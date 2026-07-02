@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planejamento de Safra 26/27</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-logo">🌱</span>
+      <div>
+        <div class="brand-title">Planejamento</div>
+        <div class="brand-sub">Safra 26/27</div>
+      </div>
+    </div>
+    <nav id="nav">
+      <a href="#/dashboard" data-view="dashboard"><span class="ico">📊</span> Painel</a>
+      <a href="#/talhoes" data-view="talhoes"><span class="ico">🗺️</span> Talhões</a>
+      <a href="#/compras" data-view="compras"><span class="ico">🛒</span> Demanda de Compras</a>
+      <a href="#/cotacao" data-view="cotacao"><span class="ico">🏷️</span> Cotação</a>
+      <a href="#/maquinas" data-view="maquinas"><span class="ico">🚜</span> Máquinas</a>
+      <a href="#/dre" data-view="dre"><span class="ico">💰</span> DRE Orçada</a>
+    </nav>
+    <div class="sidebar-foot">
+      <button id="btn-export" class="btn btn-ghost btn-sm" title="Exportar dados (JSON)">⬇ Exportar</button>
+      <button id="btn-reset" class="btn btn-ghost btn-sm" title="Descartar minhas edições">↺ Restaurar</button>
+    </div>
+  </aside>
+  <main class="main">
+    <header class="topbar">
+      <h1 id="page-title">Painel</h1>
+      <div class="topbar-right">
+        <span id="edit-badge" class="badge badge-muted" hidden>0 edições</span>
+        <span class="safra-chip">Safra 2026/2027</span>
+      </div>
+    </header>
+    <section id="content" class="content"><div class="loading">Carregando…</div></section>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
