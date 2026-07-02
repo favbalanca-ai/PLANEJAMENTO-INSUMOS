@@ -41,8 +41,8 @@ python3 -m http.server 8091
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.
 - **DRE Orçada** — resultado por cultura: Receita = Produção × Preço; Custo =
-  insumos + **máquinas** (somadas por operação). Preço de venda e custo de
-  máquinas por cultura editáveis.
+  insumos + **máquinas** (somadas por operação) + **arrendamento/outros**
+  (R$/ha editável). Preço de venda, custo de máquinas e arrendamento editáveis.
 
 ## Botões
 

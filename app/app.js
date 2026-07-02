@@ -18,6 +18,7 @@ function loadOverrides(){
   OV.maquina = OV.maquina || {};   // conjunto -> R$/HM
   OV.opMaq   = OV.opMaq   || {};   // "TL|tagOp" -> conjunto atribuído
   OV.dreOp   = OV.dreOp   || {};   // empreendimento -> custo operação R$/ha
+  OV.arrend  = OV.arrend  || {};   // empreendimento -> arrendamento/outros R$/ha
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -28,7 +29,7 @@ function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.dose).length +
          Object.keys(OV.preco).length + Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
-         Object.keys(OV.opMaq).length + (OV.diesel!==6.00?1:0) +
+         Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + (OV.diesel!==6.00?1:0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -383,13 +384,15 @@ V.dre = function(){
     g.opDefault += custoOpTalhaoHa(t)*area;  // custo máquinas estimado (R$)
   });
   const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
-  let tA=0,tR=0,tI=0,tM=0;
+  let tA=0,tR=0,tI=0,tM=0,tX=0;
   const body=list.map(([e,g])=>{
     const preco=precoCultura(e), receita=g.prod*preco;
     const opHaDefault=g.area>0?g.opDefault/g.area:0;
     const opHa=(e in OV.dreOp)?+OV.dreOp[e]:opHaDefault;
-    const custoMaq=opHa*g.area, custoTot=g.ins+custoMaq, result=receita-custoTot;
-    tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;
+    const arrHa=(e in OV.arrend)?+OV.arrend[e]:0;
+    const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
+    const custoTot=g.ins+custoMaq+custoArr, result=receita-custoTot;
+    tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;tX+=custoArr;
     return `<tr><td><b>${esc(e)}</b></td><td class="num">${num(g.area)}</td>
       <td class="num">${nf0.format(g.prod)}</td>
       <td class="num"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
@@ -397,26 +400,32 @@ V.dre = function(){
       <td class="num">${brl0(g.ins)}</td>
       <td class="num"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
       <td class="num">${brl0(custoMaq)}</td>
+      <td class="num"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
+      <td class="num">${brl0(custoArr)}</td>
       <td class="num">${brl0(custoTot)}</td>
       <td class="num"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
   }).join('');
-  const res=tR-tI-tM;
+  const res=tR-tI-tM-tX;
   return `
   <div class="kpi-grid">
     <div class="kpi"><div class="k-label">Receita total</div><div class="k-value">${brl0(tR)}</div></div>
     <div class="kpi"><div class="k-label">Custo insumos</div><div class="k-value">${brl0(tI)}</div></div>
     <div class="kpi"><div class="k-label">Custo máquinas</div><div class="k-value">${brl0(tM)}</div></div>
+    <div class="kpi"><div class="k-label">Arrend./Outros</div><div class="k-value">${brl0(tX)}</div></div>
     <div class="kpi accent"><div class="k-label">Resultado</div><div class="k-value">${brl0(res)}</div><div class="k-sub">${tR>0?nf1.format(res/tR*100)+'% da receita':''}</div></div>
   </div>
-  <div class="toolbar"><span class="badge badge-muted">Receita = Produção × Preço. Custo = insumos + máquinas (estimado; edite R$/ha). Preço de venda editável.</span></div>
+  <div class="toolbar"><span class="badge badge-muted">Resultado = Receita − insumos − máquinas − arrendamento/outros. Campos em azul são editáveis (R$/ha ou preço).</span></div>
   <div class="panel"><div class="table-wrap"><table>
     <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th>
       <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th>
-      <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th><th class="num">Custo total</th><th class="num">Resultado</th></tr></thead>
+      <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th>
+      <th class="num">Arrend. R$/ha</th><th class="num">Arrend./Outros</th>
+      <th class="num">Custo total</th><th class="num">Resultado</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tA)}</td><td></td><td></td>
       <td class="num">${brl0(tR)}</td><td class="num">${brl0(tI)}</td><td></td><td class="num">${brl0(tM)}</td>
-      <td class="num">${brl0(tI+tM)}</td>
+      <td></td><td class="num">${brl0(tX)}</td>
+      <td class="num">${brl0(tI+tM+tX)}</td>
       <td class="num"><b style="color:${res>=0?'var(--green)':'var(--red)'}">${brl0(res)}</b></td></tr></tfoot>
   </table></div></div>
   <p style="color:var(--muted);font-size:12px;margin-top:8px">O custo de máquinas soma o custo de cada operação (conjunto atribuído na tela do <b>Talhão</b>, com sugestão automática pela classe dos insumos). Ajuste o R$/ha por cultura se quiser sobrescrever. Arrendamento e custos fixos não estão incluídos.</p>`;
@@ -449,6 +458,7 @@ function applyEdit(el){
   else if(kind==='maquina'){ const c=el.dataset.conj, m=DATA.maquinas.find(x=>x.conjunto===c); if(n==null||n===m.rs_hm) delete OV.maquina[c]; else OV.maquina[c]=n; }
   else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
   else if(kind==='dreOp'){ const e=el.dataset.emp; if(n==null) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
+  else if(kind==='arrend'){ const e=el.dataset.emp; if(n==null||n===0) delete OV.arrend[e]; else OV.arrend[e]=n; }
   else if(kind==='dose'){ const k=doseKey(el.dataset.id,el.dataset.op,el.dataset.item); if(n==null) delete OV.dose[k]; else OV.dose[k]=n; }
   else if(kind==='area'||kind==='prodv'){
     const id=el.dataset.id, t=DATA.talhoes.find(x=>x.id===id); OV.talhao[id]=OV.talhao[id]||{};
