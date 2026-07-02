@@ -16,6 +16,7 @@ function loadOverrides(){
   OV.preco   = OV.preco   || {};   // produto -> preço
   OV.cultura = OV.cultura || {};   // empreendimento -> preço venda
   OV.maquina = OV.maquina || {};   // conjunto -> R$/HM
+  OV.opMaq   = OV.opMaq   || {};   // "TL|tagOp" -> conjunto atribuído
   OV.dreOp   = OV.dreOp   || {};   // empreendimento -> custo operação R$/ha
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
@@ -27,7 +28,7 @@ function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.dose).length +
          Object.keys(OV.preco).length + Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
-         (OV.diesel!==6.00?1:0) +
+         Object.keys(OV.opMaq).length + (OV.diesel!==6.00?1:0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -47,13 +48,43 @@ function custoMedioPassada(){
   const ms=DATA.maquinas||[]; if(!ms.length) return 0;
   return ms.reduce((a,m)=>a+custoMaqHa(m),0)/ms.length;
 }
-// nº de operações (passadas) do plano de um talhão
-function passadasTalhao(t){
-  const p=DATA.planos[t.id]; if(!p) return 0;
-  return (p.principal||[]).length + (p.safrinha||[]).length;
+const maqByConj = {};
+function buildMaqIndex(){ (DATA.maquinas||[]).forEach(m=>maqByConj[m.conjunto]=m); }
+// sugere um conjunto pela classe predominante dos insumos da operação
+function sugereMaquina(op){
+  const cls = op.itens.map(i=>(i.classe||'').toUpperCase());
+  const has = re => cls.some(c=>re.test(c));
+  const find = re => (DATA.maquinas||[]).find(m=>re.test(m.conjunto.toUpperCase()));
+  let m=null;
+  if(has(/CORRETIVO/))            m=find(/BRUTUS|DISTRIBUID/);
+  else if(has(/FERTILIZANTE|NUTRI/)) m=find(/ADUBAD|JAN 20000/);
+  else if(has(/SEMENTE|^TS$|^TS /)) m=find(/PLANTADEIRA|HORSCH|ASM|JD2122|CASE 2213/);
+  else if(has(/HERBICIDA|FUNGICIDA|INSETICIDA|ADJUVANTE|BIOL|NEMATIC/)) m=find(/PULVERIZADOR|JACTO|UNIPORT/);
+  return m?m.conjunto:null;
 }
-// custo de máquinas/operação por hectare estimado para um talhão
-function custoOpTalhaoHa(t){ return passadasTalhao(t)*custoMedioPassada(); }
+const opMaqKey=(tid,opref)=>`${tid}|${opref}`;
+// conjunto atribuído à operação (override do usuário, senão sugestão)
+function opMaqDe(tid,tag,oi,op){
+  const k=opMaqKey(tid,`${tag}${oi}`);
+  if(k in OV.opMaq) return OV.opMaq[k];   // "" = sem máquina (usuário desmarcou)
+  return sugereMaquina(op);
+}
+// custo de máquina/ha de uma operação (conjunto atribuído; senão média por passada)
+function custoOpHa(tid,tag,oi,op){
+  const conj=opMaqDe(tid,tag,oi,op);
+  if(conj && maqByConj[conj]) return custoMaqHa(maqByConj[conj]);
+  if(conj==='') return 0;                 // explicitamente sem máquina
+  return custoMedioPassada();             // fallback (sem sugestão)
+}
+// custo de máquinas/operação por hectare de um talhão (soma das operações)
+function custoOpTalhaoHa(t){
+  const p=DATA.planos[t.id]; if(!p) return 0; let s=0;
+  ['principal','safrinha'].forEach(seq=>{
+    const tag=seq==='safrinha'?'S':'P';
+    (p[seq]||[]).forEach((op,oi)=>{ s+=custoOpHa(t.id,tag,oi,op); });
+  });
+  return s;
+}
 
 /* ---------------- engine ---------------- */
 // demanda total por produto = Σ talhões Σ operações (dose × área)
@@ -205,6 +236,9 @@ V.talhao = function(id){
   if(!t) return `<div class="empty">Talhão não encontrado. <a class="link" data-go="#/talhoes">Voltar</a></div>`;
   const plan=DATA.planos[t.id]||{principal:[],safrinha:[]};
   const area=areaDe(t), c=custoTalhao(t);
+  const maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
+  const opts=[`<option value="">— sem máquina —</option>`].concat((DATA.maquinas||[])
+    .map(m=>`<option value="${esc(m.conjunto)}">${esc(m.conjunto)}</option>`)).join('');
   function opsHtml(seq,tag,titulo){
     const ops=plan[seq]||[]; if(!ops.length) return '';
     return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${ops.length} operações</span></div>
@@ -219,10 +253,22 @@ V.talhao = function(id){
           <td>${esc(it.un)}</td><td class="num">${preco>0?brl(preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
           <td class="num">${brl(chHa)}</td><td class="num">${brl(chHa*area)}</td></tr>`;
       }).join('');
-      return `<div style="padding:8px 14px 0"><span class="op-title">${esc(op.nome)}</span></div>
+      const conj=opMaqDe(t.id,tag,oi,op), mHa=custoOpHa(t.id,tag,oi,op);
+      const isOv=(opMaqKey(t.id,`${tag}${oi}`) in OV.opMaq);
+      const selHtml=opts.replace(`value="${esc(conj||'')}"`,`value="${esc(conj||'')}" selected`);
+      const totOp=sub+mHa;
+      return `<div style="padding:10px 14px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="op-title">${esc(op.nome)}</span>
+        <span style="font-size:12px;color:var(--muted)">🚜 Máquina:</span>
+        <select class="sel ${isOv?'':''}" data-edit="opMaq" data-id="${t.id}" data-op="${tag+oi}" style="max-width:340px;${isOv?'border-color:var(--ink2)':''}">${selHtml}</select>
+        <span style="font-size:12px;color:var(--ink2);font-weight:600">${brl(mHa)}/ha</span></div>
       <div class="table-wrap"><table><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th></tr></thead>
       <tbody>${body}</tbody>
-      <tfoot class="tfoot"><tr><td colspan="5">Subtotal operação</td><td class="num">${brl(sub)}</td><td class="num">${brl0(sub*area)}</td></tr></tfoot></table></div>`;
+      <tfoot class="tfoot">
+        <tr><td colspan="5">Insumos/ha</td><td class="num">${brl(sub)}</td><td class="num">${brl0(sub*area)}</td></tr>
+        <tr><td colspan="5">+ Máquina/ha</td><td class="num">${brl(mHa)}</td><td class="num">${brl0(mHa*area)}</td></tr>
+        <tr><td colspan="5"><b>Subtotal operação</b></td><td class="num"><b>${brl(totOp)}</b></td><td class="num"><b>${brl0(totOp*area)}</b></td></tr>
+      </tfoot></table></div>`;
     }).join('')}</div>`;
   }
   return `
@@ -231,9 +277,12 @@ V.talhao = function(id){
     <div class="di"><div class="l">Talhão</div><div class="v">${esc(t.id)} · ${esc(t.nome||'—')}</div></div>
     <div class="di"><div class="l">Cultura</div><div class="v" style="font-size:14px">${esc(t.empreendimento||'—')}</div></div>
     <div class="di"><div class="l">Área</div><div class="v">${num(area)} ha</div></div>
-    <div class="di"><div class="l">Custo/ha</div><div class="v">${brl(c.ha)}</div></div>
-    <div class="di"><div class="l">Custo total</div><div class="v">${brl0(c.total)}</div></div>
+    <div class="di"><div class="l">Insumos/ha</div><div class="v">${brl(c.ha)}</div></div>
+    <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}</div></div>
+    <div class="di"><div class="l">Custo total/ha</div><div class="v" style="color:var(--ink2)">${brl(totHa)}</div></div>
+    <div class="di"><div class="l">Custo total</div><div class="v">${brl0(totHa*area)}</div></div>
   </div>
+  <div class="toolbar" style="margin-top:-4px"><span class="badge badge-muted">A máquina de cada operação vem sugerida pela classe dos insumos — troque no seletor se precisar.</span></div>
   ${opsHtml('principal','P','Safra principal')}
   ${opsHtml('safrinha','S','Safrinha')||''}
   ${(!plan.principal.length&&!plan.safrinha.length)?'<div class="empty">Sem operações cadastradas para este talhão.</div>':''}`;
@@ -370,7 +419,7 @@ V.dre = function(){
       <td class="num">${brl0(tI+tM)}</td>
       <td class="num"><b style="color:${res>=0?'var(--green)':'var(--red)'}">${brl0(res)}</b></td></tr></tfoot>
   </table></div></div>
-  <p style="color:var(--muted);font-size:12px;margin-top:8px">O custo de máquinas é estimado por (nº de operações do talhão × custo médio por passada da aba <b>Máquinas</b>). Ajuste o R$/ha por cultura se quiser um valor próprio. Arrendamento e custos fixos não estão incluídos.</p>`;
+  <p style="color:var(--muted);font-size:12px;margin-top:8px">O custo de máquinas soma o custo de cada operação (conjunto atribuído na tela do <b>Talhão</b>, com sugestão automática pela classe dos insumos). Ajuste o R$/ha por cultura se quiser sobrescrever. Arrendamento e custos fixos não estão incluídos.</p>`;
 };
 
 /* ================= ROUTER ================= */
@@ -388,7 +437,12 @@ function route(){
 
 /* ================= EVENTOS ================= */
 function applyEdit(el){
-  const kind=el.dataset.edit, val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
+  const kind=el.dataset.edit;
+  if(kind==='opMaq'){   // valor é o conjunto (string); "" = sem máquina
+    const k=opMaqKey(el.dataset.id, el.dataset.op);
+    OV.opMaq[k]=el.value; saveOverrides(); route(); return;
+  }
+  const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
@@ -404,7 +458,7 @@ function applyEdit(el){
   }
   saveOverrides(); route();
 }
-document.addEventListener('change',e=>{ if(e.target.matches('input.cell')) applyEdit(e.target); });
+document.addEventListener('change',e=>{ if(e.target.matches('input.cell, select.sel')) applyEdit(e.target); });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input.cell')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
@@ -442,7 +496,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 fetch('data.json').then(r=>r.json()).then(d=>{
   DATA=d; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); updateEditBadge();
+  buildMaqIndex(); loadOverrides(); updateEditBadge();
   window.addEventListener('hashchange',route);
   if(!location.hash) location.hash='#/dashboard';
   route();

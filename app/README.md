@@ -30,13 +30,19 @@ python3 -m http.server 8091
 - **Talhões** — lista dos 20 talhões; edite **área** e **produtividade** e o
   cálculo (produção, custo/ha, custo total) atualiza sozinho. Clique para abrir.
 - **Talhão (detalhe)** — operações da safra principal e safrinha, com produtos,
-  **dose/ha editável**, preço, custo/ha e custo total por operação.
+  **dose/ha editável**, preço, custo/ha. Cada operação tem uma **máquina**
+  (conjunto) sugerida automaticamente pela classe dos insumos e trocável no
+  seletor; o custo de máquina/ha entra no subtotal da operação.
 - **Demanda de Compras** — consolida a demanda de todos os talhões e subtrai o
   **estoque** (editável): `A comprar = máx(0; Demanda − Estoque)`. Itens sem
   preço podem ter o preço preenchido ali.
 - **Cotação** — itens a comprar agrupados por fornecedor, com exportação CSV.
-- **DRE Orçada** — resultado por cultura (Receita = Produção × Preço; Custo =
-  insumos do plano). Preço de venda por cultura editável.
+- **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
+  **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
+  total/ha, além do custo médio por passada.
+- **DRE Orçada** — resultado por cultura: Receita = Produção × Preço; Custo =
+  insumos + **máquinas** (somadas por operação). Preço de venda e custo de
+  máquinas por cultura editáveis.
 
 ## Botões
 
