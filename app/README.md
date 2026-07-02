@@ -7,8 +7,15 @@ demanda de compras, cotação e DRE orçada. Os dados base saem da planilha
 
 ## Como rodar
 
-Precisa de um servidor HTTP simples (o app carrega `data.json` via `fetch`, que
-não funciona abrindo o arquivo direto no navegador):
+**Opção 1 — arquivo único (mais fácil):** abra **`planejamento_app.html`** direto
+no navegador (duplo clique). É uma versão autocontida (HTML+CSS+JS+dados em um só
+arquivo), não precisa de servidor. Gere-a com:
+
+```bash
+python3 scripts/build_singlefile.py
+```
+
+**Opção 2 — servidor local** (usa `index.html` + `data.json` separados):
 
 ```bash
 cd app
