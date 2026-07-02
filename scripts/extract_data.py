@@ -61,8 +61,19 @@ for c in range(2, 15):
     emp, preco = s(D.cell(2,c).value), f(D.cell(7,c).value)
     if emp and preco: precos_cultura[emp] = round(preco, 2)
 
+# MÁQUINAS (CUSTO OPERAÇÃO): conjunto máquina+implemento, HM/ha, R$/HM, custo/ha, L/ha
+C = wb["CUSTO OPERAÇÃO"]
+maquinas = []
+for r in range(2, 40):
+    conj = s(C.cell(r,4).value); larg = C.cell(r,5).value
+    if not conj or conj.strip() == "+" or not isinstance(larg, (int, float)): continue
+    maquinas.append(dict(conjunto=conj, maquina=s(C.cell(r,2).value), implemento=s(C.cell(r,3).value),
+        largura=f(C.cell(r,5).value), velocidade=f(C.cell(r,6).value), eficiencia=f(C.cell(r,7).value),
+        ha_h=f(C.cell(r,8).value), l_h=f(C.cell(r,9).value), hm_ha=f(C.cell(r,10).value),
+        l_ha=f(C.cell(r,11).value), custo_hm_ha=f(C.cell(r,12).value), rs_hm=f(C.cell(r,13).value)))
+
 data = dict(safra="2026/2027", produtos=produtos, talhoes=talhoes,
-            planos=planos, precos_cultura=precos_cultura)
+            planos=planos, precos_cultura=precos_cultura, maquinas=maquinas)
 os.makedirs("app", exist_ok=True)
 json.dump(data, open(OUT, "w", encoding="utf-8"), ensure_ascii=False)
 print(f"OK -> {OUT} | produtos={len(produtos)} talhões={len(talhoes)} planos={len(planos)}")

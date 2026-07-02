@@ -15,6 +15,9 @@ function loadOverrides(){
   OV.dose    = OV.dose    || {};   // "TL|op|item" -> valor
   OV.preco   = OV.preco   || {};   // produto -> preço
   OV.cultura = OV.cultura || {};   // empreendimento -> preço venda
+  OV.maquina = OV.maquina || {};   // conjunto -> R$/HM
+  OV.dreOp   = OV.dreOp   || {};   // empreendimento -> custo operação R$/ha
+  if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
   localStorage.setItem(LS_KEY, JSON.stringify(OV));
@@ -23,6 +26,8 @@ function saveOverrides(){
 function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.dose).length +
          Object.keys(OV.preco).length + Object.keys(OV.cultura).length +
+         Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
+         (OV.diesel!==6.00?1:0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -34,6 +39,21 @@ function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null 
 const doseKey = (tid,oi,ii)=>`${tid}|${oi}|${ii}`;
 function doseDe(tid,oi,ii,base){ const k=doseKey(tid,oi,ii); return (k in OV.dose)?+OV.dose[k]:base; }
 function precoCultura(emp){ return (emp in OV.cultura)?+OV.cultura[emp]:(DATA.precos_cultura[emp]||0); }
+function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:m.rs_hm; }
+// custo total por hectare de uma passada da máquina = custo hora-máquina + diesel
+function custoMaqHa(m){ return m.hm_ha*rsHmDe(m) + m.l_ha*(+OV.diesel); }
+// custo médio por passada (média das máquinas cadastradas)
+function custoMedioPassada(){
+  const ms=DATA.maquinas||[]; if(!ms.length) return 0;
+  return ms.reduce((a,m)=>a+custoMaqHa(m),0)/ms.length;
+}
+// nº de operações (passadas) do plano de um talhão
+function passadasTalhao(t){
+  const p=DATA.planos[t.id]; if(!p) return 0;
+  return (p.principal||[]).length + (p.safrinha||[]).length;
+}
+// custo de máquinas/operação por hectare estimado para um talhão
+function custoOpTalhaoHa(t){ return passadasTalhao(t)*custoMedioPassada(); }
 
 /* ---------------- engine ---------------- */
 // demanda total por produto = Σ talhões Σ operações (dose × área)
@@ -274,42 +294,87 @@ V.cotacao = function(){
   }).join('')}`;
 };
 
+V.maquinas = function(){
+  const ms=DATA.maquinas||[];
+  const medio=custoMedioPassada();
+  return `
+  <div class="kpi-grid">
+    <div class="kpi"><div class="k-label">Conjuntos cadastrados</div><div class="k-value">${ms.length}</div></div>
+    <div class="kpi accent"><div class="k-label">Custo médio por passada</div><div class="k-value">${brl(medio)}</div><div class="k-sub">máquina + diesel, por ha</div></div>
+    <div class="kpi"><div class="k-label">Preço do diesel</div>
+      <div class="k-value"><input class="cell ${OV.diesel!==6?'edited':''}" data-edit="diesel" value="${OV.diesel}" style="width:110px;font-size:20px;font-weight:700"> <span style="font-size:13px;color:var(--muted)">R$/L</span></div>
+      <div class="k-sub">aplicado ao consumo (L/ha)</div></div>
+  </div>
+  <div class="toolbar"><span class="badge badge-muted">Edite o <b>R$/HM</b> (custo hora-máquina) e o preço do diesel — o custo por hectare recalcula.</span></div>
+  <div class="panel"><div class="table-wrap"><table>
+    <thead><tr><th>Conjunto (máquina + implemento)</th><th class="num">Largura</th><th class="num">Vel.</th>
+      <th class="num">Efic. %</th><th class="num">ha/h</th><th class="num">HM/ha</th><th class="num">R$/HM</th>
+      <th class="num">Custo máq/ha</th><th class="num">L/ha</th><th class="num">Diesel/ha</th><th class="num">Custo total/ha</th></tr></thead>
+    <tbody>${ms.map(m=>{
+      const rs=rsHmDe(m), cmaq=m.hm_ha*rs, cdie=m.l_ha*(+OV.diesel), tot=cmaq+cdie;
+      return `<tr><td><b>${esc(m.conjunto)}</b></td>
+        <td class="num">${num(m.largura)}</td><td class="num">${num(m.velocidade)}</td>
+        <td class="num">${nf0.format(m.eficiencia)}</td><td class="num">${num(m.ha_h)}</td>
+        <td class="num">${nf2.format(m.hm_ha)}</td>
+        <td class="num"><input class="cell ${(m.conjunto in OV.maquina)?'edited':''}" data-edit="maquina" data-conj="${esc(m.conjunto)}" value="${rs}"></td>
+        <td class="num">${brl(cmaq)}</td><td class="num">${num(m.l_ha)}</td>
+        <td class="num">${brl(cdie)}</td><td class="num"><b>${brl(tot)}</b></td></tr>`;
+    }).join('')}</tbody>
+  </table></div></div>
+  <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de custo de máquinas no DRE (nº de operações do talhão × custo médio).</p>`;
+};
+
 V.dre = function(){
-  // agrupa por empreendimento
   const emps={};
   DATA.talhoes.forEach(t=>{
     const e=t.empreendimento||'—';
     const c=custoTalhao(t), area=areaDe(t);
-    const g=emps[e]||(emps[e]={area:0,prod:0,custo:0});
-    g.area+=area; g.prod+=area*prodvDe(t); g.custo+=c.total;
+    const g=emps[e]||(emps[e]={area:0,prod:0,ins:0,opDefault:0});
+    g.area+=area; g.prod+=area*prodvDe(t); g.ins+=c.total;
+    g.opDefault += custoOpTalhaoHa(t)*area;  // custo máquinas estimado (R$)
   });
   const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
-  let tA=0,tR=0,tC=0;
+  let tA=0,tR=0,tI=0,tM=0;
   const body=list.map(([e,g])=>{
-    const preco=precoCultura(e), receita=g.prod*preco, result=receita-g.custo;
-    tA+=g.area;tR+=receita;tC+=g.custo;
+    const preco=precoCultura(e), receita=g.prod*preco;
+    const opHaDefault=g.area>0?g.opDefault/g.area:0;
+    const opHa=(e in OV.dreOp)?+OV.dreOp[e]:opHaDefault;
+    const custoMaq=opHa*g.area, custoTot=g.ins+custoMaq, result=receita-custoTot;
+    tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;
     return `<tr><td><b>${esc(e)}</b></td><td class="num">${num(g.area)}</td>
       <td class="num">${nf0.format(g.prod)}</td>
       <td class="num"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
-      <td class="num">${brl0(receita)}</td><td class="num">${brl0(g.custo)}</td>
-      <td class="num">${g.area>0?brl(g.custo/g.area):'—'}</td>
+      <td class="num">${brl0(receita)}</td>
+      <td class="num">${brl0(g.ins)}</td>
+      <td class="num"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
+      <td class="num">${brl0(custoMaq)}</td>
+      <td class="num">${brl0(custoTot)}</td>
       <td class="num"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
   }).join('');
+  const res=tR-tI-tM;
   return `
-  <div class="toolbar"><span class="badge badge-muted">Receita = Produção × Preço médio. Custo = insumos do plano. Edite o preço de venda por cultura.</span></div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="k-label">Receita total</div><div class="k-value">${brl0(tR)}</div></div>
+    <div class="kpi"><div class="k-label">Custo insumos</div><div class="k-value">${brl0(tI)}</div></div>
+    <div class="kpi"><div class="k-label">Custo máquinas</div><div class="k-value">${brl0(tM)}</div></div>
+    <div class="kpi accent"><div class="k-label">Resultado</div><div class="k-value">${brl0(res)}</div><div class="k-sub">${tR>0?nf1.format(res/tR*100)+'% da receita':''}</div></div>
+  </div>
+  <div class="toolbar"><span class="badge badge-muted">Receita = Produção × Preço. Custo = insumos + máquinas (estimado; edite R$/ha). Preço de venda editável.</span></div>
   <div class="panel"><div class="table-wrap"><table>
     <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th>
-      <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th><th class="num">Custo/ha</th><th class="num">Resultado</th></tr></thead>
+      <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th>
+      <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th><th class="num">Custo total</th><th class="num">Resultado</th></tr></thead>
     <tbody>${body}</tbody>
     <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tA)}</td><td></td><td></td>
-      <td class="num">${brl0(tR)}</td><td class="num">${brl0(tC)}</td><td></td>
-      <td class="num"><b style="color:${tR-tC>=0?'var(--green)':'var(--red)'}">${brl0(tR-tC)}</b></td></tr></tfoot>
+      <td class="num">${brl0(tR)}</td><td class="num">${brl0(tI)}</td><td></td><td class="num">${brl0(tM)}</td>
+      <td class="num">${brl0(tI+tM)}</td>
+      <td class="num"><b style="color:${res>=0?'var(--green)':'var(--red)'}">${brl0(res)}</b></td></tr></tfoot>
   </table></div></div>
-  <p style="color:var(--muted);font-size:12px;margin-top:8px">Obs.: o custo considera apenas insumos das operações. Custos de máquinas/operação e arrendamento não estão incluídos nesta versão.</p>`;
+  <p style="color:var(--muted);font-size:12px;margin-top:8px">O custo de máquinas é estimado por (nº de operações do talhão × custo médio por passada da aba <b>Máquinas</b>). Ajuste o R$/ha por cultura se quiser um valor próprio. Arrendamento e custos fixos não estão incluídos.</p>`;
 };
 
 /* ================= ROUTER ================= */
-const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',dre:'DRE Orçada'};
+const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada'};
 function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
@@ -327,6 +392,9 @@ function applyEdit(el){
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
+  else if(kind==='maquina'){ const c=el.dataset.conj, m=DATA.maquinas.find(x=>x.conjunto===c); if(n==null||n===m.rs_hm) delete OV.maquina[c]; else OV.maquina[c]=n; }
+  else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
+  else if(kind==='dreOp'){ const e=el.dataset.emp; if(n==null) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
   else if(kind==='dose'){ const k=doseKey(el.dataset.id,el.dataset.op,el.dataset.item); if(n==null) delete OV.dose[k]; else OV.dose[k]=n; }
   else if(kind==='area'||kind==='prodv'){
     const id=el.dataset.id, t=DATA.talhoes.find(x=>x.id===id); OV.talhao[id]=OV.talhao[id]||{};
