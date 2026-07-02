@@ -48,7 +48,19 @@ Recursos:
   (coluna T) atualiza a lista automaticamente.
 - Mostra apenas insumos com demanda ou estoque (máquinas excluídas); 77 itens.
 
-### 3. Diagnóstico: itens sem preço
+### 3. Nova aba `COTAÇÃO FORNECEDOR`
+Itens **a comprar** (já descontado o estoque) **agrupados por fornecedor**,
+prontos para pedir cotação. Para cada fornecedor: bloco com produtos, quantidade,
+preço de referência, valor de referência e **duas colunas para o fornecedor
+preencher** — `PREÇO COTADO` (destacado em amarelo) e `VALOR COTADO` (calcula
+sozinho) — com **subtotal por fornecedor** e total geral. São 65 itens em 13
+fornecedores.
+
+### 4. Máquinas incluídas na aba `DEMANDA DE COMPRAS`
+A aba de demanda agora **inclui as MÁQUINAS** (a pedido), além dos insumos —
+89 linhas no total. A aba de cotação continua só com insumos.
+
+### 5. Diagnóstico: itens sem preço
 **20 itens** com demanda estão **sem preço** cadastrado (`PORTIFÓLIO!S` vazio —
 principalmente fertilizantes e corretivos), então o valor deles não entra no
 total. Ficam marcados como **⚠ SEM PREÇO** para preenchimento.
