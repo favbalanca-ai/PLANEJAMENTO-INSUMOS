@@ -2,7 +2,7 @@ name: Deploy app to GitHub Pages
 
 on:
   push:
-    branches: [ main, claude/new-session-fbk537 ]
+    branches: [ main ]
     paths:
       - 'app/**'
       - '.github/workflows/deploy-pages.yml'

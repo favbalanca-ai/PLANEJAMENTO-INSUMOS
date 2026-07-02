@@ -25,10 +25,18 @@ python3 -m http.server 8091
 
 ## Publicar no GitHub Pages
 
-1. Suba o repositório para o GitHub.
-2. Em **Settings → Pages**, selecione a branch e a pasta `/app` (ou mova o
-   conteúdo de `app/` para a raiz e use `/`).
-3. O app fica disponível em `https://<usuario>.github.io/<repo>/`.
+Já existe o workflow `.github/workflows/deploy-pages.yml` que publica a pasta
+`app/`. Como o token do Actions não tem permissão para **ligar** o Pages
+sozinho, é preciso habilitar uma vez (passo único):
+
+1. No GitHub, vá em **Settings → Pages**.
+2. Em **Build and deployment → Source**, selecione **GitHub Actions**.
+3. Faça o merge desta branch na `main` (ou rode o workflow manualmente em
+   **Actions → Deploy app to GitHub Pages → Run workflow**).
+4. O app fica em `https://favbalanca-ai.github.io/PLANEJAMENTO-INSUMOS/`.
+
+Enquanto isso, há uma **versão hospedada** pronta (link enviado no chat) e o
+arquivo único `planejamento_app.html` para abrir localmente.
 
 ## Telas
 
