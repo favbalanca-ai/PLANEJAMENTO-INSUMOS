@@ -78,7 +78,7 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 
 /* Badges / pills */
 .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;display:inline-block;white-space:nowrap}
-.badge-muted{background:#eef2f4;color:var(--muted)}
+.badge-muted{background:#eef2f4;color:var(--muted);white-space:normal}
 .pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;display:inline-block}
 .pill-buy{background:var(--green-soft);color:var(--green)}
 .pill-stock{background:#edeff1;color:var(--muted)}
@@ -117,8 +117,50 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
   padding:11px 20px;border-radius:9px;font-size:13px;font-weight:500;box-shadow:0 6px 20px rgba(0,0,0,.2);z-index:50}
 
-@media(max-width:720px){
-  .sidebar{width:64px}.brand>div,.brand-sub,#nav a span:not(.ico),.sidebar-foot{display:none}
-  .brand{justify-content:center;padding:16px 0}#nav a{justify-content:center;padding:12px 0}
-  .content{padding:16px 12px 60px}
+/* CRUD de insumos / bulk */
+#nav .lbl-s{display:none}
+.mut{color:var(--muted)}
+.icon-btn{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;
+  font-size:15px;cursor:pointer;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+.icon-btn:hover{background:#f5f8f9}
+.icon-btn.del:hover{background:var(--red-soft);border-color:var(--red)}
+.prod-in{min-width:150px;max-width:240px}
+.op-head{padding:12px 14px 2px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.op-maq{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
+.op-maq .sel{max-width:300px}
+.op-maqv{font-size:12px;color:var(--ink2);font-weight:600}
+.op-add{padding:8px 14px 14px}
+.bulk-add{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 18px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.chip{padding:7px 14px;border-radius:20px;background:var(--card);border:1px solid var(--line);
+  color:var(--ink2);font-weight:600;font-size:13px;cursor:pointer;text-decoration:none;white-space:nowrap}
+.chip:hover{background:#eef7f9}
+.chip-on{background:var(--ink2);color:#fff;border-color:var(--ink2)}
+
+/* ---- mobile / toque ---- */
+@media(max-width:640px){
+  #app{flex-direction:column}
+  .sidebar{width:100%;height:auto;position:fixed;bottom:0;left:0;top:auto;z-index:20;flex-direction:row;
+    background:#16404d;border-top:1px solid rgba(255,255,255,.12);box-shadow:0 -2px 10px rgba(0,0,0,.15)}
+  .brand,.sidebar-foot{display:none}
+  #nav{flex-direction:row;overflow-x:auto;padding:6px 6px;gap:2px;flex:1;-webkit-overflow-scrolling:touch}
+  #nav a{flex-direction:column;gap:2px;padding:6px 9px;border-radius:10px;min-width:60px;text-align:center}
+  #nav a .ico{font-size:19px;width:auto}
+  #nav a .lbl{display:none}
+  #nav a .lbl-s{display:inline;font-size:9.5px;line-height:1.1;white-space:nowrap}
+  .main{padding-bottom:66px}
+  .topbar{padding:12px 14px}#page-title{font-size:17px}.safra-chip{display:none}
+  .content{padding:14px 12px 24px}
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:13px 14px}.kpi .k-value{font-size:20px}
+  /* 16px evita o zoom automático do iOS ao focar inputs */
+  input.cell{min-height:42px;font-size:16px;width:78px}
+  input.txt,select.sel{min-height:42px;font-size:16px}
+  .prod-in{min-width:140px}
+  .icon-btn{width:42px;height:42px;font-size:18px}
+  thead th{font-size:10.5px;padding:9px 10px}
+  tbody td{padding:9px 10px}
+  .detail-head{gap:12px 18px;padding:14px 16px}
+  .detail-head .di{min-width:96px}
+  .btn{padding:10px 15px}
 }
