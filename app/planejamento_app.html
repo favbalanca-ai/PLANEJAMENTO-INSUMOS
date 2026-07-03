@@ -127,6 +127,10 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .op-block.op-collapsed .op-title{border-radius:7px}
 .op-sum{font-size:12px;font-weight:600;color:var(--muted)}
 .op-block:not(.op-collapsed) .op-sum{display:none}
+.op-block.force-open .op-body{display:block}          /* durante a busca, mostra mesmo recolhido */
+.compras-total{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:13px 18px;background:var(--ink2);color:#fff;border-radius:var(--radius);font-weight:700;margin-top:6px}
+.compras-total b{font-size:18px}
 
 .empty{text-align:center;color:var(--muted);padding:40px 20px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
@@ -252,6 +256,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
     font-size:18px;line-height:1;color:var(--ink2);background:none;border:none;border-radius:0;padding:0;margin:0}
   .insumo-cards tbody tr.open::after{content:"⌃"}
   .insumo-cards tbody td.c-more{order:4;flex:1 0 100%}
+
+  /* COMPRAS em lista com cabeçalho (Produto | A comprar) e detalhe por símbolo */
+  .compra-cards thead{display:block}
+  .compra-cards thead tr{display:flex;align-items:center;gap:10px;padding:2px 12px 6px;box-shadow:none}
+  .compra-cards thead th{display:none;position:static;background:none;border:none;padding:0}
+  .compra-cards thead th:nth-child(1){display:block;flex:1}                        /* Produto */
+  .compra-cards thead th:nth-child(2){display:block;flex:0 0 96px;text-align:left}  /* A comprar */
+  .compra-cards tbody tr{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px}
+  .compra-cards td.c-full{order:1;flex:1 1 52%;min-width:140px;padding:0}
+  .compra-cards td.c-full b{font-size:15px;color:var(--ink)}
+  .compra-cards tbody td[data-th="A comprar"]{order:2;flex:0 0 auto;justify-content:flex-end;padding:0;min-height:0}
+  .compra-cards tbody td[data-th="A comprar"]::before{display:none}
+  .compra-cards tbody tr::after{order:3;content:"⌄";flex:0 0 20px;width:20px;text-align:center;
+    font-size:18px;line-height:1;color:var(--ink2);background:none;border:none;border-radius:0;padding:0;margin:0}
+  .compra-cards tbody tr.open::after{content:"⌃"}
+  .compra-cards tbody td.c-more{order:4;flex:1 0 100%}
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;
@@ -763,11 +783,36 @@ V.talhao = function(id){
 };
 
 V.compras = function(){
-  const rows=calcCompras().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'')||(a.produto||'').localeCompare(b.produto||''));
-  const totalCompra=rows.reduce((a,r)=>a+r.valor,0);
-  const itens=rows.filter(r=>r.comprar>0).length;
-  const semPreco=rows.filter(r=>r.comprar>0&&r.preco<=0).length;
-  const valEstoque=rows.reduce((a,r)=>a+r.estoque*r.preco,0);
+  const all=calcCompras();
+  const totalCompra=all.reduce((a,r)=>a+r.valor,0);
+  const itens=all.filter(r=>r.comprar>0).length;
+  const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
+  const valEstoque=all.reduce((a,r)=>a+r.estoque*r.preco,0);
+  // agrupa por classe (grupos recolhíveis, como as operações do talhão)
+  const groups={};
+  all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
+  const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
+  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
+    <td class="c-full"><b>${esc(r.produto)}</b></td>
+    <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
+    <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
+    <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
+    <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
+    <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
+    <td class="c-more" data-th="Un">${esc(r.un)}</td>
+    <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
+    <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`;
+  const groupsHtml=classes.map(cl=>{
+    const g=groups[cl].slice().sort((a,b)=>b.valor-a.valor||(a.produto||'').localeCompare(b.produto||''));
+    const sub=g.reduce((a,r)=>a+r.valor,0), n=g.length, key=`cg|${cl}`, collapsed=collapsedOps.has(key);
+    return `<div class="op-block${collapsed?' op-collapsed':''}">
+      <div class="op-head">
+        <span class="op-title" data-optoggle="${esc(key)}"><span class="op-chevron">⌄</span>${esc(cl)}</span>
+        <span class="op-sum">${n} ${n===1?'item':'itens'} · ${brl0(sub)}</span></div>
+      <div class="op-body"><div class="table-wrap"><table class="cards-sm compra-cards">${th}<tbody>${g.map(rowHtml).join('')}</tbody></table></div></div>
+    </div>`;
+  }).join('');
   return `
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Total a comprar</div><div class="k-value">${brl0(totalCompra)}</div></div>
@@ -776,25 +821,9 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque) — edite o estoque</span></div>
-  <div class="panel"><div class="table-wrap"><table id="tbl-compras" class="cards-sm">
-    <thead><tr><th>Classe</th><th>Fornecedor</th><th>Produto</th><th>Un</th>
-      <th class="num">Demanda</th><th class="num">Estoque</th><th class="num">A comprar</th>
-      <th class="num">Preço</th><th class="num">Valor</th><th>Status</th></tr></thead>
-    <tbody>${rows.map(r=>`
-      <tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
-        <td class="c-more" data-th="Classe"><span class="classe-tag">${esc(r.classe)}</span></td>
-        <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
-        <td class="c-full"><b>${esc(r.produto)}</b></td>
-        <td class="c-more" data-th="Un">${esc(r.un)}</td>
-        <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
-        <td class="num" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
-        <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
-        <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
-        <td class="num" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
-        <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`).join('')}</tbody>
-    <tfoot class="tfoot"><tr><td colspan="8">TOTAL</td><td class="num">${brl0(totalCompra)}</td><td></td></tr></tfoot>
-  </table></div></div>`;
+    <div class="spacer"></div><span class="badge badge-muted">Toque na classe p/ abrir; toque no item p/ ver detalhes e editar estoque</span></div>
+  <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
+  <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
 
 V.cotacao = function(){
@@ -1207,9 +1236,22 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
-  if(e.target.id==='q-compra') filterTable('#tbl-compras',e.target.value);
+  if(e.target.id==='q-compra') filterCompras(e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
 });
+// busca na Demanda de Compras: filtra em todos os grupos e esconde grupos vazios
+function filterCompras(q){
+  q=(q||'').toLowerCase().trim();
+  document.querySelectorAll('#compras-groups .op-block').forEach(g=>{
+    let any=false;
+    g.querySelectorAll('tbody tr').forEach(tr=>{
+      const show=!q||(tr.dataset.search||'').includes(q);
+      tr.style.display=show?'':'none'; if(show) any=true;
+    });
+    g.style.display=any?'':'none';
+    g.classList.toggle('force-open', !!q);  // durante a busca, mostra o conteúdo mesmo se recolhido
+  });
+}
 // celular: tocar no cartão mostra/esconde os detalhes (ignora campos editáveis)
 document.addEventListener('click',e=>{
   if(!window.matchMedia('(max-width:640px)').matches) return;
