@@ -213,13 +213,23 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   /* botão excluir: linha própria no rodapé do cartão */
   .cards-sm td.c-del{justify-content:flex-end;padding:6px 0 0;margin-top:2px}
   .cards-sm td.c-del::before{content:"Excluir";font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-right:auto}
-  /* COMPACTO: esconde os detalhes até tocar no cartão */
+  /* COMPACTO: esconde os detalhes até tocar; barra vira BOTÃO "Detalhes" */
   .cards-sm tbody td.c-more{display:none}
   .cards-sm tbody tr.open td.c-more{display:flex}
   .cards-sm tbody tr{cursor:pointer}
-  .cards-sm tbody tr::after{content:"⌄ detalhes";display:block;text-align:center;font-size:11px;font-weight:700;
-    letter-spacing:.4px;color:var(--ink2);text-transform:uppercase;padding-top:7px;margin-top:4px;border-top:1px dashed var(--line)}
-  .cards-sm tbody tr.open::after{content:"⌃ menos"}
+  .cards-sm tbody tr::after{content:"Detalhes  ⌄";display:block;text-align:center;font-size:12px;font-weight:700;
+    color:var(--ink2);background:#f2f7f8;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px}
+  .cards-sm tbody tr.open::after{content:"Menos  ⌃"}
+
+  /* INSUMOS EM LISTA: produto + dose na mesma linha */
+  .insumo-cards tbody tr{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 12px}
+  .insumo-cards td.c-full{order:1;flex:1 1 52%;min-width:150px;padding:0}
+  .insumo-cards td.c-full .prod-in{width:100%}
+  .insumo-cards tbody td[data-th="Dose/ha"]{order:2;flex:0 0 auto;justify-content:flex-end;gap:6px;padding:0;min-height:0}
+  .insumo-cards tbody td[data-th="Dose/ha"]::before{content:"Dose";font-size:10.5px}
+  .insumo-cards tbody td[data-th="Dose/ha"] input{width:76px}
+  .insumo-cards tbody td.c-more{order:3;flex:1 0 100%}
+  .insumo-cards tbody tr::after{order:4;flex:1 0 100%;margin-top:2px}
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;

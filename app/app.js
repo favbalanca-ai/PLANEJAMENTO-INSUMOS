@@ -392,7 +392,7 @@ V.talhao = function(id){
       <td class="num" data-th="Dose/ha"><input class="cell ${it.doseEdited?'edited':''}" data-id="${t.id}" ${di} value="${it.dose}"></td>
       <td class="c-more" data-th="Un">${esc(it.un)}</td>
       <td class="num c-more" data-th="Preço">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
-      <td class="num c-more" data-th="Custo/ha">${brl(chHa)}</td><td class="num" data-th="Total">${brl(chHa*area)}</td>
+      <td class="num c-more" data-th="Custo/ha">${brl(chHa)}</td><td class="num c-more" data-th="Total">${brl(chHa*area)}</td>
       <td class="c-del c-more"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
   }
   function opsHtml(seq,tag,titulo,show){
@@ -410,7 +410,7 @@ V.talhao = function(id){
         <span class="op-maq"><span class="mut">🚜</span>
         <select class="sel" data-edit="opMaq" data-id="${t.id}" data-op="${tagoi}" ${isOv?'style="border-color:var(--ink2)"':''}>${selHtml}</select>
         <span class="op-maqv">${brl(mHa)}/ha</span></span></div>
-      <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="cards-sm insumo-cards"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
       <tbody>${items.map(itemRow).join('')||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum insumo. Use “+ adicionar insumo”.</td></tr>'}</tbody>
       <tfoot class="tfoot">
         <tr><td colspan="5">Insumos/ha</td><td class="num">${brl(sub)}</td><td class="num">${brl0(sub*area)}</td><td></td></tr>
