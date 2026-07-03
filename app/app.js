@@ -67,8 +67,10 @@ function effItems(tid, tagoi, baseItens){
   });
   return out;
 }
-// ---- talhões: base (não removidos) + criados ----
-function talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id]).concat(OV.talhaoAdd); }
+// ---- talhões: base (não removidos, não vazios) + criados ----
+// talhão "vazio" = placeholder da planilha sem cultura, sem safrinha e sem área
+function talhaoVazio(t){ return !(t.empreendimento||'').trim() && !(t.emp_safrinha||'').trim() && (+t.area||0)===0; }
+function talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id] && !talhaoVazio(t)).concat(OV.talhaoAdd); }
 function findTalhao(id){ return DATA.talhoes.find(t=>t.id===id) || OV.talhaoAdd.find(t=>t.id===id); }
 function planoDe(id){
   if(id in DATA.planos) return DATA.planos[id];
@@ -643,7 +645,8 @@ V.sync = function(){
       </div>
       <div id="sync-log" class="sync-log" ${eds.length?'':''}></div>
       <p class="mut" style="font-size:12px;margin-top:12px"><b>Puxar</b> substitui os dados pelos da planilha (a planilha manda) e limpa suas edições de campo locais.
-      <b>Enviar</b> grava de volta apenas: dose, estoque, preço, área e produtividade. Insumos adicionados/removidos e talhões criados no app <b>não</b> vão para a planilha.</p>
+      <b>Enviar</b> grava de volta apenas: dose, estoque, preço, área e produtividade. Insumos adicionados/removidos e talhões criados no app <b>não</b> vão para a planilha.<br>
+      Com a URL salva, o app <b>puxa automaticamente ao abrir</b> — a menos que você tenha edições de campo ainda não enviadas (aí ele avisa em vez de sobrescrever).</p>
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
     <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
@@ -890,4 +893,9 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   window.addEventListener('hashchange',route);
   if(!location.hash) location.hash='#/dashboard';
   route();
+  // puxar automático ao abrir (se a URL estiver configurada e não houver edições de campo pendentes)
+  if(syncUrl()){
+    if(buildFieldEdits().length===0){ syncLog('Sincronizando ao abrir…'); syncPull(); }
+    else toast('Você tem edições de campo não enviadas — veja Sincronizar antes de puxar');
+  }
 }).catch(e=>{ $('#content').innerHTML=`<div class="empty">Falha ao carregar data.json.<br>Rode via servidor HTTP (não abra o arquivo direto).<br><small>${esc(e.message)}</small></div>`; });
