@@ -926,6 +926,17 @@ function buildFieldEdits(){
   for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
     if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade}); }
+  // insumos adicionados no app -> gravam em linhas vazias da operação (só operações-base de talhões-base)
+  for(const key in OV.itemAdd){ const i=key.indexOf('|'); if(i<0) continue;
+    const tid=key.slice(0,i), tagoi=key.slice(i+1);
+    if(!isBase(tid)) continue;
+    const tag=tagoi[0], oi=+tagoi.slice(1);
+    const seq=tag==='S'?'safrinha':'principal';
+    const baseLen=(planoDe(tid)[seq]||[]).length;
+    if(!(oi<baseLen)) continue; // operação criada no app não existe na planilha
+    OV.itemAdd[key].forEach(a=>{ if(!a.produto) return; const p=PROD[a.produto];
+      eds.push({type:'additem',talhao:tid,tag,op:oi,classe:(p&&p.classe)||'',produto:a.produto,dose:+a.dose||0}); });
+  }
   return eds;
 }
 function applyPulledData(d){
@@ -957,6 +968,14 @@ async function syncPush(){
     const res=await r.json();
     syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     toast(`Enviado à planilha (${res.ok} ok)`);
+    // insumos adicionados que foram gravados agora vivem na planilha: limpa o override e puxa a verdade
+    const adds=eds.filter(e=>e.type==='additem');
+    if(res.fail===0 && adds.length){
+      adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
+        if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
+      saveOverrides();
+      syncLog('↻ Reconciliando com a planilha…'); await syncPull();
+    }
   }catch(e){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); }
 }
 
