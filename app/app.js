@@ -509,19 +509,20 @@ V.cotacao = function(){
   const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
   const totalGeral=rows.reduce((a,r)=>a+r.valor,0);
   return `
-  <div class="toolbar"><span class="badge badge-muted">Itens a comprar agrupados por fornecedor — ${order.length} fornecedores · ${brl0(totalGeral)}</span>
+  <div class="toolbar"><div class="search"><input id="q-cot" placeholder="Buscar produto, classe ou fornecedor…"></div>
+    <span class="badge badge-muted">${order.length} fornecedores · ${brl0(totalGeral)}</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ Exportar CSV</button></div>
-  ${order.map(forn=>{
+  <div id="cot-groups">${order.map(forn=>{
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
     const sub=its.reduce((a,r)=>a+r.valor,0);
     return `<div class="panel"><div class="panel-head"><h2>${esc(forn)}</h2><span class="sub">${its.length} itens · ${brl0(sub)}</span></div>
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
-    <tbody>${its.map(r=>`<tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
+    <tbody>${its.map(r=>`<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
       <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td>
       <td class="num"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
       <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="5">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
-  }).join('')}`;
+  }).join('')}</div>`;
 };
 
 V.maquinas = function(){
@@ -659,7 +660,7 @@ V.empreendimentos = function(arg){
   });
   const rows=prods.map(prod=>{
     const m=map[prod], doseCommon=m.doses.size===1?[...m.doses][0]:null, preco=precoDe(prod);
-    return `<tr>
+    return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}">
       <td>${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
       <td><b>${esc(prod)}</b></td>
       <td class="num"><input class="cell" data-edit="bulkDose" data-emp="${esc(sel)}" data-prod="${esc(prod)}"
@@ -689,8 +690,8 @@ V.empreendimentos = function(arg){
     </div>
   </div>
   <div class="panel"><div class="panel-head"><h2>Insumos da cultura</h2>
-    <span class="sub">edite a dose (aplica a todos) ou exclua — em massa</span></div>
-    <div class="table-wrap"><table>
+    <div class="search" style="max-width:240px"><input id="q-emp" placeholder="Buscar produto ou classe…"></div></div>
+    <div class="table-wrap"><table id="tbl-emp">
       <thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th>
         <th class="num">Qtd total</th><th class="num">Preço</th><th class="num">Nos talhões</th><th></th></tr></thead>
       <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Sem insumos nesta cultura.</td></tr>'}</tbody>
@@ -914,7 +915,21 @@ document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
   if(e.target.id==='q-compra') filterCompras(e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
+  if(e.target.id==='q-emp') filterTable('#tbl-emp',e.target.value);
+  if(e.target.id==='q-cot') filterCotacao(e.target.value);
 });
+// busca na Cotação: filtra em todos os fornecedores e esconde painéis vazios
+function filterCotacao(q){
+  q=(q||'').toLowerCase().trim();
+  document.querySelectorAll('#cot-groups .panel').forEach(p=>{
+    let any=false;
+    p.querySelectorAll('tbody tr').forEach(tr=>{
+      const show=!q||(tr.dataset.search||'').includes(q);
+      tr.style.display=show?'':'none'; if(show) any=true;
+    });
+    p.style.display=any?'':'none';
+  });
+}
 // busca na Demanda de Compras: filtra em todos os grupos e esconde grupos vazios
 function filterCompras(q){
   q=(q||'').toLowerCase().trim();
