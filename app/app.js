@@ -33,6 +33,7 @@ function saveOverrides(){
   localStorage.setItem(LS_KEY, JSON.stringify(OV));
   if(DATA) buildMaqIndex();
   updateEditBadge();
+  if(typeof scheduleAutoPush==='function') scheduleAutoPush(); // envia edições à planilha (auto, com debounce)
 }
 function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.dose).length +
@@ -680,7 +681,7 @@ V.empreendimentos = function(arg){
 };
 
 V.sync = function(){
-  const url=syncUrl(), eds=buildFieldEdits();
+  const url=syncUrl(), eds=buildFieldEdits(), on=autoOn();
   return `
   <div class="panel"><div class="panel-head"><h2>Sincronização com a planilha</h2><span class="sub">Google Sheets — planilha como verdade</span></div>
     <div style="padding:16px 18px">
@@ -689,14 +690,19 @@ V.sync = function(){
         <input class="txt" id="sync-url" value="${esc(url)}" placeholder="https://script.google.com/macros/s/…/exec" style="flex:1;min-width:260px">
         <button class="btn btn-outline btn-sm" data-act="sync-save">Salvar URL</button>
       </div>
+      <label class="switch" style="margin-top:16px">
+        <input type="checkbox" id="sync-auto" ${on?'checked':''} data-edit="autoSync">
+        <span class="track"></span>
+        <span><b>Sincronização automática</b> — envia suas edições e puxa a planilha sozinho${on?`&nbsp;(a cada ${Math.round(POLL_MS/1000)}s)`:''}</span>
+      </label>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-primary" data-act="sync-pull">⬇ Puxar da planilha</button>
-        <button class="btn btn-outline" data-act="sync-push">⬆ Enviar edições (${eds.length})</button>
+        <button class="btn btn-primary" data-act="sync-pull">⬇ Puxar agora</button>
+        <button class="btn btn-outline" data-act="sync-push">⬆ Enviar agora (${eds.length})</button>
       </div>
-      <div id="sync-log" class="sync-log" ${eds.length?'':''}></div>
-      <p class="mut" style="font-size:12px;margin-top:12px"><b>Puxar</b> substitui os dados pelos da planilha (a planilha manda) e limpa suas edições de campo locais.
-      <b>Enviar</b> grava de volta apenas: dose, estoque, preço, área e produtividade. Insumos adicionados/removidos e talhões criados no app <b>não</b> vão para a planilha.<br>
-      Com a URL salva, o app <b>puxa automaticamente ao abrir</b> — a menos que você tenha edições de campo ainda não enviadas (aí ele avisa em vez de sobrescrever).</p>
+      <div id="sync-log" class="sync-log"></div>
+      <p class="mut" style="font-size:12px;margin-top:12px">Com a <b>sincronização automática</b> ligada e a URL salva: o app <b>puxa</b> a planilha ao abrir e periodicamente, e <b>envia</b> suas edições automaticamente pouco depois de você mexer. A <b>planilha é a verdade</b> — ela sempre vence em conflito.<br>
+      <b>Enviado para a planilha:</b> dose, estoque, preço, área, produtividade e <b>insumos adicionados</b> a uma operação existente. Remoção de insumos e talhões/operações/máquinas criados no app <b>não</b> vão para a planilha.<br>
+      Os botões acima forçam um puxar/enviar imediato quando você quiser.</p>
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
     <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
@@ -727,6 +733,7 @@ function route(){
 function applyEdit(el){
   const kind=el.dataset.edit;
   if(!kind) return;
+  if(kind==='autoSync'){ setAutoOn(el.checked); syncLog(el.checked?'Sincronização automática ligada.':'Sincronização automática desligada.'); if(el.checked) toast('Sincronização automática ligada'); else{ clearInterval(pollTimer); toast('Sincronização automática desligada'); } return; }
   if(kind==='opMaq'){   // valor é o conjunto (string); "" = sem máquina
     const k=opMaqKey(el.dataset.id, el.dataset.op);
     OV.opMaq[k]=el.value; saveOverrides(); route(); return;
@@ -877,7 +884,7 @@ document.addEventListener('click',e=>{
       const c=a.conj, i=OV.maqAdd.findIndex(x=>x.conjunto===c); if(i>=0) OV.maqAdd.splice(i,1);
       delete OV.maqAttr[c]; delete OV.maquina[c]; saveOverrides(); route(); toast('Conjunto excluído');
     }
-    else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); }
+    else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     return;
@@ -885,6 +892,7 @@ document.addEventListener('click',e=>{
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
 });
 document.addEventListener('input',e=>{
+  lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
   if(e.target.id==='q-compra') filterTable('#tbl-compras',e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
 });
@@ -912,8 +920,28 @@ function exportCotacaoCSV(){
 }
 /* ---- sincronização com a planilha (Apps Script Web App) ---- */
 const SYNC_KEY='planejamento_sync_url';
+const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização automática
+const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
+const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
+let syncBusy=false, pushTimer=null, pollTimer=null;
+let lastPushSig='', lastRawSig='', lastInputTs=0;
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
+function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
+function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
 function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
+// chip de estado na barra superior: off | ok | busy | err
+function setSyncStatus(state, msg){
+  const el=$('#sync-status'); if(!el) return;
+  if(!syncUrl()){ el.hidden=true; return; }
+  el.hidden=false;
+  const s = state || (syncBusy?'busy':(autoOn()?'ok':'off'));
+  el.classList.remove('is-ok','is-busy','is-err','is-off');
+  el.classList.add('is-'+s);
+  const txt={ok:'Sincronizado',busy:'Sincronizando…',err:'Erro na sincronia',off:'Auto desligado'}[s]||'Local';
+  const t=el.querySelector('.sync-status-txt'); if(t) t.textContent=msg||txt;
+}
+// assinatura das edições pendentes (para não reenviar/reler à toa)
+function fieldSig(){ return JSON.stringify(buildFieldEdits()); }
 // monta as edições de CAMPO a partir dos overrides (só talhões/produtos da planilha)
 function buildFieldEdits(){
   if(!DATA) return [];
@@ -947,37 +975,74 @@ function applyPulledData(d){
   Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id]; delete o.area; delete o.produtividade; if(!Object.keys(o).length) delete OV.talhao[id]; });
   saveOverrides();
 }
-async function syncPull(){
-  const url=syncUrl(); if(!url){ toast('Configure a URL primeiro'); return; }
-  syncLog('⏳ Puxando da planilha…');
+// PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)
+async function syncPull(opts){
+  opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
+  if(syncBusy) return; syncBusy=true; setSyncStatus('busy');
+  if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   try{
     const r=await fetch(url,{method:'GET'}); const d=await r.json();
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
-    applyPulledData(d);
-    syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
-    toast('Dados atualizados da planilha'); route();
-  }catch(e){ syncLog('✖ Erro ao puxar: '+e.message+'  (verifique a URL e o acesso "Qualquer pessoa")'); toast('Falha ao puxar'); }
+    const raw=JSON.stringify(d);
+    if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
+      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); }
+      syncBusy=false; setSyncStatus('ok'); return;
+    }
+    lastRawSig=raw; applyPulledData(d); lastPushSig=fieldSig();
+    if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
+    if(!opts.silentToast) toast('Dados atualizados da planilha');
+    syncBusy=false; route(); setSyncStatus('ok');
+  }catch(e){ syncBusy=false; setSyncStatus('err');
+    if(!opts.auto){ syncLog('✖ Erro ao puxar: '+e.message+'  (verifique a URL e o acesso "Qualquer pessoa")'); toast('Falha ao puxar'); } }
 }
-async function syncPush(){
-  const url=syncUrl(); if(!url){ toast('Configure a URL primeiro'); return; }
-  const eds=buildFieldEdits();
-  if(!eds.length){ toast('Nenhuma edição de campo para enviar'); return; }
-  syncLog(`⏳ Enviando ${eds.length} edições…`);
+// ENVIAR — app -> planilha. opts.auto = disparado por edição (silencioso; deduplica)
+async function syncPush(opts){
+  opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
+  const eds=buildFieldEdits(), sig=JSON.stringify(eds);
+  if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; return; }
+  if(opts.auto && sig===lastPushSig) return;      // já enviamos exatamente isto
+  if(syncBusy){ scheduleAutoPush(); return; }       // ocupado: tenta de novo depois
+  syncBusy=true; setSyncStatus('busy');
+  if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
     const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)});
     const res=await r.json();
-    syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
-    toast(`Enviado à planilha (${res.ok} ok)`);
-    // insumos adicionados que foram gravados agora vivem na planilha: limpa o override e puxa a verdade
+    lastPushSig=sig;
+    if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
+    if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
+    // insumos adicionados agora vivem na planilha: limpa o override e puxa a verdade (reconcilia)
     const adds=eds.filter(e=>e.type==='additem');
     if(res.fail===0 && adds.length){
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
       saveOverrides();
-      syncLog('↻ Reconciliando com a planilha…'); await syncPull();
+      if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
+      syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;
     }
-  }catch(e){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); }
+    syncBusy=false; setSyncStatus('ok');
+  }catch(e){ syncBusy=false; setSyncStatus('err');
+    if(!opts.auto){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); } }
 }
+// agenda um envio automático (debounce) após edições
+function scheduleAutoPush(){
+  if(!syncUrl()||!autoOn()) return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(()=>{ if(!syncBusy) syncPush({auto:true}); else scheduleAutoPush(); }, PUSH_DEBOUNCE);
+}
+// puxar periódico (planilha -> app) enquanto a aba está visível
+function pollTick(){
+  if(!syncUrl()||!autoOn()||syncBusy) return;
+  if(document.visibilityState!=='visible') return;
+  if(Date.now()-lastInputTs < 4000) return;        // usuário digitando: não puxa agora
+  if(fieldSig()!==lastPushSig){ scheduleAutoPush(); return; }  // há edições não enviadas: envia primeiro
+  syncPull({auto:true, silentToast:true});
+}
+function startPolling(){
+  clearInterval(pollTimer);
+  if(!syncUrl()||!autoOn()) return;
+  pollTimer=setInterval(pollTick, POLL_MS);
+}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollTick(); });
 
 $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringify(OV,null,2),'application/json'); toast('Edições exportadas'); };
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
@@ -989,9 +1054,12 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   window.addEventListener('hashchange',route);
   if(!location.hash) location.hash='#/dashboard';
   route();
-  // puxar automático ao abrir (se a URL estiver configurada e não houver edições de campo pendentes)
-  if(syncUrl()){
-    if(buildFieldEdits().length===0){ syncLog('Sincronizando ao abrir…'); syncPull(); }
-    else toast('Você tem edições de campo não enviadas — veja Sincronizar antes de puxar');
+  // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
+  lastPushSig=fieldSig();
+  if(syncUrl() && autoOn()){
+    if(buildFieldEdits().length===0){ syncPull({auto:true, silentToast:true}); }
+    else scheduleAutoPush();   // há edições locais: envia para a planilha (que reconcilia via pull)
+    startPolling();
   }
+  setSyncStatus();
 }).catch(e=>{ $('#content').innerHTML=`<div class="empty">Falha ao carregar data.json.<br>Rode via servidor HTTP (não abra o arquivo direto).<br><small>${esc(e.message)}</small></div>`; });

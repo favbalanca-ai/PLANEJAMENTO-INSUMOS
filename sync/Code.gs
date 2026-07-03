@@ -43,8 +43,10 @@ function readData(){
   var planos = {};
   talhoes.forEach(function(t){
     var s = sh(t.id); if (!s) return;
-    planos[t.id] = { area:N(s.getRange(2, 2).getValue()), empreendimento:S(s.getRange(3, 2).getValue()),
-      principal: readOps(s, 10, 224), safrinha: readOps(s, 238, 451) };
+    var n = Math.min(451, s.getMaxRows());               // 1 leitura por aba (em vez de 4)
+    var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
+    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]),
+      principal: readOpsArr(big, 10, Math.min(224, n)), safrinha: readOpsArr(big, 238, Math.min(451, n)) };
   });
 
   var precos = {}, D = sh('DRE ORÇADA');
@@ -69,13 +71,14 @@ function readData(){
     precos_cultura:precos, maquinas:maquinas };
 }
 
-// operações (com itens) de uma faixa de linhas de uma aba TL
-function readOps(s, r0, r1){
-  var rows = s.getRange(r0, 1, r1 - r0 + 1, 9).getValues(), ops = [], cur = null;
-  for (var i = 0; i < rows.length; i++){
-    var a = S(rows[i][0]), prod = S(rows[i][2]);
+// operações (com itens) de uma faixa de linhas — lê de um array já carregado (big[L-1])
+function readOpsArr(big, r0, r1){
+  var ops = [], cur = null;
+  for (var L = r0; L <= r1; L++){
+    var row = big[L - 1]; if (!row) continue;
+    var a = S(row[0]), prod = S(row[2]);
     if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { nome:a, itens:[] }; ops.push(cur); }
-    if (prod && cur) cur.itens.push({ classe:S(rows[i][1]), produto:prod, dose:N(rows[i][8]), un:S(rows[i][5]) });
+    if (prod && cur) cur.itens.push({ classe:S(row[1]), produto:prod, dose:N(row[8]), un:S(row[5]) });
   }
   return ops.filter(function(o){ return o.itens.length; });
 }
