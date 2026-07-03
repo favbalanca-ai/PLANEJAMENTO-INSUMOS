@@ -21,12 +21,13 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 ## O que sincroniza
 - **Puxar (planilha → app):** todos os dados (produtos, talhões, planos,
   preços, máquinas). Substitui o que está no app.
-- **Enviar (app → planilha):** **dose, estoque, preço, área, produtividade** e
-  **insumos adicionados** a uma operação já existente (grava classe/produto/dose
-  na primeira linha vazia daquele bloco da operação). Remoção de insumos, e
-  operações/talhões/máquinas criados no app **não** são enviados (para não mexer
-  na estrutura/fórmulas da planilha). Depois de enviar insumos novos, o app puxa
-  a planilha automaticamente para reconciliar (evita duplicação).
+- **Enviar (app → planilha):** **dose, estoque, preço, área, produtividade**,
+  **insumos adicionados** a uma operação existente (grava classe/produto/dose na
+  primeira linha vazia do bloco da operação) e **insumos removidos** (limpa a
+  linha daquele insumo na operação). Operações/talhões/máquinas criados no app
+  **não** são enviados (para não mexer na estrutura/fórmulas da planilha). Depois
+  de enviar mudanças de insumo, o app puxa a planilha automaticamente para
+  reconciliar (evita duplicar ou fazer o item ressurgir).
 
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
@@ -53,6 +54,8 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   - `area` / `produtividade` → `ÁREA PLANTIO` colunas **E** / **D**
   - `additem` (insumo novo) → aba do talhão: **classe (B)**, **produto (C)** e
     **dose (I)** na primeira linha vazia do bloco da operação (`emptyItemRow`).
+  - `delitem` (insumo removido) → limpa **B/C/I** da linha do insumo naquele
+    bloco da operação (`itemRowByName`); as demais colunas (fórmulas) se ajustam.
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações
