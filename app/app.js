@@ -472,7 +472,7 @@ V.compras = function(){
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
-    <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
+    <td class="num c-more" data-th="Preço"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
     <td class="c-more" data-th="Un">${esc(r.un)}</td>
@@ -496,7 +496,7 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">Toque na classe p/ abrir; toque no item p/ ver detalhes e editar estoque</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">Toque na classe p/ abrir; toque no item p/ editar estoque e preço de referência</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
@@ -517,7 +517,7 @@ V.cotacao = function(){
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
     <tbody>${its.map(r=>`<tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
       <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td>
-      <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
+      <td class="num"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
       <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="5">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}`;
