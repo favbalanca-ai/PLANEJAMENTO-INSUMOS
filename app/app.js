@@ -627,8 +627,38 @@ V.empreendimentos = function(arg){
   <p class="mut" style="font-size:12px">Editar a dose aqui sobrescreve o insumo em <b>todos</b> os talhões desta cultura. “Dose: vários” significa que os talhões têm doses diferentes — digite um valor para uniformizar.</p>`;
 };
 
+V.sync = function(){
+  const url=syncUrl(), eds=buildFieldEdits();
+  return `
+  <div class="panel"><div class="panel-head"><h2>Sincronização com a planilha</h2><span class="sub">Google Sheets — planilha como verdade</span></div>
+    <div style="padding:16px 18px">
+      <label class="mut" style="font-size:12px;font-weight:700">URL do Web App (Apps Script)</label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <input class="txt" id="sync-url" value="${esc(url)}" placeholder="https://script.google.com/macros/s/…/exec" style="flex:1;min-width:260px">
+        <button class="btn btn-outline btn-sm" data-act="sync-save">Salvar URL</button>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn btn-primary" data-act="sync-pull">⬇ Puxar da planilha</button>
+        <button class="btn btn-outline" data-act="sync-push">⬆ Enviar edições (${eds.length})</button>
+      </div>
+      <div id="sync-log" class="sync-log" ${eds.length?'':''}></div>
+      <p class="mut" style="font-size:12px;margin-top:12px"><b>Puxar</b> substitui os dados pelos da planilha (a planilha manda) e limpa suas edições de campo locais.
+      <b>Enviar</b> grava de volta apenas: dose, estoque, preço, área e produtividade. Insumos adicionados/removidos e talhões criados no app <b>não</b> vão para a planilha.</p>
+    </div></div>
+  <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
+    <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
+      <li>Abra sua planilha no Google Sheets → <b>Extensões → Apps Script</b>.</li>
+      <li>Cole o conteúdo de <code>sync/Code.gs</code> (do repositório) e salve.</li>
+      <li><b>Implantar → Nova implantação → App da Web</b>. Executar como <b>Você</b>; acesso <b>Qualquer pessoa</b>.</li>
+      <li>Copie a URL (termina em <code>/exec</code>), cole acima e <b>Salvar URL</b>.</li>
+      <li>Clique em <b>Puxar da planilha</b>.</li>
+    </ol>
+    <p class="mut" style="font-size:12px;padding:0 18px 14px">Obs.: a sincronização funciona na versão publicada (GitHub Pages) — na pré-visualização hospedada da Claude o navegador bloqueia chamadas externas.</p>
+  </div>`;
+};
+
 /* ================= ROUTER ================= */
-const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos'};
+const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
@@ -767,6 +797,9 @@ document.addEventListener('click',e=>{
       saveOverrides(); toast(`Talhão ${a.id} excluído`);
       if(location.hash.startsWith('#/talhao/')) location.hash='#/talhoes'; else route();
     }
+    else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); }
+    else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
+    else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
@@ -797,6 +830,56 @@ function exportCotacaoCSV(){
   download('cotacao_safra_2627.csv','﻿'+csv,'text/csv;charset=utf-8');
   toast('CSV de cotação exportado');
 }
+/* ---- sincronização com a planilha (Apps Script Web App) ---- */
+const SYNC_KEY='planejamento_sync_url';
+function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
+function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
+// monta as edições de CAMPO a partir dos overrides (só talhões/produtos da planilha)
+function buildFieldEdits(){
+  if(!DATA) return [];
+  const isBase=id=>DATA.planos.hasOwnProperty(id)||DATA.talhoes.some(t=>t.id===id);
+  const eds=[];
+  for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
+    eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
+  for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
+  for(const pr in OV.preco)   eds.push({type:'preco',produto:pr,value:+OV.preco[pr]});
+  for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
+    if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
+    if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade}); }
+  return eds;
+}
+function applyPulledData(d){
+  DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
+  for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
+  // planilha como verdade: limpa overrides de campo (agora vêm da planilha)
+  OV.dose={}; OV.estoque={}; OV.preco={};
+  Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id]; delete o.area; delete o.produtividade; if(!Object.keys(o).length) delete OV.talhao[id]; });
+  saveOverrides();
+}
+async function syncPull(){
+  const url=syncUrl(); if(!url){ toast('Configure a URL primeiro'); return; }
+  syncLog('⏳ Puxando da planilha…');
+  try{
+    const r=await fetch(url,{method:'GET'}); const d=await r.json();
+    if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
+    applyPulledData(d);
+    syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
+    toast('Dados atualizados da planilha'); route();
+  }catch(e){ syncLog('✖ Erro ao puxar: '+e.message+'  (verifique a URL e o acesso "Qualquer pessoa")'); toast('Falha ao puxar'); }
+}
+async function syncPush(){
+  const url=syncUrl(); if(!url){ toast('Configure a URL primeiro'); return; }
+  const eds=buildFieldEdits();
+  if(!eds.length){ toast('Nenhuma edição de campo para enviar'); return; }
+  syncLog(`⏳ Enviando ${eds.length} edições…`);
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)});
+    const res=await r.json();
+    syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
+    toast(`Enviado à planilha (${res.ok} ok)`);
+  }catch(e){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); }
+}
+
 $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringify(OV,null,2),'application/json'); toast('Edições exportadas'); };
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
 

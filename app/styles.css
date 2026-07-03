@@ -136,6 +136,11 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   color:var(--ink2);font-weight:600;font-size:13px;cursor:pointer;text-decoration:none;white-space:nowrap}
 .chip:hover{background:#eef7f9}
 .chip-on{background:var(--ink2);color:#fff;border-color:var(--ink2)}
+.sync-log{margin-top:14px;background:#0e2a33;color:#cfe6ea;border-radius:8px;padding:0;
+  font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;max-height:200px;overflow:auto}
+.sync-log:not(:empty){padding:10px 12px}
+.sync-log div{white-space:pre-wrap;word-break:break-word}
+code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 
 /* ---- mobile / toque ---- */
 @media(max-width:640px){
