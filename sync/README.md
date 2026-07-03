@@ -22,12 +22,16 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **Puxar (planilha → app):** todos os dados (produtos, talhões, planos,
   preços, máquinas). Substitui o que está no app.
 - **Enviar (app → planilha):** **dose, estoque, preço, área, produtividade**,
-  **insumos adicionados** a uma operação existente (grava classe/produto/dose na
-  primeira linha vazia do bloco da operação) e **insumos removidos** (limpa a
-  linha daquele insumo na operação). Operações/talhões/máquinas criados no app
-  **não** são enviados (para não mexer na estrutura/fórmulas da planilha). Depois
-  de enviar mudanças de insumo, o app puxa a planilha automaticamente para
-  reconciliar (evita duplicar ou fazer o item ressurgir).
+  **1ª cultura (empreendimento), 2ª cultura (safrinha) e produtividade da
+  safrinha**, **troca de produto** de um insumo base, **insumos adicionados**
+  (grava classe/produto/dose na primeira linha vazia do bloco da operação) e
+  **insumos removidos** (limpa a linha do insumo). Depois de enviar mudanças de
+  insumo, o app puxa a planilha automaticamente para reconciliar (evita duplicar
+  ou fazer o item ressurgir).
+- **Fica só no app (não é enviado):** operações, talhões e máquinas **criados**
+  no app, e os **ajustes de máquina** (largura/velocidade) — na planilha esses
+  valores vêm de fórmulas/cadastro, então gravá-los quebraria as fórmulas.
+  (No sentido planilha → app, tudo isso é lido normalmente.)
 
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
@@ -52,6 +56,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   - `estoque` → `PORTIFÓLIO` coluna **T**
   - `preco` → `PORTIFÓLIO` coluna **S**
   - `area` / `produtividade` → `ÁREA PLANTIO` colunas **E** / **D**
+  - `empreendimento` / `emp_safrinha` / `prod_safrinha` → `ÁREA PLANTIO`
+    colunas **C** / **H** / **I** (a aba do talhão B3 já referencia C por fórmula)
+  - `itemprod` (troca de produto) → aba do talhão: acha a linha pelo produto
+    antigo (`itemRowByName`) e grava **classe (B)** e **produto novo (C)**
   - `additem` (insumo novo) → aba do talhão: **classe (B)**, **produto (C)** e
     **dose (I)** na primeira linha vazia do bloco da operação (`emptyItemRow`).
   - `delitem` (insumo removido) → limpa **B/C/I** da linha do insumo naquele
