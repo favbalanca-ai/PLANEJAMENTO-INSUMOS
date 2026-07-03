@@ -1,15 +1,13 @@
-/**
- * Planejamento Safra 26/27 — Sincronização App <-> Planilha (Google Sheets)
- *
- * Vincule este script à SUA planilha (a "verdade"):
- *   Extensões > Apps Script > cole este arquivo > Salvar
- *   Implantar > Nova implantação > Tipo: App da Web
- *     Executar como: Você | Quem tem acesso: Qualquer pessoa
- *   Copie a URL (termina em /exec) e cole na tela "Sincronizar" do app.
- *
- * doGet  -> devolve os dados da planilha em JSON (mesmo formato do app).
- * doPost -> grava de volta apenas CAMPOS: dose, estoque, preço, área, produtividade.
- */
+// Planejamento Safra 26/27 - Sincronizacao App <-> Planilha (Google Sheets)
+//
+// Vincule este script a SUA planilha (a "verdade"):
+//   Extensoes > Apps Script > selecione tudo, apague e cole este arquivo > Salvar
+//   Implantar > Nova implantacao > Tipo: App da Web
+//     Executar como: Voce | Quem tem acesso: Qualquer pessoa
+//   Copie a URL (termina em /exec) e cole na tela "Sincronizar" do app.
+//
+// doGet  -> devolve os dados da planilha em JSON (mesmo formato do app).
+// doPost -> grava de volta campos e insumos (add/remove/troca).
 
 function ss(){ return SpreadsheetApp.getActiveSpreadsheet(); }
 function sh(n){ return ss().getSheetByName(n); }
