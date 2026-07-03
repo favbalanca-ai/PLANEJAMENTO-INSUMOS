@@ -21,7 +21,11 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 ## O que sincroniza
 - **Puxar (planilha → app):** todos os dados (produtos, talhões, planos,
   preços, máquinas). Substitui o que está no app.
-- **Enviar (app → planilha):** **dose, estoque, preço, área, produtividade**,
+- **Preço de referência:** é um **ajuste local do app** (não vai para a
+  planilha e não é apagado ao puxar), porque na planilha o preço vem de
+  fórmula/importação. Editar o preço no app afeta os cálculos de valor/compra;
+  para voltar ao preço da planilha, apague o campo.
+- **Enviar (app → planilha):** **dose, estoque, área, produtividade**,
   **1ª cultura (empreendimento), 2ª cultura (safrinha) e produtividade da
   safrinha**, **troca de produto** de um insumo base, **insumos adicionados**
   (grava classe/produto/dose na primeira linha vazia do bloco da operação) e

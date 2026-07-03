@@ -7,6 +7,7 @@ let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
 let PROD = {};            // produto -> objeto do produto
 const collapsedOps = new Set(); // operações recolhidas (chave "TL|tagOp"); só na sessão
+const openCards = new Set();     // cartões abertos (detalhes) que devem continuar abertos após re-render
 
 /* ---------------- persistência ---------------- */
 function loadOverrides(){
@@ -468,7 +469,7 @@ V.compras = function(){
   all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
   const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
-  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
+  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
@@ -932,7 +933,10 @@ document.addEventListener('click',e=>{
   if(!window.matchMedia('(max-width:640px)').matches) return;
   if(e.target.closest('input,select,button,a,label')) return;
   const tr=e.target.closest('.cards-sm tbody tr');
-  if(tr) tr.classList.toggle('open');
+  if(!tr) return;
+  tr.classList.toggle('open');
+  const k=tr.getAttribute('data-cardkey');   // lembra o estado aberto p/ não fechar ao re-renderizar
+  if(k){ if(tr.classList.contains('open')) openCards.add(k); else openCards.delete(k); }
 });
 // tocar no nome da operação recolhe/expande a lista de insumos dela (sem re-renderizar)
 document.addEventListener('click',e=>{
@@ -995,7 +999,7 @@ function buildFieldEdits(){
   for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
-  for(const pr in OV.preco)   eds.push({type:'preco',produto:pr,value:+OV.preco[pr]});
+  // preço de referência: ajuste LOCAL do app (a coluna de preço da planilha é fórmula/importada) — não envia
   for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
     if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade});
@@ -1036,7 +1040,8 @@ function applyPulledData(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // planilha como verdade: limpa overrides de campo (agora vêm da planilha)
-  OV.dose={}; OV.estoque={}; OV.preco={}; OV.itemProd={};
+  // OBS: OV.preco NÃO é limpo — é ajuste local do usuário (a planilha traz o preço por fórmula/importação)
+  OV.dose={}; OV.estoque={}; OV.itemProd={};
   Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id];
     delete o.area; delete o.produtividade; delete o.empreendimento; delete o.emp_safrinha; delete o.prod_safrinha;
     if(!Object.keys(o).length) delete OV.talhao[id]; });
