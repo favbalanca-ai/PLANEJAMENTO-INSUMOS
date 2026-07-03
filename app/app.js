@@ -190,6 +190,41 @@ function custoTalhao(t){
   });
   return {ha, total:ha*area, area};
 }
+// custo de insumos (R$/ha) de UMA safra do talhão
+function custoSeqHa(t,seq){
+  const p=planoDe(t.id); if(!p) return 0; const tag=seq==='safrinha'?'S':'P'; let ha=0;
+  (p[seq]||[]).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>ha+=it.dose*precoDe(it.produto)));
+  return ha;
+}
+// custo de máquinas (R$/ha) de UMA safra do talhão
+function custoOpSeqHa(t,seq){
+  const p=planoDe(t.id); if(!p) return 0; const tag=seq==='safrinha'?'S':'P'; let s=0;
+  (p[seq]||[]).forEach((op,oi)=>{ s+=custoOpHa(t.id,tag,oi,op); });
+  return s;
+}
+const temSafrinha = t => !!(t.emp_safrinha && String(t.emp_safrinha).trim());
+function prodSafDe(t){ const o=OV.talhao[t.id]; return o&&o.prod_safrinha!=null?+o.prod_safrinha:(t.prod_safrinha||0); }
+// cada talhão vira 1 ou 2 "cultivos" (safra principal + safrinha)
+function cultivos(){
+  const out=[];
+  talhoesAll().forEach(t=>{
+    const area=areaDe(t);
+    out.push({t,seq:'principal',tag:'P',emp:t.empreendimento||'—',area,prod:area*prodvDe(t),
+      ins:custoSeqHa(t,'principal')*area, maqHa:custoOpSeqHa(t,'principal')});
+    if(temSafrinha(t)) out.push({t,seq:'safrinha',tag:'S',emp:t.emp_safrinha,area,prod:area*prodSafDe(t),
+      ins:custoSeqHa(t,'safrinha')*area, maqHa:custoOpSeqHa(t,'safrinha')});
+  });
+  return out;
+}
+// pares (talhão, safra) que pertencem a um empreendimento
+function cultivosDaEmp(emp){
+  const out=[];
+  talhoesAll().forEach(t=>{
+    if((t.empreendimento||'—')===emp) out.push({t,seq:'principal',tag:'P'});
+    if(temSafrinha(t)&&t.emp_safrinha===emp) out.push({t,seq:'safrinha',tag:'S'});
+  });
+  return out;
+}
 
 /* ---------------- formatação ---------------- */
 const nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
@@ -227,7 +262,7 @@ V.dashboard = function(){
   const semPreco=compras.filter(r=>r.comprar>0&&r.preco<=0).length;
   // custo por cultura
   const porCultura={};
-  talhoesAll().forEach(t=>{const e=t.empreendimento||'—';porCultura[e]=(porCultura[e]||0)+custoTalhao(t).total;});
+  cultivos().forEach(cv=>{ porCultura[cv.emp]=(porCultura[cv.emp]||0)+cv.ins; });
   const culturas=Object.entries(porCultura).sort((a,b)=>b[1]-a[1]);
   const maxC=Math.max(1,...culturas.map(c=>c[1]));
   // custo por classe (insumo)
@@ -361,7 +396,8 @@ V.talhao = function(id){
   <a class="link" data-go="#/talhoes">‹ Talhões</a>
   <div class="detail-head" style="margin-top:10px">
     <div class="di"><div class="l">Talhão</div><div class="v">${esc(t.id)} · ${esc(t.nome||'—')}</div></div>
-    <div class="di"><div class="l">Cultura</div><div class="v" style="font-size:14px">${esc(t.empreendimento||'—')}</div></div>
+    <div class="di"><div class="l">${temSafrinha(t)?'1ª cultura':'Cultura'}</div><div class="v" style="font-size:14px">${esc(t.empreendimento||'—')}</div></div>
+    ${temSafrinha(t)?`<div class="di"><div class="l">2ª cultura (safrinha)</div><div class="v" style="font-size:14px">${esc(t.emp_safrinha)} · ${num(prodSafDe(t))} sc/ha</div></div>`:''}
     <div class="di"><div class="l">Área</div><div class="v">${num(area)} ha</div></div>
     <div class="di"><div class="l">Insumos/ha</div><div class="v">${brl(c.ha)}</div></div>
     <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}</div></div>
@@ -373,8 +409,8 @@ V.talhao = function(id){
     <button class="btn btn-outline btn-sm" data-act="deltalhao" data-id="${esc(t.id)}" data-novo="${DATA.talhoes.some(x=>x.id===t.id)?0:1}" style="color:var(--red)">🗑 Excluir talhão</button>
     <div class="spacer"></div>
     <span class="badge badge-muted">Toque no produto para trocar, na dose para editar, no 🗑 para excluir — ou “+ adicionar insumo”.</span></div>
-  ${opsHtml('principal','P','Safra principal')}
-  ${opsHtml('safrinha','S','Safrinha')||''}
+  ${opsHtml('principal','P',temSafrinha(t)?'Safra principal · '+esc(t.empreendimento||''):'Safra principal')}
+  ${opsHtml('safrinha','S','Safrinha'+(temSafrinha(t)?' · '+esc(t.emp_safrinha):''))||''}
   ${(!plan.principal.length&&!plan.safrinha.length)?'<div class="empty">Sem operações cadastradas para este talhão.</div>':''}`;
 };
 
@@ -465,12 +501,9 @@ V.maquinas = function(){
 
 V.dre = function(){
   const emps={};
-  talhoesAll().forEach(t=>{
-    const e=t.empreendimento||'—';
-    const c=custoTalhao(t), area=areaDe(t);
-    const g=emps[e]||(emps[e]={area:0,prod:0,ins:0,opDefault:0});
-    g.area+=area; g.prod+=area*prodvDe(t); g.ins+=c.total;
-    g.opDefault += custoOpTalhaoHa(t)*area;  // custo máquinas estimado (R$)
+  cultivos().forEach(cv=>{   // 1 linha por cultura; safrinha entra como cultivo próprio
+    const g=emps[cv.emp]||(emps[cv.emp]={area:0,prod:0,ins:0,opDefault:0});
+    g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area;
   });
   const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
   let tA=0,tR=0,tI=0,tM=0,tX=0;
@@ -517,16 +550,17 @@ V.dre = function(){
       <td class="num">${brl0(tI+tM+tX)}</td>
       <td class="num"><b style="color:${res>=0?'var(--green)':'var(--red)'}">${brl0(res)}</b></td></tr></tfoot>
   </table></div></div>
-  <p style="color:var(--muted);font-size:12px;margin-top:8px">O custo de máquinas soma o custo de cada operação (conjunto atribuído na tela do <b>Talhão</b>, com sugestão automática pela classe dos insumos). Ajuste o R$/ha por cultura se quiser sobrescrever. Arrendamento e custos fixos não estão incluídos.</p>`;
+  <p style="color:var(--muted);font-size:12px;margin-top:8px">Cada talhão com 2ª safra entra como <b>dois cultivos</b> (principal + safrinha), então a coluna Área soma a <b>área plantada</b> por cultura (a mesma terra pode aparecer em duas culturas). O custo de máquinas soma o custo de cada operação. Ajuste o R$/ha por cultura se quiser sobrescrever. Arrendamento e custos fixos são editáveis por cultura.</p>`;
 };
 
 // insumos consolidados de um empreendimento (produto -> {classe,un,qtd,doses,talhoes})
+// considera a safra correta (principal ou safrinha) de cada talhão
 function insumosDoEmp(emp){
   const map={};
-  talhoesAll().filter(t=>(t.empreendimento||'—')===emp).forEach(t=>{
-    const area=areaDe(t);
-    eachOp(t,(seq,tag,oi,op,tagoi)=>{
-      effItems(t.id,tagoi,op.itens).forEach(it=>{
+  cultivosDaEmp(emp).forEach(({t,seq,tag})=>{
+    const area=areaDe(t), p=planoDe(t.id);
+    (p[seq]||[]).forEach((op,oi)=>{
+      effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{
         if(!it.produto) return;
         const m=map[it.produto]||(map[it.produto]={classe:it.classe,un:it.un,qtd:0,doses:new Set(),talhoes:new Set()});
         m.qtd+=it.dose*area; m.doses.add(Math.round(it.dose*1e6)/1e6); m.talhoes.add(t.id);
@@ -536,16 +570,18 @@ function insumosDoEmp(emp){
   return map;
 }
 function empList(){
-  const s=[]; talhoesAll().forEach(t=>{const e=t.empreendimento||'—'; if(!s.includes(e))s.push(e);});
+  const s=[]; cultivos().forEach(cv=>{ if(!s.includes(cv.emp)) s.push(cv.emp); });
   return s;
 }
 V.empreendimentos = function(arg){
   const emps=empList();
   const sel=arg&&emps.includes(arg)?arg:emps[0];
   const chips=emps.map(e=>`<a class="chip ${e===sel?'chip-on':''}" data-go="#/empreendimentos/${encodeURIComponent(e)}">${esc(e)}</a>`).join('');
-  const talhoes=talhoesAll().filter(t=>(t.empreendimento||'—')===sel);
-  const area=talhoes.reduce((a,t)=>a+areaDe(t),0);
-  const custo=talhoes.reduce((a,t)=>a+custoTalhao(t).total,0);
+  const cvs=cultivosDaEmp(sel);
+  const talhaoIds=[...new Set(cvs.map(c=>c.t.id))];
+  const area=cvs.reduce((a,c)=>a+areaDe(c.t),0);
+  const custo=cvs.reduce((a,c)=>a+custoSeqHa(c.t,c.seq)*areaDe(c.t),0);
+  const seqSaf=cvs.length>0 && cvs.every(c=>c.seq==='safrinha');
   const map=insumosDoEmp(sel);
   const prods=Object.keys(map).sort((a,b)=>{
     const ca=map[a].classe||'', cb=map[b].classe||''; return ca.localeCompare(cb)||a.localeCompare(b);
@@ -567,13 +603,13 @@ V.empreendimentos = function(arg){
   return `${prodDatalist()}
   <div class="chips">${chips}</div>
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Talhões</div><div class="k-value">${talhoes.length}</div><div class="k-sub">${talhoes.map(t=>esc(t.id)).join(', ')}</div></div>
-    <div class="kpi"><div class="k-label">Área</div><div class="k-value">${num(area)} ha</div></div>
+    <div class="kpi"><div class="k-label">Talhões${seqSaf?' (safrinha)':''}</div><div class="k-value">${talhaoIds.length}</div><div class="k-sub">${talhaoIds.map(esc).join(', ')}</div></div>
+    <div class="kpi"><div class="k-label">Área plantada</div><div class="k-value">${num(area)} ha</div></div>
     <div class="kpi"><div class="k-label">Custo insumos</div><div class="k-value">${brl0(custo)}</div></div>
     <div class="kpi"><div class="k-label">Insumos distintos</div><div class="k-value">${prods.length}</div></div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h2>Adicionar insumo em massa</h2><span class="sub">aplica a todos os ${talhoes.length} talhões</span></div>
+    <div class="panel-head"><h2>Adicionar insumo em massa</h2><span class="sub">aplica a ${cvs.length} talhão(ões)${seqSaf?' na safrinha':''}</span></div>
     <div class="bulk-add">
       <input list="prodlist" class="txt" id="ba-prod" placeholder="produto (escolha da lista)">
       <input class="cell" id="ba-dose" placeholder="dose/ha" style="width:90px">
@@ -649,9 +685,12 @@ function delItem(a){
   if(a.kind==='add'){ const k=`${a.id}|${a.op}`, arr=OV.itemAdd[k]; if(arr){ arr.splice(+a.ai,1); if(!arr.length) delete OV.itemAdd[k]; } }
   else { const rk=`${a.id}|${a.op}|${a.item}`; OV.itemRemoved[rk]=true; delete OV.dose[rk]; delete OV.itemProd[rk]; }
 }
-function talhoesDaEmp(emp){ return talhoesAll().filter(t=>(t.empreendimento||'—')===emp); }
+function eachOpSeq(t,seq,cb){
+  const p=planoDe(t.id); if(!p) return; const tag=seq==='safrinha'?'S':'P';
+  (p[seq]||[]).forEach((op,oi)=>cb(tag,oi,op,`${tag}${oi}`));
+}
 function bulkSetDose(emp,prod,dose){
-  talhoesDaEmp(emp).forEach(t=>eachOp(t,(seq,tag,oi,op,tagoi)=>{
+  cultivosDaEmp(emp).forEach(({t,seq})=>eachOpSeq(t,seq,(tag,oi,op,tagoi)=>{
     effItems(t.id,tagoi,op.itens).forEach(it=>{
       if(it.produto!==prod) return;
       if(it.kind==='base') OV.dose[it.key]=dose;
@@ -660,7 +699,7 @@ function bulkSetDose(emp,prod,dose){
   }));
 }
 function bulkDelProd(emp,prod){
-  talhoesDaEmp(emp).forEach(t=>eachOp(t,(seq,tag,oi,op,tagoi)=>{
+  cultivosDaEmp(emp).forEach(({t,seq})=>eachOpSeq(t,seq,(tag,oi,op,tagoi)=>{
     const akey=`${t.id}|${tagoi}`, arr=OV.itemAdd[akey];
     if(arr){ for(let i=arr.length-1;i>=0;i--) if(arr[i].produto===prod) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[akey]; }
     op.itens.forEach((bit,ii)=>{
@@ -671,9 +710,9 @@ function bulkDelProd(emp,prod){
 }
 function bulkAdd(emp,prod,dose,opNum){
   let n=0;
-  talhoesDaEmp(emp).forEach(t=>{
-    const p=planoDe(t.id); if(!p||!(p.principal||[]).length) return;
-    const oi=Math.max(0,Math.min(p.principal.length-1,(opNum|0)-1)), key=`${t.id}|P${oi}`;
+  cultivosDaEmp(emp).forEach(({t,seq,tag})=>{
+    const ops=(planoDe(t.id)||{})[seq]||[]; if(!ops.length) return;
+    const oi=Math.max(0,Math.min(ops.length-1,(opNum|0)-1)), key=`${t.id}|${tag}${oi}`;
     (OV.itemAdd[key]=OV.itemAdd[key]||[]).push({produto:prod,dose:dose||0}); n++;
   });
   return n;
