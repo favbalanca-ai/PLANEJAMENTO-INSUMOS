@@ -6,6 +6,7 @@ const LS_KEY = 'planejamento_safra_2627_v1';
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
 let PROD = {};            // produto -> objeto do produto
+const collapsedOps = new Set(); // operações recolhidas (chave "TL|tagOp"); só na sessão
 
 /* ---------------- persistência ---------------- */
 function loadOverrides(){
@@ -405,11 +406,15 @@ V.talhao = function(id){
       const isOv=(opMaqKey(t.id,tagoi) in OV.opMaq);
       const selHtml=opts.replace(`value="${esc(conj||'')}"`,`value="${esc(conj||'')}" selected`);
       const totOp=sub+mHa;
-      return `<div class="op-head">
-        <span class="op-title">${esc(op.nome)}</span>
+      const okey=`${t.id}|${tagoi}`, collapsed=collapsedOps.has(okey);
+      return `<div class="op-block${collapsed?' op-collapsed':''}">
+      <div class="op-head">
+        <span class="op-title" data-optoggle="${okey}"><span class="op-chevron">⌄</span>${esc(op.nome)}</span>
+        <span class="op-sum">${items.length} insumo${items.length===1?'':'s'} · ${brl(totOp)}/ha</span>
         <span class="op-maq"><span class="mut">🚜</span>
         <select class="sel" data-edit="opMaq" data-id="${t.id}" data-op="${tagoi}" ${isOv?'style="border-color:var(--ink2)"':''}>${selHtml}</select>
         <span class="op-maqv">${brl(mHa)}/ha</span></span></div>
+      <div class="op-body">
       <div class="table-wrap"><table class="cards-sm insumo-cards"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
       <tbody>${items.map(itemRow).join('')||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum insumo. Use “+ adicionar insumo”.</td></tr>'}</tbody>
       <tfoot class="tfoot">
@@ -417,7 +422,8 @@ V.talhao = function(id){
         <tr><td colspan="5">+ Máquina/ha</td><td class="num">${brl(mHa)}</td><td class="num">${brl0(mHa*area)}</td><td></td></tr>
         <tr><td colspan="5"><b>Subtotal operação</b></td><td class="num"><b>${brl(totOp)}</b></td><td class="num"><b>${brl0(totOp*area)}</b></td><td></td></tr>
       </tfoot></table></div>
-      <div class="op-add"><button class="btn btn-outline btn-sm" data-act="additem" data-id="${t.id}" data-op="${tagoi}">+ adicionar insumo</button></div>`;
+      <div class="op-add"><button class="btn btn-outline btn-sm" data-act="additem" data-id="${t.id}" data-op="${tagoi}">+ adicionar insumo</button></div>
+      </div></div>`;
     }).join('')||'<div class="mut" style="padding:14px 18px 0">Nenhuma operação nesta safra ainda.</div>'}
     <div class="op-add"><button class="btn btn-primary btn-sm" data-act="addop" data-id="${t.id}" data-tag="${tag}">+ adicionar operação</button></div>
     </div>`;
@@ -905,6 +911,13 @@ document.addEventListener('click',e=>{
   if(e.target.closest('input,select,button,a,label')) return;
   const tr=e.target.closest('.cards-sm tbody tr');
   if(tr) tr.classList.toggle('open');
+});
+// tocar no nome da operação recolhe/expande a lista de insumos dela (sem re-renderizar)
+document.addEventListener('click',e=>{
+  const tog=e.target.closest('[data-optoggle]'); if(!tog) return;
+  const key=tog.getAttribute('data-optoggle'), block=tog.closest('.op-block');
+  if(collapsedOps.has(key)){ collapsedOps.delete(key); block&&block.classList.remove('op-collapsed'); }
+  else { collapsedOps.add(key); block&&block.classList.add('op-collapsed'); }
 });
 function filterTable(sel,q){
   q=q.toLowerCase().trim();
