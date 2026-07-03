@@ -221,13 +221,23 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   /* botão excluir: linha própria no rodapé do cartão */
   .cards-sm td.c-del{justify-content:flex-end;padding:6px 0 0;margin-top:2px}
   .cards-sm td.c-del::before{content:"Excluir";font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-right:auto}
-  /* COMPACTO: esconde os detalhes até tocar no cartão */
+  /* COMPACTO: esconde os detalhes até tocar; barra vira BOTÃO "Detalhes" */
   .cards-sm tbody td.c-more{display:none}
   .cards-sm tbody tr.open td.c-more{display:flex}
   .cards-sm tbody tr{cursor:pointer}
-  .cards-sm tbody tr::after{content:"⌄ detalhes";display:block;text-align:center;font-size:11px;font-weight:700;
-    letter-spacing:.4px;color:var(--ink2);text-transform:uppercase;padding-top:7px;margin-top:4px;border-top:1px dashed var(--line)}
-  .cards-sm tbody tr.open::after{content:"⌃ menos"}
+  .cards-sm tbody tr::after{content:"Detalhes  ⌄";display:block;text-align:center;font-size:12px;font-weight:700;
+    color:var(--ink2);background:#f2f7f8;border:1px solid var(--line);border-radius:8px;padding:8px;margin-top:8px}
+  .cards-sm tbody tr.open::after{content:"Menos  ⌃"}
+
+  /* INSUMOS EM LISTA: produto + dose na mesma linha */
+  .insumo-cards tbody tr{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:10px 12px}
+  .insumo-cards td.c-full{order:1;flex:1 1 52%;min-width:150px;padding:0}
+  .insumo-cards td.c-full .prod-in{width:100%}
+  .insumo-cards tbody td[data-th="Dose/ha"]{order:2;flex:0 0 auto;justify-content:flex-end;gap:6px;padding:0;min-height:0}
+  .insumo-cards tbody td[data-th="Dose/ha"]::before{content:"Dose";font-size:10.5px}
+  .insumo-cards tbody td[data-th="Dose/ha"] input{width:76px}
+  .insumo-cards tbody td.c-more{order:3;flex:1 0 100%}
+  .insumo-cards tbody tr::after{order:4;flex:1 0 100%;margin-top:2px}
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;
@@ -673,7 +683,7 @@ V.talhao = function(id){
       <td class="num" data-th="Dose/ha"><input class="cell ${it.doseEdited?'edited':''}" data-id="${t.id}" ${di} value="${it.dose}"></td>
       <td class="c-more" data-th="Un">${esc(it.un)}</td>
       <td class="num c-more" data-th="Preço">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
-      <td class="num c-more" data-th="Custo/ha">${brl(chHa)}</td><td class="num" data-th="Total">${brl(chHa*area)}</td>
+      <td class="num c-more" data-th="Custo/ha">${brl(chHa)}</td><td class="num c-more" data-th="Total">${brl(chHa*area)}</td>
       <td class="c-del c-more"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
   }
   function opsHtml(seq,tag,titulo,show){
@@ -691,7 +701,7 @@ V.talhao = function(id){
         <span class="op-maq"><span class="mut">🚜</span>
         <select class="sel" data-edit="opMaq" data-id="${t.id}" data-op="${tagoi}" ${isOv?'style="border-color:var(--ink2)"':''}>${selHtml}</select>
         <span class="op-maqv">${brl(mHa)}/ha</span></span></div>
-      <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="cards-sm insumo-cards"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
       <tbody>${items.map(itemRow).join('')||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum insumo. Use “+ adicionar insumo”.</td></tr>'}</tbody>
       <tfoot class="tfoot">
         <tr><td colspan="5">Insumos/ha</td><td class="num">${brl(sub)}</td><td class="num">${brl0(sub*area)}</td><td></td></tr>
