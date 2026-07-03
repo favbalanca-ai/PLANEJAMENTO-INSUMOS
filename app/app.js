@@ -387,13 +387,13 @@ V.talhao = function(id){
                             :`data-edit="itemProd" data-op="${it.key.split('|')[1]}" data-item="${it.ii}"`;
     const del=`data-act="delitem" data-id="${t.id}" data-op="${it.key.split('|')[1]}" data-kind="${it.kind}" ${it.kind==='add'?`data-ai="${it.ai}"`:`data-item="${it.ii}"`}`;
     return `<tr>
-      <td>${it.classe?`<span class="classe-tag">${esc(it.classe)}</span>`:'<span class="pill pill-none">—</span>'}</td>
-      <td><input list="prodlist" class="txt prod-in ${it.prodEdited||it.kind==='add'?'edited':''}" data-id="${t.id}" ${pi} value="${esc(it.produto)}" placeholder="escolha o insumo"></td>
-      <td class="num"><input class="cell ${it.doseEdited?'edited':''}" data-id="${t.id}" ${di} value="${it.dose}"></td>
-      <td>${esc(it.un)}</td>
-      <td class="num">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
-      <td class="num">${brl(chHa)}</td><td class="num">${brl(chHa*area)}</td>
-      <td class="num"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
+      <td data-th="Classe">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span>`:'<span class="pill pill-none">—</span>'}</td>
+      <td class="c-full" data-th="Produto"><input list="prodlist" class="txt prod-in ${it.prodEdited||it.kind==='add'?'edited':''}" data-id="${t.id}" ${pi} value="${esc(it.produto)}" placeholder="escolha o insumo"></td>
+      <td class="num" data-th="Dose/ha"><input class="cell ${it.doseEdited?'edited':''}" data-id="${t.id}" ${di} value="${it.dose}"></td>
+      <td data-th="Un">${esc(it.un)}</td>
+      <td class="num" data-th="Preço">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
+      <td class="num" data-th="Custo/ha">${brl(chHa)}</td><td class="num" data-th="Total">${brl(chHa*area)}</td>
+      <td class="c-del"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
   }
   function opsHtml(seq,tag,titulo,show){
     const ops=opsOf(t.id,seq); if(!ops.length && !show) return '';
@@ -410,7 +410,7 @@ V.talhao = function(id){
         <span class="op-maq"><span class="mut">🚜</span>
         <select class="sel" data-edit="opMaq" data-id="${t.id}" data-op="${tagoi}" ${isOv?'style="border-color:var(--ink2)"':''}>${selHtml}</select>
         <span class="op-maqv">${brl(mHa)}/ha</span></span></div>
-      <div class="table-wrap"><table><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
+      <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
       <tbody>${items.map(itemRow).join('')||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum insumo. Use “+ adicionar insumo”.</td></tr>'}</tbody>
       <tfoot class="tfoot">
         <tr><td colspan="5">Insumos/ha</td><td class="num">${brl(sub)}</td><td class="num">${brl0(sub*area)}</td><td></td></tr>
@@ -466,20 +466,22 @@ V.compras = function(){
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
     <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque) — edite o estoque</span></div>
-  <div class="panel"><div class="table-wrap"><table id="tbl-compras">
+  <div class="panel"><div class="table-wrap"><table id="tbl-compras" class="cards-sm">
     <thead><tr><th>Classe</th><th>Fornecedor</th><th>Produto</th><th>Un</th>
       <th class="num">Demanda</th><th class="num">Estoque</th><th class="num">A comprar</th>
       <th class="num">Preço</th><th class="num">Valor</th><th>Status</th></tr></thead>
     <tbody>${rows.map(r=>`
       <tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
-        <td><span class="classe-tag">${esc(r.classe)}</span></td>
-        <td>${esc(r.empresa||'—')}</td><td><b>${esc(r.produto)}</b></td><td>${esc(r.un)}</td>
-        <td class="num">${num(r.demanda)}</td>
-        <td class="num"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
-        <td class="num"><b>${num(r.comprar)}</b></td>
-        <td class="num">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
-        <td class="num">${r.valor>0?brl(r.valor):'—'}</td>
-        <td>${pill(r.status)}</td></tr>`).join('')}</tbody>
+        <td data-th="Classe"><span class="classe-tag">${esc(r.classe)}</span></td>
+        <td data-th="Fornecedor">${esc(r.empresa||'—')}</td>
+        <td class="c-full"><b>${esc(r.produto)}</b></td>
+        <td data-th="Un">${esc(r.un)}</td>
+        <td class="num" data-th="Demanda">${num(r.demanda)}</td>
+        <td class="num" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
+        <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
+        <td class="num" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
+        <td class="num" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
+        <td data-th="Status">${pill(r.status)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="8">TOTAL</td><td class="num">${brl0(totalCompra)}</td><td></td></tr></tfoot>
   </table></div></div>`;
 };

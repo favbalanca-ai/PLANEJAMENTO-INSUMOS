@@ -184,4 +184,40 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .detail-head{gap:12px 18px;padding:14px 16px}
   .detail-head .di{min-width:96px}
   .btn{padding:10px 15px}
+
+  /* culturas do talhão: empilha e ocupa a largura toda */
+  .bulk-add{padding:12px 14px;gap:10px}
+  .bulk-add label{width:100%;display:flex;align-items:center;gap:8px;justify-content:space-between}
+  .bulk-add label .txt{min-width:0!important;flex:1}
+  .bulk-add label .cell{width:96px!important}
+  .bulk-add>span{display:none} /* divisória vertical */
+
+  /* tabelas viram CARTÕES (sem rolar de lado) */
+  .cards-sm thead{display:none}
+  .cards-sm,.cards-sm tbody{display:block;width:100%}
+  .cards-sm tbody tr{display:flex;flex-direction:column;background:#fff;border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);padding:10px 12px 8px;margin:0 0 12px;position:relative}
+  .cards-sm tbody tr:hover{background:#fff}
+  .cards-sm tbody td{display:flex;justify-content:space-between;align-items:center;gap:12px;
+    border:none;padding:5px 0;min-height:34px}
+  .cards-sm tbody td::before{content:attr(data-th);font-size:11px;font-weight:700;color:var(--muted);
+    text-transform:uppercase;letter-spacing:.3px;flex:none}
+  .cards-sm tbody td.num{text-align:left;font-size:14px}
+  .cards-sm tbody td.num input{width:120px}
+  .cards-sm tbody td:empty{display:none} /* esconde células vazias (ex.: Un sem valor) */
+  /* célula "cheia" (produto): largura total, sem rótulo, encabeça o cartão */
+  .cards-sm td.c-full{display:block;padding:0 0 4px;order:-1}
+  .cards-sm td.c-full::before{display:none}
+  .cards-sm td.c-full .prod-in,.cards-sm td.c-full input{width:100%;max-width:none;min-width:0}
+  .cards-sm td.c-full b{font-size:15.5px;color:var(--ink)}
+  /* botão excluir: linha própria no rodapé do cartão */
+  .cards-sm td.c-del{justify-content:flex-end;padding:6px 0 0;margin-top:2px;border-top:1px dashed var(--line)}
+  .cards-sm td.c-del::before{content:"Excluir";font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-right:auto}
+  /* rodapé (subtotais/total) como faixa resumo */
+  .cards-sm tfoot{display:block}
+  .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;
+    padding:8px 12px;background:#eef4f5;border-radius:10px;margin-bottom:8px}
+  .cards-sm tfoot td{border:none;padding:0;font-weight:700}
+  .cards-sm tfoot td[colspan]{flex:1;text-align:left}
+  .cards-sm tfoot td:empty{display:none}
 }
