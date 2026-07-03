@@ -387,13 +387,13 @@ V.talhao = function(id){
                             :`data-edit="itemProd" data-op="${it.key.split('|')[1]}" data-item="${it.ii}"`;
     const del=`data-act="delitem" data-id="${t.id}" data-op="${it.key.split('|')[1]}" data-kind="${it.kind}" ${it.kind==='add'?`data-ai="${it.ai}"`:`data-item="${it.ii}"`}`;
     return `<tr>
-      <td data-th="Classe">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span>`:'<span class="pill pill-none">—</span>'}</td>
+      <td class="c-more" data-th="Classe">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span>`:'<span class="pill pill-none">—</span>'}</td>
       <td class="c-full" data-th="Produto"><input list="prodlist" class="txt prod-in ${it.prodEdited||it.kind==='add'?'edited':''}" data-id="${t.id}" ${pi} value="${esc(it.produto)}" placeholder="escolha o insumo"></td>
       <td class="num" data-th="Dose/ha"><input class="cell ${it.doseEdited?'edited':''}" data-id="${t.id}" ${di} value="${it.dose}"></td>
-      <td data-th="Un">${esc(it.un)}</td>
-      <td class="num" data-th="Preço">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
-      <td class="num" data-th="Custo/ha">${brl(chHa)}</td><td class="num" data-th="Total">${brl(chHa*area)}</td>
-      <td class="c-del"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
+      <td class="c-more" data-th="Un">${esc(it.un)}</td>
+      <td class="num c-more" data-th="Preço">${preco>0?brl(preco):(it.produto?'<span class="pill pill-noprice">s/ preço</span>':'—')}</td>
+      <td class="num c-more" data-th="Custo/ha">${brl(chHa)}</td><td class="num" data-th="Total">${brl(chHa*area)}</td>
+      <td class="c-del c-more"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
   }
   function opsHtml(seq,tag,titulo,show){
     const ops=opsOf(t.id,seq); if(!ops.length && !show) return '';
@@ -472,16 +472,16 @@ V.compras = function(){
       <th class="num">Preço</th><th class="num">Valor</th><th>Status</th></tr></thead>
     <tbody>${rows.map(r=>`
       <tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
-        <td data-th="Classe"><span class="classe-tag">${esc(r.classe)}</span></td>
-        <td data-th="Fornecedor">${esc(r.empresa||'—')}</td>
+        <td class="c-more" data-th="Classe"><span class="classe-tag">${esc(r.classe)}</span></td>
+        <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
         <td class="c-full"><b>${esc(r.produto)}</b></td>
-        <td data-th="Un">${esc(r.un)}</td>
-        <td class="num" data-th="Demanda">${num(r.demanda)}</td>
+        <td class="c-more" data-th="Un">${esc(r.un)}</td>
+        <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
         <td class="num" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
         <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
-        <td class="num" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
+        <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
         <td class="num" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
-        <td data-th="Status">${pill(r.status)}</td></tr>`).join('')}</tbody>
+        <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="8">TOTAL</td><td class="num">${brl0(totalCompra)}</td><td></td></tr></tfoot>
   </table></div></div>`;
 };
@@ -898,6 +898,13 @@ document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
   if(e.target.id==='q-compra') filterTable('#tbl-compras',e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
+});
+// celular: tocar no cartão mostra/esconde os detalhes (ignora campos editáveis)
+document.addEventListener('click',e=>{
+  if(!window.matchMedia('(max-width:640px)').matches) return;
+  if(e.target.closest('input,select,button,a,label')) return;
+  const tr=e.target.closest('.cards-sm tbody tr');
+  if(tr) tr.classList.toggle('open');
 });
 function filterTable(sel,q){
   q=q.toLowerCase().trim();
