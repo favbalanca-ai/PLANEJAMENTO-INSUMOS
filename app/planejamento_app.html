@@ -873,15 +873,16 @@ V.maquinas = function(){
       <button class="btn btn-primary btn-sm" data-act="addmaq">+ Montar</button>
     </div>
   </div>
-  <div class="toolbar"><span class="badge badge-muted">Edite <b>largura</b>, <b>velocidade</b>, <b>eficiência</b>, <b>L/h</b> e <b>R$/HM</b> — ha/h e custos recalculam. ha/h = largura×velocidade×efic ÷ 1000.</span></div>
-  <div class="panel"><div class="table-wrap"><table>
+  <div class="toolbar"><div class="search"><input id="q-maq" placeholder="Buscar conjunto, máquina ou implemento…"></div>
+    <div class="spacer"></div><span class="badge badge-muted">Edite <b>largura</b>, <b>velocidade</b>, <b>eficiência</b>, <b>L/h</b> e <b>R$/HM</b> — ha/h e custos recalculam.</span></div>
+  <div class="panel"><div class="table-wrap"><table id="tbl-maq">
     <thead><tr><th>Conjunto</th><th class="num">Largura (m)</th><th class="num">Vel. (km/h)</th>
       <th class="num">Efic. %</th><th class="num">ha/h</th><th class="num">HM/ha</th><th class="num">L/h</th><th class="num">R$/HM</th>
       <th class="num">Custo máq/ha</th><th class="num">L/ha</th><th class="num">Diesel/ha</th><th class="num">Custo total/ha</th><th></th></tr></thead>
     <tbody>${ms.map(m=>{
       const e=effMaq(m), novo=OV.maqAdd.some(x=>x.conjunto===m.conjunto);
       const inp=(k,v,w)=>`<input class="cell ${attrEd(m,k)}" data-edit="maqAttr" data-conj="${esc(m.conjunto)}" data-attr="${k}" value="${v}" style="width:${w||70}px">`;
-      return `<tr><td><b>${esc(m.conjunto)}</b>${novo?' <span class="pill pill-buy">novo</span>':''}</td>
+      return `<tr data-search="${esc((m.conjunto+' '+(m.maquina||'')+' '+(m.implemento||'')).toLowerCase())}"><td><b>${esc(m.conjunto)}</b>${novo?' <span class="pill pill-buy">novo</span>':''}</td>
         <td class="num">${inp('largura',m.largura!=null?maqAttr(m,'largura'):'',72)}</td>
         <td class="num">${inp('velocidade',maqAttr(m,'velocidade'),72)}</td>
         <td class="num">${inp('eficiencia',maqAttr(m,'eficiencia'),64)}</td>
@@ -1241,6 +1242,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-compra') filterCompras(e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
   if(e.target.id==='q-emp') filterTable('#tbl-emp',e.target.value);
+  if(e.target.id==='q-maq') filterTable('#tbl-maq',e.target.value);
   if(e.target.id==='q-cot') filterCotacao(e.target.value);
 });
 // busca na Cotação: filtra em todos os fornecedores e esconde painéis vazios
