@@ -211,8 +211,15 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .cards-sm td.c-full .prod-in,.cards-sm td.c-full input{width:100%;max-width:none;min-width:0}
   .cards-sm td.c-full b{font-size:15.5px;color:var(--ink)}
   /* botão excluir: linha própria no rodapé do cartão */
-  .cards-sm td.c-del{justify-content:flex-end;padding:6px 0 0;margin-top:2px;border-top:1px dashed var(--line)}
+  .cards-sm td.c-del{justify-content:flex-end;padding:6px 0 0;margin-top:2px}
   .cards-sm td.c-del::before{content:"Excluir";font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-right:auto}
+  /* COMPACTO: esconde os detalhes até tocar no cartão */
+  .cards-sm tbody td.c-more{display:none}
+  .cards-sm tbody tr.open td.c-more{display:flex}
+  .cards-sm tbody tr{cursor:pointer}
+  .cards-sm tbody tr::after{content:"⌄ detalhes";display:block;text-align:center;font-size:11px;font-weight:700;
+    letter-spacing:.4px;color:var(--ink2);text-transform:uppercase;padding-top:7px;margin-top:4px;border-top:1px dashed var(--line)}
+  .cards-sm tbody tr.open::after{content:"⌃ menos"}
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;
