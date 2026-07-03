@@ -109,9 +109,30 @@ function applyEdit(ed){
     sa.getRange(nr, 2).setValue(S(ed.classe));  // B = classe
     sa.getRange(nr, 3).setValue(S(ed.produto)); // C = produto
     sa.getRange(nr, 9).setValue(N(ed.dose));    // I = dose/ha
+  } else if (ed.type === 'delitem'){
+    var sx = sh(ed.talhao); if (!sx) throw 'aba não encontrada: ' + ed.talhao;
+    var fx = ed.tag === 'S' ? [238, 451] : [10, 224];
+    var dr = itemRowByName(sx, fx[0], fx[1], ed.op, ed.produto);
+    if (dr){ sx.getRange(dr, 2).clearContent(); sx.getRange(dr, 3).clearContent(); sx.getRange(dr, 9).clearContent(); }
+    // se não achou (já removido), não falha — o objetivo (insumo ausente) já está atendido
   } else {
     throw 'tipo desconhecido: ' + ed.type;
   }
+}
+
+// linha do insumo (pela classe/produto) dentro do bloco da operação opIdx
+function itemRowByName(s, r0, r1, opIdx, produto){
+  var rows = s.getRange(r0, 1, r1 - r0 + 1, 3).getValues(), blocks = [], cur = null;
+  for (var i = 0; i < rows.length; i++){
+    var a = S(rows[i][0]);
+    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
+    else if (cur){ cur.body.push(i); if (S(rows[i][2])) cur.has = true; }
+  }
+  var withItems = blocks.filter(function(b){ return b.has; });
+  var b = withItems[opIdx];
+  if (!b) return 0;
+  for (var j = 0; j < b.body.length; j++){ if (S(rows[b.body[j]][2]) === S(produto)) return r0 + b.body[j]; }
+  return 0;
 }
 
 // primeira linha vazia (coluna C) dentro do bloco da operação opIdx (blocos contam só operações com itens — igual ao app)

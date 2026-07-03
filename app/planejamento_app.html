@@ -1203,6 +1203,15 @@ function buildFieldEdits(){
     OV.itemAdd[key].forEach(a=>{ if(!a.produto) return; const p=PROD[a.produto];
       eds.push({type:'additem',talhao:tid,tag,op:oi,classe:(p&&p.classe)||'',produto:a.produto,dose:+a.dose||0}); });
   }
+  // insumos removidos de operações-base -> apaga a linha na planilha (casa pelo nome do produto)
+  for(const rk in OV.itemRemoved){ const p=rk.split('|'); if(p.length<3) continue;
+    const tid=p[0], tagoi=p[1], ii=+p[2];
+    if(!isBase(tid)) continue;
+    const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
+    const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
+    const prod=op.itens[ii].produto; if(!prod) continue;
+    eds.push({type:'delitem',talhao:tid,tag,op:oi,produto:prod,rk:rk});
+  }
   return eds;
 }
 function applyPulledData(d){
@@ -1248,11 +1257,13 @@ async function syncPush(opts){
     lastPushSig=sig;
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
-    // insumos adicionados agora vivem na planilha: limpa o override e puxa a verdade (reconcilia)
-    const adds=eds.filter(e=>e.type==='additem');
-    if(res.fail===0 && adds.length){
+    // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
+    // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
+    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem');
+    if(res.fail===0 && (adds.length||dels.length)){
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
+      dels.forEach(e=>{ if(e.rk) delete OV.itemRemoved[e.rk]; });
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
       syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;
