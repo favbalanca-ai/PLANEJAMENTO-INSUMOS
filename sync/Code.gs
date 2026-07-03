@@ -105,8 +105,8 @@ function applyEdit(ed){
     var fi = ed.tag === 'S' ? [238, 451] : [10, 224];
     var ri = itemRowByName(si, fi[0], fi[1], ed.op, ed.from);
     if (!ri) throw 'insumo não localizado (troca): ' + ed.from;
-    if (ed.classe) si.getRange(ri, 2).setValue(S(ed.classe)); // B = classe
     si.getRange(ri, 3).setValue(S(ed.to));                    // C = produto novo
+    setClasseSafe(si, ri, S(ed.classe));                      // B = classe (best-effort; pode ter validação)
   } else if (ed.type === 'dose'){
     var s = sh(ed.talhao); if (!s) throw 'aba não encontrada: ' + ed.talhao;
     var faixa = ed.tag === 'S' ? [238, 451] : [10, 224];
@@ -116,11 +116,13 @@ function applyEdit(ed){
   } else if (ed.type === 'additem'){
     var sa = sh(ed.talhao); if (!sa) throw 'aba não encontrada: ' + ed.talhao;
     var fa = ed.tag === 'S' ? [238, 451] : [10, 224];
-    var nr = emptyItemRow(sa, fa[0], fa[1], ed.op);
+    // idempotente: se o produto já existe na operação, atualiza a linha dele; senão usa a 1ª vazia
+    var nr = itemRowByName(sa, fa[0], fa[1], ed.op, ed.produto);
+    if (!nr) nr = emptyItemRow(sa, fa[0], fa[1], ed.op);
     if (!nr) throw 'sem linha vazia na operação ' + ed.op + ' de ' + ed.talhao;
-    sa.getRange(nr, 2).setValue(S(ed.classe));  // B = classe
     sa.getRange(nr, 3).setValue(S(ed.produto)); // C = produto
     sa.getRange(nr, 9).setValue(N(ed.dose));    // I = dose/ha
+    setClasseSafe(sa, nr, S(ed.classe));        // B = classe (best-effort; a coluna pode ter validação)
   } else if (ed.type === 'delitem'){
     var sx = sh(ed.talhao); if (!sx) throw 'aba não encontrada: ' + ed.talhao;
     var fx = ed.tag === 'S' ? [238, 451] : [10, 224];
@@ -130,6 +132,13 @@ function applyEdit(ed){
   } else {
     throw 'tipo desconhecido: ' + ed.type;
   }
+}
+
+// grava a classe (coluna B) sem falhar se a célula tiver validação de dados que recuse o valor
+function setClasseSafe(sheet, row, classe){
+  if (!classe) return;
+  try { sheet.getRange(row, 2).setValue(classe); }
+  catch (e) { /* B tem validação e recusou a classe — mantém o insumo (produto/dose já gravados) */ }
 }
 
 // linha do insumo (pela classe/produto) dentro do bloco da operação opIdx
