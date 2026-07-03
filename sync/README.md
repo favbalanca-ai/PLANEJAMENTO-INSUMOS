@@ -7,10 +7,12 @@ a verdade**: o app puxa dela e grava de volta apenas campos simples.
 ## O que sincroniza
 - **Puxar (planilha → app):** todos os dados (produtos, talhões, planos,
   preços, máquinas). Substitui o que está no app.
-- **Enviar (app → planilha):** apenas **dose, estoque, preço, área e
-  produtividade** (grava em células de entrada). Inserção/remoção de insumos e
-  talhões criados no app **não** são enviados (por segurança, para não mexer na
-  estrutura/fórmulas da planilha).
+- **Enviar (app → planilha):** **dose, estoque, preço, área, produtividade** e
+  **insumos adicionados** a uma operação já existente (grava classe/produto/dose
+  na primeira linha vazia daquele bloco da operação). Remoção de insumos, e
+  operações/talhões/máquinas criados no app **não** são enviados (para não mexer
+  na estrutura/fórmulas da planilha). Depois de enviar insumos novos, o app puxa
+  a planilha automaticamente para reconciliar (evita duplicação).
 
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
@@ -35,6 +37,8 @@ a verdade**: o app puxa dela e grava de volta apenas campos simples.
   - `estoque` → `PORTIFÓLIO` coluna **T**
   - `preco` → `PORTIFÓLIO` coluna **S**
   - `area` / `produtividade` → `ÁREA PLANTIO` colunas **E** / **D**
+  - `additem` (insumo novo) → aba do talhão: **classe (B)**, **produto (C)** e
+    **dose (I)** na primeira linha vazia do bloco da operação (`emptyItemRow`).
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações

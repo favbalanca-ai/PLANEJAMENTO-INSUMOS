@@ -98,9 +98,32 @@ function applyEdit(ed){
     var row = itemRow(s, faixa[0], faixa[1], ed.op, ed.item);
     if (!row) throw 'insumo não localizado em ' + ed.talhao + ' (op ' + ed.op + ', item ' + ed.item + ')';
     s.getRange(row, 9).setValue(ed.value); // I = dose/ha
+  } else if (ed.type === 'additem'){
+    var sa = sh(ed.talhao); if (!sa) throw 'aba não encontrada: ' + ed.talhao;
+    var fa = ed.tag === 'S' ? [238, 451] : [10, 224];
+    var nr = emptyItemRow(sa, fa[0], fa[1], ed.op);
+    if (!nr) throw 'sem linha vazia na operação ' + ed.op + ' de ' + ed.talhao;
+    sa.getRange(nr, 2).setValue(S(ed.classe));  // B = classe
+    sa.getRange(nr, 3).setValue(S(ed.produto)); // C = produto
+    sa.getRange(nr, 9).setValue(N(ed.dose));    // I = dose/ha
   } else {
     throw 'tipo desconhecido: ' + ed.type;
   }
+}
+
+// primeira linha vazia (coluna C) dentro do bloco da operação opIdx (blocos contam só operações com itens — igual ao app)
+function emptyItemRow(s, r0, r1, opIdx){
+  var rows = s.getRange(r0, 1, r1 - r0 + 1, 3).getValues(), blocks = [], cur = null;
+  for (var i = 0; i < rows.length; i++){
+    var a = S(rows[i][0]);
+    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
+    else if (cur){ cur.body.push(i); if (S(rows[i][2])) cur.has = true; }
+  }
+  var withItems = blocks.filter(function(b){ return b.has; });
+  var b = withItems[opIdx];
+  if (!b) return 0;
+  for (var j = 0; j < b.body.length; j++){ if (!S(rows[b.body[j]][2])) return r0 + b.body[j]; }
+  return 0; // bloco cheio (sem linha livre)
 }
 
 function findRow(s, col, r0, r1, alvo){
