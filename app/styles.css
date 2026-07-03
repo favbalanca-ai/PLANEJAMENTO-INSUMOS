@@ -119,6 +119,10 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .op-block.op-collapsed .op-title{border-radius:7px}
 .op-sum{font-size:12px;font-weight:600;color:var(--muted)}
 .op-block:not(.op-collapsed) .op-sum{display:none}
+.op-block.force-open .op-body{display:block}          /* durante a busca, mostra mesmo recolhido */
+.compras-total{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:13px 18px;background:var(--ink2);color:#fff;border-radius:var(--radius);font-weight:700;margin-top:6px}
+.compras-total b{font-size:18px}
 
 .empty{text-align:center;color:var(--muted);padding:40px 20px}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
@@ -244,6 +248,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
     font-size:18px;line-height:1;color:var(--ink2);background:none;border:none;border-radius:0;padding:0;margin:0}
   .insumo-cards tbody tr.open::after{content:"⌃"}
   .insumo-cards tbody td.c-more{order:4;flex:1 0 100%}
+
+  /* COMPRAS em lista com cabeçalho (Produto | A comprar) e detalhe por símbolo */
+  .compra-cards thead{display:block}
+  .compra-cards thead tr{display:flex;align-items:center;gap:10px;padding:2px 12px 6px;box-shadow:none}
+  .compra-cards thead th{display:none;position:static;background:none;border:none;padding:0}
+  .compra-cards thead th:nth-child(1){display:block;flex:1}                        /* Produto */
+  .compra-cards thead th:nth-child(2){display:block;flex:0 0 96px;text-align:left}  /* A comprar */
+  .compra-cards tbody tr{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px}
+  .compra-cards td.c-full{order:1;flex:1 1 52%;min-width:140px;padding:0}
+  .compra-cards td.c-full b{font-size:15px;color:var(--ink)}
+  .compra-cards tbody td[data-th="A comprar"]{order:2;flex:0 0 auto;justify-content:flex-end;padding:0;min-height:0}
+  .compra-cards tbody td[data-th="A comprar"]::before{display:none}
+  .compra-cards tbody tr::after{order:3;content:"⌄";flex:0 0 20px;width:20px;text-align:center;
+    font-size:18px;line-height:1;color:var(--ink2);background:none;border:none;border-radius:0;padding:0;margin:0}
+  .compra-cards tbody tr.open::after{content:"⌃"}
+  .compra-cards tbody td.c-more{order:4;flex:1 0 100%}
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;

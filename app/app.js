@@ -458,11 +458,36 @@ V.talhao = function(id){
 };
 
 V.compras = function(){
-  const rows=calcCompras().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'')||(a.produto||'').localeCompare(b.produto||''));
-  const totalCompra=rows.reduce((a,r)=>a+r.valor,0);
-  const itens=rows.filter(r=>r.comprar>0).length;
-  const semPreco=rows.filter(r=>r.comprar>0&&r.preco<=0).length;
-  const valEstoque=rows.reduce((a,r)=>a+r.estoque*r.preco,0);
+  const all=calcCompras();
+  const totalCompra=all.reduce((a,r)=>a+r.valor,0);
+  const itens=all.filter(r=>r.comprar>0).length;
+  const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
+  const valEstoque=all.reduce((a,r)=>a+r.estoque*r.preco,0);
+  // agrupa por classe (grupos recolhíveis, como as operações do talhão)
+  const groups={};
+  all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
+  const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
+  const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
+  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
+    <td class="c-full"><b>${esc(r.produto)}</b></td>
+    <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
+    <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
+    <td class="num c-more" data-th="Preço"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
+    <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
+    <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
+    <td class="c-more" data-th="Un">${esc(r.un)}</td>
+    <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
+    <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`;
+  const groupsHtml=classes.map(cl=>{
+    const g=groups[cl].slice().sort((a,b)=>b.valor-a.valor||(a.produto||'').localeCompare(b.produto||''));
+    const sub=g.reduce((a,r)=>a+r.valor,0), n=g.length, key=`cg|${cl}`, collapsed=collapsedOps.has(key);
+    return `<div class="op-block${collapsed?' op-collapsed':''}">
+      <div class="op-head">
+        <span class="op-title" data-optoggle="${esc(key)}"><span class="op-chevron">⌄</span>${esc(cl)}</span>
+        <span class="op-sum">${n} ${n===1?'item':'itens'} · ${brl0(sub)}</span></div>
+      <div class="op-body"><div class="table-wrap"><table class="cards-sm compra-cards">${th}<tbody>${g.map(rowHtml).join('')}</tbody></table></div></div>
+    </div>`;
+  }).join('');
   return `
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Total a comprar</div><div class="k-value">${brl0(totalCompra)}</div></div>
@@ -471,25 +496,9 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque) — edite o estoque</span></div>
-  <div class="panel"><div class="table-wrap"><table id="tbl-compras" class="cards-sm">
-    <thead><tr><th>Classe</th><th>Fornecedor</th><th>Produto</th><th>Un</th>
-      <th class="num">Demanda</th><th class="num">Estoque</th><th class="num">A comprar</th>
-      <th class="num">Preço</th><th class="num">Valor</th><th>Status</th></tr></thead>
-    <tbody>${rows.map(r=>`
-      <tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}">
-        <td class="c-more" data-th="Classe"><span class="classe-tag">${esc(r.classe)}</span></td>
-        <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
-        <td class="c-full"><b>${esc(r.produto)}</b></td>
-        <td class="c-more" data-th="Un">${esc(r.un)}</td>
-        <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
-        <td class="num" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
-        <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
-        <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):`<input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="" placeholder="preço">`}</td>
-        <td class="num" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
-        <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`).join('')}</tbody>
-    <tfoot class="tfoot"><tr><td colspan="8">TOTAL</td><td class="num">${brl0(totalCompra)}</td><td></td></tr></tfoot>
-  </table></div></div>`;
+    <div class="spacer"></div><span class="badge badge-muted">Toque na classe p/ abrir; toque no item p/ editar estoque e preço de referência</span></div>
+  <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
+  <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
 
 V.cotacao = function(){
@@ -508,7 +517,7 @@ V.cotacao = function(){
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
     <tbody>${its.map(r=>`<tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
       <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td>
-      <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
+      <td class="num"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
       <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="5">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}`;
@@ -902,9 +911,22 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
-  if(e.target.id==='q-compra') filterTable('#tbl-compras',e.target.value);
+  if(e.target.id==='q-compra') filterCompras(e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
 });
+// busca na Demanda de Compras: filtra em todos os grupos e esconde grupos vazios
+function filterCompras(q){
+  q=(q||'').toLowerCase().trim();
+  document.querySelectorAll('#compras-groups .op-block').forEach(g=>{
+    let any=false;
+    g.querySelectorAll('tbody tr').forEach(tr=>{
+      const show=!q||(tr.dataset.search||'').includes(q);
+      tr.style.display=show?'':'none'; if(show) any=true;
+    });
+    g.style.display=any?'':'none';
+    g.classList.toggle('force-open', !!q);  // durante a busca, mostra o conteúdo mesmo se recolhido
+  });
+}
 // celular: tocar no cartão mostra/esconde os detalhes (ignora campos editáveis)
 document.addEventListener('click',e=>{
   if(!window.matchMedia('(max-width:640px)').matches) return;
