@@ -22,6 +22,8 @@ function loadOverrides(){
   OV.itemRemoved = OV.itemRemoved || {}; // "TL|tagOp|ii" -> true (insumo base removido)
   OV.itemProd    = OV.itemProd    || {}; // "TL|tagOp|ii" -> produto (troca do insumo base)
   OV.itemAdd     = OV.itemAdd     || {}; // "TL|tagOp" -> [{produto,dose}] (insumos adicionados)
+  OV.talhaoAdd     = OV.talhaoAdd     || []; // talhões criados: [{id,nome,empreendimento,produtividade,area,plano}]
+  OV.talhaoRemoved = OV.talhaoRemoved || {}; // idBase -> true (talhão base ocultado)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -35,6 +37,7 @@ function countEdits(){
          Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + (OV.diesel!==6.00?1:0) +
          Object.keys(OV.itemRemoved).length + Object.keys(OV.itemProd).length +
          Object.values(OV.itemAdd).reduce((a,arr)=>a+arr.length,0) +
+         OV.talhaoAdd.length + Object.keys(OV.talhaoRemoved).length +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -64,9 +67,39 @@ function effItems(tid, tagoi, baseItens){
   });
   return out;
 }
+// ---- talhões: base (não removidos) + criados ----
+function talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id]).concat(OV.talhaoAdd); }
+function findTalhao(id){ return DATA.talhoes.find(t=>t.id===id) || OV.talhaoAdd.find(t=>t.id===id); }
+function planoDe(id){
+  if(id in DATA.planos) return DATA.planos[id];
+  const c=OV.talhaoAdd.find(t=>t.id===id);
+  return (c&&c.plano)||{principal:[],safrinha:[]};
+}
+function nextTalhaoId(){ let n=1; while(findTalhao('NV'+n)) n++; return 'NV'+n; }
+// materializa o plano EFETIVO (com edições) em estrutura simples — para duplicar
+function snapshotPlano(id){
+  const pl=planoDe(id), snap={principal:[],safrinha:[]};
+  ['principal','safrinha'].forEach(seq=>{
+    const tag=seq==='safrinha'?'S':'P';
+    (pl[seq]||[]).forEach((op,oi)=>{
+      const itens=effItems(id,`${tag}${oi}`,op.itens).filter(it=>it.produto)
+        .map(it=>({classe:it.classe,produto:it.produto,dose:it.dose,un:it.un}));
+      snap[seq].push({nome:op.nome,itens});
+    });
+  });
+  return snap;
+}
+// remove todos os overrides de um talhão (ao excluí-lo)
+function cleanTalhaoOverlays(id){
+  const pref=id+'|';
+  [OV.dose,OV.itemRemoved,OV.itemProd,OV.itemAdd,OV.opMaq].forEach(o=>{
+    Object.keys(o).forEach(k=>{ if(k.startsWith(pref)) delete o[k]; });
+  });
+  delete OV.talhao[id];
+}
 // percorre todas as operações de um talhão: cb(seq, tag, oi, op, tagoi)
 function eachOp(t, cb){
-  const p=DATA.planos[t.id]; if(!p) return;
+  const p=planoDe(t.id); if(!p) return;
   ['principal','safrinha'].forEach(seq=>{
     const tag=seq==='safrinha'?'S':'P';
     (p[seq]||[]).forEach((op,oi)=>cb(seq,tag,oi,op,`${tag}${oi}`));
@@ -111,7 +144,7 @@ function custoOpHa(tid,tag,oi,op){
 }
 // custo de máquinas/operação por hectare de um talhão (soma das operações)
 function custoOpTalhaoHa(t){
-  const p=DATA.planos[t.id]; if(!p) return 0; let s=0;
+  const p=planoDe(t.id); if(!p) return 0; let s=0;
   ['principal','safrinha'].forEach(seq=>{
     const tag=seq==='safrinha'?'S':'P';
     (p[seq]||[]).forEach((op,oi)=>{ s+=custoOpHa(t.id,tag,oi,op); });
@@ -123,7 +156,7 @@ function custoOpTalhaoHa(t){
 // demanda total por produto = Σ talhões Σ operações (dose × área)
 function calcDemanda(){
   const dem = {};
-  for(const t of DATA.talhoes){
+  for(const t of talhoesAll()){
     const area = areaDe(t);
     eachOp(t,(seq,tag,oi,op,tagoi)=>{
       effItems(t.id,tagoi,op.itens).forEach(it=>{
@@ -150,7 +183,7 @@ function calcCompras(){
 }
 // custo de insumos por talhão (e por ha)
 function custoTalhao(t){
-  const plan=DATA.planos[t.id]; if(!plan) return {ha:0,total:0,area:areaDe(t)};
+  const plan=planoDe(t.id); if(!plan) return {ha:0,total:0,area:areaDe(t)};
   const area=areaDe(t); let ha=0;
   eachOp(t,(seq,tag,oi,op,tagoi)=>{
     effItems(t.id,tagoi,op.itens).forEach(it=>{ ha += it.dose*precoDe(it.produto); });
@@ -173,6 +206,7 @@ function toast(msg){
   const t=$('#toast'); t.textContent=msg; t.hidden=false;
   clearTimeout(t._h); t._h=setTimeout(()=>t.hidden=true,2200);
 }
+function ask(m){ try{ return window.confirm(m); }catch(e){ return true; } }
 function updateEditBadge(){
   const n=countEdits(), b=$('#edit-badge');
   b.hidden=n===0; b.textContent=n+(n===1?' edição':' edições');
@@ -186,14 +220,14 @@ const V = {};
 
 V.dashboard = function(){
   const compras=calcCompras();
-  const areaTotal=DATA.talhoes.reduce((a,t)=>a+areaDe(t),0);
-  const custoTotal=DATA.talhoes.reduce((a,t)=>a+custoTalhao(t).total,0);
+  const areaTotal=talhoesAll().reduce((a,t)=>a+areaDe(t),0);
+  const custoTotal=talhoesAll().reduce((a,t)=>a+custoTalhao(t).total,0);
   const totalCompra=compras.reduce((a,r)=>a+r.valor,0);
   const itensComprar=compras.filter(r=>r.comprar>0).length;
   const semPreco=compras.filter(r=>r.comprar>0&&r.preco<=0).length;
   // custo por cultura
   const porCultura={};
-  DATA.talhoes.forEach(t=>{const e=t.empreendimento||'—';porCultura[e]=(porCultura[e]||0)+custoTalhao(t).total;});
+  talhoesAll().forEach(t=>{const e=t.empreendimento||'—';porCultura[e]=(porCultura[e]||0)+custoTalhao(t).total;});
   const culturas=Object.entries(porCultura).sort((a,b)=>b[1]-a[1]);
   const maxC=Math.max(1,...culturas.map(c=>c[1]));
   // custo por classe (insumo)
@@ -204,7 +238,7 @@ V.dashboard = function(){
 
   return `
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Área total</div><div class="k-value">${num(areaTotal)} ha</div><div class="k-sub">${DATA.talhoes.length} talhões</div></div>
+    <div class="kpi"><div class="k-label">Área total</div><div class="k-value">${num(areaTotal)} ha</div><div class="k-sub">${talhoesAll().length} talhões</div></div>
     <div class="kpi accent"><div class="k-label">Demanda de compras</div><div class="k-value">${brl0(totalCompra)}</div><div class="k-sub">${itensComprar} itens a comprar</div></div>
     <div class="kpi"><div class="k-label">Custo de insumos (plano)</div><div class="k-value">${brl0(custoTotal)}</div><div class="k-sub">${areaTotal>0?brl(custoTotal/areaTotal):'—'} / ha</div></div>
     <div class="kpi"><div class="k-label">Itens sem preço</div><div class="k-value" style="color:${semPreco?'var(--red)':'var(--green)'}">${semPreco}</div><div class="k-sub">a cadastrar preço</div></div>
@@ -229,22 +263,36 @@ V.dashboard = function(){
 };
 
 V.talhoes = function(){
-  const rows=DATA.talhoes.map(t=>{
+  const all=talhoesAll();
+  const rows=all.map(t=>{
     const c=custoTalhao(t), area=areaDe(t), prodv=prodvDe(t);
-    const prodTotal=area*prodv;
-    return {t,area,prodv,prodTotal,custo:c.total,custoHa:c.ha};
+    return {t,area,prodv,prodTotal:area*prodv,custo:c.total,custoHa:c.ha,novo:!(t.id in DATA.planos)&&!DATA.talhoes.some(x=>x.id===t.id)};
   });
   const totArea=rows.reduce((a,r)=>a+r.area,0);
   const totCusto=rows.reduce((a,r)=>a+r.custo,0);
-  return `
+  const empOpts=empList().filter(e=>e&&e!=='—').map(e=>`<option value="${esc(e)}">`).join('');
+  const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.nome||'')}</option>`).join('');
+  return `${prodDatalist()}
+  <datalist id="emplist">${empOpts}</datalist>
+  <div class="panel"><div class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span></div>
+    <div class="bulk-add">
+      <input class="txt" id="nt-nome" placeholder="nome (ex.: Área 5)" style="min-width:150px">
+      <input class="txt" list="emplist" id="nt-emp" placeholder="cultura / empreendimento" style="min-width:180px">
+      <input class="cell" id="nt-area" placeholder="área (ha)" style="width:96px">
+      <input class="cell" id="nt-prod" placeholder="prod. sc/ha" style="width:96px">
+      <label class="mut" style="font-size:12px">copiar plano de
+        <select class="sel" id="nt-copy"><option value="">— em branco —</option>${copyOpts}</select></label>
+      <button class="btn btn-primary btn-sm" data-act="createtalhao">+ Criar talhão</button>
+    </div>
+  </div>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">Edite área e produtividade — o cálculo atualiza sozinho</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
     <thead><tr><th>Talhão</th><th>Nome</th><th>Cultura</th><th class="num">Área (ha)</th>
       <th class="num">Prod. (sc/ha)</th><th class="num">Produção (sc)</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`
-      <tr data-search="${esc((r.t.id+' '+r.t.nome+' '+r.t.empreendimento).toLowerCase())}">
-        <td><b>${esc(r.t.id)}</b></td>
+      <tr data-search="${esc((r.t.id+' '+(r.t.nome||'')+' '+(r.t.empreendimento||'')).toLowerCase())}">
+        <td><b>${esc(r.t.id)}</b>${r.novo?' <span class="pill pill-buy">novo</span>':''}</td>
         <td><a class="link" data-go="#/talhao/${esc(r.t.id)}">${esc(r.t.nome||'—')}</a></td>
         <td><span class="classe-tag">${esc(r.t.empreendimento||'—')}</span></td>
         <td class="num"><input class="cell ${OV.talhao[r.t.id]&&OV.talhao[r.t.id].area!=null?'edited':''}" data-edit="area" data-id="${r.t.id}" value="${r.area}"></td>
@@ -252,7 +300,7 @@ V.talhoes = function(){
         <td class="num">${nf0.format(r.prodTotal)}</td>
         <td class="num">${brl(r.custoHa)}</td>
         <td class="num"><b>${brl0(r.custo)}</b></td>
-        <td><a class="link" data-go="#/talhao/${esc(r.t.id)}">abrir ›</a></td></tr>`).join('')}</tbody>
+        <td class="num"><button class="icon-btn del" title="Excluir talhão" data-act="deltalhao" data-id="${esc(r.t.id)}" data-novo="${r.novo?1:0}">🗑</button></td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="3">TOTAL</td><td class="num">${num(totArea)}</td><td></td><td></td><td></td><td class="num">${brl0(totCusto)}</td><td></td></tr></tfoot>
   </table></div></div>`;
 };
@@ -261,9 +309,9 @@ function prodDatalist(){
   return `<datalist id="prodlist">${DATA.produtos.map(p=>`<option value="${esc(p.produto)}">`).join('')}</datalist>`;
 }
 V.talhao = function(id){
-  const t=DATA.talhoes.find(x=>x.id===id);
+  const t=findTalhao(id);
   if(!t) return `<div class="empty">Talhão não encontrado. <a class="link" data-go="#/talhoes">Voltar</a></div>`;
-  const plan=DATA.planos[t.id]||{principal:[],safrinha:[]};
+  const plan=planoDe(t.id)||{principal:[],safrinha:[]};
   const area=areaDe(t), c=custoTalhao(t);
   const maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
   const opts=[`<option value="">— sem máquina —</option>`].concat((DATA.maquinas||[])
@@ -320,7 +368,11 @@ V.talhao = function(id){
     <div class="di"><div class="l">Custo total/ha</div><div class="v" style="color:var(--ink2)">${brl(totHa)}</div></div>
     <div class="di"><div class="l">Custo total</div><div class="v">${brl0(totHa*area)}</div></div>
   </div>
-  <div class="toolbar" style="margin-top:-4px"><span class="badge badge-muted">Toque no produto para trocar, na dose para editar, no 🗑 para excluir — ou “+ adicionar insumo”.</span></div>
+  <div class="toolbar" style="margin-top:-4px">
+    <button class="btn btn-outline btn-sm" data-act="duptalhao" data-id="${esc(t.id)}">⧉ Duplicar plano</button>
+    <button class="btn btn-outline btn-sm" data-act="deltalhao" data-id="${esc(t.id)}" data-novo="${DATA.talhoes.some(x=>x.id===t.id)?0:1}" style="color:var(--red)">🗑 Excluir talhão</button>
+    <div class="spacer"></div>
+    <span class="badge badge-muted">Toque no produto para trocar, na dose para editar, no 🗑 para excluir — ou “+ adicionar insumo”.</span></div>
   ${opsHtml('principal','P','Safra principal')}
   ${opsHtml('safrinha','S','Safrinha')||''}
   ${(!plan.principal.length&&!plan.safrinha.length)?'<div class="empty">Sem operações cadastradas para este talhão.</div>':''}`;
@@ -413,7 +465,7 @@ V.maquinas = function(){
 
 V.dre = function(){
   const emps={};
-  DATA.talhoes.forEach(t=>{
+  talhoesAll().forEach(t=>{
     const e=t.empreendimento||'—';
     const c=custoTalhao(t), area=areaDe(t);
     const g=emps[e]||(emps[e]={area:0,prod:0,ins:0,opDefault:0});
@@ -471,7 +523,7 @@ V.dre = function(){
 // insumos consolidados de um empreendimento (produto -> {classe,un,qtd,doses,talhoes})
 function insumosDoEmp(emp){
   const map={};
-  DATA.talhoes.filter(t=>(t.empreendimento||'—')===emp).forEach(t=>{
+  talhoesAll().filter(t=>(t.empreendimento||'—')===emp).forEach(t=>{
     const area=areaDe(t);
     eachOp(t,(seq,tag,oi,op,tagoi)=>{
       effItems(t.id,tagoi,op.itens).forEach(it=>{
@@ -484,14 +536,14 @@ function insumosDoEmp(emp){
   return map;
 }
 function empList(){
-  const s=[]; DATA.talhoes.forEach(t=>{const e=t.empreendimento||'—'; if(!s.includes(e))s.push(e);});
+  const s=[]; talhoesAll().forEach(t=>{const e=t.empreendimento||'—'; if(!s.includes(e))s.push(e);});
   return s;
 }
 V.empreendimentos = function(arg){
   const emps=empList();
   const sel=arg&&emps.includes(arg)?arg:emps[0];
   const chips=emps.map(e=>`<a class="chip ${e===sel?'chip-on':''}" data-go="#/empreendimentos/${encodeURIComponent(e)}">${esc(e)}</a>`).join('');
-  const talhoes=DATA.talhoes.filter(t=>(t.empreendimento||'—')===sel);
+  const talhoes=talhoesAll().filter(t=>(t.empreendimento||'—')===sel);
   const area=talhoes.reduce((a,t)=>a+areaDe(t),0);
   const custo=talhoes.reduce((a,t)=>a+custoTalhao(t).total,0);
   const map=insumosDoEmp(sel);
@@ -566,7 +618,7 @@ function applyEdit(el){
     const tid=el.dataset.id, op=el.dataset.op;
     if(kind==='itemProd'){
       const seq=op[0]==='S'?'safrinha':'principal', oi=+op.slice(1), ii=+el.dataset.item;
-      const base=DATA.planos[tid][seq][oi].itens[ii].produto, key=`${tid}|${op}|${ii}`;
+      const base=planoDe(tid)[seq][oi].itens[ii].produto, key=`${tid}|${op}|${ii}`;
       if(!v||v===base) delete OV.itemProd[key]; else OV.itemProd[key]=v;
     } else {
       const arr=OV.itemAdd[`${tid}|${op}`]; if(arr&&arr[+el.dataset.ai]) arr[+el.dataset.ai].produto=v;
@@ -585,7 +637,7 @@ function applyEdit(el){
   else if(kind==='doseAdd'){ const arr=OV.itemAdd[`${el.dataset.id}|${el.dataset.op}`]; if(arr&&arr[+el.dataset.ai]) arr[+el.dataset.ai].dose=(n==null?0:n); }
   else if(kind==='bulkDose'){ if(n!=null) bulkSetDose(el.dataset.emp, el.dataset.prod, n); }
   else if(kind==='area'||kind==='prodv'){
-    const id=el.dataset.id, t=DATA.talhoes.find(x=>x.id===id); OV.talhao[id]=OV.talhao[id]||{};
+    const id=el.dataset.id, t=findTalhao(id); OV.talhao[id]=OV.talhao[id]||{};
     const base= kind==='area'?t.area:t.produtividade, key= kind==='area'?'area':'produtividade';
     if(n==null||n===base) delete OV.talhao[id][key]; else OV.talhao[id][key]=n;
     if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id];
@@ -597,7 +649,7 @@ function delItem(a){
   if(a.kind==='add'){ const k=`${a.id}|${a.op}`, arr=OV.itemAdd[k]; if(arr){ arr.splice(+a.ai,1); if(!arr.length) delete OV.itemAdd[k]; } }
   else { const rk=`${a.id}|${a.op}|${a.item}`; OV.itemRemoved[rk]=true; delete OV.dose[rk]; delete OV.itemProd[rk]; }
 }
-function talhoesDaEmp(emp){ return DATA.talhoes.filter(t=>(t.empreendimento||'—')===emp); }
+function talhoesDaEmp(emp){ return talhoesAll().filter(t=>(t.empreendimento||'—')===emp); }
 function bulkSetDose(emp,prod,dose){
   talhoesDaEmp(emp).forEach(t=>eachOp(t,(seq,tag,oi,op,tagoi)=>{
     effItems(t.id,tagoi,op.itens).forEach(it=>{
@@ -620,11 +672,19 @@ function bulkDelProd(emp,prod){
 function bulkAdd(emp,prod,dose,opNum){
   let n=0;
   talhoesDaEmp(emp).forEach(t=>{
-    const p=DATA.planos[t.id]; if(!p||!(p.principal||[]).length) return;
+    const p=planoDe(t.id); if(!p||!(p.principal||[]).length) return;
     const oi=Math.max(0,Math.min(p.principal.length-1,(opNum|0)-1)), key=`${t.id}|P${oi}`;
     (OV.itemAdd[key]=OV.itemAdd[key]||[]).push({produto:prod,dose:dose||0}); n++;
   });
   return n;
+}
+function copiaMaquinas(srcId,dstId,plano){
+  ['P','S'].forEach(tag=>{
+    (plano[tag==='S'?'safrinha':'principal']||[]).forEach((op,oi)=>{
+      const k=opMaqKey(srcId,`${tag}${oi}`);
+      if(k in OV.opMaq) OV.opMaq[opMaqKey(dstId,`${tag}${oi}`)]=OV.opMaq[k];
+    });
+  });
 }
 
 document.addEventListener('change',e=>{ if(e.target.matches('input.cell, select.sel, input.prod-in')) applyEdit(e.target); });
@@ -636,13 +696,37 @@ document.addEventListener('click',e=>{
     const a=act.dataset;
     if(a.act==='delitem'){ delItem(a); saveOverrides(); route(); }
     else if(a.act==='additem'){ const k=`${a.id}|${a.op}`; (OV.itemAdd[k]=OV.itemAdd[k]||[]).push({produto:'',dose:0}); saveOverrides(); route(); }
-    else if(a.act==='bulkdel'){ if(confirm(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
+    else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
     else if(a.act==='bulkadd'){
       const prod=($('#ba-prod').value||'').trim();
       const dose=parseFloat((($('#ba-dose').value)||'').replace(',','.'))||0;
       const opn=parseInt($('#ba-op').value)||1;
       if(!prod||!PROD[prod]){ toast('Escolha um produto válido da lista'); return; }
       const n=bulkAdd(a.emp,prod,dose,opn); saveOverrides(); route(); toast(`Adicionado em ${n} talhões`);
+    }
+    else if(a.act==='createtalhao'){
+      const nome=($('#nt-nome').value||'').trim(), emp=($('#nt-emp').value||'').trim();
+      const area=parseFloat(($('#nt-area').value||'').replace(',','.'))||0;
+      const prod=parseFloat(($('#nt-prod').value||'').replace(',','.'))||0;
+      const copy=$('#nt-copy').value, id=nextTalhaoId();
+      const plano=copy?snapshotPlano(copy):{principal:[{nome:'OPERAÇÃO 1',itens:[]}],safrinha:[]};
+      OV.talhaoAdd.push({id,nome:nome||id,empreendimento:emp,produtividade:prod,area,plano});
+      if(copy) copiaMaquinas(copy,id,plano);
+      saveOverrides(); toast(`Talhão ${id} criado`); location.hash='#/talhao/'+id;
+    }
+    else if(a.act==='duptalhao'){
+      const s=findTalhao(a.id); if(!s) return;
+      const id=nextTalhaoId(), plano=snapshotPlano(a.id);
+      OV.talhaoAdd.push({id,nome:(s.nome||a.id)+' (cópia)',empreendimento:s.empreendimento,produtividade:prodvDe(s),area:areaDe(s),plano});
+      copiaMaquinas(a.id,id,plano);
+      saveOverrides(); toast(`Plano duplicado em ${id}`); location.hash='#/talhao/'+id;
+    }
+    else if(a.act==='deltalhao'){
+      if(!ask(`Excluir o talhão ${a.id}? Remove-o do plano (dá para restaurar tudo depois).`)) return;
+      if(a.novo==='1'){ const i=OV.talhaoAdd.findIndex(t=>t.id===a.id); if(i>=0) OV.talhaoAdd.splice(i,1); cleanTalhaoOverlays(a.id); }
+      else OV.talhaoRemoved[a.id]=true;
+      saveOverrides(); toast(`Talhão ${a.id} excluído`);
+      if(location.hash.startsWith('#/talhao/')) location.hash='#/talhoes'; else route();
     }
     return;
   }

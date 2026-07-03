@@ -42,7 +42,7 @@ arquivo único `planejamento_app.html` para abrir localmente.
 
 - **Painel** — indicadores: área total, demanda de compras (R$), custo de
   insumos, itens sem preço; custo por cultura, compras por classe, maiores compras.
-- **Talhões** — lista dos 20 talhões; edite **área** e **produtividade** e o
+- **Talhões** — criar, duplicar (copiando o plano de outro) e excluir talhões;  lista dos 20 talhões; edite **área** e **produtividade** e o
   cálculo (produção, custo/ha, custo total) atualiza sozinho. Clique para abrir.
 - **Talhão (detalhe)** — operações da safra principal e safrinha, com produtos,
   **dose/ha editável**, preço, custo/ha. Cada operação tem uma **máquina**
