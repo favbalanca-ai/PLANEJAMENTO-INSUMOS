@@ -939,7 +939,8 @@ V.sync = function(){
       </div>
       <div id="sync-log" class="sync-log"></div>
       <p class="mut" style="font-size:12px;margin-top:12px">Com a <b>sincronização automática</b> ligada e a URL salva: o app <b>puxa</b> a planilha ao abrir e periodicamente, e <b>envia</b> suas edições automaticamente pouco depois de você mexer. A <b>planilha é a verdade</b> — ela sempre vence em conflito.<br>
-      <b>Enviado para a planilha:</b> dose, estoque, preço, área, produtividade e <b>insumos adicionados</b> a uma operação existente. Remoção de insumos e talhões/operações/máquinas criados no app <b>não</b> vão para a planilha.<br>
+      <b>Vai para a planilha (nos dois sentidos):</b> dose, preço, estoque, área, produtividade, <b>1ª e 2ª cultura</b> (empreendimento/safrinha) e produtividade da safrinha, <b>troca de produto</b> de um insumo, e insumos <b>adicionados/removidos</b> de uma operação existente.<br>
+      <b>Fica só no app</b> (para não quebrar as fórmulas/estrutura da planilha): operações, talhões e máquinas <b>criados</b> no app, e os ajustes de máquina (largura/velocidade, que na planilha vêm de fórmulas).<br>
       Os botões acima forçam um puxar/enviar imediato quando você quiser.</p>
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
@@ -1191,7 +1192,18 @@ function buildFieldEdits(){
   for(const pr in OV.preco)   eds.push({type:'preco',produto:pr,value:+OV.preco[pr]});
   for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
-    if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade}); }
+    if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade});
+    if(o.empreendimento!=null) eds.push({type:'empreendimento',talhao:id,value:String(o.empreendimento)});
+    if(o.emp_safrinha!=null) eds.push({type:'emp_safrinha',talhao:id,value:String(o.emp_safrinha)});
+    if(o.prod_safrinha!=null) eds.push({type:'prod_safrinha',talhao:id,value:+o.prod_safrinha}); }
+  // troca de produto de um insumo base -> grava classe/produto na linha (casa pelo produto ANTIGO)
+  for(const rk in OV.itemProd){ const p=rk.split('|'); if(p.length<3) continue;
+    const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)) continue;
+    const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
+    const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
+    const from=op.itens[ii].produto, to=OV.itemProd[rk]; if(!from||!to||from===to) continue;
+    const pr=PROD[to];
+    eds.push({type:'itemprod',talhao:tid,tag,op:oi,from,to,classe:(pr&&pr.classe)||'',rk:rk}); }
   // insumos adicionados no app -> gravam em linhas vazias da operação (só operações-base de talhões-base)
   for(const key in OV.itemAdd){ const i=key.indexOf('|'); if(i<0) continue;
     const tid=key.slice(0,i), tagoi=key.slice(i+1);
@@ -1218,8 +1230,10 @@ function applyPulledData(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // planilha como verdade: limpa overrides de campo (agora vêm da planilha)
-  OV.dose={}; OV.estoque={}; OV.preco={};
-  Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id]; delete o.area; delete o.produtividade; if(!Object.keys(o).length) delete OV.talhao[id]; });
+  OV.dose={}; OV.estoque={}; OV.preco={}; OV.itemProd={};
+  Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id];
+    delete o.area; delete o.produtividade; delete o.empreendimento; delete o.emp_safrinha; delete o.prod_safrinha;
+    if(!Object.keys(o).length) delete OV.talhao[id]; });
   saveOverrides();
 }
 // PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)

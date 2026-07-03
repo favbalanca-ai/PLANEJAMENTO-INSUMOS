@@ -95,6 +95,20 @@ function applyEdit(ed){
     var rr2 = findRow(A, 1, 2, A.getLastRow(), ed.talhao);
     if (!rr2) throw 'talhão não encontrado: ' + ed.talhao;
     A.getRange(rr2, col2).setValue(ed.value);
+  } else if (ed.type === 'empreendimento' || ed.type === 'emp_safrinha' || ed.type === 'prod_safrinha'){
+    var Ae = sh('ÁREA PLANTIO');
+    var re = findRow(Ae, 1, 2, Ae.getLastRow(), ed.talhao);
+    if (!re) throw 'talhão não encontrado: ' + ed.talhao;
+    var colE = ed.type === 'empreendimento' ? 3 : (ed.type === 'emp_safrinha' ? 8 : 9); // C / H / I
+    Ae.getRange(re, colE).setValue(ed.type === 'prod_safrinha' ? N(ed.value) : S(ed.value));
+    // obs.: a aba do talhão (B3) costuma referenciar 'ÁREA PLANTIO'!C por fórmula — não sobrescrever
+  } else if (ed.type === 'itemprod'){
+    var si = sh(ed.talhao); if (!si) throw 'aba não encontrada: ' + ed.talhao;
+    var fi = ed.tag === 'S' ? [238, 451] : [10, 224];
+    var ri = itemRowByName(si, fi[0], fi[1], ed.op, ed.from);
+    if (!ri) throw 'insumo não localizado (troca): ' + ed.from;
+    if (ed.classe) si.getRange(ri, 2).setValue(S(ed.classe)); // B = classe
+    si.getRange(ri, 3).setValue(S(ed.to));                    // C = produto novo
   } else if (ed.type === 'dose'){
     var s = sh(ed.talhao); if (!s) throw 'aba não encontrada: ' + ed.talhao;
     var faixa = ed.tag === 'S' ? [238, 451] : [10, 224];
