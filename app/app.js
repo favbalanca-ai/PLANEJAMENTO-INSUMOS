@@ -24,10 +24,14 @@ function loadOverrides(){
   OV.itemAdd     = OV.itemAdd     || {}; // "TL|tagOp" -> [{produto,dose}] (insumos adicionados)
   OV.talhaoAdd     = OV.talhaoAdd     || []; // talhões criados: [{id,nome,empreendimento,produtividade,area,plano}]
   OV.talhaoRemoved = OV.talhaoRemoved || {}; // idBase -> true (talhão base ocultado)
+  OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
+  OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
+  OV.opAdd         = OV.opAdd         || {}; // talhao -> {P:[nomes], S:[nomes]} operações criadas
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
   localStorage.setItem(LS_KEY, JSON.stringify(OV));
+  if(DATA) buildMaqIndex();
   updateEditBadge();
 }
 function countEdits(){
@@ -38,6 +42,8 @@ function countEdits(){
          Object.keys(OV.itemRemoved).length + Object.keys(OV.itemProd).length +
          Object.values(OV.itemAdd).reduce((a,arr)=>a+arr.length,0) +
          OV.talhaoAdd.length + Object.keys(OV.talhaoRemoved).length +
+         Object.keys(OV.maqAttr).length + OV.maqAdd.length +
+         Object.values(OV.opAdd).reduce((a,o)=>a+(o.P||[]).length+(o.S||[]).length,0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -108,21 +114,31 @@ function eachOp(t, cb){
   });
 }
 function precoCultura(emp){ return (emp in OV.cultura)?+OV.cultura[emp]:(DATA.precos_cultura[emp]||0); }
-function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:m.rs_hm; }
-// custo total por hectare de uma passada da máquina = custo hora-máquina + diesel
-function custoMaqHa(m){ return m.hm_ha*rsHmDe(m) + m.l_ha*(+OV.diesel); }
+function maquinasAll(){ return (DATA.maquinas||[]).concat(OV.maqAdd); }
+function maqAttr(m,k){ const o=OV.maqAttr[m.conjunto]; return (o&&o[k]!=null)?+o[k]:(+m[k]||0); }
+function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:(+m.rs_hm||0); }
+// máquina "efetiva": aplica edições de largura/velocidade/efic/L-h e recalcula ha/h, HM/ha, L/ha, custos
+function effMaq(m){
+  const larg=maqAttr(m,'largura'), vel=maqAttr(m,'velocidade'), efic=maqAttr(m,'eficiencia'), lh=maqAttr(m,'l_h'), rs=rsHmDe(m);
+  const ha_h=larg*vel*efic/1000, hm_ha=ha_h>0?1/ha_h:0, l_ha=ha_h>0?lh/ha_h:0;
+  const cmaq=hm_ha*rs, cdie=l_ha*(+OV.diesel);
+  return {conjunto:m.conjunto,maquina:m.maquina,implemento:m.implemento,largura:larg,velocidade:vel,
+    eficiencia:efic,l_h:lh,rs_hm:rs,ha_h:ha_h,hm_ha:hm_ha,l_ha:l_ha,custoMaqHa:cmaq,dieselHa:cdie,custoHa:cmaq+cdie};
+}
+// custo total por hectare de uma passada = custo hora-máquina + diesel
+function custoMaqHa(m){ return effMaq(m).custoHa; }
 // custo médio por passada (média das máquinas cadastradas)
 function custoMedioPassada(){
-  const ms=DATA.maquinas||[]; if(!ms.length) return 0;
-  return ms.reduce((a,m)=>a+custoMaqHa(m),0)/ms.length;
+  const ms=maquinasAll(); if(!ms.length) return 0;
+  return ms.reduce((a,m)=>a+effMaq(m).custoHa,0)/ms.length;
 }
 const maqByConj = {};
-function buildMaqIndex(){ (DATA.maquinas||[]).forEach(m=>maqByConj[m.conjunto]=m); }
+function buildMaqIndex(){ for(const k in maqByConj) delete maqByConj[k]; maquinasAll().forEach(m=>maqByConj[m.conjunto]=m); }
 // sugere um conjunto pela classe predominante dos insumos (recebe lista de classes)
 function sugereMaquina(clsArr){
   const cls = (clsArr||[]).map(c=>(c||'').toUpperCase());
   const has = re => cls.some(c=>re.test(c));
-  const find = re => (DATA.maquinas||[]).find(m=>re.test(m.conjunto.toUpperCase()));
+  const find = re => maquinasAll().find(m=>re.test((m.conjunto||'').toUpperCase()));
   let m=null;
   if(has(/CORRETIVO/))            m=find(/BRUTUS|DISTRIBUID/);
   else if(has(/FERTILIZANTE|NUTRI/)) m=find(/ADUBAD|JAN 20000/);
@@ -351,7 +367,7 @@ V.talhao = function(id){
   const plan=planoDe(t.id)||{principal:[],safrinha:[]};
   const area=areaDe(t), c=custoTalhao(t);
   const maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
-  const opts=[`<option value="">— sem máquina —</option>`].concat((DATA.maquinas||[])
+  const opts=[`<option value="">— sem máquina —</option>`].concat(maquinasAll()
     .map(m=>`<option value="${esc(m.conjunto)}">${esc(m.conjunto)}</option>`)).join('');
   function itemRow(it){
     const preco=precoDe(it.produto), chHa=it.dose*preco;
@@ -472,33 +488,49 @@ V.cotacao = function(){
 };
 
 V.maquinas = function(){
-  const ms=DATA.maquinas||[];
-  const medio=custoMedioPassada();
+  const ms=maquinasAll(), medio=custoMedioPassada();
+  const attrEd=(m,k)=>(OV.maqAttr[m.conjunto]&&OV.maqAttr[m.conjunto][k]!=null)?'edited':'';
   return `
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Conjuntos cadastrados</div><div class="k-value">${ms.length}</div></div>
+    <div class="kpi"><div class="k-label">Conjuntos</div><div class="k-value">${ms.length}</div><div class="k-sub">${OV.maqAdd.length} montados por você</div></div>
     <div class="kpi accent"><div class="k-label">Custo médio por passada</div><div class="k-value">${brl(medio)}</div><div class="k-sub">máquina + diesel, por ha</div></div>
     <div class="kpi"><div class="k-label">Preço do diesel</div>
       <div class="k-value"><input class="cell ${OV.diesel!==6?'edited':''}" data-edit="diesel" value="${OV.diesel}" style="width:110px;font-size:20px;font-weight:700"> <span style="font-size:13px;color:var(--muted)">R$/L</span></div>
       <div class="k-sub">aplicado ao consumo (L/ha)</div></div>
   </div>
-  <div class="toolbar"><span class="badge badge-muted">Edite o <b>R$/HM</b> (custo hora-máquina) e o preço do diesel — o custo por hectare recalcula.</span></div>
+  <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento — largura e velocidade definem o rendimento</span></div>
+    <div class="bulk-add">
+      <input class="txt" id="mq-maq" placeholder="máquina (ex.: Trator JD 7500)" style="min-width:170px">
+      <input class="txt" id="mq-imp" placeholder="implemento (ex.: Pulverizador)" style="min-width:170px">
+      <input class="cell" id="mq-larg" placeholder="largura (m)" style="width:96px">
+      <input class="cell" id="mq-vel" placeholder="vel. (km/h)" style="width:96px">
+      <input class="cell" id="mq-efic" value="85" placeholder="efic. %" style="width:80px">
+      <input class="cell" id="mq-lh" placeholder="L/h" style="width:70px">
+      <input class="cell" id="mq-rs" placeholder="R$/HM" style="width:84px">
+      <button class="btn btn-primary btn-sm" data-act="addmaq">+ Montar</button>
+    </div>
+  </div>
+  <div class="toolbar"><span class="badge badge-muted">Edite <b>largura</b>, <b>velocidade</b>, <b>eficiência</b>, <b>L/h</b> e <b>R$/HM</b> — ha/h e custos recalculam. ha/h = largura×velocidade×efic ÷ 1000.</span></div>
   <div class="panel"><div class="table-wrap"><table>
-    <thead><tr><th>Conjunto (máquina + implemento)</th><th class="num">Largura</th><th class="num">Vel.</th>
-      <th class="num">Efic. %</th><th class="num">ha/h</th><th class="num">HM/ha</th><th class="num">R$/HM</th>
-      <th class="num">Custo máq/ha</th><th class="num">L/ha</th><th class="num">Diesel/ha</th><th class="num">Custo total/ha</th></tr></thead>
+    <thead><tr><th>Conjunto</th><th class="num">Largura (m)</th><th class="num">Vel. (km/h)</th>
+      <th class="num">Efic. %</th><th class="num">ha/h</th><th class="num">HM/ha</th><th class="num">L/h</th><th class="num">R$/HM</th>
+      <th class="num">Custo máq/ha</th><th class="num">L/ha</th><th class="num">Diesel/ha</th><th class="num">Custo total/ha</th><th></th></tr></thead>
     <tbody>${ms.map(m=>{
-      const rs=rsHmDe(m), cmaq=m.hm_ha*rs, cdie=m.l_ha*(+OV.diesel), tot=cmaq+cdie;
-      return `<tr><td><b>${esc(m.conjunto)}</b></td>
-        <td class="num">${num(m.largura)}</td><td class="num">${num(m.velocidade)}</td>
-        <td class="num">${nf0.format(m.eficiencia)}</td><td class="num">${num(m.ha_h)}</td>
-        <td class="num">${nf2.format(m.hm_ha)}</td>
-        <td class="num"><input class="cell ${(m.conjunto in OV.maquina)?'edited':''}" data-edit="maquina" data-conj="${esc(m.conjunto)}" value="${rs}"></td>
-        <td class="num">${brl(cmaq)}</td><td class="num">${num(m.l_ha)}</td>
-        <td class="num">${brl(cdie)}</td><td class="num"><b>${brl(tot)}</b></td></tr>`;
+      const e=effMaq(m), novo=OV.maqAdd.some(x=>x.conjunto===m.conjunto);
+      const inp=(k,v,w)=>`<input class="cell ${attrEd(m,k)}" data-edit="maqAttr" data-conj="${esc(m.conjunto)}" data-attr="${k}" value="${v}" style="width:${w||70}px">`;
+      return `<tr><td><b>${esc(m.conjunto)}</b>${novo?' <span class="pill pill-buy">novo</span>':''}</td>
+        <td class="num">${inp('largura',m.largura!=null?maqAttr(m,'largura'):'',72)}</td>
+        <td class="num">${inp('velocidade',maqAttr(m,'velocidade'),72)}</td>
+        <td class="num">${inp('eficiencia',maqAttr(m,'eficiencia'),64)}</td>
+        <td class="num">${num(e.ha_h)}</td><td class="num">${nf2.format(e.hm_ha)}</td>
+        <td class="num">${inp('l_h',maqAttr(m,'l_h'),58)}</td>
+        <td class="num"><input class="cell ${(m.conjunto in OV.maquina)?'edited':''}" data-edit="maquina" data-conj="${esc(m.conjunto)}" value="${e.rs_hm}" style="width:80px"></td>
+        <td class="num">${brl(e.custoMaqHa)}</td><td class="num">${num(e.l_ha)}</td>
+        <td class="num">${brl(e.dieselHa)}</td><td class="num"><b>${brl(e.custoHa)}</b></td>
+        <td class="num">${novo?`<button class="icon-btn del" title="Excluir conjunto" data-act="delmaq" data-conj="${esc(m.conjunto)}">🗑</button>`:''}</td></tr>`;
     }).join('')}</tbody>
   </table></div></div>
-  <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de custo de máquinas no DRE (nº de operações do talhão × custo médio).</p>`;
+  <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão.</p>`;
 };
 
 V.dre = function(){
@@ -698,7 +730,8 @@ function applyEdit(el){
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
-  else if(kind==='maquina'){ const c=el.dataset.conj, m=DATA.maquinas.find(x=>x.conjunto===c); if(n==null||n===m.rs_hm) delete OV.maquina[c]; else OV.maquina[c]=n; }
+  else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
+  else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
   else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
   else if(kind==='dreOp'){ const e=el.dataset.emp; if(n==null) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
   else if(kind==='arrend'){ const e=el.dataset.emp; if(n==null||n===0) delete OV.arrend[e]; else OV.arrend[e]=n; }
@@ -800,6 +833,19 @@ document.addEventListener('click',e=>{
       saveOverrides(); toast(`Talhão ${a.id} excluído`);
       if(location.hash.startsWith('#/talhao/')) location.hash='#/talhoes'; else route();
     }
+    else if(a.act==='addmaq'){
+      const maq=($('#mq-maq').value||'').trim(), imp=($('#mq-imp').value||'').trim();
+      const nn=id=>parseFloat(($('#'+id).value||'').replace(',','.'))||0;
+      if(!maq&&!imp){ toast('Informe máquina e/ou implemento'); return; }
+      let conj=(maq+(imp?' + '+imp:'')).trim(), base=conj, i=2; while(maqByConj[conj]){ conj=base+' ('+i+')'; i++; }
+      OV.maqAdd.push({conjunto:conj,maquina:maq,implemento:imp,largura:nn('mq-larg'),velocidade:nn('mq-vel'),
+        eficiencia:nn('mq-efic')||85,l_h:nn('mq-lh'),rs_hm:nn('mq-rs')});
+      saveOverrides(); route(); toast('Conjunto montado: '+conj);
+    }
+    else if(a.act==='delmaq'){
+      const c=a.conj, i=OV.maqAdd.findIndex(x=>x.conjunto===c); if(i>=0) OV.maqAdd.splice(i,1);
+      delete OV.maqAttr[c]; delete OV.maquina[c]; saveOverrides(); route(); toast('Conjunto excluído');
+    }
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
@@ -889,7 +935,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 fetch('data.json').then(r=>r.json()).then(d=>{
   DATA=d; d.produtos.forEach(p=>PROD[p.produto]=p);
-  buildMaqIndex(); loadOverrides(); updateEditBadge();
+  loadOverrides(); buildMaqIndex(); updateEditBadge();
   window.addEventListener('hashchange',route);
   if(!location.hash) location.hash='#/dashboard';
   route();
