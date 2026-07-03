@@ -4,6 +4,20 @@ O app é estático (roda no navegador). Para sincronizar com a sua planilha do
 Google, publicamos um **Web App do Apps Script** vinculado a ela. A **planilha é
 a verdade**: o app puxa dela e grava de volta apenas campos simples.
 
+## Automática (padrão)
+Com a URL salva e a chave **Sincronização automática** ligada (tela
+**Sincronizar** do app), a sincronização acontece sozinha nos dois sentidos:
+
+- **App → planilha:** ao editar algo, o app envia a mudança ~1,5 s depois.
+- **Planilha → app:** o app puxa a planilha ao abrir e a cada ~45 s enquanto a
+  aba está visível. Se nada mudou na planilha, ele **não** re-renderiza (não
+  pisca a tela).
+
+Um indicador no topo mostra o estado: 🟢 *Sincronizado*, 🟡 *Sincronizando…*,
+🔴 *Erro* ou ⚪ *Auto desligado*. Os botões **Puxar agora / Enviar agora**
+forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
+(o app puxa por cima das edições de campo locais).
+
 ## O que sincroniza
 - **Puxar (planilha → app):** todos os dados (produtos, talhões, planos,
   preços, máquinas). Substitui o que está no app.
