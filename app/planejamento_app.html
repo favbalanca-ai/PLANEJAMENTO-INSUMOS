@@ -989,16 +989,16 @@ V.empreendimentos = function(arg){
   });
   const rows=prods.map(prod=>{
     const m=map[prod], doseCommon=m.doses.size===1?[...m.doses][0]:null, preco=precoDe(prod);
-    return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}">
-      <td>${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
-      <td><b>${esc(prod)}</b></td>
-      <td class="num"><input class="cell" data-edit="bulkDose" data-emp="${esc(sel)}" data-prod="${esc(prod)}"
+    return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}" data-cardkey="ce|${esc(prod)}"${openCards.has('ce|'+prod)?' class="open"':''}>
+      <td class="c-more" data-th="Classe">${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
+      <td class="c-full" data-th="Produto"><b>${esc(prod)}</b></td>
+      <td class="num" data-th="Dose/ha"><input class="cell" data-edit="bulkDose" data-emp="${esc(sel)}" data-prod="${esc(prod)}"
         value="${doseCommon!=null?doseCommon:''}" placeholder="${doseCommon!=null?'':'vários'}"></td>
-      <td>${esc(m.un)}</td>
-      <td class="num">${num(m.qtd)}</td>
-      <td class="num">${preco>0?brl(preco):'—'}</td>
-      <td class="num">${m.talhoes.size}</td>
-      <td class="num"><button class="icon-btn del" title="Excluir de todos os talhões desta cultura"
+      <td class="c-more" data-th="Un">${esc(m.un)}</td>
+      <td class="num c-more" data-th="Qtd total">${num(m.qtd)}</td>
+      <td class="num c-more" data-th="Preço">${preco>0?brl(preco):'—'}</td>
+      <td class="num c-more" data-th="Nos talhões">${m.talhoes.size}</td>
+      <td class="c-del c-more"><button class="icon-btn del" title="Excluir de todos os talhões desta cultura"
         data-act="bulkdel" data-emp="${esc(sel)}" data-prod="${esc(prod)}">🗑</button></td></tr>`;
   }).join('');
   return `${prodDatalist()}
@@ -1018,9 +1018,10 @@ V.empreendimentos = function(arg){
       <button class="btn btn-primary btn-sm" data-act="bulkadd" data-emp="${esc(sel)}">+ Adicionar a todos</button>
     </div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Insumos da cultura</h2>
-    <div class="search" style="max-width:240px"><input id="q-emp" placeholder="Buscar produto ou classe…"></div></div>
-    <div class="table-wrap"><table id="tbl-emp">
+  <div class="toolbar"><div class="search"><input id="q-emp" placeholder="Buscar insumo ou classe…"></div>
+    <div class="spacer"></div><span class="badge badge-muted">edite a dose (aplica a todos os talhões) ou exclua — em massa</span></div>
+  <div class="panel"><div class="panel-head"><h2>Insumos da cultura</h2><span class="sub">${prods.length} insumos</span></div>
+    <div class="table-wrap"><table id="tbl-emp" class="cards-sm insumo-cards">
       <thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th>
         <th class="num">Qtd total</th><th class="num">Preço</th><th class="num">Nos talhões</th><th></th></tr></thead>
       <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Sem insumos nesta cultura.</td></tr>'}</tbody>
