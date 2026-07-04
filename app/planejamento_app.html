@@ -166,6 +166,17 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;max-height:200px;overflow:auto}
 .sync-log:not(:empty){padding:10px 12px}
 .sync-log div{white-space:pre-wrap;word-break:break-word}
+/* histórico de sincronização */
+.sync-hist{max-height:320px;overflow:auto;padding:4px 0}
+.hist-empty{padding:14px 18px;font-size:13px}
+.hist-row{display:flex;gap:12px;align-items:baseline;padding:8px 18px;border-top:1px solid var(--line);font-size:13px}
+.hist-row:first-child{border-top:0}
+.hist-when{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:74px}
+.hist-kind{font-weight:700;white-space:nowrap;min-width:64px}
+.hist-msg{flex:1;word-break:break-word}
+.hist-row.is-ok .hist-msg{color:var(--green,#2e7d32)}
+.hist-row.is-err .hist-msg{color:var(--red,#c0392b)}
+@media(max-width:640px){.hist-row{flex-wrap:wrap;gap:4px 10px}.hist-msg{flex-basis:100%}}
 /* chip de estado da sincronização (topbar) */
 .sync-status{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
   font-size:12px;font-weight:600;color:var(--ink2);background:#eef2f4;
@@ -1084,6 +1095,9 @@ V.sync = function(){
       <b>Fica só no app</b> (para não quebrar as fórmulas/estrutura da planilha): operações, talhões e máquinas <b>criados</b> no app, e os ajustes de máquina (largura/velocidade, que na planilha vêm de fórmulas).<br>
       Os botões acima forçam um puxar/enviar imediato quando você quiser.</p>
     </div></div>
+  <div class="panel"><div class="panel-head"><h2>Histórico de sincronização</h2><span class="sub">últimas 50</span>
+      <div class="spacer"></div><button class="btn btn-ghost btn-sm" data-act="hist-clear">Limpar histórico</button></div>
+    <div id="sync-hist" class="sync-hist">${histRowsHtml()}</div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
     <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
       <li>Abra sua planilha no Google Sheets → <b>Extensões → Apps Script</b>.</li>
@@ -1269,6 +1283,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
+    else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
@@ -1408,6 +1423,33 @@ function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
 function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
+// histórico persistente de sincronização (data/hora, puxar/enviar, ok/falhas) — fica no localStorage
+const HIST_KEY='planejamento_sync_hist';
+function syncHist(){ try{ return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); }catch(_){ return []; } }
+function addHist(kind, ok, msg){
+  const h=syncHist();
+  h.unshift({t:Date.now(), kind:kind, ok:!!ok, msg:String(msg||'')});
+  if(h.length>50) h.length=50;
+  localStorage.setItem(HIST_KEY, JSON.stringify(h));
+  renderHist();
+}
+function fmtHist(t){
+  const d=new Date(t), z=n=>String(n).padStart(2,'0');
+  return `${z(d.getDate())}/${z(d.getMonth()+1)} ${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+function histRowsHtml(){
+  const h=syncHist();
+  if(!h.length) return '<div class="hist-empty mut">Nenhuma sincronização ainda.</div>';
+  return h.map(e=>{
+    const ic = e.kind==='pull' ? '⬇' : '⬆';
+    const st = e.ok ? '✔' : '✖';
+    return `<div class="hist-row ${e.ok?'is-ok':'is-err'}">`+
+      `<span class="hist-when">${esc(fmtHist(e.t))}</span>`+
+      `<span class="hist-kind">${ic} ${e.kind==='pull'?'Puxar':'Enviar'}</span>`+
+      `<span class="hist-msg">${st} ${esc(e.msg)}</span></div>`;
+  }).join('');
+}
+function renderHist(){ const el=$('#sync-hist'); if(el) el.innerHTML=histRowsHtml(); }
 // chip de estado na barra superior: off | ok | busy | err
 function setSyncStatus(state, msg){
   const el=$('#sync-status'); if(!el) return;
@@ -1528,15 +1570,17 @@ async function syncPull(opts){
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
-      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); }
+      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças'); }
       syncBusy=false; setSyncStatus('ok'); return;
     }
     lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
+    addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões`);
     if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
     syncBusy=false; route(); setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
     const aborted=/abort/i.test(e&&e.message||'');
+    addHist('pull',false, aborted?'Tempo esgotado (planilha lenta)':('Erro: '+(e&&e.message||'')));
     if(!opts.auto){
       syncLog(aborted
         ? '✖ A planilha demorou demais para responder. Toque em "Puxar agora" de novo — a 1ª vez costuma ser mais lenta.'
@@ -1557,6 +1601,7 @@ async function syncPush(opts){
     const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},60000);
     const res=await r.json();
     lastPushSig=sig; lastPushOk=(res.fail===0);   // se houve falha, permite novo reenvio depois
+    addHist('push', res.fail===0, `${res.ok} gravadas, ${res.fail} falhas`);
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
@@ -1572,6 +1617,7 @@ async function syncPush(opts){
     }
     syncBusy=false; setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
+    addHist('push',false,'Erro: '+(e&&e.message||''));
     if(!opts.auto){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); } }
 }
 // agenda um envio automático (debounce) após edições

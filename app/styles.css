@@ -151,6 +151,17 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;max-height:200px;overflow:auto}
 .sync-log:not(:empty){padding:10px 12px}
 .sync-log div{white-space:pre-wrap;word-break:break-word}
+/* histórico de sincronização */
+.sync-hist{max-height:320px;overflow:auto;padding:4px 0}
+.hist-empty{padding:14px 18px;font-size:13px}
+.hist-row{display:flex;gap:12px;align-items:baseline;padding:8px 18px;border-top:1px solid var(--line);font-size:13px}
+.hist-row:first-child{border-top:0}
+.hist-when{color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:74px}
+.hist-kind{font-weight:700;white-space:nowrap;min-width:64px}
+.hist-msg{flex:1;word-break:break-word}
+.hist-row.is-ok .hist-msg{color:var(--green,#2e7d32)}
+.hist-row.is-err .hist-msg{color:var(--red,#c0392b)}
+@media(max-width:640px){.hist-row{flex-wrap:wrap;gap:4px 10px}.hist-msg{flex-basis:100%}}
 /* chip de estado da sincronização (topbar) */
 .sync-status{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
   font-size:12px;font-weight:600;color:var(--ink2);background:#eef2f4;
