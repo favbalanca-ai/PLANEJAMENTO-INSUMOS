@@ -1403,7 +1403,7 @@ const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização auto
 const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
 let syncBusy=false, pushTimer=null, pollTimer=null;
-let lastPushSig='', lastRawSig='', lastInputTs=0;
+let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true;
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
@@ -1470,13 +1470,34 @@ function buildFieldEdits(){
 function applyPulledData(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
-  // planilha como verdade: limpa overrides de campo (agora vêm da planilha)
-  // OBS: OV.preco NÃO é limpo — é ajuste local do usuário (a planilha traz o preço por fórmula/importação)
-  OV.dose={}; OV.estoque={}; OV.pedido={}; OV.itemProd={};
-  Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id];
-    delete o.area; delete o.produtividade; delete o.empreendimento; delete o.emp_safrinha; delete o.prod_safrinha;
-    if(!Object.keys(o).length) delete OV.talhao[id]; });
+  // NÃO apaga as edições cegamente: só descarta o override que JÁ está igual na planilha
+  // (ou seja, que já foi salvo). O que ainda não foi salvo é PRESERVADO — evita "minhas edições somem".
+  reconcileOverrides();
   saveOverrides();
+}
+const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
+function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
+  const op=((DATA.planos[tid]&&DATA.planos[tid][seq])||[])[oi]; return (op&&op.itens[ii])?op.itens[ii]:null; }
+function reconcileOverrides(){
+  // estoque / em pedido (base vem da planilha)
+  for(const pr in OV.estoque){ if(PROD[pr] && near(OV.estoque[pr],PROD[pr].estoque)) delete OV.estoque[pr]; }
+  for(const pr in OV.pedido){ if(PROD[pr] && near(OV.pedido[pr],PROD[pr].pedido||0)) delete OV.pedido[pr]; }
+  // OV.preco NÃO entra: é ajuste local (a coluna de preço da planilha é fórmula/importada)
+  // dose e troca de produto (comparam com o insumo base da planilha)
+  for(const k in OV.dose){ const p=k.split('|'); if(String(p[2]).indexOf('a')===0) continue;
+    const it=baseDoseOf(p[0],p[1],+p[2]); if(it && near(OV.dose[k],it.dose)) delete OV.dose[k]; }
+  for(const rk in OV.itemProd){ const p=rk.split('|'); const it=baseDoseOf(p[0],p[1],+p[2]);
+    if(it && String(OV.itemProd[rk])===String(it.produto)) delete OV.itemProd[rk]; }
+  // culturas / área / produtividade do talhão
+  Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id], t=DATA.talhoes.find(x=>x.id===id); if(!t) return;
+    if(o.area!=null && near(o.area,t.area)) delete o.area;
+    if(o.produtividade!=null && near(o.produtividade,t.produtividade)) delete o.produtividade;
+    if(o.empreendimento!=null && String(o.empreendimento)===String(t.empreendimento||'')) delete o.empreendimento;
+    if(o.emp_safrinha!=null && String(o.emp_safrinha)===String(t.emp_safrinha||'')) delete o.emp_safrinha;
+    if(o.prod_safrinha!=null && near(o.prod_safrinha,t.prod_safrinha||0)) delete o.prod_safrinha;
+    if(!Object.keys(o).length) delete OV.talhao[id]; });
+  // preço de venda por cultura (DRE) — só dropa se já bater com a planilha
+  for(const e in OV.cultura){ if(near(OV.cultura[e], DATA.precos_cultura[e]||0)) delete OV.cultura[e]; }
 }
 // PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)
 // fetch com timeout GENEROSO (o Apps Script lê a planilha toda e pode demorar; só aborta se travar de vez)
@@ -1510,7 +1531,7 @@ async function syncPull(opts){
       if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); }
       syncBusy=false; setSyncStatus('ok'); return;
     }
-    lastRawSig=raw; applyPulledData(d); lastPushSig=fieldSig();
+    lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
     if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
     syncBusy=false; route(); setSyncStatus('ok');
@@ -1527,15 +1548,15 @@ async function syncPull(opts){
 async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
-  if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; return; }
-  if(opts.auto && sig===lastPushSig) return;      // já enviamos exatamente isto
+  if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
+  if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
   if(syncBusy){ scheduleAutoPush(); return; }       // ocupado: tenta de novo depois
   syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
     const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},60000);
     const res=await r.json();
-    lastPushSig=sig;
+    lastPushSig=sig; lastPushOk=(res.fail===0);   // se houve falha, permite novo reenvio depois
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
@@ -1564,7 +1585,8 @@ function pollTick(){
   if(!syncUrl()||!autoOn()||syncBusy) return;
   if(document.visibilityState!=='visible') return;
   if(Date.now()-lastInputTs < 4000) return;        // usuário digitando: não puxa agora
-  if(fieldSig()!==lastPushSig){ scheduleAutoPush(); return; }  // há edições não enviadas: envia primeiro
+  // com edições pendentes: envia (o puxar agora é seguro e não apaga o que não foi salvo)
+  if(buildFieldEdits().length>0) scheduleAutoPush();
   syncPull({auto:true, silentToast:true});
 }
 function startPolling(){
@@ -1587,10 +1609,10 @@ Promise.resolve(window.__DATA__).then(d=>{
   if(!location.hash) location.hash='#/dashboard';
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
-  lastPushSig=fieldSig();
+  lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
   if(syncUrl() && autoOn()){
     if(buildFieldEdits().length===0){ syncPull({auto:true, silentToast:true}); }
-    else scheduleAutoPush();   // há edições locais: envia para a planilha (que reconcilia via pull)
+    else scheduleAutoPush();   // há edições locais não salvas: envia para a planilha
     startPolling();
   }
   setSyncStatus();
