@@ -303,6 +303,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
     font-size:18px;line-height:1;color:var(--ink2);background:none;border:none;border-radius:0;padding:0;margin:0}
   .compra-cards tbody tr.open::after{content:"⌃"}
   .compra-cards tbody td.c-more{order:4;flex:1 0 100%}
+  /* DRE: cartão completo por cultura (todos os campos rotulados, sem toggle) */
+  .dre-cards tbody tr{cursor:default}
+  .dre-cards tbody tr::after{display:none!important}
+  .dre-cards tbody td{padding:6px 0;border-top:1px solid var(--line)}
+  .dre-cards td.c-full{border-top:0;margin-bottom:2px}
+  .dre-cards tbody td.num input{width:130px}
+  .dre-cards td.c-res{background:#f2f7f8;border-radius:8px;margin-top:6px;padding:8px 10px;border-top:0}
+  .dre-cards td.c-res::before{color:var(--ink2)}
+  .dre-cards td.c-res b{font-size:16px}
+  .dre-cards tfoot{display:none}   /* os totais já aparecem nos KPIs acima */
+
   /* rodapé (subtotais/total) como faixa resumo */
   .cards-sm tfoot{display:block}
   .cards-sm tfoot tr{display:flex;justify-content:space-between;gap:10px;align-items:center;

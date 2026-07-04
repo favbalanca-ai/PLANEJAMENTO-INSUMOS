@@ -595,17 +595,18 @@ V.dre = function(){
     const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
     const custoTot=g.ins+custoMaq+custoArr, result=receita-custoTot;
     tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;tX+=custoArr;
-    return `<tr><td><b>${esc(e)}</b></td><td class="num">${num(g.area)}</td>
-      <td class="num">${nf0.format(g.prod)}</td>
-      <td class="num"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
-      <td class="num">${brl0(receita)}</td>
-      <td class="num">${brl0(g.ins)}</td>
-      <td class="num"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
-      <td class="num">${brl0(custoMaq)}</td>
-      <td class="num"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
-      <td class="num">${brl0(custoArr)}</td>
-      <td class="num">${brl0(custoTot)}</td>
-      <td class="num"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
+    return `<tr><td class="c-full"><b>${esc(e)}</b></td>
+      <td class="num" data-th="Área (ha)">${num(g.area)}</td>
+      <td class="num" data-th="Produção (sc)">${nf0.format(g.prod)}</td>
+      <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
+      <td class="num" data-th="Receita">${brl0(receita)}</td>
+      <td class="num" data-th="Custo insumos">${brl0(g.ins)}</td>
+      <td class="num" data-th="Máq. R$/ha"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
+      <td class="num" data-th="Custo máquinas">${brl0(custoMaq)}</td>
+      <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
+      <td class="num" data-th="Arrend./Outros">${brl0(custoArr)}</td>
+      <td class="num" data-th="Custo total">${brl0(custoTot)}</td>
+      <td class="num c-res" data-th="Resultado"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
   }).join('');
   const res=tR-tI-tM-tX;
   return `
@@ -617,7 +618,7 @@ V.dre = function(){
     <div class="kpi accent"><div class="k-label">Resultado</div><div class="k-value">${brl0(res)}</div><div class="k-sub">${tR>0?nf1.format(res/tR*100)+'% da receita':''}</div></div>
   </div>
   <div class="toolbar"><span class="badge badge-muted">Resultado = Receita − insumos − máquinas − arrendamento/outros. Campos em azul são editáveis (R$/ha ou preço).</span></div>
-  <div class="panel"><div class="table-wrap"><table>
+  <div class="panel"><div class="table-wrap"><table class="cards-sm dre-cards">
     <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th>
       <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th>
       <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th>
