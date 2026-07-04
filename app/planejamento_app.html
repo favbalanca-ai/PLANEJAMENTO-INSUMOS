@@ -1042,7 +1042,7 @@ V.sync = function(){
       <label class="switch" style="margin-top:16px">
         <input type="checkbox" id="sync-auto" ${on?'checked':''} data-edit="autoSync">
         <span class="track"></span>
-        <span><b>Sincronização automática</b> — envia suas edições e puxa a planilha sozinho${on?`&nbsp;(a cada ${Math.round(POLL_MS/1000)}s)`:''}</span>
+        <span><b>Sincronização automática</b> — envia suas edições e puxa a planilha sozinho (ao abrir, ao voltar pro app e periodicamente)</span>
       </label>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
         <button class="btn btn-primary" data-act="sync-pull">⬇ Puxar agora</button>
@@ -1396,12 +1396,21 @@ function applyPulledData(d){
   saveOverrides();
 }
 // PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)
+// fetch com timeout (evita travar em conexão lenta no celular)
+async function syncFetch(url, opts, ms){
+  const ctrl = ('AbortController' in window) ? new AbortController() : null;
+  const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||25000) : null;
+  try{ return await fetch(url, ctrl ? Object.assign({}, opts, {signal:ctrl.signal}) : opts); }
+  finally{ if(to) clearTimeout(to); }
+}
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   if(syncBusy) return; syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   try{
-    const r=await fetch(url,{method:'GET'}); const d=await r.json();
+    // cache-busting + no-store: o navegador do celular estava servindo resposta em cache (não atualizava)
+    const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
+    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},25000); const d=await r.json();
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
@@ -1425,7 +1434,7 @@ async function syncPush(opts){
   syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
-    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)});
+    const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},25000);
     const res=await r.json();
     lastPushSig=sig;
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
@@ -1462,7 +1471,9 @@ function pollTick(){
 function startPolling(){
   clearInterval(pollTimer);
   if(!syncUrl()||!autoOn()) return;
-  pollTimer=setInterval(pollTick, POLL_MS);
+  // celular: puxa com menos frequência (mais leve); a volta ao app (visibilitychange) já puxa
+  const ms = (window.matchMedia && window.matchMedia('(max-width:640px)').matches) ? 120000 : POLL_MS;
+  pollTimer=setInterval(pollTick, ms);
 }
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollTick(); });
 
