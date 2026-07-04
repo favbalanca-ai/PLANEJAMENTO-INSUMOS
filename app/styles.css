@@ -169,6 +169,26 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .switch input:checked+.track::after{left:18px}
 code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 
+/* ---- exportar PDF (impressão) ---- */
+#print-area{display:none}
+@media print{
+  #app,.toast,#toast,.sidebar,.topbar{display:none!important}
+  #print-area{display:block!important;color:#000;font:12px/1.45 Arial,Helvetica,sans-serif}
+  #print-area h1{font-size:18px;margin:0 0 2px}
+  #print-area h2{font-size:14px;margin:14px 0 6px;padding-bottom:3px;border-bottom:2px solid #333}
+  #print-area h3{font-size:12.5px;margin:10px 0 4px;color:#222}
+  #print-area .meta{font-size:11px;color:#444;margin-bottom:6px}
+  #print-area .pdf-head{margin-bottom:8px}
+  #print-area table{width:100%;border-collapse:collapse;margin:0 0 6px;font-size:11px}
+  #print-area th,#print-area td{border:1px solid #999;padding:4px 6px;text-align:left;vertical-align:top}
+  #print-area th{background:#eaeaea;color:#111;text-transform:none;letter-spacing:0;font-weight:700;position:static}
+  #print-area td.num,#print-area th.num{text-align:right;white-space:nowrap}
+  #print-area section{page-break-inside:auto}
+  #print-area section.pb{page-break-before:always}
+  #print-area .foot{font-size:11px;color:#333;margin:6px 0 4px}
+  @page{margin:14mm}
+}
+
 /* ---- mobile / toque ---- */
 @media(max-width:640px){
   #app{flex-direction:column}
