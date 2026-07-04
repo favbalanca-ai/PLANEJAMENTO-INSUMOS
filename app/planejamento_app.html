@@ -338,6 +338,7 @@ const openCards = new Set();     // cartões abertos (detalhes) que devem contin
 function loadOverrides(){
   try{ OV = JSON.parse(localStorage.getItem(LS_KEY)) || {}; }catch(e){ OV = {}; }
   OV.estoque = OV.estoque || {};
+  OV.pedido  = OV.pedido  || {};   // produto -> qtd já em pedido (abate da demanda; só local)
   OV.talhao  = OV.talhao  || {};   // id -> {area, produtividade}
   OV.dose    = OV.dose    || {};   // "TL|op|item" -> valor
   OV.preco   = OV.preco   || {};   // produto -> preço
@@ -363,7 +364,7 @@ function saveOverrides(){
   if(typeof scheduleAutoPush==='function') scheduleAutoPush(); // envia edições à planilha (auto, com debounce)
 }
 function countEdits(){
-  return Object.keys(OV.estoque).length + Object.keys(OV.dose).length +
+  return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.dose).length +
          Object.keys(OV.preco).length + Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
          Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + (OV.diesel!==6.00?1:0) +
@@ -377,6 +378,7 @@ function countEdits(){
 
 /* ---------------- acessores (base + override) ---------------- */
 const estoqueDe = p => (p in OV.estoque) ? +OV.estoque[p] : (PROD[p] ? PROD[p].estoque : 0);
+const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : 0;
 const precoDe   = p => (p in OV.preco)   ? +OV.preco[p]   : (PROD[p] ? PROD[p].preco   : 0);
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
 function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null ? +o.produtividade : t.produtividade; }
@@ -517,12 +519,12 @@ function calcCompras(){
   const dem = calcDemanda();
   const rows = [];
   for(const p of DATA.produtos){
-    const nome=p.produto, d=dem[nome]||0, est=estoqueDe(nome);
-    if(d<=0 && est<=0) continue;
+    const nome=p.produto, d=dem[nome]||0, est=estoqueDe(nome), ped=pedidoDe(nome);
+    if(d<=0 && est<=0 && ped<=0) continue;
     if((p.classe||'').toUpperCase().startsWith('MÁQUINA')) continue;
-    const comprar=Math.max(0,d-est), preco=precoDe(nome), valor=comprar*preco;
+    const comprar=Math.max(0,d-est-ped), preco=precoDe(nome), valor=comprar*preco;
     let status = comprar>0 ? (preco>0?'COMPRAR':'SEM_PRECO') : (d>0?'ESTOQUE':'SEM_DEMANDA');
-    rows.push({...p, demanda:d, estoque:est, comprar, preco, valor, status});
+    rows.push({...p, demanda:d, estoque:est, pedido:ped, comprar, preco, valor, status});
   }
   return rows;
 }
@@ -793,11 +795,12 @@ V.compras = function(){
   const groups={};
   all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
-  const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
+  const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
   const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
+    <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.pedido>0?r.pedido:''}" placeholder="0"></td>
     <td class="num c-more" data-th="Preço"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
@@ -822,7 +825,7 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">Toque na classe p/ abrir; toque no item p/ editar estoque e preço de referência</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque − Em pedido). Toque no item p/ editar.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
@@ -1109,6 +1112,7 @@ function applyEdit(el){
   const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
+  else if(kind==='pedido'){ if(n==null||n===0) delete OV.pedido[el.dataset.prod]; else OV.pedido[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
   else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
   else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
