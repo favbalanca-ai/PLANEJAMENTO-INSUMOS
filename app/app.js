@@ -476,7 +476,7 @@ V.compras = function(){
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
     <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.pedido>0?r.pedido:''}" placeholder="0"></td>
-    <td class="num c-more" data-th="Preço"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
+    <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}${(r.produto in OV.preco)?' <span class="classe-tag" title="preço ajustado na Cotação">ajustado</span>':''}</td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
     <td class="c-more" data-th="Un">${esc(r.un)}</td>
@@ -500,7 +500,7 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque − Em pedido). Toque no item p/ editar.</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque − Em pedido). Preço se edita na aba Cotação.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
@@ -513,7 +513,7 @@ V.cotacao = function(){
   const totalGeral=rows.reduce((a,r)=>a+r.valor,0);
   return `
   <div class="toolbar"><div class="search"><input id="q-cot" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <span class="badge badge-muted">${order.length} fornecedores · ${brl0(totalGeral)}</span>
+    <span class="badge badge-muted">${order.length} fornecedores · ${brl0(totalGeral)} — edite o <b>Preço ref.</b> aqui</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ Exportar CSV</button></div>
   <div id="cot-groups">${order.map(forn=>{
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
