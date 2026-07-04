@@ -341,7 +341,8 @@ V.talhoes = function(){
   const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.nome||'')}</option>`).join('');
   return `${prodDatalist()}
   <datalist id="emplist">${empOpts}</datalist>
-  <div class="panel"><div class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span></div>
+  <details class="panel panel-collapse">
+    <summary class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span><span class="panel-chevron">▸</span></summary>
     <div class="bulk-add">
       <input class="txt" id="nt-nome" placeholder="nome (ex.: Área 5)" style="min-width:150px">
       <input class="txt" list="emplist" id="nt-emp" placeholder="cultura / empreendimento" style="min-width:180px">
@@ -351,7 +352,7 @@ V.talhoes = function(){
         <select class="sel" id="nt-copy"><option value="">— em branco —</option>${copyOpts}</select></label>
       <button class="btn btn-primary btn-sm" data-act="createtalhao">+ Criar talhão</button>
     </div>
-  </div>
+  </details>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">

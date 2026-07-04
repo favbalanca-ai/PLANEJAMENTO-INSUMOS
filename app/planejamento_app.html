@@ -66,6 +66,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
 .panel-head h2{font-size:15px;font-weight:700;color:var(--ink)}
 .panel-head .sub{font-size:12px;color:var(--muted);font-weight:400}
+/* painel recolhível (details/summary) */
+.panel-collapse>summary{cursor:pointer;list-style:none;user-select:none}
+.panel-collapse>summary::-webkit-details-marker{display:none}
+.panel-collapse:not([open])>summary{border-bottom:0}
+.panel-collapse:not([open])>*:not(summary){display:none!important}
+.panel-collapse>summary .sub{margin-left:auto;margin-right:10px}
+.panel-chevron{font-size:11px;color:var(--muted);transition:transform .15s}
+.panel-collapse[open]>summary .panel-chevron{transform:rotate(90deg)}
 .panel-body{padding:4px 0}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
 @media(max-width:900px){.grid-2{grid-template-columns:1fr}}
@@ -704,7 +712,8 @@ V.talhoes = function(){
   const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.nome||'')}</option>`).join('');
   return `${prodDatalist()}
   <datalist id="emplist">${empOpts}</datalist>
-  <div class="panel"><div class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span></div>
+  <details class="panel panel-collapse">
+    <summary class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span><span class="panel-chevron">▸</span></summary>
     <div class="bulk-add">
       <input class="txt" id="nt-nome" placeholder="nome (ex.: Área 5)" style="min-width:150px">
       <input class="txt" list="emplist" id="nt-emp" placeholder="cultura / empreendimento" style="min-width:180px">
@@ -714,7 +723,7 @@ V.talhoes = function(){
         <select class="sel" id="nt-copy"><option value="">— em branco —</option>${copyOpts}</select></label>
       <button class="btn btn-primary btn-sm" data-act="createtalhao">+ Criar talhão</button>
     </div>
-  </div>
+  </details>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
