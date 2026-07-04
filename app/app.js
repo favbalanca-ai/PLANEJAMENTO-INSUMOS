@@ -1130,18 +1130,28 @@ function applyPulledData(d){
 // fetch com timeout GENEROSO (o Apps Script lê a planilha toda e pode demorar; só aborta se travar de vez)
 async function syncFetch(url, opts, ms){
   const ctrl = ('AbortController' in window) ? new AbortController() : null;
-  const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||90000) : null;
+  const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||120000) : null;
   try{ return await fetch(url, ctrl ? Object.assign({}, opts, {signal:ctrl.signal}) : opts); }
   finally{ if(to) clearTimeout(to); }
+}
+// GET com timeout longo + 1 tentativa extra (a 1ª chamada do Apps Script costuma ser lenta = "aquecimento")
+async function syncGet(url, opts){
+  opts=opts||{}; let lastErr;
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
+      const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},120000);
+      return await r.json();
+    }catch(e){ lastErr=e; if(attempt===0){ if(!opts.auto) syncLog('… demorou; tentando de novo'); await new Promise(res=>setTimeout(res,1800)); } }
+  }
+  throw lastErr;
 }
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   if(syncBusy) return; syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   try{
-    // cache-busting + no-store: o navegador do celular estava servindo resposta em cache (não atualizava)
-    const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
-    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},90000); const d=await r.json();
+    const d=await syncGet(url,opts);
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
@@ -1153,7 +1163,13 @@ async function syncPull(opts){
     if(!opts.silentToast) toast('Dados atualizados da planilha');
     syncBusy=false; route(); setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
-    if(!opts.auto){ syncLog('✖ Erro ao puxar: '+e.message+'  (verifique a URL e o acesso "Qualquer pessoa")'); toast('Falha ao puxar'); } }
+    const aborted=/abort/i.test(e&&e.message||'');
+    if(!opts.auto){
+      syncLog(aborted
+        ? '✖ A planilha demorou demais para responder. Toque em "Puxar agora" de novo — a 1ª vez costuma ser mais lenta.'
+        : '✖ Erro ao puxar: '+(e&&e.message)+'  (verifique a URL e o acesso "Qualquer pessoa")');
+      toast(aborted?'Planilha lenta — tente puxar de novo':'Falha ao puxar');
+    } }
 }
 // ENVIAR — app -> planilha. opts.auto = disparado por edição (silencioso; deduplica)
 async function syncPush(opts){
