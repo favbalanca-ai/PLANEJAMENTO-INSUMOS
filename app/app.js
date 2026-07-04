@@ -1071,10 +1071,10 @@ function applyPulledData(d){
   saveOverrides();
 }
 // PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)
-// fetch com timeout (evita travar em conexão lenta no celular)
+// fetch com timeout GENEROSO (o Apps Script lê a planilha toda e pode demorar; só aborta se travar de vez)
 async function syncFetch(url, opts, ms){
   const ctrl = ('AbortController' in window) ? new AbortController() : null;
-  const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||25000) : null;
+  const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||90000) : null;
   try{ return await fetch(url, ctrl ? Object.assign({}, opts, {signal:ctrl.signal}) : opts); }
   finally{ if(to) clearTimeout(to); }
 }
@@ -1085,7 +1085,7 @@ async function syncPull(opts){
   try{
     // cache-busting + no-store: o navegador do celular estava servindo resposta em cache (não atualizava)
     const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
-    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},25000); const d=await r.json();
+    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},90000); const d=await r.json();
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
@@ -1109,7 +1109,7 @@ async function syncPush(opts){
   syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
-    const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},25000);
+    const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},60000);
     const res=await r.json();
     lastPushSig=sig;
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
