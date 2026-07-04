@@ -452,6 +452,7 @@ V.talhao = function(id){
     </div>
   </div>
   <div class="toolbar" style="margin-top:-4px">
+    <button class="btn btn-outline btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}">🖨 Exportar PDF</button>
     <button class="btn btn-outline btn-sm" data-act="duptalhao" data-id="${esc(t.id)}">⧉ Duplicar plano</button>
     <button class="btn btn-outline btn-sm" data-act="deltalhao" data-id="${esc(t.id)}" data-novo="${DATA.talhoes.some(x=>x.id===t.id)?0:1}" style="color:var(--red)">🗑 Excluir talhão</button>
     <div class="spacer"></div>
@@ -514,7 +515,9 @@ V.cotacao = function(){
   return `
   <div class="toolbar"><div class="search"><input id="q-cot" placeholder="Buscar produto, classe ou fornecedor…"></div>
     <span class="badge badge-muted">${order.length} fornecedores · ${brl0(totalGeral)} — edite o <b>Preço ref.</b> aqui</span>
-    <div class="spacer"></div><button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ Exportar CSV</button></div>
+    <div class="spacer"></div>
+    <button class="btn btn-outline btn-sm" id="btn-cot-pdf">🖨 PDF por fornecedor</button>
+    <button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ CSV</button></div>
   <div id="cot-groups">${order.map(forn=>{
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
     const sub=its.reduce((a,r)=>a+r.valor,0);
@@ -883,6 +886,7 @@ document.addEventListener('click',e=>{
       if(copy) copiaMaquinas(copy,id,plano);
       saveOverrides(); toast(`Talhão ${id} criado`); location.hash='#/talhao/'+id;
     }
+    else if(a.act==='pdftalhao'){ exportTalhaoPDF(a.id); }
     else if(a.act==='duptalhao'){
       const s=findTalhao(a.id); if(!s) return;
       const id=nextTalhaoId(), plano=snapshotPlano(a.id);
@@ -916,6 +920,7 @@ document.addEventListener('click',e=>{
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
+  if(e.target.id==='btn-cot-pdf') exportCotacaoPDF();
 });
 document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
@@ -988,6 +993,57 @@ function exportCotacaoCSV(){
     nf2.format(r.preco),nf2.format(r.valor)].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(';')+'\n';});
   download('cotacao_safra_2627.csv','﻿'+csv,'text/csv;charset=utf-8');
   toast('CSV de cotação exportado');
+}
+/* ---- exportar PDF (via impressão do navegador -> "Salvar como PDF") ---- */
+function printDoc(html){
+  let el=document.getElementById('print-area');
+  if(!el){ el=document.createElement('div'); el.id='print-area'; document.body.appendChild(el); }
+  el.innerHTML=html;
+  setTimeout(()=>window.print(), 60);
+}
+// COTAÇÃO: um bloco por fornecedor (quebra de página), lista de insumo + volume
+function exportCotacaoPDF(){
+  const rows=calcCompras().filter(r=>r.comprar>0);
+  if(!rows.length){ toast('Nada a cotar (sem itens a comprar)'); return; }
+  const groups={}; rows.forEach(r=>{const k=r.empresa||'(sem fornecedor)';(groups[k]=groups[k]||[]).push(r);});
+  const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
+  let html=`<div class="pdf-head"><h1>Cotação de insumos — Safra 2026/2027</h1>
+    <div class="meta">${order.length} fornecedor(es) · gerado pelo app Planejamento</div></div>`;
+  order.forEach((forn,i)=>{
+    const its=groups[forn].slice().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'')||a.produto.localeCompare(b.produto));
+    html+=`<section class="${i>0?'pb':''}"><h2>${esc(forn)}</h2>
+      <table><thead><tr><th>Insumo</th><th>Classe</th><th class="num">Volume</th><th>Un</th></tr></thead><tbody>`;
+    its.forEach(r=>{ html+=`<tr><td>${esc(r.produto)}</td><td>${esc(r.classe||'—')}</td><td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td></tr>`; });
+    html+=`</tbody></table>
+      <div class="foot">Assinatura / condições: ______________________________________</div></section>`;
+  });
+  printDoc(html);
+  toast('Gerando PDF da cotação — escolha "Salvar como PDF"');
+}
+// TALHÃO: planejamento do talhão por safra/empreendimento (operações, insumos e doses)
+function exportTalhaoPDF(id){
+  const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
+  const area=areaDe(t), c=custoTalhao(t), maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
+  let html=`<div class="pdf-head"><h1>Planejamento — ${esc(t.id)} · ${esc(t.nome||'')}</h1>
+    <div class="meta">Safra 2026/2027 · Área ${num(area)} ha · Custo total/ha ${brl(totHa)} · Custo total ${brl0(totHa*area)}</div></div>`;
+  const seqBlock=(seq,tag,cultura,prod)=>{
+    const ops=opsOf(t.id,seq); if(!ops.length) return '';
+    let s=`<section><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>`;
+    ops.forEach((op,oi)=>{
+      const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
+      const conj=opMaqDe(t.id,tag,oi,op);
+      s+=`<h3>${esc(op.nome)}${conj?` — 🚜 ${esc(conj)}`:''}</h3>
+        <table><thead><tr><th>Classe</th><th>Insumo</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Custo/ha</th></tr></thead><tbody>`;
+      if(!items.length) s+=`<tr><td colspan="5">— sem insumos —</td></tr>`;
+      items.forEach(it=>{ const p=precoDe(it.produto); s+=`<tr><td>${esc(it.classe||'—')}</td><td>${esc(it.produto)}</td><td class="num">${it.dose}</td><td>${esc(it.un)}</td><td class="num">${p>0?brl(it.dose*p):'—'}</td></tr>`; });
+      s+=`</tbody></table>`;
+    });
+    return s+`</section>`;
+  };
+  html+=seqBlock('principal','P',empDe(t),prodvDe(t));
+  if(temSafrinha(t)) html+=seqBlock('safrinha','S',empSafDe(t),prodSafDe(t));
+  printDoc(html);
+  toast('Gerando PDF do talhão — escolha "Salvar como PDF"');
 }
 /* ---- sincronização com a planilha (Apps Script Web App) ---- */
 const SYNC_KEY='planejamento_sync_url';
