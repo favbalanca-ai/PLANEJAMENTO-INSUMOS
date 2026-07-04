@@ -13,7 +13,7 @@ const openCards = new Set();     // cartões abertos (detalhes) que devem contin
 function loadOverrides(){
   try{ OV = JSON.parse(localStorage.getItem(LS_KEY)) || {}; }catch(e){ OV = {}; }
   OV.estoque = OV.estoque || {};
-  OV.pedido  = OV.pedido  || {};   // produto -> qtd já em pedido (abate da demanda; só local)
+  OV.pedido  = OV.pedido  || {};   // produto -> qtd já em pedido (abate da demanda; sincroniza com a coluna EM PEDIDO)
   OV.talhao  = OV.talhao  || {};   // id -> {area, produtividade}
   OV.dose    = OV.dose    || {};   // "TL|op|item" -> valor
   OV.preco   = OV.preco   || {};   // produto -> preço
@@ -53,7 +53,7 @@ function countEdits(){
 
 /* ---------------- acessores (base + override) ---------------- */
 const estoqueDe = p => (p in OV.estoque) ? +OV.estoque[p] : (PROD[p] ? PROD[p].estoque : 0);
-const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : 0;
+const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : (PROD[p] ? (+PROD[p].pedido||0) : 0);
 const precoDe   = p => (p in OV.preco)   ? +OV.preco[p]   : (PROD[p] ? PROD[p].preco   : 0);
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
 function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null ? +o.produtividade : t.produtividade; }
@@ -1020,6 +1020,7 @@ function buildFieldEdits(){
   for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
+  for(const pr in OV.pedido)  eds.push({type:'pedido', produto:pr,value:+OV.pedido[pr]});
   // preço de referência: ajuste LOCAL do app (a coluna de preço da planilha é fórmula/importada) — não envia
   for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
@@ -1062,7 +1063,7 @@ function applyPulledData(d){
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // planilha como verdade: limpa overrides de campo (agora vêm da planilha)
   // OBS: OV.preco NÃO é limpo — é ajuste local do usuário (a planilha traz o preço por fórmula/importação)
-  OV.dose={}; OV.estoque={}; OV.itemProd={};
+  OV.dose={}; OV.estoque={}; OV.pedido={}; OV.itemProd={};
   Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id];
     delete o.area; delete o.produtividade; delete o.empreendimento; delete o.emp_safrinha; delete o.prod_safrinha;
     if(!Object.keys(o).length) delete OV.talhao[id]; });
