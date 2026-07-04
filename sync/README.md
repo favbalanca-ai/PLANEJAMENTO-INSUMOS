@@ -25,7 +25,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   planilha e não é apagado ao puxar), porque na planilha o preço vem de
   fórmula/importação. Editar o preço no app afeta os cálculos de valor/compra;
   para voltar ao preço da planilha, apague o campo.
-- **Enviar (app → planilha):** **dose, estoque, área, produtividade**,
+- **Em pedido:** sincroniza com a coluna **EM PEDIDO** da `PORTIFÓLIO` (criada
+  automaticamente e localizada pelo cabeçalho — você pode mover a coluna).
+- **Enviar (app → planilha):** **dose, estoque, em pedido, área, produtividade**,
   **1ª cultura (empreendimento), 2ª cultura (safrinha) e produtividade da
   safrinha**, **troca de produto** de um insumo base, **insumos adicionados**
   (grava classe/produto/dose na primeira linha vazia do bloco da operação) e
@@ -58,6 +60,7 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - `doPost` recebe uma lista de edições e grava:
   - `dose` → aba do talhão, coluna **I** (dose/ha) da operação/insumo
   - `estoque` → `PORTIFÓLIO` coluna **T**
+  - `pedido` → `PORTIFÓLIO` coluna **EM PEDIDO** (achada pelo cabeçalho; criada em W se faltar)
   - `preco` → `PORTIFÓLIO` coluna **S**
   - `area` / `produtividade` → `ÁREA PLANTIO` colunas **E** / **D**
   - `empreendimento` / `emp_safrinha` / `prod_safrinha` → `ÁREA PLANTIO`

@@ -18,12 +18,14 @@ function N(v){ var n = parseFloat(v); return isFinite(n) ? Math.round(n * 1e4) /
 function readData(){
   var produtos = [], P = sh('PORTIFÓLIO');
   if (P){
-    var pv = P.getRange(4, 1, 412, 20).getValues(); // linhas 4..415, colunas A..T
+    var pcol = pedidoColOf(P);                       // coluna "EM PEDIDO" (acha pelo cabeçalho; cria se não existir)
+    var pv = P.getRange(4, 1, 412, 20).getValues();  // linhas 4..415, colunas A..T
+    var ped = P.getRange(4, pcol, 412, 1).getValues();
     for (var i = 0; i < pv.length; i++){
       var r = pv[i], prod = S(r[2]);            // C = produto
       if (!prod) continue;
       produtos.push({ empresa:S(r[0]), classe:S(r[1]), produto:prod, ativos:S(r[3]),
-        un:S(r[5]), preco:N(r[18]), estoque:N(r[19]) }); // S=preço(19), T=estoque(20)
+        un:S(r[5]), preco:N(r[18]), estoque:N(r[19]), pedido:N(ped[i][0]) }); // S=preço(19), T=estoque(20), EM PEDIDO
     }
   }
 
@@ -88,6 +90,11 @@ function applyEdit(ed){
     var rr = findRow(P, 3, 4, 433, ed.produto);
     if (!rr) throw 'produto não encontrado: ' + ed.produto;
     P.getRange(rr, col).setValue(ed.value);
+  } else if (ed.type === 'pedido'){
+    var Pp = sh('PORTIFÓLIO');
+    var rp = findRow(Pp, 3, 4, 433, ed.produto);
+    if (!rp) throw 'produto não encontrado: ' + ed.produto;
+    Pp.getRange(rp, pedidoColOf(Pp)).setValue(ed.value); // coluna EM PEDIDO
   } else if (ed.type === 'area' || ed.type === 'produtividade'){
     var A = sh('ÁREA PLANTIO'), col2 = ed.type === 'area' ? 5 : 4;
     var rr2 = findRow(A, 1, 2, A.getLastRow(), ed.talhao);
@@ -134,6 +141,18 @@ function applyEdit(ed){
   } else {
     throw 'tipo desconhecido: ' + ed.type;
   }
+}
+
+// coluna "EM PEDIDO" na PORTIFÓLIO: acha pelo cabeçalho (linha 3); se não existir, cria em W (23)
+function pedidoColOf(P){
+  var last = Math.max(23, P.getLastColumn());
+  var hdr = P.getRange(3, 1, 1, last).getValues()[0];
+  for (var c = 0; c < hdr.length; c++){
+    var h = S(hdr[c]).toUpperCase();
+    if (h.indexOf('EM PEDIDO') === 0 || h === 'PEDIDO' || h === 'PEDIDOS' || h.indexOf('INSUMOS EM PEDIDO') === 0) return c + 1;
+  }
+  P.getRange(3, 23).setValue('EM PEDIDO'); // cria o cabeçalho em W3 (você pode mover a coluna; é achada pelo nome)
+  return 23;
 }
 
 // linha do insumo (pela classe/produto) dentro do bloco da operação opIdx
