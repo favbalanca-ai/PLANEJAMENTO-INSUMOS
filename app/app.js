@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-12';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-13';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -860,20 +860,30 @@ function campoAppMsg(key){
     return {produto:it.produto,un:it.un,dose};
   }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})));
   const L=[];
-  L.push('🚿 *RECOMENDAÇÃO DE APLICAÇÃO*');
-  L.push(`📍 Talhão: ${t.id}${t.nome?' - '+t.nome:''} (${num(area)} ha)`);
-  if(cultura&&cultura!=='—') L.push(`🌾 Cultura: ${cultura}`);
-  if(fk.op) L.push(`🔧 Operação: ${fk.op.nome}`);
-  if(r.data) L.push(`📅 Data: ${fmtDataBR(r.data)}`);
-  if(app.maq) L.push(`🚜 Máquina: ${app.maq}`);
-  if(app.hIni||app.hFim) L.push(`⏱ Horário: ${app.hIni||'?'}–${app.hFim||'?'}${dur!=null?` (${nf1.format(dur)} h)`:''}`);
-  if(vazao||tanque) L.push(`💧 Vazão: ${vazao?num(vazao)+' L/ha':'—'}  |  Tanque: ${tanque?num(tanque)+' L':'—'}`);
-  if(caldaTotal) L.push(`🧪 Calda total: ${num(caldaTotal)} L  |  ${nT} tanque(s)${haPorTanque?`  (1 tanque = ${nf1.format(haPorTanque)} ha)`:''}`);
+  L.push(`🚿 *Aplicação* — ${t.id}${t.nome?' '+t.nome:''} (${num(area)} ha)`);
+  const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
+  if(l1.length) L.push(l1.join(' · '));
+  if(app.maq) L.push(`🚜 ${app.maq}`);
+  const l2=[]; if(vazao) l2.push(`Vazão ${num(vazao)} L/ha`); if(tanque) l2.push(`Tanque ${num(tanque)} L`);
+  if(l2.length) L.push('💧 '+l2.join(' · '));
+  if(caldaTotal) L.push(`🧪 Calda ${num(caldaTotal)} L · ${nT} tanque(s)`);
   const prods=items.filter(x=>x.produto);
-  if(prods.length){ L.push(''); L.push('*Insumos (total na área | por tanque):*');
+  if(prods.length){ L.push('');
+    L.push(haPorTanque?'*Insumos por tanque:*':'*Insumos (total na área):*');
     prods.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
-      L.push(`• ${x.produto}: ${num(total)} ${x.un}${haPorTanque?`  |  ${num(porT)} ${x.un}/tanque`:''}`); }); }
-  if(r.obs){ L.push(''); L.push(`📝 Obs: ${r.obs}`); }
+      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}`); }); }
+  if(r.obs) L.push(`\n📝 ${r.obs}`);
+  // link de resposta: abre um questionário no WhatsApp para o operador informar o volume utilizado
+  const q=[];
+  q.push(`📋 Volume utilizado — ${t.id}${fk.op?' · '+fk.op.nome:''}`);
+  q.push('(preencha e envie de volta)');
+  prods.forEach(x=>q.push(`${x.produto}: ___ ${x.un}`));
+  q.push('Nº de tanques cheios: ___');
+  q.push('Sobras / obs: ___');
+  const replyUrl='https://wa.me/?text='+encodeURIComponent(q.join('\n'));
+  L.push('');
+  L.push('📝 Responder volume utilizado (toque para preencher):');
+  L.push(replyUrl);
   return L.join('\n');
 }
 function campoProgress(){
