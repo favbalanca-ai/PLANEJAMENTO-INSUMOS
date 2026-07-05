@@ -168,6 +168,9 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .app-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px 12px;margin:12px 0}
 .app-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
 .app-grid input,.app-grid select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:15px;color:var(--ink);font-weight:400}
+.app-adjust{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:2px 0 14px;font-size:13px;font-weight:600;
+  color:var(--ink2);background:#f6fafb;border:1px dashed var(--line);border-radius:9px;padding:11px 12px}
+.app-adjust .cell{width:58px}
 .app-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:6px 0 12px}
 .app-stat{background:var(--teal-soft);border-radius:10px;padding:9px 12px}
 .app-stat span{display:block;font-size:11px;color:var(--muted);font-weight:600}
