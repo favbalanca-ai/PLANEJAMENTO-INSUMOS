@@ -36,6 +36,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 #nav{display:flex;flex-direction:column;gap:2px;padding:8px 10px;flex:1}
 #nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:#c7dde2;
   text-decoration:none;font-weight:500;font-size:13.5px;transition:background .15s,color .15s}
+#nav a[hidden]{display:none!important}   /* esconde itens fora do módulo (a regra acima sobrepunha o [hidden]) */
 #nav a .ico{font-size:15px;width:20px;text-align:center}
 #nav a:hover{background:rgba(255,255,255,.07);color:#fff}
 #nav a.active{background:var(--teal);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
@@ -559,7 +560,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-9';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-10';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
