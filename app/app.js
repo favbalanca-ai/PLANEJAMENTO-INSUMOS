@@ -341,7 +341,8 @@ V.talhoes = function(){
   const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.nome||'')}</option>`).join('');
   return `${prodDatalist()}
   <datalist id="emplist">${empOpts}</datalist>
-  <div class="panel"><div class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span></div>
+  <details class="panel panel-collapse">
+    <summary class="panel-head"><h2>Criar talhão</h2><span class="sub">novo talhão — em branco ou copiando o plano de outro</span><span class="panel-chevron">▸</span></summary>
     <div class="bulk-add">
       <input class="txt" id="nt-nome" placeholder="nome (ex.: Área 5)" style="min-width:150px">
       <input class="txt" list="emplist" id="nt-emp" placeholder="cultura / empreendimento" style="min-width:180px">
@@ -351,7 +352,7 @@ V.talhoes = function(){
         <select class="sel" id="nt-copy"><option value="">— em branco —</option>${copyOpts}</select></label>
       <button class="btn btn-primary btn-sm" data-act="createtalhao">+ Criar talhão</button>
     </div>
-  </div>
+  </details>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
@@ -594,17 +595,18 @@ V.dre = function(){
     const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
     const custoTot=g.ins+custoMaq+custoArr, result=receita-custoTot;
     tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;tX+=custoArr;
-    return `<tr><td><b>${esc(e)}</b></td><td class="num">${num(g.area)}</td>
-      <td class="num">${nf0.format(g.prod)}</td>
-      <td class="num"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
-      <td class="num">${brl0(receita)}</td>
-      <td class="num">${brl0(g.ins)}</td>
-      <td class="num"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
-      <td class="num">${brl0(custoMaq)}</td>
-      <td class="num"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
-      <td class="num">${brl0(custoArr)}</td>
-      <td class="num">${brl0(custoTot)}</td>
-      <td class="num"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
+    return `<tr><td class="c-full"><b>${esc(e)}</b></td>
+      <td class="num" data-th="Área (ha)">${num(g.area)}</td>
+      <td class="num" data-th="Produção (sc)">${nf0.format(g.prod)}</td>
+      <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
+      <td class="num" data-th="Receita">${brl0(receita)}</td>
+      <td class="num" data-th="Custo insumos">${brl0(g.ins)}</td>
+      <td class="num" data-th="Máq. R$/ha"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
+      <td class="num" data-th="Custo máquinas">${brl0(custoMaq)}</td>
+      <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
+      <td class="num" data-th="Arrend./Outros">${brl0(custoArr)}</td>
+      <td class="num" data-th="Custo total">${brl0(custoTot)}</td>
+      <td class="num c-res" data-th="Resultado"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
   }).join('');
   const res=tR-tI-tM-tX;
   return `
@@ -616,7 +618,7 @@ V.dre = function(){
     <div class="kpi accent"><div class="k-label">Resultado</div><div class="k-value">${brl0(res)}</div><div class="k-sub">${tR>0?nf1.format(res/tR*100)+'% da receita':''}</div></div>
   </div>
   <div class="toolbar"><span class="badge badge-muted">Resultado = Receita − insumos − máquinas − arrendamento/outros. Campos em azul são editáveis (R$/ha ou preço).</span></div>
-  <div class="panel"><div class="table-wrap"><table>
+  <div class="panel"><div class="table-wrap"><table class="cards-sm dre-cards">
     <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th>
       <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th>
       <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th>
@@ -732,6 +734,9 @@ V.sync = function(){
       <b>Fica só no app</b> (para não quebrar as fórmulas/estrutura da planilha): operações, talhões e máquinas <b>criados</b> no app, e os ajustes de máquina (largura/velocidade, que na planilha vêm de fórmulas).<br>
       Os botões acima forçam um puxar/enviar imediato quando você quiser.</p>
     </div></div>
+  <div class="panel"><div class="panel-head"><h2>Histórico de sincronização</h2><span class="sub">últimas 50</span>
+      <div class="spacer"></div><button class="btn btn-ghost btn-sm" data-act="hist-clear">Limpar histórico</button></div>
+    <div id="sync-hist" class="sync-hist">${histRowsHtml()}</div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
     <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
       <li>Abra sua planilha no Google Sheets → <b>Extensões → Apps Script</b>.</li>
@@ -917,6 +922,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
+    else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
@@ -1056,6 +1062,33 @@ function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
 function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
+// histórico persistente de sincronização (data/hora, puxar/enviar, ok/falhas) — fica no localStorage
+const HIST_KEY='planejamento_sync_hist';
+function syncHist(){ try{ return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); }catch(_){ return []; } }
+function addHist(kind, ok, msg){
+  const h=syncHist();
+  h.unshift({t:Date.now(), kind:kind, ok:!!ok, msg:String(msg||'')});
+  if(h.length>50) h.length=50;
+  localStorage.setItem(HIST_KEY, JSON.stringify(h));
+  renderHist();
+}
+function fmtHist(t){
+  const d=new Date(t), z=n=>String(n).padStart(2,'0');
+  return `${z(d.getDate())}/${z(d.getMonth()+1)} ${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+function histRowsHtml(){
+  const h=syncHist();
+  if(!h.length) return '<div class="hist-empty mut">Nenhuma sincronização ainda.</div>';
+  return h.map(e=>{
+    const ic = e.kind==='pull' ? '⬇' : '⬆';
+    const st = e.ok ? '✔' : '✖';
+    return `<div class="hist-row ${e.ok?'is-ok':'is-err'}">`+
+      `<span class="hist-when">${esc(fmtHist(e.t))}</span>`+
+      `<span class="hist-kind">${ic} ${e.kind==='pull'?'Puxar':'Enviar'}</span>`+
+      `<span class="hist-msg">${st} ${esc(e.msg)}</span></div>`;
+  }).join('');
+}
+function renderHist(){ const el=$('#sync-hist'); if(el) el.innerHTML=histRowsHtml(); }
 // chip de estado na barra superior: off | ok | busy | err
 function setSyncStatus(state, msg){
   const el=$('#sync-status'); if(!el) return;
@@ -1176,15 +1209,17 @@ async function syncPull(opts){
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
-      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); }
+      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças'); }
       syncBusy=false; setSyncStatus('ok'); return;
     }
     lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
+    addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões`);
     if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
     syncBusy=false; route(); setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
     const aborted=/abort/i.test(e&&e.message||'');
+    addHist('pull',false, aborted?'Tempo esgotado (planilha lenta)':('Erro: '+(e&&e.message||'')));
     if(!opts.auto){
       syncLog(aborted
         ? '✖ A planilha demorou demais para responder. Toque em "Puxar agora" de novo — a 1ª vez costuma ser mais lenta.'
@@ -1205,6 +1240,7 @@ async function syncPush(opts){
     const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},60000);
     const res=await r.json();
     lastPushSig=sig; lastPushOk=(res.fail===0);   // se houve falha, permite novo reenvio depois
+    addHist('push', res.fail===0, `${res.ok} gravadas, ${res.fail} falhas`);
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
@@ -1220,6 +1256,7 @@ async function syncPush(opts){
     }
     syncBusy=false; setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
+    addHist('push',false,'Erro: '+(e&&e.message||''));
     if(!opts.auto){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); } }
 }
 // agenda um envio automático (debounce) após edições
