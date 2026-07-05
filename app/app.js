@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-4';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-5';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
@@ -587,36 +587,73 @@ V.dre = function(){
     g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area;
   });
   const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
-  let tA=0,tR=0,tI=0,tM=0,tX=0;
-  const body=list.map(([e,g])=>{
+  // dados calculados por cultura (reaproveitados na tabela e no gráfico)
+  const R=list.map(([e,g])=>{
     const preco=precoCultura(e), receita=g.prod*preco;
-    const opHaDefault=g.area>0?g.opDefault/g.area:0;
-    const opHa=(e in OV.dreOp)?+OV.dreOp[e]:opHaDefault;
+    const opHa=(e in OV.dreOp)?+OV.dreOp[e]:(g.area>0?g.opDefault/g.area:0);
     const arrHa=(e in OV.arrend)?+OV.arrend[e]:0;
     const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
     const custoTot=g.ins+custoMaq+custoArr, result=receita-custoTot;
-    tA+=g.area;tR+=receita;tI+=g.ins;tM+=custoMaq;tX+=custoArr;
-    return `<tr><td class="c-full"><b>${esc(e)}</b></td>
-      <td class="num" data-th="Área (ha)">${num(g.area)}</td>
-      <td class="num" data-th="Produção (sc)">${nf0.format(g.prod)}</td>
-      <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(e)}" value="${preco}"></td>
-      <td class="num" data-th="Receita">${brl0(receita)}</td>
-      <td class="num" data-th="Custo insumos">${brl0(g.ins)}</td>
-      <td class="num" data-th="Máq. R$/ha"><input class="cell ${(e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(e)}" value="${opHa.toFixed(2)}"></td>
-      <td class="num" data-th="Custo máquinas">${brl0(custoMaq)}</td>
-      <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(e)}" value="${arrHa.toFixed(2)}"></td>
-      <td class="num" data-th="Arrend./Outros">${brl0(custoArr)}</td>
-      <td class="num" data-th="Custo total">${brl0(custoTot)}</td>
-      <td class="num c-res" data-th="Resultado"><b style="color:${result>=0?'var(--green)':'var(--red)'}">${brl0(result)}</b></td></tr>`;
+    return {e,g,preco,opHa,arrHa,receita,custoMaq,custoArr,custoTot,result};
+  });
+  const tA=R.reduce((s,r)=>s+r.g.area,0), tR=R.reduce((s,r)=>s+r.receita,0);
+  const tI=R.reduce((s,r)=>s+r.g.ins,0), tM=R.reduce((s,r)=>s+r.custoMaq,0), tX=R.reduce((s,r)=>s+r.custoArr,0);
+  const tCusto=tI+tM+tX, res=tR-tCusto, marg=tR>0?res/tR*100:0;
+  const body=R.map(r=>{
+    return `<tr><td class="c-full"><b>${esc(r.e)}</b></td>
+      <td class="num" data-th="Área (ha)">${num(r.g.area)}</td>
+      <td class="num" data-th="Produção (sc)">${nf0.format(r.g.prod)}</td>
+      <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(r.e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(r.e)}" value="${r.preco}"></td>
+      <td class="num" data-th="Receita">${brl0(r.receita)}</td>
+      <td class="num" data-th="Custo insumos">${brl0(r.g.ins)}</td>
+      <td class="num" data-th="Máq. R$/ha"><input class="cell ${(r.e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(r.e)}" value="${r.opHa.toFixed(2)}"></td>
+      <td class="num" data-th="Custo máquinas">${brl0(r.custoMaq)}</td>
+      <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(r.e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(r.e)}" value="${r.arrHa.toFixed(2)}"></td>
+      <td class="num" data-th="Arrend./Outros">${brl0(r.custoArr)}</td>
+      <td class="num" data-th="Custo total">${brl0(r.custoTot)}</td>
+      <td class="num c-res" data-th="Resultado"><b style="color:${r.result>=0?'var(--green)':'var(--red)'}">${brl0(r.result)}</b></td></tr>`;
   }).join('');
-  const res=tR-tI-tM-tX;
+  // gráfico por cultura: barra de receita x custo (escala comum) + resultado/margem
+  const maxRef=Math.max(1,...R.map(r=>Math.max(r.receita,r.custoTot)));
+  const pct=v=>Math.max(0,Math.min(100,v/maxRef*100)).toFixed(1);
+  const chart=R.map(r=>{
+    const m=r.receita>0?r.result/r.receita*100:0;
+    return `<div class="dre-crow">
+      <div class="dre-clabel">${esc(r.e)}<small>${num(r.g.area)} ha</small></div>
+      <div class="dre-cbars">
+        <div class="dre-barline"><span class="dre-bt rec">Receita</span><div class="dre-track"><div class="dre-fill rec" style="width:${pct(r.receita)}%"></div></div><span class="dre-bv">${brl0(r.receita)}</span></div>
+        <div class="dre-barline"><span class="dre-bt cost">Custo</span><div class="dre-track"><div class="dre-fill cost" style="width:${pct(r.custoTot)}%"></div></div><span class="dre-bv">${brl0(r.custoTot)}</span></div>
+      </div>
+      <div class="dre-cres ${r.result>=0?'pos':'neg'}">${brl0(r.result)}<small>${r.receita>0?nf1.format(m)+'%':'—'}</small></div>
+    </div>`;
+  }).join('');
+  // composição do custo (sempre bem definida) para a barra do resumo
+  const cd=tCusto>0?tCusto:1;
   return `
-  <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Receita total</div><div class="k-value">${brl0(tR)}</div></div>
-    <div class="kpi"><div class="k-label">Custo insumos</div><div class="k-value">${brl0(tI)}</div></div>
-    <div class="kpi"><div class="k-label">Custo máquinas</div><div class="k-value">${brl0(tM)}</div></div>
-    <div class="kpi"><div class="k-label">Arrend./Outros</div><div class="k-value">${brl0(tX)}</div></div>
-    <div class="kpi accent"><div class="k-label">Resultado</div><div class="k-value">${brl0(res)}</div><div class="k-sub">${tR>0?nf1.format(res/tR*100)+'% da receita':''}</div></div>
+  <div class="dre-hero">
+    <div class="dre-hero-main">
+      <div class="dre-hero-label">Resultado da safra</div>
+      <div class="dre-hero-val ${res>=0?'pos':'neg'}">${brl0(res)}</div>
+      <div class="dre-hero-sub">${tR>0?'<b>'+nf1.format(marg)+'%</b> da receita · ':''}Receita ${brl0(tR)} · Custo ${brl0(tCusto)} · ${num(tA)} ha</div>
+    </div>
+    <div class="dre-hero-split">
+      <div class="dre-split-cap">Composição do custo</div>
+      <div class="dre-split-bar">
+        <div class="seg seg-ins" style="width:${(tI/cd*100).toFixed(1)}%"></div>
+        <div class="seg seg-maq" style="width:${(tM/cd*100).toFixed(1)}%"></div>
+        <div class="seg seg-arr" style="width:${(tX/cd*100).toFixed(1)}%"></div>
+      </div>
+      <div class="dre-split-leg">
+        <span><i class="d-ins"></i>Insumos ${brl0(tI)}</span>
+        <span><i class="d-maq"></i>Máquinas ${brl0(tM)}</span>
+        <span><i class="d-arr"></i>Arrend./Outros ${brl0(tX)}</span>
+      </div>
+    </div>
+  </div>
+  <div class="dre-chart">
+    <div class="dre-chart-head"><h3>Resultado por cultura</h3>
+      <span class="dre-chart-leg"><i class="d-rec"></i>Receita <i class="d-cost"></i>Custo</span></div>
+    ${chart||'<p class="mut" style="padding:0 14px 12px">Sem culturas para exibir.</p>'}
   </div>
   <div class="toolbar"><span class="badge badge-muted">Resultado = Receita − insumos − máquinas − arrendamento/outros. Campos em azul são editáveis (R$/ha ou preço).</span></div>
   <div class="panel"><div class="table-wrap"><table class="cards-sm dre-cards">
@@ -672,7 +709,7 @@ V.empreendimentos = function(arg){
     const m=map[prod], doseCommon=m.doses.size===1?[...m.doses][0]:null, preco=precoDe(prod);
     return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}" data-cardkey="ce|${esc(prod)}"${openCards.has('ce|'+prod)?' class="open"':''}>
       <td class="c-more" data-th="Classe">${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
-      <td class="c-full" data-th="Produto"><b>${esc(prod)}</b></td>
+      <td class="c-full" data-th="Produto"><input list="prodlist" class="txt prod-in" data-edit="bulkProd" data-emp="${esc(sel)}" data-prod="${esc(prod)}" value="${esc(prod)}" title="Trocar este insumo por outro em todos os talhões desta cultura"></td>
       <td class="num" data-th="Dose/ha"><input class="cell" data-edit="bulkDose" data-emp="${esc(sel)}" data-prod="${esc(prod)}"
         value="${doseCommon!=null?doseCommon:''}" placeholder="${doseCommon!=null?'':'vários'}"></td>
       <td class="c-more" data-th="Un">${esc(m.un)}</td>
@@ -700,7 +737,7 @@ V.empreendimentos = function(arg){
     </div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-emp" placeholder="Buscar insumo ou classe…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">edite a dose (aplica a todos os talhões) ou exclua — em massa</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">troque o produto ou a dose (aplica a todos os talhões) ou exclua — em massa</span></div>
   <div class="panel"><div class="panel-head"><h2>Insumos da cultura</h2><span class="sub">${prods.length} insumos</span></div>
     <div class="table-wrap"><table id="tbl-emp" class="cards-sm insumo-cards">
       <thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th>
@@ -795,6 +832,14 @@ function applyEdit(el){
     if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id];
     saveOverrides(); route(); return;
   }
+  if(kind==='bulkProd'){   // troca de produto em massa na cultura (string)
+    const v=el.value.trim(), old=el.dataset.prod;
+    if(!v||!PROD[v]){ toast('Produto não encontrado na lista'); route(); return; }
+    if(v===old){ return; }
+    const nn=bulkSwapProd(el.dataset.emp, old, v);
+    saveOverrides(); route(); toast(nn?`Insumo trocado em ${nn} local(is)`:'Nada para trocar');
+    return;
+  }
   const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
@@ -834,6 +879,24 @@ function bulkSetDose(emp,prod,dose){
       else { const arr=OV.itemAdd[`${t.id}|${tagoi}`]; if(arr&&arr[it.ai]) arr[it.ai].dose=dose; }
     });
   }));
+}
+// troca de produto EM MASSA: substitui um insumo por outro em todos os talhões da cultura
+function bulkSwapProd(emp, oldProd, newProd){
+  if(!newProd || !PROD[newProd] || newProd===oldProd) return 0;
+  let n=0;
+  cultivosDaEmp(emp).forEach(({t,seq})=>eachOpSeq(t,seq,(tag,oi,op,tagoi)=>{
+    effItems(t.id,tagoi,op.itens).forEach(it=>{
+      if(it.produto!==oldProd) return;
+      if(it.kind==='base'){
+        const base=op.itens[it.ii].produto;
+        if(newProd===base) delete OV.itemProd[it.key]; else OV.itemProd[it.key]=newProd;
+      } else {
+        const arr=OV.itemAdd[`${t.id}|${tagoi}`]; if(arr&&arr[it.ai]) arr[it.ai].produto=newProd;
+      }
+      n++;
+    });
+  }));
+  return n;
 }
 function bulkDelProd(emp,prod){
   cultivosDaEmp(emp).forEach(({t,seq})=>eachOpSeq(t,seq,(tag,oi,op,tagoi)=>{

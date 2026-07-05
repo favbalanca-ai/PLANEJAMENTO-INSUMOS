@@ -47,6 +47,42 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .kpi.accent{background:linear-gradient(135deg,#16404d,#2e7d8c);border:none}
 .kpi.accent .k-label{color:#a9d2da}.kpi.accent .k-value,.kpi.accent .k-sub{color:#fff}
 
+/* ===== DRE: resumo (hero) + gráfico por cultura ===== */
+.dre-hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:18px 20px;margin-bottom:16px;display:grid;grid-template-columns:minmax(200px,1fr) 1.6fr;gap:24px;align-items:center}
+.dre-hero-label{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.dre-hero-val{font-size:34px;font-weight:800;line-height:1.05;margin-top:4px}
+.dre-hero-val.pos{color:var(--green)} .dre-hero-val.neg{color:var(--red)}
+.dre-hero-sub{font-size:13px;color:var(--muted);margin-top:6px}
+.dre-split-cap{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px}
+.dre-split-bar{display:flex;height:16px;border-radius:8px;overflow:hidden;background:#eef2f3}
+.dre-split-bar .seg{height:100%}
+.seg-ins{background:#4bb0bf} .seg-maq{background:#f0a44b} .seg-arr{background:#b98cd1}
+.dre-split-leg{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:12px;color:var(--ink2)}
+.dre-split-leg i,.dre-chart-leg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.d-ins{background:#4bb0bf} .d-maq{background:#f0a44b} .d-arr{background:#b98cd1}
+.d-rec{background:#2e7d8c} .d-cost{background:#e07a5f}
+
+.dre-chart{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+  padding:6px 8px 14px;margin-bottom:16px}
+.dre-chart-head{display:flex;align-items:baseline;justify-content:space-between;padding:12px 14px 6px;gap:12px;flex-wrap:wrap}
+.dre-chart-head h3{font-size:14px;font-weight:700;color:var(--ink)}
+.dre-chart-leg{font-size:12px;color:var(--muted)} .dre-chart-leg i{margin-left:10px}
+.dre-crow{display:grid;grid-template-columns:130px 1fr 120px;gap:14px;align-items:center;padding:9px 14px;border-top:1px solid var(--line)}
+.dre-clabel{font-size:13px;font-weight:600;color:var(--ink);line-height:1.2;overflow:hidden}
+.dre-clabel small{display:block;font-weight:500;font-size:11px;color:var(--muted);margin-top:1px}
+.dre-cbars{display:flex;flex-direction:column;gap:5px;min-width:0}
+.dre-barline{display:flex;align-items:center;gap:8px}
+.dre-bt{flex:0 0 52px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.dre-bt.rec{color:#2e7d8c} .dre-bt.cost{color:#e07a5f}
+.dre-track{flex:1;height:14px;background:#eef2f3;border-radius:5px;overflow:hidden;min-width:0}
+.dre-fill{height:100%;border-radius:5px;min-width:2px}
+.dre-fill.rec{background:#2e7d8c} .dre-fill.cost{background:#e07a5f}
+.dre-bv{flex:0 0 92px;text-align:right;font-size:12px;font-weight:600;color:var(--ink2);font-variant-numeric:tabular-nums}
+.dre-cres{text-align:right;font-weight:800;font-size:15px;font-variant-numeric:tabular-nums}
+.dre-cres.pos{color:var(--green)} .dre-cres.neg{color:var(--red)}
+.dre-cres small{display:block;font-weight:600;font-size:11px;color:var(--muted)}
+
 /* Cards / panels */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
 .panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
@@ -226,6 +262,15 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .content{padding:14px 12px 24px}
   .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
   .kpi{padding:13px 14px}.kpi .k-value{font-size:20px}
+  /* DRE resumo + gráfico no celular */
+  .dre-hero{grid-template-columns:1fr;gap:16px;padding:16px}
+  .dre-hero-val{font-size:28px}
+  .dre-crow{grid-template-columns:1fr auto;gap:6px 10px;padding:10px 12px}
+  .dre-clabel{grid-column:1;align-self:center}
+  .dre-cres{grid-column:2;align-self:center}
+  .dre-cbars{grid-column:1 / -1;order:3}
+  .dre-bv{flex:0 0 78px}
+  .dre-bt{flex:0 0 46px}
   /* 16px evita o zoom automático do iOS ao focar inputs */
   input.cell{min-height:42px;font-size:16px;width:78px}
   input.txt,select.sel{min-height:42px;font-size:16px}
