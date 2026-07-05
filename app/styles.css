@@ -29,9 +29,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 
 /* Main */
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;
+.topbar{display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:16px 26px;
   background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-#page-title{font-size:19px;font-weight:700;color:var(--ink)}
+#page-title{font-size:19px;font-weight:700;color:var(--ink);margin-right:auto}
+/* seletor de módulo (Planejamento × Campo) */
+.mod-switch{display:inline-flex;background:#eef2f3;border-radius:11px;padding:3px;gap:2px;flex:none}
+.mod-switch button{border:none;background:none;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;
+  color:var(--muted);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.mod-switch button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.mod-switch .ms-ico{font-size:15px}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .safra-chip{background:var(--teal-soft);color:var(--ink2);font-weight:600;font-size:12px;
   padding:5px 11px;border-radius:20px}
@@ -301,7 +307,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .lbl{display:none}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:66px}
-  .topbar{padding:12px 14px}#page-title{font-size:17px}.safra-chip{display:none}
+  .topbar{padding:10px 12px;gap:8px}.safra-chip{display:none}
+  #page-title{display:none}   /* no celular o seletor de módulo + a barra de baixo já indicam onde você está */
+  .mod-switch{flex:1;margin-right:auto}
+  .mod-switch button{flex:1;justify-content:center;padding:9px 8px;font-size:12.5px}
   .content{padding:14px 12px 24px}
   .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
   .kpi{padding:13px 14px}.kpi .k-value{font-size:20px}

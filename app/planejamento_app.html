@@ -44,9 +44,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 
 /* Main */
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 26px;
+.topbar{display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:16px 26px;
   background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-#page-title{font-size:19px;font-weight:700;color:var(--ink)}
+#page-title{font-size:19px;font-weight:700;color:var(--ink);margin-right:auto}
+/* seletor de módulo (Planejamento × Campo) */
+.mod-switch{display:inline-flex;background:#eef2f3;border-radius:11px;padding:3px;gap:2px;flex:none}
+.mod-switch button{border:none;background:none;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;
+  color:var(--muted);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.mod-switch button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.mod-switch .ms-ico{font-size:15px}
 .topbar-right{display:flex;align-items:center;gap:10px}
 .safra-chip{background:var(--teal-soft);color:var(--ink2);font-weight:600;font-size:12px;
   padding:5px 11px;border-radius:20px}
@@ -316,7 +322,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .lbl{display:none}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:66px}
-  .topbar{padding:12px 14px}#page-title{font-size:17px}.safra-chip{display:none}
+  .topbar{padding:10px 12px;gap:8px}.safra-chip{display:none}
+  #page-title{display:none}   /* no celular o seletor de módulo + a barra de baixo já indicam onde você está */
+  .mod-switch{flex:1;margin-right:auto}
+  .mod-switch button{flex:1;justify-content:center;padding:9px 8px;font-size:12.5px}
   .content{padding:14px 12px 24px}
   .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
   .kpi{padding:13px 14px}.kpi .k-value{font-size:20px}
@@ -447,15 +456,15 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       </div>
     </div>
     <nav id="nav">
-      <a href="#/dashboard" data-view="dashboard"><span class="ico">📊</span><span class="lbl">Painel</span><span class="lbl-s">Painel</span></a>
-      <a href="#/talhoes" data-view="talhoes"><span class="ico">🗺️</span><span class="lbl">Talhões</span><span class="lbl-s">Talhões</span></a>
-      <a href="#/campo" data-view="campo"><span class="ico">🧑‍🌾</span><span class="lbl">Operação de Campo</span><span class="lbl-s">Campo</span></a>
-      <a href="#/empreendimentos" data-view="empreendimentos"><span class="ico">🌾</span><span class="lbl">Empreendimentos</span><span class="lbl-s">Culturas</span></a>
-      <a href="#/compras" data-view="compras"><span class="ico">🛒</span><span class="lbl">Demanda de Compras</span><span class="lbl-s">Compras</span></a>
-      <a href="#/cotacao" data-view="cotacao"><span class="ico">🏷️</span><span class="lbl">Cotação</span><span class="lbl-s">Cotação</span></a>
-      <a href="#/maquinas" data-view="maquinas"><span class="ico">🚜</span><span class="lbl">Máquinas</span><span class="lbl-s">Máquinas</span></a>
-      <a href="#/dre" data-view="dre"><span class="ico">💰</span><span class="lbl">DRE Orçada</span><span class="lbl-s">DRE</span></a>
-      <a href="#/sync" data-view="sync"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
+      <a href="#/dashboard" data-view="dashboard" data-mod="planejamento"><span class="ico">📊</span><span class="lbl">Painel</span><span class="lbl-s">Painel</span></a>
+      <a href="#/talhoes" data-view="talhoes" data-mod="planejamento"><span class="ico">🗺️</span><span class="lbl">Talhões</span><span class="lbl-s">Talhões</span></a>
+      <a href="#/empreendimentos" data-view="empreendimentos" data-mod="planejamento"><span class="ico">🌾</span><span class="lbl">Empreendimentos</span><span class="lbl-s">Culturas</span></a>
+      <a href="#/compras" data-view="compras" data-mod="planejamento"><span class="ico">🛒</span><span class="lbl">Demanda de Compras</span><span class="lbl-s">Compras</span></a>
+      <a href="#/cotacao" data-view="cotacao" data-mod="planejamento"><span class="ico">🏷️</span><span class="lbl">Cotação</span><span class="lbl-s">Cotação</span></a>
+      <a href="#/maquinas" data-view="maquinas" data-mod="planejamento"><span class="ico">🚜</span><span class="lbl">Máquinas</span><span class="lbl-s">Máquinas</span></a>
+      <a href="#/dre" data-view="dre" data-mod="planejamento"><span class="ico">💰</span><span class="lbl">DRE Orçada</span><span class="lbl-s">DRE</span></a>
+      <a href="#/campo" data-view="campo" data-mod="campo"><span class="ico">🧑‍🌾</span><span class="lbl">Operação de Campo</span><span class="lbl-s">Campo</span></a>
+      <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
     </nav>
     <div class="sidebar-foot">
       <button id="btn-export" class="btn btn-ghost btn-sm" title="Exportar dados (JSON)">⬇ Exportar</button>
@@ -465,6 +474,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   </aside>
   <main class="main">
     <header class="topbar">
+      <div class="mod-switch" id="mod-switch">
+        <button type="button" data-mod="planejamento"><span class="ms-ico">📋</span><span class="ms-lbl">Planejamento</span></button>
+        <button type="button" data-mod="campo"><span class="ms-ico">🧑‍🌾</span><span class="ms-lbl">Campo</span></button>
+      </div>
       <h1 id="page-title">Painel</h1>
       <div class="topbar-right">
         <a href="#/sync" id="sync-status" class="sync-status" hidden title="Estado da sincronização"><span class="dot"></span><span class="sync-status-txt">Local</span></a>
@@ -500,8 +513,21 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-6';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-7';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
+const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
+// a qual módulo cada tela pertence ('both' = aparece nos dois)
+const VIEW_MOD = { dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
+  empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento',
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
+function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
+function moduleHome(m){ return m==='campo'?'#/campo':'#/dashboard'; }
+function applyModule(){
+  const m=currentModule();
+  document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
+  document.querySelectorAll('#mod-switch button').forEach(b=>b.classList.toggle('on',b.dataset.mod===m));
+  document.body.dataset.mod=m;
+}
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
 let PROD = {};            // produto -> objeto do produto
@@ -1371,6 +1397,10 @@ function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
   const fn=V[view];
+  // mantém o módulo ativo em sincronia com a tela aberta (telas exclusivas trocam o módulo)
+  const vm=VIEW_MOD[view]||'planejamento';
+  if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
+  applyModule();
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
@@ -1531,6 +1561,8 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
+  const ms=e.target.closest('#mod-switch button'); if(ms){ const m=ms.dataset.mod;
+    localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); return; }
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
   const act=e.target.closest('[data-act]');
   if(act){
@@ -1962,7 +1994,8 @@ Promise.resolve(window.__DATA__).then(d=>{
   loadOverrides(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
-  if(!location.hash) location.hash='#/dashboard';
+  applyModule();
+  if(!location.hash) location.hash=moduleHome(currentModule());
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
