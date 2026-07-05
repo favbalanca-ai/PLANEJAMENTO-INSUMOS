@@ -195,6 +195,7 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .app-ins th.num,.app-ins td.num{text-align:right}
 .app-ins td{padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}
 .app-ins small{color:var(--muted)}
+.app-secttl{font-size:12px;font-weight:800;color:var(--ink);text-transform:uppercase;letter-spacing:.3px;margin:14px 0 4px}
 .app-note{font-size:12px;color:var(--ink2);margin-top:10px}
 .btn-wa{background:#25d366;color:#fff;border:none;font-weight:700;margin-top:12px;width:100%}
 .btn-wa:hover{background:#1fb457;color:#fff}
@@ -565,7 +566,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-13';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-14';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -1374,7 +1375,18 @@ function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), t
 // duração entre "HH:MM" e "HH:MM" (em horas, atravessa a meia-noite se fim<início)
 function durHoras(a,b){ if(!a||!b) return null; const pa=a.split(':'),pb=b.split(':');
   let mi=(+pa[0])*60+(+pa[1]), mf=(+pb[0])*60+(+pb[1]); if(mf<mi) mf+=1440; return (mf-mi)/60; }
-// recomendação de aplicação: calda total, nº de tanques e volumes por insumo (planejado/realizado)
+// classifica o insumo pela unidade: 'L' = líquido (vai na calda); demais = sólido (distribuição)
+function isLiquido(un){ const u=(un||'').trim().toLowerCase(); return u==='l'||u==='lt'||u==='ml'||u==='litro'||u==='cc'; }
+// itens efetivos da operação (dose realizada, se houver, senão a planejada) + extras
+function campoItems(talId, tagoi, opItens, r){
+  return effItems(talId,tagoi,opItens).map(it=>{
+    const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
+    return {produto:it.produto,un:it.un,dose};
+  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})))
+  .filter(x=>x.produto);
+}
+// recomendação de aplicação: líquidos (calda/tanque) e sólidos (só total na área) separados
 function campoAppOut(talId, tagoi, opItens, r){
   const t=findTalhao(talId); if(!t) return '';
   const area=areaDe(t), app=r.app||{};
@@ -1383,28 +1395,36 @@ function campoAppOut(talId, tagoi, opItens, r){
   const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
   const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
   const dur=durHoras(app.hIni,app.hFim);
-  const items=effItems(talId,tagoi,opItens).map(it=>{
-    const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
-    const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
-    return {produto:it.produto,un:it.un,dose};
-  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})));
-  const rows=items.filter(x=>x.produto).map(x=>{
-    const total=x.dose*area, porT=x.dose*haPorTanque;
+  const all=campoItems(talId,tagoi,opItens,r);
+  const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
+  const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
+  const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
     return `<tr><td>${esc(x.produto)}</td>
       <td class="num">${num(total)}<small> ${esc(x.un)}</small></td>
-      <td class="num">${haPorTanque?num(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`;
-  }).join('');
-  const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
-  return `
-    <div class="app-stats">
+      <td class="num">${haPorTanque?num(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
+  const solRows=sol.map(x=>{ const total=x.dose*area;
+    return `<tr><td>${esc(x.produto)}</td>
+      <td class="num">${num(x.dose)}<small> ${esc(x.un)}/ha</small></td>
+      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
+  let html=`<div class="app-stats">
       ${stat('Área do talhão',num(area)+' ha')}
-      ${stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—')}
-      ${stat('Nº de tanques',nT?nT+' × '+num(tanque)+' L':'—')}
+      ${liq.length?stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—'):''}
+      ${liq.length?stat('Nº de tanques',nT?nT+' × '+num(tanque)+' L':'—'):''}
       ${stat('Duração',dur!=null?nf1.format(dur)+' h':'—')}
-    </div>
-    <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Total na área</th><th class="num">Por tanque</th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="3" class="mut" style="padding:6px 8px">Preencha as doses realizadas.</td></tr>'}</tbody></table>
-    ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão).</p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volumes por insumo.</p>'}`;
+    </div>`;
+  if(liq.length){
+    html+=`<div class="app-secttl">💧 Líquidos — ${app.tipo==='aereo'?'aéreo (air tractor)':'pulverizador'}</div>
+      <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Total na área</th><th class="num">Por tanque</th></tr></thead>
+        <tbody>${liqRows}</tbody></table>
+      ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão).</p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volume por tanque.</p>'}`;
+  }
+  if(sol.length){
+    html+=`<div class="app-secttl">📦 Sólidos — distribuição</div>
+      <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Total na área</th></tr></thead>
+        <tbody>${solRows}</tbody></table>`;
+  }
+  if(!all.length) html+='<p class="app-note mut">Preencha as doses realizadas para ver os volumes.</p>';
+  return html;
 }
 function fmtDataBR(s){ const p=(s||'').split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; }
 // monta o texto da recomendação de aplicação (para WhatsApp)
@@ -1417,31 +1437,31 @@ function campoAppMsg(key){
   const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
   const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
   const dur=durHoras(app.hIni,app.hFim);
-  const items=effItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[]).map(it=>{
-    const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
-    const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
-    return {produto:it.produto,un:it.un,dose};
-  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})));
+  const all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
+  const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
   const L=[];
   L.push(`🚿 *Aplicação* — ${t.id}${t.nome?' '+t.nome:''} (${num(area)} ha)`);
   const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
   if(l1.length) L.push(l1.join(' · '));
   if(app.maq) L.push(`🚜 ${app.maq}`);
-  const l2=[]; if(vazao) l2.push(`Vazão ${num(vazao)} L/ha`); if(tanque) l2.push(`Tanque ${num(tanque)} L`);
-  if(l2.length) L.push('💧 '+l2.join(' · '));
-  if(caldaTotal) L.push(`🧪 Calda ${num(caldaTotal)} L · ${nT} tanque(s)`);
-  const prods=items.filter(x=>x.produto);
-  if(prods.length){ L.push('');
-    L.push(haPorTanque?'*Insumos por tanque:*':'*Insumos (total na área):*');
-    prods.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
-      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}`); }); }
+  if(liq.length){
+    L.push(`${app.tipo==='aereo'?'✈️ Aéreo (air tractor)':'🚿 Pulverizador'}`);
+    const l2=[]; if(vazao) l2.push(`Vazão ${num(vazao)} L/ha`); if(tanque) l2.push(`Tanque ${num(tanque)} L`);
+    if(l2.length) L.push('💧 '+l2.join(' · '));
+    if(caldaTotal) L.push(`🧪 Calda ${num(caldaTotal)} L · ${nT} tanque(s)`);
+    L.push(''); L.push(haPorTanque?'*Líquidos (por tanque):*':'*Líquidos (total):*');
+    liq.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
+      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}`); });
+  }
+  if(sol.length){ L.push(''); L.push('*Sólidos (total na área):*');
+    sol.forEach(x=>{ const total=x.dose*area; L.push(`• ${x.produto}: ${num(total)} ${x.un}`); }); }
   if(r.obs) L.push(`\n📝 ${r.obs}`);
   // link de resposta: abre um questionário no WhatsApp para o operador informar o volume utilizado
   const q=[];
   q.push(`📋 Volume utilizado — ${t.id}${fk.op?' · '+fk.op.nome:''}`);
   q.push('(preencha e envie de volta)');
-  prods.forEach(x=>q.push(`${x.produto}: ___ ${x.un}`));
-  q.push('Nº de tanques cheios: ___');
+  all.forEach(x=>q.push(`${x.produto}: ___ ${x.un}`));
+  if(liq.length) q.push('Nº de tanques cheios: ___');
   q.push('Sobras / obs: ___');
   const replyUrl='https://wa.me/?text='+encodeURIComponent(q.join('\n'));
   L.push('');
@@ -1502,12 +1522,16 @@ V.campo = function(arg){
         <summary class="camp-app-sum"><span>🚿 Recomendação de aplicação</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
-            <label>Máquina<select class="sel" data-edit="realApp" data-field="maq" data-key="${esc(o.key)}">
+            <label>Tipo (líquidos)<select class="sel" data-edit="realApp" data-field="tipo" data-key="${esc(o.key)}">
+              <option value="terrestre"${(r.app&&r.app.tipo==='aereo')?'':' selected'}>Pulverizador (terrestre)</option>
+              <option value="aereo"${(r.app&&r.app.tipo==='aereo')?' selected':''}>Aéreo (air tractor)</option>
+            </select></label>
+            <label>Máquina/aeronave<select class="sel" data-edit="realApp" data-field="maq" data-key="${esc(o.key)}">
               <option value="">— máquina —</option>
               ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${((r.app&&r.app.maq!=null?r.app.maq:(opMaqDe(t.id,o.tag,o.oi,o.op)||''))===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
             </select></label>
-            <label>Volume do tanque (L)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
-            <label>Vazão (L/ha)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
+            <label>Tanque (L) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
+            <label>Vazão (L/ha) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
             <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hIni)||'')}"></label>
             <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hFim)||'')}"></label>
           </div>
