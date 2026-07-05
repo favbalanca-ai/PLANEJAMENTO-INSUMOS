@@ -2,6 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
+const APP_VERSION = '2026.07.05-3';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
@@ -746,7 +747,8 @@ V.sync = function(){
       <li>Clique em <b>Puxar da planilha</b>.</li>
     </ol>
     <p class="mut" style="font-size:12px;padding:0 18px 14px">Obs.: a sincronização funciona na versão publicada (GitHub Pages) — na pré-visualização hospedada da Claude o navegador bloqueia chamadas externas.</p>
-  </div>`;
+  </div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:-6px 0 8px">Versão do app: <b>v${APP_VERSION}</b></p>`;
 };
 
 /* ================= ROUTER ================= */
@@ -1290,6 +1292,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 fetch('data.json').then(r=>r.json()).then(d=>{
   DATA=d; d.produtos.forEach(p=>PROD[p.produto]=p);
   loadOverrides(); buildMaqIndex(); updateEditBadge();
+  { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
   if(!location.hash) location.hash='#/dashboard';
   route();

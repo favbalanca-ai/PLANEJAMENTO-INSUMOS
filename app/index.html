@@ -37,6 +37,7 @@
     <div class="sidebar-foot">
       <button id="btn-export" class="btn btn-ghost btn-sm" title="Exportar dados (JSON)">⬇ Exportar</button>
       <button id="btn-reset" class="btn btn-ghost btn-sm" title="Descartar minhas edições">↺ Restaurar</button>
+      <div id="app-ver" class="app-ver" title="Versão do app publicada"></div>
     </div>
   </aside>
   <main class="main">
@@ -52,6 +53,24 @@
   </main>
 </div>
 <div id="toast" class="toast" hidden></div>
+<script>
+/* Registra o service worker: mantém o app sempre atualizado (network-first)
+   e recarrega sozinho quando uma versão nova assume o controle. */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      var refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (refreshing) return; refreshing = true; window.location.reload();
+      });
+      try { reg.update(); } catch (e) {}
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') { try { reg.update(); } catch (e) {} }
+      });
+    }).catch(function () {});
+  });
+}
+</script>
 <script src="app.js"></script>
 </body>
 </html>
