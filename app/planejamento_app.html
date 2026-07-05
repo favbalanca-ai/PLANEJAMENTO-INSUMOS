@@ -196,6 +196,8 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .app-ins td{padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}
 .app-ins small{color:var(--muted)}
 .app-note{font-size:12px;color:var(--ink2);margin-top:10px}
+.btn-wa{background:#25d366;color:#fff;border:none;font-weight:700;margin-top:12px;width:100%}
+.btn-wa:hover{background:#1fb457;color:#fff}
 .camp-app:not([open]) .panel-chevron,.camp-app .panel-chevron{transition:transform .15s}
 .camp-app[open] .panel-chevron{transform:rotate(90deg)}
 .camp-app:not([open])>*:not(summary){display:none!important}
@@ -563,7 +565,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-11';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-12';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -1404,6 +1406,39 @@ function campoAppOut(talId, tagoi, opItens, r){
       <tbody>${rows||'<tr><td colspan="3" class="mut" style="padding:6px 8px">Preencha as doses realizadas.</td></tr>'}</tbody></table>
     ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão).</p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volumes por insumo.</p>'}`;
 }
+function fmtDataBR(s){ const p=(s||'').split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; }
+// monta o texto da recomendação de aplicação (para WhatsApp)
+function campoAppMsg(key){
+  const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t) return '';
+  const r=realOf(key)||{}, app=r.app||{};
+  const tag=fk.tagoi[0], cultura=tag==='S'?empSafDe(t):empDe(t);
+  const area=areaDe(t), vazao=+app.vazao||0, tanque=+app.tanque||0;
+  const caldaTotal=vazao>0?vazao*area:0;
+  const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
+  const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
+  const dur=durHoras(app.hIni,app.hFim);
+  const items=effItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[]).map(it=>{
+    const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
+    return {produto:it.produto,un:it.un,dose};
+  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})));
+  const L=[];
+  L.push('🚿 *RECOMENDAÇÃO DE APLICAÇÃO*');
+  L.push(`📍 Talhão: ${t.id}${t.nome?' - '+t.nome:''} (${num(area)} ha)`);
+  if(cultura&&cultura!=='—') L.push(`🌾 Cultura: ${cultura}`);
+  if(fk.op) L.push(`🔧 Operação: ${fk.op.nome}`);
+  if(r.data) L.push(`📅 Data: ${fmtDataBR(r.data)}`);
+  if(app.maq) L.push(`🚜 Máquina: ${app.maq}`);
+  if(app.hIni||app.hFim) L.push(`⏱ Horário: ${app.hIni||'?'}–${app.hFim||'?'}${dur!=null?` (${nf1.format(dur)} h)`:''}`);
+  if(vazao||tanque) L.push(`💧 Vazão: ${vazao?num(vazao)+' L/ha':'—'}  |  Tanque: ${tanque?num(tanque)+' L':'—'}`);
+  if(caldaTotal) L.push(`🧪 Calda total: ${num(caldaTotal)} L  |  ${nT} tanque(s)${haPorTanque?`  (1 tanque = ${nf1.format(haPorTanque)} ha)`:''}`);
+  const prods=items.filter(x=>x.produto);
+  if(prods.length){ L.push(''); L.push('*Insumos (total na área | por tanque):*');
+    prods.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
+      L.push(`• ${x.produto}: ${num(total)} ${x.un}${haPorTanque?`  |  ${num(porT)} ${x.un}/tanque`:''}`); }); }
+  if(r.obs){ L.push(''); L.push(`📝 Obs: ${r.obs}`); }
+  return L.join('\n');
+}
 function campoProgress(){
   let total=0, done=0, running=0;
   talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ total++; const r=realOf(o.key);
@@ -1473,6 +1508,7 @@ V.campo = function(arg){
             <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}">Calcular vazão</button>
           </div>
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
+          <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
         </div>
       </details>
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
@@ -1790,6 +1826,9 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
+    else if(a.act==='waApp'){ const txt=campoAppMsg(a.key);
+      if(!txt){ toast('Nada para enviar'); return; }
+      window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
