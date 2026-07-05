@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-10';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-11';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -905,6 +905,12 @@ V.campo = function(arg){
             <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hIni)||'')}"></label>
             <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hFim)||'')}"></label>
           </div>
+          <div class="app-adjust">
+            <span>Ajustar vazão para</span>
+            <input class="cell" inputmode="numeric" data-adjust-n value="" placeholder="nº" style="width:58px">
+            <span>tanque(s) cheios na área</span>
+            <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}">Calcular vazão</button>
+          </div>
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
         </div>
       </details>
@@ -1209,6 +1215,20 @@ document.addEventListener('click',e=>{
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
     else if(a.act==='pickmod'){ const m=a.mod; localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); }
+    else if(a.act==='ajustVazao'){
+      const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
+      const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));
+      const fk=opFromKey(a.key), t=findTalhao(fk.talId), area=t?areaDe(t):0;
+      const r=realEnsure(a.key); r.app=r.app||{}; const tanque=+r.app.tanque||0;
+      if(!n||n<=0){ toast('Informe o número de tanques'); return; }
+      if(!tanque){ toast('Preencha o volume do tanque primeiro'); return; }
+      if(!area){ toast('Talhão sem área'); return; }
+      const vazao=Math.floor((n*tanque/area)*100)/100;   // arredonda para baixo: garante caber em n tanques
+      r.app.vazao=vazao; realClean(a.key); saveOverrides();
+      const vz=document.querySelector('input[data-edit="realApp"][data-field="vazao"][data-key="'+a.key+'"]'); if(vz) vz.value=vazao;
+      const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
+      toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
+    }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
