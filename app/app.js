@@ -2,8 +2,21 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-6';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-7';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
+const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
+// a qual módulo cada tela pertence ('both' = aparece nos dois)
+const VIEW_MOD = { dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
+  empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento',
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
+function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
+function moduleHome(m){ return m==='campo'?'#/campo':'#/dashboard'; }
+function applyModule(){
+  const m=currentModule();
+  document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
+  document.querySelectorAll('#mod-switch button').forEach(b=>b.classList.toggle('on',b.dataset.mod===m));
+  document.body.dataset.mod=m;
+}
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
 let PROD = {};            // produto -> objeto do produto
@@ -873,6 +886,10 @@ function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
   const fn=V[view];
+  // mantém o módulo ativo em sincronia com a tela aberta (telas exclusivas trocam o módulo)
+  const vm=VIEW_MOD[view]||'planejamento';
+  if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
+  applyModule();
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
@@ -1033,6 +1050,8 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
+  const ms=e.target.closest('#mod-switch button'); if(ms){ const m=ms.dataset.mod;
+    localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); return; }
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
   const act=e.target.closest('[data-act]');
   if(act){
@@ -1464,7 +1483,8 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   loadOverrides(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
-  if(!location.hash) location.hash='#/dashboard';
+  applyModule();
+  if(!location.hash) location.hash=moduleHome(currentModule());
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
