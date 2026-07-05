@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-5';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-6';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
@@ -31,6 +31,7 @@ function loadOverrides(){
   OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
   OV.opAdd         = OV.opAdd         || {}; // talhao -> {P:[nomes], S:[nomes]} operações criadas
+  OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -747,6 +748,84 @@ V.empreendimentos = function(arg){
   <p class="mut" style="font-size:12px">Editar a dose aqui sobrescreve o insumo em <b>todos</b> os talhões desta cultura. “Dose: vários” significa que os talhões têm doses diferentes — digite um valor para uniformizar.</p>`;
 };
 
+/* ================= MODO CAMPO (planejado × realizado) ================= */
+const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'} };
+function opsDoTalhao(t){
+  const out=[];
+  ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P';
+    (opsOf(t.id,seq)||[]).forEach((op,oi)=>out.push({seq,tag,oi,op,tagoi:`${tag}${oi}`,key:`${t.id}|${tag}${oi}`,
+      cultura: seq==='safrinha'?empSafDe(t):empDe(t)})); });
+  return out;
+}
+function realOf(key){ return OV.realizado[key]||null; }
+function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[]}); }
+function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
+  && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null))) delete OV.realizado[key]; }
+function campoProgress(){
+  let total=0, done=0, running=0;
+  talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ total++; const r=realOf(o.key);
+    if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento') running++; } }));
+  return {total,done,running};
+}
+V.campo = function(arg){
+  const all=talhoesAll();
+  if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
+  const selId=(arg && all.some(t=>t.id===arg))?arg:all[0].id;
+  const t=all.find(x=>x.id===selId);
+  const prog=campoProgress(), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
+  const tOpt=all.map(x=>{ const ops=opsDoTalhao(x);
+    const d=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length;
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')} — ${d}/${ops.length} ok</option>`; }).join('');
+  const ops=opsDoTalhao(t);
+  const opsHtml=ops.map(o=>{
+    const r=realOf(o.key)||{status:'pendente',data:'',obs:'',doses:{},extras:[]};
+    const items=effItems(t.id,o.tagoi,o.op.itens);
+    const insRows=items.map(it=>{
+      const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+      const rv=(r.doses&&(iid in r.doses))?r.doses[iid]:'';
+      const diff=rv!=='' && +rv!==+it.dose;
+      return `<tr>
+        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b></td>
+        <td class="num ci-plan">${num(it.dose)}<small> ${esc(it.un||'')}</small></td>
+        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${num(it.dose)}"></td>
+      </tr>`;
+    }).join('');
+    const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
+        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano"></td>
+        <td class="num ci-plan mut">—</td>
+        <td class="num ci-real"><input class="cell" inputmode="decimal" data-edit="realExtraDose" data-key="${esc(o.key)}" data-ei="${ei}" value="${ex.dose!=null?ex.dose:''}" placeholder="dose">
+          <button class="icon-btn del" title="Remover extra" data-act="realDelExtra" data-key="${esc(o.key)}" data-ei="${ei}">🗑</button></td>
+      </tr>`).join('');
+    const st=REAL_ST[r.status]||REAL_ST.pendente;
+    const sbtn=v=>`<button class="camp-st ${REAL_ST[v].cls}${r.status===v?' on':''}" data-act="realStatus" data-key="${esc(o.key)}" data-val="${v}">${REAL_ST[v].lbl}</button>`;
+    return `<div class="camp-op ${st.cls}">
+      <div class="camp-op-head">
+        <div class="camp-op-title">${esc(o.op.nome)}<small>${esc(o.cultura||'')}${o.seq==='safrinha'?' · 2ª safra':''}</small></div>
+        <span class="camp-badge ${st.cls}">${st.lbl}</span>
+      </div>
+      <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}</div>
+      <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
+      <div class="table-wrap"><table class="camp-ins">
+        <thead><tr><th>Insumo</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead>
+        <tbody>${insRows||'<tr><td colspan="3" class="mut" style="padding:8px 10px">Sem insumos planejados nesta operação.</td></tr>'}${extrasRows}</tbody>
+      </table></div>
+      <button class="btn btn-outline btn-sm" data-act="realAddExtra" data-key="${esc(o.key)}">+ insumo extra</button>
+      <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
+    </div>`;
+  }).join('') || '<div class="mut" style="padding:14px">Este talhão não tem operações planejadas.</div>';
+  return `${prodDatalist()}
+  <div class="camp-top">
+    <div class="camp-prog">
+      <div class="camp-prog-bar"><div style="width:${pctDone}%"></div></div>
+      <div class="camp-prog-txt"><b>${prog.done}</b>/${prog.total} operações concluídas · ${pctDone}%${prog.running?` · ${prog.running} em andamento`:''}</div>
+    </div>
+    <div class="camp-sel"><label>Talhão</label><select class="sel" id="camp-talhao">${tOpt}</select></div>
+  </div>
+  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` / ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div>
+  ${opsHtml}
+  <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">O realizado fica salvo <b>no aparelho</b>. Digite a dose aplicada em cada insumo (deixe em branco = conforme o plano). Use “+ insumo extra” para aplicações fora do plano.</p>`;
+};
+
 V.sync = function(){
   const url=syncUrl(), eds=buildFieldEdits(), on=autoOn();
   return `
@@ -789,7 +868,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
@@ -838,6 +917,28 @@ function applyEdit(el){
     if(v===old){ return; }
     const nn=bulkSwapProd(el.dataset.emp, old, v);
     saveOverrides(); route(); toast(nn?`Insumo trocado em ${nn} local(is)`:'Nada para trocar');
+    return;
+  }
+  if(kind==='realData'||kind==='realObs'){   // modo Campo: data / observação (string) — local
+    const r=realEnsure(el.dataset.key);
+    if(kind==='realData') r.data=el.value; else r.obs=el.value;
+    realClean(el.dataset.key); saveOverrides();
+    if(kind==='realData') route();   // obs não re-renderiza (mantém o cursor)
+    return;
+  }
+  if(kind==='realExtraProd'){   // modo Campo: produto do insumo extra (string) — local
+    const v=el.value.trim();
+    if(v && !PROD[v]){ toast('Produto não encontrado na lista'); return; }
+    const r=realEnsure(el.dataset.key); (r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={})).produto=v;
+    realClean(el.dataset.key); saveOverrides(); return;
+  }
+  if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
+    const val=el.value.trim().replace(',','.'), q=val===''?null:parseFloat(val);
+    const r=realEnsure(el.dataset.key);
+    if(kind==='realDose'){ if(q==null) delete r.doses[el.dataset.iid]; else r.doses[el.dataset.iid]=q; }
+    else { const ex=r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={}); ex.dose=(q==null?null:q); }
+    realClean(el.dataset.key); saveOverrides();
+    el.classList.toggle('edited', q!=null);   // sem re-render: não rola a tela ao preencher várias doses
     return;
   }
   const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
@@ -926,7 +1027,10 @@ function copiaMaquinas(srcId,dstId,plano){
   });
 }
 
-document.addEventListener('change',e=>{ if(e.target.matches('input[data-edit], select[data-edit]')) applyEdit(e.target); });
+document.addEventListener('change',e=>{
+  if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches('input[data-edit], select[data-edit], textarea[data-edit]')) applyEdit(e.target);
+});
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
@@ -988,6 +1092,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
+    else if(a.act==='realStatus'){ const r=realEnsure(a.key); r.status=a.val; realClean(a.key); saveOverrides(); route(); }
+    else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
+    else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
