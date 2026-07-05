@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-14';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-15';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -723,7 +723,7 @@ V.empreendimentos = function(arg){
   });
   const rows=prods.map(prod=>{
     const m=map[prod], doseCommon=m.doses.size===1?[...m.doses][0]:null, preco=precoDe(prod);
-    return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}" data-cardkey="ce|${esc(prod)}"${openCards.has('ce|'+prod)?' class="open"':''}>
+    return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}" data-classe="${esc(m.classe||'')}" data-cardkey="ce|${esc(prod)}"${openCards.has('ce|'+prod)?' class="open"':''}>
       <td class="c-more" data-th="Classe">${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
       <td class="c-full" data-th="Produto"><input list="prodlist" class="txt prod-in" data-edit="bulkProd" data-emp="${esc(sel)}" data-prod="${esc(prod)}" value="${esc(prod)}" title="Trocar este insumo por outro em todos os talhões desta cultura"></td>
       <td class="num" data-th="Dose/ha"><input class="cell" data-edit="bulkDose" data-emp="${esc(sel)}" data-prod="${esc(prod)}"
@@ -754,6 +754,11 @@ V.empreendimentos = function(arg){
   </div>
   <div class="toolbar"><div class="search"><input id="q-emp" placeholder="Buscar insumo ou classe…"></div>
     <div class="spacer"></div><span class="badge badge-muted">troque o produto ou a dose (aplica a todos os talhões) ou exclua — em massa</span></div>
+  ${(()=>{ const classes=[...new Set(prods.map(p=>map[p].classe).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+    return classes.length? `<div class="classe-filter" id="emp-cfilter">
+      <button class="chip-f on" data-classef="">Todas</button>
+      ${classes.map(c=>`<button class="chip-f" data-classef="${esc(c)}">${esc(c)}</button>`).join('')}
+    </div>`:''; })()}
   <div class="panel"><div class="panel-head"><h2>Insumos da cultura</h2><span class="sub">${prods.length} insumos</span></div>
     <div class="table-wrap"><table id="tbl-emp" class="cards-sm insumo-cards">
       <thead><tr><th>Classe</th><th>Produto</th><th class="num">Dose/ha</th><th>Un</th>
@@ -1013,9 +1018,10 @@ V.sync = function(){
         <span><b>Sincronização automática</b> — envia suas edições e puxa a planilha sozinho (ao abrir, ao voltar pro app e periodicamente)</span>
       </label>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn btn-primary" data-act="sync-pull">⬇ Puxar agora</button>
+        <button class="btn btn-primary" data-act="sync-pull">⬇ Buscar última atualização</button>
         <button class="btn btn-outline" data-act="sync-push">⬆ Enviar agora (${eds.length})</button>
       </div>
+      <div id="sync-last" class="sync-last">${lastSyncTxt()}</div>
       <div id="sync-log" class="sync-log"></div>
       <p class="mut" style="font-size:12px;margin-top:12px">Com a <b>sincronização automática</b> ligada e a URL salva: o app <b>puxa</b> a planilha ao abrir e periodicamente, e <b>envia</b> suas edições automaticamente pouco depois de você mexer. A <b>planilha é a verdade</b> — ela sempre vence em conflito.<br>
       <b>Vai para a planilha (nos dois sentidos):</b> dose, preço, estoque, área, produtividade, <b>1ª e 2ª cultura</b> (empreendimento/safrinha) e produtividade da safrinha, <b>troca de produto</b> de um insumo, e insumos <b>adicionados/removidos</b> de uma operação existente.<br>
@@ -1219,6 +1225,8 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
+  const cf=e.target.closest('#emp-cfilter .chip-f');
+  if(cf){ cf.parentElement.querySelectorAll('.chip-f').forEach(bb=>bb.classList.remove('on')); cf.classList.add('on'); applyEmpFilter(); return; }
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
   const act=e.target.closest('[data-act]');
   if(act){
@@ -1275,7 +1283,7 @@ document.addEventListener('click',e=>{
       delete OV.maqAttr[c]; delete OV.maquina[c]; saveOverrides(); route(); toast('Conjunto excluído');
     }
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
-    else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull(); }
+    else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     else if(a.act==='realStatus'){ const r=realEnsure(a.key); r.status=a.val; realClean(a.key); saveOverrides(); route(); }
@@ -1308,7 +1316,7 @@ document.addEventListener('input',e=>{
   lastInputTs=Date.now();   // adia o puxar automático enquanto o usuário digita
   if(e.target.id==='q-compra') filterCompras(e.target.value);
   if(e.target.id==='q-talhao') filterTable('#tbl-talhoes',e.target.value);
-  if(e.target.id==='q-emp') filterTable('#tbl-emp',e.target.value);
+  if(e.target.id==='q-emp') applyEmpFilter();
   if(e.target.id==='q-maq') filterTable('#tbl-maq',e.target.value);
   if(e.target.id==='q-cot') filterCotacao(e.target.value);
 });
@@ -1358,6 +1366,16 @@ function filterTable(sel,q){
   q=q.toLowerCase().trim();
   document.querySelectorAll(sel+' tbody tr').forEach(tr=>{
     tr.style.display = !q||(tr.dataset.search||'').includes(q)?'':'none';
+  });
+}
+// Empreendimentos: filtro por texto + classe combinados
+function applyEmpFilter(){
+  const qi=document.getElementById('q-emp'); const q=((qi&&qi.value)||'').toLowerCase().trim();
+  const active=document.querySelector('#emp-cfilter .chip-f.on'); const cf=active?active.dataset.classef:'';
+  document.querySelectorAll('#tbl-emp tbody tr').forEach(tr=>{
+    const okQ=!q||(tr.dataset.search||'').includes(q);
+    const okC=!cf||(tr.dataset.classe||'')===cf;
+    tr.style.display=(okQ&&okC)?'':'none';
   });
 }
 
@@ -1440,6 +1458,9 @@ function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPo
 function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
 // histórico persistente de sincronização (data/hora, puxar/enviar, ok/falhas) — fica no localStorage
 const HIST_KEY='planejamento_sync_hist';
+const SYNC_LAST_KEY='planejamento_sync_last';   // timestamp da última sincronização bem-sucedida
+function markSynced(){ localStorage.setItem(SYNC_LAST_KEY, String(Date.now())); const el=document.getElementById('sync-last'); if(el) el.textContent=lastSyncTxt(); }
+function lastSyncTxt(){ const t=+localStorage.getItem(SYNC_LAST_KEY)||0; return t?('Última atualização: '+fmtHist(t)):'Ainda não sincronizado'; }
 function syncHist(){ try{ return JSON.parse(localStorage.getItem(HIST_KEY)||'[]'); }catch(_){ return []; } }
 function addHist(kind, ok, msg){
   const h=syncHist();
@@ -1584,6 +1605,7 @@ async function syncPull(opts){
     const d=await syncGet(url,opts);
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     const raw=JSON.stringify(d);
+    markSynced();
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
       if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças'); }
       syncBusy=false; setSyncStatus('ok'); return;
