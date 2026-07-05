@@ -83,6 +83,49 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .dre-cres.pos{color:var(--green)} .dre-cres.neg{color:var(--red)}
 .dre-cres small{display:block;font-weight:600;font-size:11px;color:var(--muted)}
 
+/* ===== Modo Campo (planejado × realizado) ===== */
+.camp-top{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.camp-prog{flex:1;min-width:220px}
+.camp-prog-bar{height:10px;background:#e6edee;border-radius:6px;overflow:hidden}
+.camp-prog-bar>div{height:100%;background:linear-gradient(90deg,#4bb0bf,#2e7d8c);border-radius:6px;transition:width .3s}
+.camp-prog-txt{font-size:12px;color:var(--muted);margin-top:5px}
+.camp-sel{display:flex;align-items:center;gap:8px}
+.camp-sel label{font-size:12px;color:var(--muted);font-weight:700}
+.camp-sel select{min-width:210px}
+.camp-tinfo{font-size:13px;color:var(--ink2);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+.camp-op{background:var(--card);border:1px solid var(--line);border-left:4px solid #c2ccce;border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:14px}
+.camp-op.st-ok{border-left-color:var(--green)}
+.camp-op.st-and{border-left-color:var(--amber)}
+.camp-op-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.camp-op-title{font-size:15px;font-weight:700;color:var(--ink);line-height:1.2}
+.camp-op-title small{display:block;font-weight:500;font-size:12px;color:var(--muted);margin-top:2px}
+.camp-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;white-space:nowrap}
+.camp-badge.st-ok{background:var(--green-soft);color:var(--green)}
+.camp-badge.st-and{background:var(--amber-soft);color:var(--amber)}
+.camp-badge.st-pend{background:#eef1f2;color:var(--muted)}
+.camp-strow{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
+.camp-st{flex:1;min-width:92px;padding:10px 8px;border:1px solid var(--line);border-radius:10px;background:#fff;
+  font-size:12.5px;font-weight:700;color:var(--ink2);cursor:pointer}
+.camp-st.on.st-pend{background:#eef1f2;border-color:#c2ccce;color:var(--ink)}
+.camp-st.on.st-and{background:var(--amber-soft);border-color:var(--amber);color:var(--amber)}
+.camp-st.on.st-ok{background:var(--green-soft);border-color:var(--green);color:var(--green)}
+.camp-date{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.camp-date label{font-size:12px;color:var(--muted);font-weight:700}
+.camp-date input{padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:15px;color:var(--ink)}
+.camp-ins{width:100%;border-collapse:collapse}
+.camp-ins th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.camp-ins th.num,.camp-ins td.num{text-align:right}
+.camp-ins td{padding:7px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+.ci-prod .classe-tag{font-size:10px}
+.ci-plan{color:var(--ink2);white-space:nowrap}.ci-plan small{color:var(--muted)}
+.ci-real{white-space:nowrap}
+.ci-real input{width:80px}
+.ci-real .icon-btn{margin-left:4px;width:34px;height:34px;font-size:15px}
+.ci-extra .prod-in{width:100%;min-width:130px}
+.camp-obs{margin-top:12px}
+.camp-obs label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px}
+.camp-obs textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px;font-family:inherit;resize:vertical}
+
 /* Cards / panels */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
 .panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
@@ -251,12 +294,12 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .sidebar{width:100%;height:auto;position:fixed;bottom:0;left:0;top:auto;z-index:20;flex-direction:row;
     background:#16404d;border-top:1px solid rgba(255,255,255,.12);box-shadow:0 -2px 10px rgba(0,0,0,.15)}
   .brand,.sidebar-foot{display:none}
-  /* todos os 8 itens cabem na largura da tela (sem rolar de lado) */
-  #nav{display:grid;grid-template-columns:repeat(8,1fr);overflow:visible;padding:6px 3px;gap:1px;flex:1}
+  /* todos os itens cabem na largura da tela (colunas iguais, sem rolar de lado) */
+  #nav{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;overflow:visible;padding:6px 2px;gap:1px;flex:1}
   #nav a{flex-direction:column;gap:2px;padding:6px 1px;border-radius:9px;min-width:0;text-align:center}
-  #nav a .ico{font-size:18px;width:auto}
+  #nav a .ico{font-size:17px;width:auto}
   #nav a .lbl{display:none}
-  #nav a .lbl-s{display:block;font-size:9px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:66px}
   .topbar{padding:12px 14px}#page-title{font-size:17px}.safra-chip{display:none}
   .content{padding:14px 12px 24px}
@@ -271,6 +314,12 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .dre-cbars{grid-column:1 / -1;order:3}
   .dre-bv{flex:0 0 78px}
   .dre-bt{flex:0 0 46px}
+  /* Modo Campo no celular */
+  .camp-top{flex-direction:column;align-items:stretch;gap:12px}
+  .camp-sel{justify-content:space-between}.camp-sel select{flex:1;min-width:0}
+  .ci-real input{width:72px}
+  .camp-ins td,.camp-ins th{padding:7px 5px}
+  .camp-st{min-width:0;padding:11px 4px;font-size:12px}
   /* 16px evita o zoom automático do iOS ao focar inputs */
   input.cell{min-height:42px;font-size:16px;width:78px}
   input.txt,select.sel{min-height:42px;font-size:16px}
