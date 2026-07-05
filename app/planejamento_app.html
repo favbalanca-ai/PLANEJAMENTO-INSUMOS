@@ -53,6 +53,32 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
   color:var(--muted);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
 .mod-switch button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
 .mod-switch .ms-ico{font-size:15px}
+
+/* ===== Tela inicial (porta de entrada) ===== */
+body[data-view="inicio"] .sidebar,
+body[data-view="inicio"] .topbar{display:none!important}
+body[data-view="inicio"] .main{padding-bottom:0}
+body[data-view="inicio"] .content{max-width:none;padding:0}
+.entry{max-width:780px;margin:0 auto;padding:44px 22px;min-height:100vh;display:flex;flex-direction:column;justify-content:center}
+.entry-brand{display:flex;align-items:center;gap:12px;margin-bottom:30px;justify-content:center}
+.entry-logo{font-size:36px}
+.entry-title{font-size:20px;font-weight:800;color:var(--ink)}
+.entry-sub{font-size:13px;color:var(--muted)}
+.entry-h{font-size:23px;font-weight:800;color:var(--ink);text-align:center;margin-bottom:24px}
+.entry-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.entry-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:9px;text-align:left;
+  background:var(--card);border:1.5px solid var(--line);border-radius:16px;padding:24px 22px;cursor:pointer;
+  box-shadow:var(--shadow);transition:transform .12s,border-color .12s,box-shadow .12s;font-family:inherit}
+.entry-card:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(0,0,0,.10)}
+.entry-card.ec-plan:hover{border-color:var(--teal)}
+.entry-card.ec-campo:hover{border-color:var(--green)}
+.ec-ico{font-size:36px;line-height:1}
+.ec-name{font-size:19px;font-weight:800;color:var(--ink)}
+.ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
+.ec-go{margin-top:8px;font-weight:700;color:var(--ink2);font-size:14px}
+.ec-badge{position:absolute;top:14px;right:14px;font-size:10.5px;font-weight:700;background:var(--teal-soft);color:var(--ink2);padding:3px 9px;border-radius:20px}
+.entry-foot{text-align:center;margin-top:28px;font-size:12px;color:var(--muted)}
+@media(max-width:640px){ .entry-cards{grid-template-columns:1fr} .entry{padding:28px 16px;min-height:100dvh} .entry-h{font-size:20px} }
 .topbar-right{display:flex;align-items:center;gap:10px}
 .safra-chip{background:var(--teal-soft);color:var(--ink2);font-weight:600;font-size:12px;
   padding:5px 11px;border-radius:20px}
@@ -448,7 +474,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 <body>
 <div id="app">
   <aside class="sidebar">
-    <div class="brand">
+    <div class="brand" data-go="#/inicio" title="Tela inicial (escolher módulo)" style="cursor:pointer">
       <span class="brand-logo">🌱</span>
       <div>
         <div class="brand-title">Planejamento</div>
@@ -513,11 +539,11 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-7';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-8';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
-const VIEW_MOD = { dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
+const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento',
   maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
 function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
@@ -1272,6 +1298,30 @@ V.empreendimentos = function(arg){
   <p class="mut" style="font-size:12px">Editar a dose aqui sobrescreve o insumo em <b>todos</b> os talhões desta cultura. “Dose: vários” significa que os talhões têm doses diferentes — digite um valor para uniformizar.</p>`;
 };
 
+/* ================= TELA INICIAL (porta de entrada: Planejamento × Campo) ================= */
+V.inicio = function(){
+  const m=currentModule();
+  const card=(mod,ico,nome,desc,hoverCls)=>`
+    <button class="entry-card ${hoverCls}" data-act="pickmod" data-mod="${mod}">
+      <span class="ec-ico">${ico}</span>
+      <span class="ec-name">${nome}</span>
+      <span class="ec-desc">${desc}</span>
+      ${m===mod?'<span class="ec-badge">último usado</span>':''}
+      <span class="ec-go">Entrar →</span>
+    </button>`;
+  return `
+  <div class="entry">
+    <div class="entry-brand"><span class="entry-logo">🌱</span>
+      <div><div class="entry-title">Planejamento de Safra</div><div class="entry-sub">Safra 2026/2027 · favbalança</div></div></div>
+    <h1 class="entry-h">Como você vai usar agora?</h1>
+    <div class="entry-cards">
+      ${card('planejamento','📋','Planejamento','Talhões, insumos, compras, cotação, máquinas e DRE. Monte e ajuste o plano da safra.','ec-plan')}
+      ${card('campo','🧑‍🌾','Campo','Veja o planejado e informe o realizado de cada operação, direto na lavoura.','ec-campo')}
+    </div>
+    <p class="entry-foot">Dá para trocar de módulo a qualquer momento pelo seletor no topo. <span class="mut">v${APP_VERSION}</span></p>
+  </div>`;
+};
+
 /* ================= MODO CAMPO (planejado × realizado) ================= */
 const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'} };
 function opsDoTalhao(t){
@@ -1392,7 +1442,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
@@ -1401,6 +1451,7 @@ function route(){
   const vm=VIEW_MOD[view]||'planejamento';
   if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
   applyModule();
+  document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
@@ -1625,6 +1676,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='realStatus'){ const r=realEnsure(a.key); r.status=a.val; realClean(a.key); saveOverrides(); route(); }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
+    else if(a.act==='pickmod'){ const m=a.mod; localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
@@ -1995,7 +2047,7 @@ Promise.resolve(window.__DATA__).then(d=>{
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
   applyModule();
-  if(!location.hash) location.hash=moduleHome(currentModule());
+  if(!location.hash) location.hash='#/inicio';   // porta de entrada: escolher o módulo
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas

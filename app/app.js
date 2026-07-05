@@ -2,11 +2,11 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-7';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-8';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
-const VIEW_MOD = { dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
+const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento',
   maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
 function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
@@ -761,6 +761,30 @@ V.empreendimentos = function(arg){
   <p class="mut" style="font-size:12px">Editar a dose aqui sobrescreve o insumo em <b>todos</b> os talhões desta cultura. “Dose: vários” significa que os talhões têm doses diferentes — digite um valor para uniformizar.</p>`;
 };
 
+/* ================= TELA INICIAL (porta de entrada: Planejamento × Campo) ================= */
+V.inicio = function(){
+  const m=currentModule();
+  const card=(mod,ico,nome,desc,hoverCls)=>`
+    <button class="entry-card ${hoverCls}" data-act="pickmod" data-mod="${mod}">
+      <span class="ec-ico">${ico}</span>
+      <span class="ec-name">${nome}</span>
+      <span class="ec-desc">${desc}</span>
+      ${m===mod?'<span class="ec-badge">último usado</span>':''}
+      <span class="ec-go">Entrar →</span>
+    </button>`;
+  return `
+  <div class="entry">
+    <div class="entry-brand"><span class="entry-logo">🌱</span>
+      <div><div class="entry-title">Planejamento de Safra</div><div class="entry-sub">Safra 2026/2027 · favbalança</div></div></div>
+    <h1 class="entry-h">Como você vai usar agora?</h1>
+    <div class="entry-cards">
+      ${card('planejamento','📋','Planejamento','Talhões, insumos, compras, cotação, máquinas e DRE. Monte e ajuste o plano da safra.','ec-plan')}
+      ${card('campo','🧑‍🌾','Campo','Veja o planejado e informe o realizado de cada operação, direto na lavoura.','ec-campo')}
+    </div>
+    <p class="entry-foot">Dá para trocar de módulo a qualquer momento pelo seletor no topo. <span class="mut">v${APP_VERSION}</span></p>
+  </div>`;
+};
+
 /* ================= MODO CAMPO (planejado × realizado) ================= */
 const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'} };
 function opsDoTalhao(t){
@@ -881,7 +905,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
@@ -890,6 +914,7 @@ function route(){
   const vm=VIEW_MOD[view]||'planejamento';
   if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
   applyModule();
+  document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
@@ -1114,6 +1139,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='realStatus'){ const r=realEnsure(a.key); r.status=a.val; realClean(a.key); saveOverrides(); route(); }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
+    else if(a.act==='pickmod'){ const m=a.mod; localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
@@ -1484,7 +1510,7 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
   applyModule();
-  if(!location.hash) location.hash=moduleHome(currentModule());
+  if(!location.hash) location.hash='#/inicio';   // porta de entrada: escolher o módulo
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
