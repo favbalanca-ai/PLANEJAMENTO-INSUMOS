@@ -230,11 +230,12 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .sidebar{width:100%;height:auto;position:fixed;bottom:0;left:0;top:auto;z-index:20;flex-direction:row;
     background:#16404d;border-top:1px solid rgba(255,255,255,.12);box-shadow:0 -2px 10px rgba(0,0,0,.15)}
   .brand,.sidebar-foot{display:none}
-  #nav{flex-direction:row;overflow-x:auto;padding:6px 6px;gap:2px;flex:1;-webkit-overflow-scrolling:touch}
-  #nav a{flex-direction:column;gap:2px;padding:6px 9px;border-radius:10px;min-width:60px;text-align:center}
-  #nav a .ico{font-size:19px;width:auto}
+  /* todos os 8 itens cabem na largura da tela (sem rolar de lado) */
+  #nav{display:grid;grid-template-columns:repeat(8,1fr);overflow:visible;padding:6px 3px;gap:1px;flex:1}
+  #nav a{flex-direction:column;gap:2px;padding:6px 1px;border-radius:9px;min-width:0;text-align:center}
+  #nav a .ico{font-size:18px;width:auto}
   #nav a .lbl{display:none}
-  #nav a .lbl-s{display:inline;font-size:9.5px;line-height:1.1;white-space:nowrap}
+  #nav a .lbl-s{display:block;font-size:9px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:66px}
   .topbar{padding:12px 14px}#page-title{font-size:17px}.safra-chip{display:none}
   .content{padding:14px 12px 24px}
@@ -404,7 +405,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-3';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-4';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 let DATA = null;          // dados base (data.json)
 let OV = null;            // overrides do usuário
