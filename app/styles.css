@@ -32,12 +32,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 .topbar{display:flex;align-items:center;justify-content:flex-start;gap:14px;padding:16px 26px;
   background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
 #page-title{font-size:19px;font-weight:700;color:var(--ink);margin-right:auto}
-/* seletor de módulo (Planejamento × Campo) */
-.mod-switch{display:inline-flex;background:#eef2f3;border-radius:11px;padding:3px;gap:2px;flex:none}
-.mod-switch button{border:none;background:none;padding:7px 14px;border-radius:9px;font-size:13px;font-weight:700;
-  color:var(--muted);cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
-.mod-switch button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
-.mod-switch .ms-ico{font-size:15px}
+/* módulo atual + botão trocar (Planejamento × Campo) */
+.mod-cur{display:inline-flex;align-items:center;gap:7px;background:var(--teal-soft);color:var(--ink);
+  font-weight:800;font-size:14px;padding:7px 13px;border-radius:11px;white-space:nowrap}
+.mod-cur .mc-ico{font-size:16px}
+.mod-trocar{flex:none;white-space:nowrap}
 
 /* ===== Tela inicial (porta de entrada) ===== */
 body[data-view="inicio"] .sidebar,
@@ -60,6 +59,8 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
+.ec-list{list-style:none;margin:4px 0 2px;padding:0;display:flex;flex-wrap:wrap;gap:5px 6px}
+.ec-list li{font-size:11.5px;font-weight:600;color:var(--ink2);background:#f1f5f6;border:1px solid var(--line);border-radius:20px;padding:3px 9px}
 .ec-go{margin-top:8px;font-weight:700;color:var(--ink2);font-size:14px}
 .ec-badge{position:absolute;top:14px;right:14px;font-size:10.5px;font-weight:700;background:var(--teal-soft);color:var(--ink2);padding:3px 9px;border-radius:20px}
 .entry-foot{text-align:center;margin-top:28px;font-size:12px;color:var(--muted)}
@@ -157,6 +158,28 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .camp-obs{margin-top:12px}
 .camp-obs label{display:block;font-size:12px;color:var(--muted);font-weight:700;margin-bottom:4px}
 .camp-obs textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px;font-family:inherit;resize:vertical}
+/* recomendação de aplicação (Campo) */
+.camp-app{margin:12px 0 0;border:1px solid var(--line);border-radius:10px;background:var(--teal-soft);overflow:hidden}
+.camp-app-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 14px;
+  cursor:pointer;list-style:none;font-weight:700;color:var(--ink);font-size:14px}
+.camp-app-sum::-webkit-details-marker{display:none}
+.camp-app-in{padding:4px 14px 14px;background:#fff}
+.app-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px 12px;margin:12px 0}
+.app-grid label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
+.app-grid input,.app-grid select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:15px;color:var(--ink);font-weight:400}
+.app-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:6px 0 12px}
+.app-stat{background:var(--teal-soft);border-radius:10px;padding:9px 12px}
+.app-stat span{display:block;font-size:11px;color:var(--muted);font-weight:600}
+.app-stat b{font-size:16px;color:var(--ink)}
+.app-ins{width:100%;border-collapse:collapse}
+.app-ins th{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+.app-ins th.num,.app-ins td.num{text-align:right}
+.app-ins td{padding:6px 8px;border-bottom:1px solid var(--line);font-size:13px}
+.app-ins small{color:var(--muted)}
+.app-note{font-size:12px;color:var(--ink2);margin-top:10px}
+.camp-app:not([open]) .panel-chevron,.camp-app .panel-chevron{transition:transform .15s}
+.camp-app[open] .panel-chevron{transform:rotate(90deg)}
+.camp-app:not([open])>*:not(summary){display:none!important}
 
 /* Cards / panels */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
@@ -334,9 +357,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:66px}
   .topbar{padding:10px 12px;gap:8px}.safra-chip{display:none}
-  #page-title{display:none}   /* no celular o seletor de módulo + a barra de baixo já indicam onde você está */
-  .mod-switch{flex:1;margin-right:auto}
-  .mod-switch button{flex:1;justify-content:center;padding:9px 8px;font-size:12.5px}
+  #page-title{display:none}   /* no celular o módulo atual + a barra de baixo já indicam onde você está */
+  .mod-cur{margin-right:auto}
   .content{padding:14px 12px 24px}
   .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
   .kpi{padding:13px 14px}.kpi .k-value{font-size:20px}

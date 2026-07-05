@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-8';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-9';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -11,10 +11,12 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
 function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campo':'#/dashboard'; }
+const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'} };
 function applyModule(){
   const m=currentModule();
   document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
-  document.querySelectorAll('#mod-switch button').forEach(b=>b.classList.toggle('on',b.dataset.mod===m));
+  const cur=document.getElementById('mod-cur');
+  if(cur){ const info=MOD_INFO[m]; cur.innerHTML=`<span class="mc-ico">${info.ico}</span><span class="mc-name">${info.nome}</span>`; }
   document.body.dataset.mod=m;
 }
 let DATA = null;          // dados base (data.json)
@@ -764,11 +766,12 @@ V.empreendimentos = function(arg){
 /* ================= TELA INICIAL (porta de entrada: Planejamento × Campo) ================= */
 V.inicio = function(){
   const m=currentModule();
-  const card=(mod,ico,nome,desc,hoverCls)=>`
+  const card=(mod,ico,nome,desc,itens,hoverCls)=>`
     <button class="entry-card ${hoverCls}" data-act="pickmod" data-mod="${mod}">
       <span class="ec-ico">${ico}</span>
       <span class="ec-name">${nome}</span>
       <span class="ec-desc">${desc}</span>
+      <ul class="ec-list">${itens.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>
       ${m===mod?'<span class="ec-badge">último usado</span>':''}
       <span class="ec-go">Entrar →</span>
     </button>`;
@@ -778,10 +781,12 @@ V.inicio = function(){
       <div><div class="entry-title">Planejamento de Safra</div><div class="entry-sub">Safra 2026/2027 · favbalança</div></div></div>
     <h1 class="entry-h">Como você vai usar agora?</h1>
     <div class="entry-cards">
-      ${card('planejamento','📋','Planejamento','Talhões, insumos, compras, cotação, máquinas e DRE. Monte e ajuste o plano da safra.','ec-plan')}
-      ${card('campo','🧑‍🌾','Campo','Veja o planejado e informe o realizado de cada operação, direto na lavoura.','ec-campo')}
+      ${card('planejamento','📋','Planejamento','Monte e ajuste o plano da safra.',
+        ['Painel','Talhões','Empreendimentos','Demanda de Compras','Cotação','Máquinas','DRE'],'ec-plan')}
+      ${card('campo','🧑‍🌾','Campo','Execute e registre as operações na lavoura.',
+        ['Operação de Campo','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
     </div>
-    <p class="entry-foot">Dá para trocar de módulo a qualquer momento pelo seletor no topo. <span class="mut">v${APP_VERSION}</span></p>
+    <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
   </div>`;
 };
 
@@ -795,9 +800,49 @@ function opsDoTalhao(t){
   return out;
 }
 function realOf(key){ return OV.realizado[key]||null; }
-function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[]}); }
+function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{}}); }
+function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
-  && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null))) delete OV.realizado[key]; }
+  && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)) delete OV.realizado[key]; }
+// localiza operação a partir da chave "TL|tagOp"
+function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), tagoi=key.slice(i+1);
+  const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
+  const op=(opsOf(talId,seq)||[])[oi]; return {talId,tagoi,op}; }
+// duração entre "HH:MM" e "HH:MM" (em horas, atravessa a meia-noite se fim<início)
+function durHoras(a,b){ if(!a||!b) return null; const pa=a.split(':'),pb=b.split(':');
+  let mi=(+pa[0])*60+(+pa[1]), mf=(+pb[0])*60+(+pb[1]); if(mf<mi) mf+=1440; return (mf-mi)/60; }
+// recomendação de aplicação: calda total, nº de tanques e volumes por insumo (planejado/realizado)
+function campoAppOut(talId, tagoi, opItens, r){
+  const t=findTalhao(talId); if(!t) return '';
+  const area=areaDe(t), app=r.app||{};
+  const vazao=+app.vazao||0, tanque=+app.tanque||0;
+  const caldaTotal=vazao>0?vazao*area:0;
+  const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
+  const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
+  const dur=durHoras(app.hIni,app.hFim);
+  const items=effItems(talId,tagoi,opItens).map(it=>{
+    const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
+    return {produto:it.produto,un:it.un,dose};
+  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})));
+  const rows=items.filter(x=>x.produto).map(x=>{
+    const total=x.dose*area, porT=x.dose*haPorTanque;
+    return `<tr><td>${esc(x.produto)}</td>
+      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td>
+      <td class="num">${haPorTanque?num(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`;
+  }).join('');
+  const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
+  return `
+    <div class="app-stats">
+      ${stat('Área do talhão',num(area)+' ha')}
+      ${stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—')}
+      ${stat('Nº de tanques',nT?nT+' × '+num(tanque)+' L':'—')}
+      ${stat('Duração',dur!=null?nf1.format(dur)+' h':'—')}
+    </div>
+    <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Total na área</th><th class="num">Por tanque</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="3" class="mut" style="padding:6px 8px">Preencha as doses realizadas.</td></tr>'}</tbody></table>
+    ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão).</p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volumes por insumo.</p>'}`;
+}
 function campoProgress(){
   let total=0, done=0, running=0;
   talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ total++; const r=realOf(o.key);
@@ -847,6 +892,22 @@ V.campo = function(arg){
         <tbody>${insRows||'<tr><td colspan="3" class="mut" style="padding:8px 10px">Sem insumos planejados nesta operação.</td></tr>'}${extrasRows}</tbody>
       </table></div>
       <button class="btn btn-outline btn-sm" data-act="realAddExtra" data-key="${esc(o.key)}">+ insumo extra</button>
+      <details class="camp-app panel-collapse">
+        <summary class="camp-app-sum"><span>🚿 Recomendação de aplicação</span><span class="panel-chevron">▸</span></summary>
+        <div class="camp-app-in">
+          <div class="app-grid">
+            <label>Máquina<select class="sel" data-edit="realApp" data-field="maq" data-key="${esc(o.key)}">
+              <option value="">— máquina —</option>
+              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${((r.app&&r.app.maq!=null?r.app.maq:(opMaqDe(t.id,o.tag,o.oi,o.op)||''))===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
+            </select></label>
+            <label>Volume do tanque (L)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
+            <label>Vazão (L/ha)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
+            <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hIni)||'')}"></label>
+            <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hFim)||'')}"></label>
+          </div>
+          <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
+        </div>
+      </details>
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
     </div>`;
   }).join('') || '<div class="mut" style="padding:14px">Este talhão não tem operações planejadas.</div>';
@@ -974,6 +1035,16 @@ function applyEdit(el){
     const r=realEnsure(el.dataset.key); (r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={})).produto=v;
     realClean(el.dataset.key); saveOverrides(); return;
   }
+  if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
+    const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
+    if(f==='vazao'||f==='tanque'){ const val=el.value.trim().replace(',','.'); r.app[f]=val===''?null:parseFloat(val); }
+    else { r.app[f]=el.value; }
+    realClean(el.dataset.key); saveOverrides();
+    // atualiza só o quadro de cálculo (sem re-render, para não rolar a tela)
+    const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]');
+    if(box) box.innerHTML=campoAppOut(fk.talId, fk.tagoi, fk.op?fk.op.itens:[], (OV.realizado[el.dataset.key]||r));
+    return;
+  }
   if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
     const val=el.value.trim().replace(',','.'), q=val===''?null:parseFloat(val);
     const r=realEnsure(el.dataset.key);
@@ -1075,8 +1146,6 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('click',e=>{
-  const ms=e.target.closest('#mod-switch button'); if(ms){ const m=ms.dataset.mod;
-    localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); return; }
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
   const act=e.target.closest('[data-act]');
   if(act){
