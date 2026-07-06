@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-16';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-17';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -1636,6 +1636,17 @@ async function syncPull(opts){
       toast(aborted?'Planilha lenta — tente puxar de novo':'Falha ao puxar');
     } }
 }
+// POST com timeout longo (120s) + 1 tentativa extra (rede instável / Apps Script lento)
+async function syncPost(url, body){
+  let lastErr;
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body},120000);
+      return await r.json();
+    }catch(e){ lastErr=e; if(attempt===0) await new Promise(res=>setTimeout(res,1500)); }
+  }
+  throw lastErr;
+}
 // ENVIAR — app -> planilha. opts.auto = disparado por edição (silencioso; deduplica)
 async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
@@ -1646,8 +1657,15 @@ async function syncPush(opts){
   syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
-    const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(eds)},60000);
-    const res=await r.json();
+    // envia em lotes (cada requisição menor = mais rápida e não estoura o timeout)
+    const CHUNK=40; let ok=0, fail=0, msgs=[];
+    for(let i=0;i<eds.length;i+=CHUNK){
+      const part=eds.slice(i,i+CHUNK);
+      if(!opts.auto && eds.length>CHUNK) syncLog(`⏳ Enviando ${Math.min(i+CHUNK,eds.length)}/${eds.length}…`);
+      const pr=await syncPost(url, JSON.stringify(part));
+      ok+=(pr.ok||0); fail+=(pr.fail||0); if(pr.msgs&&pr.msgs.length) msgs=msgs.concat(pr.msgs);
+    }
+    const res={ok,fail,msgs};
     lastPushSig=sig; lastPushOk=(res.fail===0);   // se houve falha, permite novo reenvio depois
     addHist('push', res.fail===0, `${res.ok} gravadas, ${res.fail} falhas`);
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
@@ -1665,8 +1683,12 @@ async function syncPush(opts){
     }
     syncBusy=false; setSyncStatus('ok');
   }catch(e){ syncBusy=false; setSyncStatus('err');
-    addHist('push',false,'Erro: '+(e&&e.message||''));
-    if(!opts.auto){ syncLog('✖ Erro ao enviar: '+e.message); toast('Falha ao enviar'); } }
+    const aborted=/abort|failed to fetch/i.test(e&&e.message||'');
+    addHist('push',false, aborted?'Tempo esgotado — tente enviar de novo':('Erro: '+(e&&e.message||'')));
+    if(!opts.auto){
+      syncLog(aborted?'✖ A planilha demorou demais para gravar. Toque em "Enviar agora" de novo — as edições que já entraram não se perdem.':'✖ Erro ao enviar: '+e.message);
+      toast(aborted?'Planilha lenta — tente enviar de novo':'Falha ao enviar');
+    } }
 }
 // agenda um envio automático (debounce) após edições
 function scheduleAutoPush(){
