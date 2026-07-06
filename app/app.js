@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.05-15';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.05-16';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -1046,7 +1046,8 @@ V.sync = function(){
 
 /* ================= ROUTER ================= */
 const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
-function route(){
+function route(opts){
+  const keepScroll = opts && opts.keepScroll===true;   // re-render silencioso (sync) não rola pro topo
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
   const fn=V[view];
@@ -1059,7 +1060,13 @@ function route(){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
-  $('.main').scrollTop=0; window.scrollTo(0,0);
+  if(!keepScroll){ $('.main').scrollTop=0; window.scrollTo(0,0); }
+}
+// está editando? (campo focado ou digitou há pouco) — usado para não puxar/re-renderizar por cima
+function isEditing(){
+  const a=document.activeElement;
+  if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return true;
+  return (Date.now()-lastInputTs) < 6000;
 }
 
 /* ================= EVENTOS ================= */
@@ -1451,7 +1458,7 @@ const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização auto
 const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
 let syncBusy=false, pushTimer=null, pollTimer=null;
-let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true;
+let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false;
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
@@ -1614,7 +1621,11 @@ async function syncPull(opts){
     addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões`);
     if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
-    syncBusy=false; route(); setSyncStatus('ok');
+    syncBusy=false; setSyncStatus('ok');
+    // re-render: manual = normal; automático = só se você NÃO estiver mexendo, e sem rolar a tela
+    if(!opts.auto){ route(); }
+    else if(!isEditing()){ pendingRerender=false; route({keepScroll:true}); }
+    else { pendingRerender=true; }   // você está editando: aplica os dados agora, atualiza a tela quando parar
   }catch(e){ syncBusy=false; setSyncStatus('err');
     const aborted=/abort/i.test(e&&e.message||'');
     addHist('pull',false, aborted?'Tempo esgotado (planilha lenta)':('Erro: '+(e&&e.message||'')));
@@ -1667,9 +1678,11 @@ function scheduleAutoPush(){
 function pollTick(){
   if(!syncUrl()||!autoOn()||syncBusy) return;
   if(document.visibilityState!=='visible') return;
-  if(Date.now()-lastInputTs < 4000) return;        // usuário digitando: não puxa agora
-  // com edições pendentes: envia (o puxar agora é seguro e não apaga o que não foi salvo)
-  if(buildFieldEdits().length>0) scheduleAutoPush();
+  if(isEditing()) return;                          // você está mexendo: não mexe na tela
+  // ficou pendente uma atualização enquanto você editava? aplica agora que parou (sem rolar)
+  if(pendingRerender){ pendingRerender=false; route({keepScroll:true}); }
+  // com edições pendentes: só ENVIA, não puxa (evita qualquer atropelo do que ainda não foi salvo)
+  if(buildFieldEdits().length>0){ scheduleAutoPush(); return; }
   syncPull({auto:true, silentToast:true});
 }
 function startPolling(){
