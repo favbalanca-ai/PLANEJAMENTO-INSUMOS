@@ -83,64 +83,132 @@ function readOpsArr(big, r0, r1){
   return ops.filter(function(o){ return o.itens.length; });
 }
 
-/* ----------------------------- ESCRITA ----------------------------- */
-function applyEdit(ed){
-  if (ed.type === 'estoque' || ed.type === 'preco'){
-    var P = sh('PORTIFÓLIO'), col = ed.type === 'estoque' ? 20 : 19;
-    var rr = findRow(P, 3, 4, 433, ed.produto);
-    if (!rr) throw 'produto não encontrado: ' + ed.produto;
-    P.getRange(rr, col).setValue(ed.value);
-  } else if (ed.type === 'pedido'){
-    var Pp = sh('PORTIFÓLIO');
-    var rp = findRow(Pp, 3, 4, 433, ed.produto);
-    if (!rp) throw 'produto não encontrado: ' + ed.produto;
-    Pp.getRange(rp, pedidoColOf(Pp)).setValue(ed.value); // coluna EM PEDIDO
-  } else if (ed.type === 'area' || ed.type === 'produtividade'){
-    var A = sh('ÁREA PLANTIO'), col2 = ed.type === 'area' ? 5 : 4;
-    var rr2 = findRow(A, 1, 2, A.getLastRow(), ed.talhao);
-    if (!rr2) throw 'talhão não encontrado: ' + ed.talhao;
-    A.getRange(rr2, col2).setValue(ed.value);
-  } else if (ed.type === 'empreendimento' || ed.type === 'emp_safrinha' || ed.type === 'prod_safrinha'){
-    var Ae = sh('ÁREA PLANTIO');
-    var re = findRow(Ae, 1, 2, Ae.getLastRow(), ed.talhao);
-    if (!re) throw 'talhão não encontrado: ' + ed.talhao;
-    var colE = ed.type === 'empreendimento' ? 3 : (ed.type === 'emp_safrinha' ? 8 : 9); // C / H / I
-    Ae.getRange(re, colE).setValue(ed.type === 'prod_safrinha' ? N(ed.value) : S(ed.value));
-    // obs.: a aba do talhão (B3) costuma referenciar 'ÁREA PLANTIO'!C por fórmula — não sobrescrever
-  } else if (ed.type === 'itemprod'){
-    var si = sh(ed.talhao); if (!si) throw 'aba não encontrada: ' + ed.talhao;
-    var fi = ed.tag === 'S' ? [238, 451] : [10, 224];
-    var ri = itemRowByName(si, fi[0], fi[1], ed.op, ed.from);
-    if (!ri) throw 'insumo não localizado (troca): ' + ed.from;
-    si.getRange(ri, 2, 1, 2).setDataValidation(null);         // tira a validação de B e C nesta linha
-    si.getRange(ri, 3).setValue(S(ed.to));                    // C = produto novo (D preenche por fórmula)
-    if (ed.classe) si.getRange(ri, 2).setValue(S(ed.classe)); // B = classe
-  } else if (ed.type === 'dose'){
-    var s = sh(ed.talhao); if (!s) throw 'aba não encontrada: ' + ed.talhao;
-    var faixa = ed.tag === 'S' ? [238, 451] : [10, 224];
-    var row = itemRow(s, faixa[0], faixa[1], ed.op, ed.item);
-    if (!row) throw 'insumo não localizado em ' + ed.talhao + ' (op ' + ed.op + ', item ' + ed.item + ')';
-    s.getRange(row, 9).setValue(ed.value); // I = dose/ha
-  } else if (ed.type === 'additem'){
-    var sa = sh(ed.talhao); if (!sa) throw 'aba não encontrada: ' + ed.talhao;
-    var fa = ed.tag === 'S' ? [238, 451] : [10, 224];
-    // idempotente: se o produto já existe na operação, atualiza a linha dele; senão usa a 1ª vazia
-    var nr = itemRowByName(sa, fa[0], fa[1], ed.op, ed.produto);
-    if (!nr) nr = emptyItemRow(sa, fa[0], fa[1], ed.op);
-    if (!nr) throw 'sem linha vazia na operação ' + ed.op + ' de ' + ed.talhao;
-    sa.getRange(nr, 2, 1, 2).setDataValidation(null); // tira a validação (listas) de B e C nesta linha
-    sa.getRange(nr, 3).setValue(S(ed.produto)); // C = produto (D preenche o ativo por fórmula)
-    sa.getRange(nr, 9).setValue(N(ed.dose));    // I = dose/ha
-    if (ed.classe) sa.getRange(nr, 2).setValue(S(ed.classe)); // B = classe
-  } else if (ed.type === 'delitem'){
-    var sx = sh(ed.talhao); if (!sx) throw 'aba não encontrada: ' + ed.talhao;
-    var fx = ed.tag === 'S' ? [238, 451] : [10, 224];
-    var dr = itemRowByName(sx, fx[0], fx[1], ed.op, ed.produto);
-    if (dr){ sx.getRange(dr, 2).clearContent(); sx.getRange(dr, 3).clearContent(); sx.getRange(dr, 9).clearContent(); }
-    // se não achou (já removido), não falha — o objetivo (insumo ausente) já está atendido
-  } else {
-    throw 'tipo desconhecido: ' + ed.type;
+/* ----------------------------- ESCRITA (EM LOTE) -----------------------------
+   Agrupa as edições por aba e faz 1 leitura + escrita em bloco por aba, em vez
+   de reler a aba e gravar célula por célula a cada edição. Bem mais rápido.
+   Não toca em colunas de fórmula (D na aba do talhão; B2/B3; preço na PORTIFÓLIO). */
+function applyEditsBatch(edits, out){
+  var byTalhao = {}, port = [], area = [];
+  edits.forEach(function(ed){
+    var t = ed.type;
+    if (t === 'estoque' || t === 'preco' || t === 'pedido') port.push(ed);
+    else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
+    else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
+    else { out.fail++; if (out.msgs.length < 10) out.msgs.push('tipo/sem talhão: ' + t); }
+  });
+  if (port.length) applyPortifolio(port, out);
+  if (area.length) applyAreaPlantio(area, out);
+  for (var tid in byTalhao) applyTalhao(tid, byTalhao[tid], out);
+}
+
+// PORTIFÓLIO: estoque (T=20) e EM PEDIDO em bloco; preço (S=19) individual (é fórmula/import)
+function applyPortifolio(edits, out){
+  var P = sh('PORTIFÓLIO');
+  if (!P){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba PORTIFÓLIO não encontrada'); return; }
+  var pcol = pedidoColOf(P), r0 = 4, r1 = 433, nn = r1 - r0 + 1;
+  var cvals = P.getRange(r0, 3, nn, 1).getValues();     // C = produto (mapa)
+  var map = {};
+  for (var i = 0; i < nn; i++){ var pr = S(cvals[i][0]); if (pr && !(pr in map)) map[pr] = r0 + i; }
+  var est = P.getRange(r0, 20, nn, 1).getValues(), estDirty = false;
+  var ped = P.getRange(r0, pcol, nn, 1).getValues(), pedDirty = false;
+  edits.forEach(function(ed){
+    try {
+      var L = map[S(ed.produto)]; if (!L) throw 'produto não encontrado: ' + ed.produto;
+      var idx = L - r0;
+      if (ed.type === 'estoque'){ est[idx][0] = ed.value; estDirty = true; }
+      else if (ed.type === 'pedido'){ ped[idx][0] = ed.value; pedDirty = true; }
+      else if (ed.type === 'preco'){ P.getRange(L, 19).setValue(ed.value); }
+      out.ok++;
+    } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
+  });
+  if (estDirty) P.getRange(r0, 20, nn, 1).setValues(est);
+  if (pedDirty) P.getRange(r0, pcol, nn, 1).setValues(ped);
+}
+
+// ÁREA PLANTIO: poucas edições (por talhão) — grava individual, mas lê o índice de IDs 1 vez
+function applyAreaPlantio(edits, out){
+  var A = sh('ÁREA PLANTIO');
+  if (!A){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba ÁREA PLANTIO não encontrada'); return; }
+  var last = A.getLastRow(), idv = A.getRange(2, 1, Math.max(1, last - 1), 1).getValues(), map = {};
+  for (var i = 0; i < idv.length; i++){ var id = S(idv[i][0]); if (id && !(id in map)) map[id] = 2 + i; }
+  edits.forEach(function(ed){
+    try {
+      var L = map[S(ed.talhao)]; if (!L) throw 'talhão não encontrado: ' + ed.talhao;
+      if (ed.type === 'area') A.getRange(L, 5).setValue(N(ed.value));
+      else if (ed.type === 'produtividade') A.getRange(L, 4).setValue(N(ed.value));
+      else if (ed.type === 'empreendimento') A.getRange(L, 3).setValue(S(ed.value));
+      else if (ed.type === 'emp_safrinha') A.getRange(L, 8).setValue(S(ed.value));
+      else if (ed.type === 'prod_safrinha') A.getRange(L, 9).setValue(N(ed.value));
+      out.ok++;
+    } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
+  });
+}
+
+// aba do talhão: 1 leitura do bloco (1..9), aplica tudo em memória, grava B:C e I de volta
+function applyTalhao(tid, edits, out){
+  var s = sh(tid);
+  if (!s){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba não encontrada: ' + tid); return; }
+  var n = Math.min(451, s.getMaxRows());
+  var vals = s.getRange(1, 1, n, 9).getValues();   // 0-based: linha L -> vals[L-1]
+  var dirty = false;
+  edits.forEach(function(ed){
+    try {
+      var faixa = ed.tag === 'S' ? [238, Math.min(451, n)] : [10, Math.min(224, n)];
+      var op = opByIndex(vals, faixa[0], faixa[1], ed.op);
+      if (ed.type === 'dose'){
+        if (!op) throw 'operação não encontrada (dose)';
+        var prodRows = op.body.filter(function(L){ return S(vals[L - 1][2]); });
+        var Ld = prodRows[ed.item]; if (!Ld) throw 'insumo não localizado (dose, item ' + ed.item + ')';
+        vals[Ld - 1][8] = ed.value; dirty = true; out.ok++;                 // I (col 9)
+      } else if (ed.type === 'itemprod'){
+        if (!op) throw 'operação não encontrada (troca)';
+        var Lp = findInOp(vals, op, ed.from); if (!Lp) throw 'insumo não localizado (troca): ' + ed.from;
+        vals[Lp - 1][2] = S(ed.to);                                         // C
+        if (ed.classe) vals[Lp - 1][1] = S(ed.classe);                      // B
+        dirty = true; out.ok++;
+      } else if (ed.type === 'additem'){
+        if (!op) throw 'operação não encontrada (add)';
+        var La = findInOp(vals, op, ed.produto) || firstEmptyInOp(vals, op);
+        if (!La) throw 'sem linha vazia na operação';
+        vals[La - 1][2] = S(ed.produto);                                    // C
+        vals[La - 1][8] = N(ed.dose);                                       // I
+        if (ed.classe) vals[La - 1][1] = S(ed.classe);                      // B
+        dirty = true; out.ok++;
+      } else if (ed.type === 'delitem'){
+        if (op){ var Lx = findInOp(vals, op, ed.produto);
+          if (Lx){ vals[Lx - 1][1] = ''; vals[Lx - 1][2] = ''; vals[Lx - 1][8] = ''; dirty = true; } }
+        out.ok++;                                                           // idempotente
+      } else { throw 'tipo desconhecido p/ talhão: ' + ed.type; }
+    } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
+  });
+  if (dirty){
+    var wr0 = 10, wn = n - wr0 + 1;                 // só as faixas das operações (não toca em B2/B3)
+    var bc = [], ii = [];
+    for (var L = wr0; L <= n; L++){ bc.push([vals[L - 1][1], vals[L - 1][2]]); ii.push([vals[L - 1][8]]); }
+    s.getRange(wr0, 2, wn, 2).clearDataValidations();   // tira validações de B:C do bloco de uma vez
+    s.getRange(wr0, 2, wn, 2).setValues(bc);            // B:C
+    s.getRange(wr0, 9, wn, 1).setValues(ii);            // I (dose) — D fica intacta (fórmula)
   }
+}
+
+// operação opIdx (contando só operações COM itens — igual ao app) dentro da faixa, no array em memória
+function opByIndex(vals, r0, r1, opIdx){
+  var blocks = [], cur = null;
+  for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (!row) continue;
+    var a = S(row[0]);
+    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
+    else if (cur){ cur.body.push(L); if (S(row[2])) cur.has = true; }
+  }
+  var withItems = blocks.filter(function(b){ return b.has; });
+  return withItems[opIdx] || null;
+}
+function findInOp(vals, op, produto){
+  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (S(vals[L - 1][2]) === S(produto)) return L; }
+  return 0;
+}
+function firstEmptyInOp(vals, op){
+  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (!S(vals[L - 1][2])) return L; }
+  return 0;
 }
 
 // coluna "EM PEDIDO" na PORTIFÓLIO: acha pelo cabeçalho (linha 3); se não existir, cria em W (23)
@@ -155,54 +223,6 @@ function pedidoColOf(P){
   return 23;
 }
 
-// linha do insumo (pela classe/produto) dentro do bloco da operação opIdx
-function itemRowByName(s, r0, r1, opIdx, produto){
-  var rows = s.getRange(r0, 1, r1 - r0 + 1, 3).getValues(), blocks = [], cur = null;
-  for (var i = 0; i < rows.length; i++){
-    var a = S(rows[i][0]);
-    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
-    else if (cur){ cur.body.push(i); if (S(rows[i][2])) cur.has = true; }
-  }
-  var withItems = blocks.filter(function(b){ return b.has; });
-  var b = withItems[opIdx];
-  if (!b) return 0;
-  for (var j = 0; j < b.body.length; j++){ if (S(rows[b.body[j]][2]) === S(produto)) return r0 + b.body[j]; }
-  return 0;
-}
-
-// primeira linha vazia (coluna C) dentro do bloco da operação opIdx (blocos contam só operações com itens — igual ao app)
-function emptyItemRow(s, r0, r1, opIdx){
-  var rows = s.getRange(r0, 1, r1 - r0 + 1, 3).getValues(), blocks = [], cur = null;
-  for (var i = 0; i < rows.length; i++){
-    var a = S(rows[i][0]);
-    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
-    else if (cur){ cur.body.push(i); if (S(rows[i][2])) cur.has = true; }
-  }
-  var withItems = blocks.filter(function(b){ return b.has; });
-  var b = withItems[opIdx];
-  if (!b) return 0;
-  for (var j = 0; j < b.body.length; j++){ if (!S(rows[b.body[j]][2])) return r0 + b.body[j]; }
-  return 0; // bloco cheio (sem linha livre)
-}
-
-function findRow(s, col, r0, r1, alvo){
-  var vals = s.getRange(r0, col, r1 - r0 + 1, 1).getValues();
-  for (var i = 0; i < vals.length; i++){ if (S(vals[i][0]) === S(alvo)) return r0 + i; }
-  return 0;
-}
-
-// linha da célula de dose do item (opIdx/itemIdx contam só operações com itens — igual ao app)
-function itemRow(s, r0, r1, opIdx, itemIdx){
-  var rows = s.getRange(r0, 1, r1 - r0 + 1, 3).getValues(), ops = [], cur = null;
-  for (var i = 0; i < rows.length; i++){
-    var a = S(rows[i][0]), prod = S(rows[i][2]);
-    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = []; ops.push(cur); }
-    if (prod && cur) cur.push(r0 + i);
-  }
-  var f = ops.filter(function(o){ return o.length; });
-  return (f[opIdx] && f[opIdx][itemIdx] != null) ? f[opIdx][itemIdx] : 0;
-}
-
 /* ----------------------------- ENDPOINTS ----------------------------- */
 function json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
@@ -212,10 +232,7 @@ function doPost(e){
   var out = { ok:0, fail:0, msgs:[] };
   try {
     var edits = JSON.parse(e.postData.contents);
-    edits.forEach(function(ed){
-      try { applyEdit(ed); out.ok++; }
-      catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
-    });
+    applyEditsBatch(edits, out);      // grava em lote (rápido)
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
   return json(out);
 }
