@@ -219,3 +219,39 @@ function doPost(e){
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
   return json(out);
 }
+
+/* ------------------------- MANUTENÇÃO (rodar à mão) -------------------------
+   Remove as REGRAS de validação de dados (listas suspensas / "rejeitar entrada")
+   de TODAS as abas. NÃO apaga valores nem fórmulas — só tira as regras que fazem
+   a planilha recusar o que o app grava. Rode UMA vez pelo editor do Apps Script:
+   selecione "limparValidacoes" no menu de funções e clique em Executar
+   (autorize o acesso na 1ª vez). Não precisa reimplantar o Web App. */
+function limparValidacoes(){
+  var sheets = ss().getSheets(), n = 0, nomes = [];
+  sheets.forEach(function(s){
+    var rng = s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns());
+    rng.clearDataValidations();
+    n++; nomes.push(s.getName());
+  });
+  var msg = 'Validações removidas de ' + n + ' aba(s): ' + nomes.join(', ');
+  Logger.log(msg);
+  try { SpreadsheetApp.getActiveSpreadsheet().toast(msg, 'Pronto', 8); } catch (e) {}
+  return msg;
+}
+
+/* Versão só das abas que o app grava (talhões TL*, PORTIFÓLIO e ÁREA PLANTIO),
+   caso queira manter as listas das demais abas. */
+function limparValidacoesApp(){
+  var sheets = ss().getSheets(), n = 0, nomes = [];
+  sheets.forEach(function(s){
+    var nome = s.getName(), up = nome.toUpperCase();
+    if (up.indexOf('TL') === 0 || up === 'PORTIFÓLIO' || up === 'ÁREA PLANTIO') {
+      s.getRange(1, 1, s.getMaxRows(), s.getMaxColumns()).clearDataValidations();
+      n++; nomes.push(nome);
+    }
+  });
+  var msg = 'Validações removidas de ' + n + ' aba(s): ' + nomes.join(', ');
+  Logger.log(msg);
+  try { SpreadsheetApp.getActiveSpreadsheet().toast(msg, 'Pronto', 8); } catch (e) {}
+  return msg;
+}
