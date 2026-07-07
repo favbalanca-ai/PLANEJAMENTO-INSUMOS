@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-18';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-19';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -45,7 +45,7 @@ function loadOverrides(){
   OV.talhaoRemoved = OV.talhaoRemoved || {}; // idBase -> true (talhão base ocultado)
   OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
-  OV.opAdd         = OV.opAdd         || {}; // talhao -> {P:[nomes], S:[nomes]} operações criadas
+  OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
@@ -236,10 +236,16 @@ const temSafrinha = t => !!String(empSafDe(t)||'').trim();
 function prodSafDe(t){ const o=OV.talhao[t.id]; return o&&o.prod_safrinha!=null?+o.prod_safrinha:(t.prod_safrinha||0); }
 // operações de uma safra = base (planilha) + operações criadas no app
 function opsOf(tid, seq){
-  const tag=seq==='safrinha'?'S':'P';
-  const out=(planoDe(tid)[seq]||[]).slice();
-  ((OV.opAdd[tid]&&OV.opAdd[tid][tag])||[]).forEach(nome=>out.push({nome:nome, itens:[], _added:true}));
-  return out;
+  // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios
+  return (planoDe(tid)[seq]||[]).slice();
+}
+// quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
+const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
+function opsShownCount(tid, tag){
+  const seq=tag==='S'?'safrinha':'principal', all=(planoDe(tid)[seq]||[]);
+  let lastFilled=-1;
+  all.forEach((op,oi)=>{ if(effItems(tid,`${tag}${oi}`,op.itens).length) lastFilled=oi; });
+  return Math.min(all.length, Math.max(lastFilled+1, revealOps[`${tid}|${tag}`]||0));
 }
 // custo de insumos (R$/ha) de UMA safra do talhão
 function custoSeqHa(t,seq){
@@ -418,8 +424,13 @@ V.talhao = function(id){
       <td class="c-del c-more"><button class="icon-btn del" title="Excluir insumo" ${del}>🗑</button></td></tr>`;
   }
   function opsHtml(seq,tag,titulo,show){
-    const ops=opsOf(t.id,seq); if(!ops.length && !show) return '';
-    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${ops.length} operações</span></div>
+    const all=opsOf(t.id,seq);
+    const nShow=opsShownCount(t.id,tag);
+    const cnt = nShow>0 ? nShow : (show?1:0);
+    if(cnt===0) return '';
+    const ops=all.slice(0,cnt);
+    const canReveal = cnt < all.length;
+    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${cnt} de ${all.length} operações</span></div>
     ${ops.map((op,oi)=>{
       const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
       let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto));
@@ -446,7 +457,9 @@ V.talhao = function(id){
       <div class="op-add"><button class="btn btn-outline btn-sm" data-act="additem" data-id="${t.id}" data-op="${tagoi}">+ adicionar insumo</button></div>
       </div></div>`;
     }).join('')||'<div class="mut" style="padding:14px 18px 0">Nenhuma operação nesta safra ainda.</div>'}
-    <div class="op-add"><button class="btn btn-primary btn-sm" data-act="addop" data-id="${t.id}" data-tag="${tag}">+ adicionar operação</button></div>
+    <div class="op-add">${canReveal
+      ? `<button class="btn btn-primary btn-sm" data-act="addop" data-id="${t.id}" data-tag="${tag}">+ adicionar operação</button>`
+      : '<span class="mut" style="font-size:12px">As 12 operações da planilha já estão em uso.</span>'}</div>
     </div>`;
   }
   const empOpts=empList().filter(e=>e&&e!=='—').map(e=>`<option value="${esc(e)}">`).join('');
@@ -1239,9 +1252,10 @@ document.addEventListener('click',e=>{
     const a=act.dataset;
     if(a.act==='delitem'){ delItem(a); saveOverrides(); route(); }
     else if(a.act==='additem'){ const k=`${a.id}|${a.op}`; (OV.itemAdd[k]=OV.itemAdd[k]||[]).push({produto:'',dose:0}); saveOverrides(); route(); }
-    else if(a.act==='addop'){ const tid=a.id, tag=a.tag; OV.opAdd[tid]=OV.opAdd[tid]||{}; OV.opAdd[tid][tag]=OV.opAdd[tid][tag]||[];
-      const seq=tag==='S'?'safrinha':'principal', baseLen=(planoDe(tid)[seq]||[]).length;
-      OV.opAdd[tid][tag].push('OPERAÇÃO '+(baseLen+OV.opAdd[tid][tag].length+1)); saveOverrides(); route(); }
+    else if(a.act==='addop'){ const rk=`${a.id}|${a.tag}`;
+      const shown=opsShownCount(a.id,a.tag), seq=a.tag==='S'?'safrinha':'principal', total=(planoDe(a.id)[seq]||[]).length;
+      if(shown>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
+      revealOps[rk]=shown+1; route(); }
     else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
     else if(a.act==='bulkadd'){
       const prod=($('#ba-prod').value||'').trim();
@@ -1437,6 +1451,7 @@ function exportTalhaoPDF(id){
     let s=`<section><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>`;
     ops.forEach((op,oi)=>{
       const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
+      if(!items.length) return;   // não imprime operações vazias
       const conj=opMaqDe(t.id,tag,oi,op);
       s+=`<h3>${esc(op.nome)}${conj?` — 🚜 ${esc(conj)}`:''}</h3>
         <table><thead><tr><th>Classe</th><th>Insumo</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Custo/ha</th></tr></thead><tbody>`;
