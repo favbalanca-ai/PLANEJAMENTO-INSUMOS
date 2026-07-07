@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-17';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-18';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -32,7 +32,7 @@ function loadOverrides(){
   OV.pedido  = OV.pedido  || {};   // produto -> qtd já em pedido (abate da demanda; sincroniza com a coluna EM PEDIDO)
   OV.talhao  = OV.talhao  || {};   // id -> {area, produtividade}
   OV.dose    = OV.dose    || {};   // "TL|op|item" -> valor
-  OV.preco   = OV.preco   || {};   // produto -> preço
+  OV.preco   = {};   // preço não é mais editável no app — segue sempre a planilha (descarta ajustes locais antigos)
   OV.cultura = OV.cultura || {};   // empreendimento -> preço venda
   OV.maquina = OV.maquina || {};   // conjunto -> R$/HM
   OV.opMaq   = OV.opMaq   || {};   // "TL|tagOp" -> conjunto atribuído
@@ -57,7 +57,7 @@ function saveOverrides(){
 }
 function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.dose).length +
-         Object.keys(OV.preco).length + Object.keys(OV.cultura).length +
+         Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
          Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + (OV.diesel!==6.00?1:0) +
          Object.keys(OV.itemRemoved).length + Object.keys(OV.itemProd).length +
@@ -71,7 +71,7 @@ function countEdits(){
 /* ---------------- acessores (base + override) ---------------- */
 const estoqueDe = p => (p in OV.estoque) ? +OV.estoque[p] : (PROD[p] ? PROD[p].estoque : 0);
 const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : (PROD[p] ? (+PROD[p].pedido||0) : 0);
-const precoDe   = p => (p in OV.preco)   ? +OV.preco[p]   : (PROD[p] ? PROD[p].preco   : 0);
+const precoDe   = p => (PROD[p] ? PROD[p].preco : 0);   // preço SEMPRE da planilha (lista importada)
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
 function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null ? +o.produtividade : t.produtividade; }
 const doseKey = (tid,oi,ii)=>`${tid}|${oi}|${ii}`;
@@ -495,7 +495,7 @@ V.compras = function(){
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
     <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.pedido>0?r.pedido:''}" placeholder="0"></td>
-    <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}${(r.produto in OV.preco)?' <span class="classe-tag" title="preço ajustado na Cotação">ajustado</span>':''}</td>
+    <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
     <td class="c-more" data-th="Un">${esc(r.un)}</td>
@@ -543,7 +543,7 @@ V.cotacao = function(){
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
     <tbody>${its.map(r=>`<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
       <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td>
-      <td class="num"><input class="cell ${(r.produto in OV.preco)?'edited':''}" data-edit="preco" data-prod="${esc(r.produto)}" value="${r.preco>0?r.preco:''}" placeholder="preço"></td>
+      <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
       <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="5">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}</div>`;
@@ -1142,7 +1142,6 @@ function applyEdit(el){
   }
   const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
-  else if(kind==='preco'){ if(n==null||n===0) delete OV.preco[el.dataset.prod]; else OV.preco[el.dataset.prod]=n; }
   else if(kind==='pedido'){ if(n==null||n===0) delete OV.pedido[el.dataset.prod]; else OV.pedido[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
   else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
