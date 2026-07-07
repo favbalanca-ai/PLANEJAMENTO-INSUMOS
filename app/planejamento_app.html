@@ -574,7 +574,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-19';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-20';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -2044,7 +2044,7 @@ const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização auto
 const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
 let syncBusy=false, pushTimer=null, pollTimer=null;
-let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false;
+let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false, lastServerHash='';
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
@@ -2190,13 +2190,27 @@ async function syncGet(url, opts){
   }
   throw lastErr;
 }
+// checagem leve: pergunta só o "hash" dos dados (resposta minúscula, servidor usa cache)
+async function getServerHash(url){
+  try{
+    const bust=(url.indexOf('?')<0?'?':'&')+'h=1&t='+Date.now();
+    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},30000);
+    const j=await r.json(); return (j&&j.hash)||null;
+  }catch(e){ return null; }
+}
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   if(syncBusy) return; syncBusy=true; setSyncStatus('busy');
+  // automático: se nada mudou na planilha (mesmo hash), nem baixa o pacote grande
+  if(opts.auto && !opts.force && lastServerHash){
+    const h=await getServerHash(url);
+    if(h && h===lastServerHash){ syncBusy=false; setSyncStatus('ok'); markSynced(); return; }
+  }
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   try{
     const d=await syncGet(url,opts);
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
+    getServerHash(url).then(h=>{ if(h) lastServerHash=h; });   // registra o hash atual p/ as próximas checagens
     const raw=JSON.stringify(d);
     markSynced();
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
