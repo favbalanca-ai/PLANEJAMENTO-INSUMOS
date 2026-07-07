@@ -224,8 +224,46 @@ function pedidoColOf(P){
 
 /* ----------------------------- ENDPOINTS ----------------------------- */
 function json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function jsonStr(s){ return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.JSON); }
 
-function doGet(e){ return json(readData()); }
+/* Cache dos dados (CacheService) — a leitura pesada roda no máx. 1x a cada CACHE_TTL s;
+   os demais celulares recebem instantâneo. Como o valor pode passar de 100KB, é fatiado. */
+var CACHE_TTL = 45;
+function cacheGet(){
+  var c = CacheService.getScriptCache(), meta = c.get('pd_meta');
+  if (!meta) return null;
+  var n = parseInt(meta, 10), keys = [];
+  for (var i = 0; i < n; i++) keys.push('pd_' + i);
+  var got = c.getAll(keys), parts = [];
+  for (var j = 0; j < n; j++){ var v = got['pd_' + j]; if (v == null) return null; parts.push(v); }
+  return parts.join('');
+}
+function cachePut(str){
+  var c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(str.length / size), obj = {};
+  for (var i = 0; i < n; i++) obj['pd_' + i] = str.substr(i * size, size);
+  obj['pd_meta'] = String(n);
+  c.putAll(obj, CACHE_TTL);
+}
+function cacheClear(){ try { CacheService.getScriptCache().remove('pd_meta'); } catch (e) {} }
+// JSON atual dos dados (do cache; senão lê a planilha e cacheia)
+function currentJson(){
+  var cached = cacheGet();
+  if (cached) return cached;
+  var str = JSON.stringify(readData());
+  cachePut(str);
+  return str;
+}
+
+function doGet(e){
+  var str = currentJson();
+  // ?h=1 -> devolve só o "hash" (resposta minúscula) para o app checar se mudou antes de baixar tudo
+  if (e && e.parameter && e.parameter.h){
+    var dig = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8);
+    var hash = Utilities.base64Encode(dig);
+    return jsonStr(JSON.stringify({ hash: hash }));
+  }
+  return jsonStr(str);
+}
 
 function doPost(e){
   var out = { ok:0, fail:0, msgs:[] };
@@ -233,6 +271,7 @@ function doPost(e){
     var edits = JSON.parse(e.postData.contents);
     applyEditsBatch(edits, out);      // grava em lote (rápido)
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
+  cacheClear();                       // invalida o cache: o próximo puxar traz o dado fresco
   return json(out);
 }
 
