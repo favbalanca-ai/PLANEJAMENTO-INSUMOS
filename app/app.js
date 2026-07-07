@@ -2,8 +2,11 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-20';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-21';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
+const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
+function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
+function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
@@ -1568,6 +1571,7 @@ function buildFieldEdits(){
 }
 function applyPulledData(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
+  saveDataCache(d);   // guarda p/ abrir com o dado mais recente na próxima vez
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // NÃO apaga as edições cegamente: só descarta o override que JÁ está igual na planilha
   // (ou seja, que já foi salvo). O que ainda não foi salvo é PRESERVADO — evita "minhas edições somem".
@@ -1748,8 +1752,8 @@ $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringi
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
 
 /* ================= INIT ================= */
-fetch('data.json').then(r=>r.json()).then(d=>{
-  DATA=d; d.produtos.forEach(p=>PROD[p.produto]=p);
+function boot(d){
+  DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   loadOverrides(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',route);
@@ -1759,9 +1763,17 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
   if(syncUrl() && autoOn()){
-    if(buildFieldEdits().length===0){ syncPull({auto:true, silentToast:true}); }
+    // ao ABRIR: força buscar a última atualização da planilha (mesmo já tendo dado em cache)
+    if(buildFieldEdits().length===0){ syncPull({auto:true, force:true, silentToast:true}); }
     else scheduleAutoPush();   // há edições locais não salvas: envia para a planilha
     startPolling();
   }
   setSyncStatus();
-}).catch(e=>{ $('#content').innerHTML=`<div class="empty">Falha ao carregar data.json.<br>Rode via servidor HTTP (não abra o arquivo direto).<br><small>${esc(e.message)}</small></div>`; });
+}
+// abre JÁ com os últimos dados sincronizados (cache local); se não houver, usa o data.json embutido
+(function(){
+  const cached=loadDataCache();
+  if(cached && cached.produtos){ boot(cached); return; }
+  fetch('data.json').then(r=>r.json()).then(boot)
+    .catch(e=>{ $('#content').innerHTML=`<div class="empty">Falha ao carregar os dados.<br><small>${esc(e.message)}</small></div>`; });
+})();
