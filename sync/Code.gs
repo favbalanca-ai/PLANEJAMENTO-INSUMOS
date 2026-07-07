@@ -80,7 +80,7 @@ function readOpsArr(big, r0, r1){
     if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { nome:a, itens:[] }; ops.push(cur); }
     if (prod && cur) cur.itens.push({ classe:S(row[1]), produto:prod, dose:N(row[8]), un:S(row[5]) });
   }
-  return ops.filter(function(o){ return o.itens.length; });
+  return ops;   // TODAS as operações (por posição) — inclusive as vazias; o app revela/preenche os slots livres
 }
 
 /* ----------------------------- ESCRITA (EM LOTE) -----------------------------
@@ -191,7 +191,7 @@ function applyTalhao(tid, edits, out){
   }
 }
 
-// operação opIdx (contando só operações COM itens — igual ao app) dentro da faixa, no array em memória
+// operação opIdx (por POSIÇÃO — inclui as vazias, igual ao app) dentro da faixa, no array em memória
 function opByIndex(vals, r0, r1, opIdx){
   var blocks = [], cur = null;
   for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (!row) continue;
@@ -199,8 +199,7 @@ function opByIndex(vals, r0, r1, opIdx){
     if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
     else if (cur){ cur.body.push(L); if (S(row[2])) cur.has = true; }
   }
-  var withItems = blocks.filter(function(b){ return b.has; });
-  return withItems[opIdx] || null;
+  return blocks[opIdx] || null;
 }
 function findInOp(vals, op, produto){
   for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (S(vals[L - 1][2]) === S(produto)) return L; }
