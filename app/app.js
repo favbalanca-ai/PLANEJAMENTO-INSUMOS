@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-21';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-22';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -1063,7 +1063,9 @@ V.sync = function(){
 /* ================= ROUTER ================= */
 const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
-  const keepScroll = opts && opts.keepScroll===true;   // re-render silencioso (sync) não rola pro topo
+  // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
+  // só rola pro topo em navegação de verdade (toTop:true — troca de página)
+  const toTop = opts && opts.toTop===true;
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
   const fn=V[view];
@@ -1076,7 +1078,7 @@ function route(opts){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
-  if(!keepScroll){ $('.main').scrollTop=0; window.scrollTo(0,0); }
+  if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
 }
 // está editando? (campo focado ou digitou há pouco) — usado para não puxar/re-renderizar por cima
 function isEditing(){
@@ -1756,7 +1758,7 @@ function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   loadOverrides(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
-  window.addEventListener('hashchange',route);
+  window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
   if(!location.hash) location.hash='#/inicio';   // porta de entrada: escolher o módulo
   route();
