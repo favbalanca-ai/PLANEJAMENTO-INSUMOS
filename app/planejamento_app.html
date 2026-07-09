@@ -574,7 +574,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-24';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-25';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -1069,9 +1069,12 @@ V.talhao = function(id){
   ${opsHtml('safrinha','S','Safrinha'+(temSafrinha(t)?' · '+esc(empSafDe(t)):''),temSafrinha(t))}`;
 };
 
-const cotaEmpSel = new Set();   // empreendimentos selecionados no filtro da Cotação (vazio = todos) — sessão
+const cotaEmpSel = new Set();      // filtro da Cotação (vazio = todos) — sessão
+const comprasEmpSel = new Set();   // filtro da Demanda de Compras (independente) — sessão
 V.compras = function(){
-  const all=calcCompras();
+  const sel=comprasEmpSel;
+  const emps=empList().filter(e=>e&&e!=='—');
+  const all=calcCompras(sel.size?sel:null);
   const totalCompra=all.reduce((a,r)=>a+r.valor,0);
   const itens=all.filter(r=>r.comprar>0).length;
   const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
@@ -1109,9 +1112,15 @@ V.compras = function(){
     <div class="kpi"><div class="k-label">Itens sem preço</div><div class="k-value" style="color:${semPreco?'var(--red)':'var(--green)'}">${semPreco}</div></div>
     <div class="kpi"><div class="k-label">Valor em estoque</div><div class="k-value">${brl0(valEstoque)}</div></div>
   </div>
+  <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Fracionar por empreendimento</h2>
+      <span class="sub">${sel.size?`${sel.size} cultura(s) selecionada(s)`:'todas as culturas'}</span></div>
+    <div class="classe-filter" id="compras-empf" style="margin:12px 14px">
+      <button class="chip-f ${sel.size===0?'on':''}" data-empf="">Todos</button>
+      ${emps.map(e=>`<button class="chip-f ${sel.has(e)?'on':''}" data-empf="${esc(e)}">${esc(e)}</button>`).join('')}
+    </div></div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">A comprar = máx(0; Demanda − Estoque − Em pedido). Preço se edita na aba Cotação.</span></div>
-  <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens.</div>'}</div>
+    <div class="spacer"></div><span class="badge badge-muted">${sel.size?'Demanda só das culturas selecionadas (estoque/pedido são globais). ':''}A comprar = máx(0; Demanda − Estoque − Em pedido).</span></div>
+  <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
 
@@ -1834,9 +1843,9 @@ document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')
 document.addEventListener('click',e=>{
   const cf=e.target.closest('#emp-cfilter .chip-f');
   if(cf){ cf.parentElement.querySelectorAll('.chip-f').forEach(bb=>bb.classList.remove('on')); cf.classList.add('on'); applyEmpFilter(); return; }
-  const ef=e.target.closest('#cot-empf .chip-f');
-  if(ef){ const v=ef.dataset.empf;
-    if(v===''){ cotaEmpSel.clear(); } else if(cotaEmpSel.has(v)){ cotaEmpSel.delete(v); } else { cotaEmpSel.add(v); }
+  const ef=e.target.closest('#cot-empf .chip-f, #compras-empf .chip-f');
+  if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel;
+    if(v===''){ setSel.clear(); } else if(setSel.has(v)){ setSel.delete(v); } else { setSel.add(v); }
     route(); return; }
   const go=e.target.closest('[data-go]'); if(go){ e.preventDefault(); location.hash=go.dataset.go; return; }
   const act=e.target.closest('[data-act]');
