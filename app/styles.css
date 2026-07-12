@@ -311,6 +311,8 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .dem-bar .dem-val{font-size:26px;font-weight:800;line-height:1.1}
 .dem-bar b{font-size:22px;font-weight:800}
 .dem-bar .dem-buy{text-align:right}
+.dem-bar .dem-vol{font-size:24px}
+.dem-bar .dem-vol small{font-size:13px;font-weight:600;color:#bfe0e6}
 /* última sincronização */
 .sync-last{margin-top:10px;font-size:12px;color:var(--muted);font-weight:600}
 .sync-log{margin-top:14px;background:#0e2a33;color:#cfe6ea;border-radius:8px;padding:0;

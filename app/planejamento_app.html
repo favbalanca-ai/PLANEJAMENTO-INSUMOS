@@ -326,6 +326,8 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .dem-bar .dem-val{font-size:26px;font-weight:800;line-height:1.1}
 .dem-bar b{font-size:22px;font-weight:800}
 .dem-bar .dem-buy{text-align:right}
+.dem-bar .dem-vol{font-size:24px}
+.dem-bar .dem-vol small{font-size:13px;font-weight:600;color:#bfe0e6}
 /* última sincronização */
 .sync-last{margin-top:10px;font-size:12px;color:var(--muted);font-weight:600}
 .sync-log{margin-top:14px;background:#0e2a33;color:#cfe6ea;border-radius:8px;padding:0;
@@ -582,7 +584,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-27';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-28';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -1097,7 +1099,7 @@ V.compras = function(){
   all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
   const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
-  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
+  const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-dem="${r.demanda}" data-val="${r.demanda*r.preco}" data-buy="${r.valor}" data-un="${esc(r.un||'')}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="num c-more" data-th="Estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.estoque}"></td>
@@ -1138,6 +1140,7 @@ V.compras = function(){
       ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.nome||'')}">${esc(t.id)}</button>`).join('')}
     </div></div>
   <div class="dem-bar${filtro?' is-filtered':''}">
+    <div class="dem-volwrap" hidden><span class="dem-lbl">Volume do insumo</span><b class="dem-vol"></b></div>
     <div><span class="dem-lbl">Valor da demanda${filtro?' (filtro)':''}</span><b class="dem-val">${brl0(valDemanda)}</b></div>
     <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
   </div>
@@ -1983,15 +1986,27 @@ function filterCotacao(q){
 // busca na Demanda de Compras: filtra em todos os grupos e esconde grupos vazios
 function filterCompras(q){
   q=(q||'').toLowerCase().trim();
+  let val=0, buy=0, dem=0, n=0; const uns=new Set();
   document.querySelectorAll('#compras-groups .op-block').forEach(g=>{
     let any=false;
     g.querySelectorAll('tbody tr').forEach(tr=>{
       const show=!q||(tr.dataset.search||'').includes(q);
-      tr.style.display=show?'':'none'; if(show) any=true;
+      tr.style.display=show?'':'none';
+      if(show){ any=true;
+        if(tr.dataset.val!=null){ val+=+tr.dataset.val||0; buy+=+tr.dataset.buy||0; dem+=+tr.dataset.dem||0; uns.add(tr.dataset.un||''); n++; } }
     });
     g.style.display=any?'':'none';
     g.classList.toggle('force-open', !!q);  // durante a busca, mostra o conteúdo mesmo se recolhido
   });
+  // atualiza o destaque com o insumo/itens filtrados (valor sempre; volume só se a unidade for única)
+  const dv=document.querySelector('.dem-bar .dem-val'); if(dv) dv.textContent=brl0(val);
+  const db=document.querySelector('.dem-bar .dem-buy b'); if(db) db.textContent=brl0(buy);
+  const volw=document.querySelector('.dem-volwrap'), vol=document.querySelector('.dem-vol');
+  if(volw&&vol){
+    if(q && uns.size===1){ vol.innerHTML=`${num(dem)} <small>${esc([...uns][0]||'')}</small>`; volw.hidden=false; }
+    else if(q && n>0){ vol.innerHTML=`${n} <small>itens</small>`; volw.hidden=false; }
+    else volw.hidden=true;
+  }
 }
 // celular: tocar no cartão mostra/esconde os detalhes (ignora campos editáveis)
 document.addEventListener('click',e=>{
