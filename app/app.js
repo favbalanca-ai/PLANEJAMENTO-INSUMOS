@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-26';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-27';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -507,6 +507,8 @@ V.compras = function(){
   const talhoes=talhoesAll();
   const all=calcCompras(sel.size?sel:null, tsel.size?tsel:null);
   const totalCompra=all.reduce((a,r)=>a+r.valor,0);
+  const valDemanda=all.reduce((a,r)=>a+r.demanda*r.preco,0);
+  const filtro=(sel.size||tsel.size);
   const itens=all.filter(r=>r.comprar>0).length;
   const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
   const valEstoque=all.reduce((a,r)=>a+r.estoque*r.preco,0);
@@ -555,6 +557,10 @@ V.compras = function(){
       <button class="chip-f ${tsel.size===0?'on':''}" data-talf="">Todos</button>
       ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.nome||'')}">${esc(t.id)}</button>`).join('')}
     </div></div>
+  <div class="dem-bar${filtro?' is-filtered':''}">
+    <div><span class="dem-lbl">Valor da demanda${filtro?' (filtro)':''}</span><b class="dem-val">${brl0(valDemanda)}</b></div>
+    <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
+  </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
     <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado (estoque/pedido são globais). ':''}A comprar = máx(0; Demanda − Estoque − Em pedido).</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
@@ -1090,7 +1096,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)

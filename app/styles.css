@@ -303,6 +303,14 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   padding:6px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
 .chip-f:hover{background:#eef7f9}
 .chip-f.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* destaque do valor da demanda (Demanda de Insumos) */
+.dem-bar{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between;
+  background:linear-gradient(135deg,#16404d,#2e7d8c);color:#fff;border-radius:14px;padding:14px 20px;margin:0 0 16px}
+.dem-bar.is-filtered{box-shadow:0 0 0 2px var(--teal) inset}
+.dem-bar .dem-lbl{display:block;font-size:12px;color:#bfe0e6;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.dem-bar .dem-val{font-size:26px;font-weight:800;line-height:1.1}
+.dem-bar b{font-size:22px;font-weight:800}
+.dem-bar .dem-buy{text-align:right}
 /* última sincronização */
 .sync-last{margin-top:10px;font-size:12px;color:var(--muted);font-weight:600}
 .sync-log{margin-top:14px;background:#0e2a33;color:#cfe6ea;border-radius:8px;padding:0;

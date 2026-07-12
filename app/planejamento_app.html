@@ -318,6 +318,14 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   padding:6px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
 .chip-f:hover{background:#eef7f9}
 .chip-f.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+/* destaque do valor da demanda (Demanda de Insumos) */
+.dem-bar{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between;
+  background:linear-gradient(135deg,#16404d,#2e7d8c);color:#fff;border-radius:14px;padding:14px 20px;margin:0 0 16px}
+.dem-bar.is-filtered{box-shadow:0 0 0 2px var(--teal) inset}
+.dem-bar .dem-lbl{display:block;font-size:12px;color:#bfe0e6;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.dem-bar .dem-val{font-size:26px;font-weight:800;line-height:1.1}
+.dem-bar b{font-size:22px;font-weight:800}
+.dem-bar .dem-buy{text-align:right}
 /* última sincronização */
 .sync-last{margin-top:10px;font-size:12px;color:var(--muted);font-weight:600}
 .sync-log{margin-top:14px;background:#0e2a33;color:#cfe6ea;border-radius:8px;padding:0;
@@ -522,7 +530,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/dashboard" data-view="dashboard" data-mod="planejamento"><span class="ico">📊</span><span class="lbl">Painel</span><span class="lbl-s">Painel</span></a>
       <a href="#/talhoes" data-view="talhoes" data-mod="planejamento"><span class="ico">🗺️</span><span class="lbl">Talhões</span><span class="lbl-s">Talhões</span></a>
       <a href="#/empreendimentos" data-view="empreendimentos" data-mod="planejamento"><span class="ico">🌾</span><span class="lbl">Empreendimentos</span><span class="lbl-s">Culturas</span></a>
-      <a href="#/compras" data-view="compras" data-mod="planejamento"><span class="ico">🛒</span><span class="lbl">Demanda de Compras</span><span class="lbl-s">Compras</span></a>
+      <a href="#/compras" data-view="compras" data-mod="planejamento"><span class="ico">🛒</span><span class="lbl">Demanda</span><span class="lbl-s">Demanda</span></a>
       <a href="#/cotacao" data-view="cotacao" data-mod="planejamento"><span class="ico">🏷️</span><span class="lbl">Cotação</span><span class="lbl-s">Cotação</span></a>
       <a href="#/maquinas" data-view="maquinas" data-mod="planejamento"><span class="ico">🚜</span><span class="lbl">Máquinas</span><span class="lbl-s">Máquinas</span></a>
       <a href="#/dre" data-view="dre" data-mod="planejamento"><span class="ico">💰</span><span class="lbl">DRE Orçada</span><span class="lbl-s">DRE</span></a>
@@ -574,7 +582,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-26';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.06-27';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -1079,6 +1087,8 @@ V.compras = function(){
   const talhoes=talhoesAll();
   const all=calcCompras(sel.size?sel:null, tsel.size?tsel:null);
   const totalCompra=all.reduce((a,r)=>a+r.valor,0);
+  const valDemanda=all.reduce((a,r)=>a+r.demanda*r.preco,0);
+  const filtro=(sel.size||tsel.size);
   const itens=all.filter(r=>r.comprar>0).length;
   const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
   const valEstoque=all.reduce((a,r)=>a+r.estoque*r.preco,0);
@@ -1127,6 +1137,10 @@ V.compras = function(){
       <button class="chip-f ${tsel.size===0?'on':''}" data-talf="">Todos</button>
       ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.nome||'')}">${esc(t.id)}</button>`).join('')}
     </div></div>
+  <div class="dem-bar${filtro?' is-filtered':''}">
+    <div><span class="dem-lbl">Valor da demanda${filtro?' (filtro)':''}</span><b class="dem-val">${brl0(valDemanda)}</b></div>
+    <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
+  </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
     <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado (estoque/pedido são globais). ':''}A comprar = máx(0; Demanda − Estoque − Em pedido).</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
@@ -1662,7 +1676,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Compras',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
