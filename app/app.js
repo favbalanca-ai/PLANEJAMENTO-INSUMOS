@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.06-29';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.16-30';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -23,7 +23,9 @@ function precoComposto(it, tipo){
   const s=safraAtual();
   const ref=s.refs.find(r=>(r.classe||'').toUpperCase().trim()===(it.classe||'').toUpperCase().trim());
   if(!ref) return 0;
-  return (+ref[tipo]||0)*(1+(+it.pct||0));
+  // % à vista usa it.pct; % a prazo usa it.pctPrazo (se não informado, cai no it.pct)
+  const pct=tipo==='prazo'?(it.pctPrazo!=null?+it.pctPrazo:(+it.pct||0)):(+it.pct||0);
+  return (+ref[tipo]||0)*(1+(pct||0));
 }
 function applyPrecoEdit(el){
   const k=el.dataset.pr, i=+el.dataset.i, s=safraAtual();
@@ -36,19 +38,119 @@ function applyPrecoEdit(el){
   else if(k==='itClasse'){ s.itens[i].classe=el.value.trim().toUpperCase(); }
   else if(k==='itProduto'){ s.itens[i].produto=el.value.trim(); }
   else if(k==='itPct'){ s.itens[i].pct=numv(el.value); }
+  else if(k==='itPctPrazo'){ s.itens[i].pctPrazo=(String(el.value).trim()===''?null:numv(el.value)); }
   savePrecos(); route();
+}
+/* ---- Importar lista de produtos de um PDF (portfólio do ano) ---- */
+let _pdfjsLoading=null;
+function loadPdfJs(){
+  if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if(_pdfjsLoading) return _pdfjsLoading;
+  _pdfjsLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    s.onload=()=>{ try{ window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; }catch(e){} res(window.pdfjsLib); };
+    s.onerror=()=>{ _pdfjsLoading=null; rej(new Error('Não foi possível carregar o leitor de PDF (precisa de internet). Cole a lista manualmente.')); };
+    document.head.appendChild(s);
+  });
+  return _pdfjsLoading;
+}
+// extrai o texto do PDF preservando as colunas (TAB nos vãos grandes) e uma linha por fileira
+async function extractPdfText(file){
+  const lib=await loadPdfJs();
+  const buf=await file.arrayBuffer();
+  const pdf=await lib.getDocument({data:buf}).promise;
+  const lines=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const rows={};
+    tc.items.forEach(it=>{
+      if(!it.str) return;
+      const y=Math.round(it.transform[5]);
+      (rows[y]=rows[y]||[]).push({x:it.transform[4], w:it.width||0, h:Math.abs(it.height)||8, s:it.str});
+    });
+    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+      const cells=rows[y].sort((a,b)=>a.x-b.x);
+      let out='', prevEnd=null;
+      cells.forEach(o=>{
+        if(prevEnd!=null){ const gap=o.x-prevEnd; out += gap>o.h*0.9?'\t':(gap>0.5?' ':''); }
+        out+=o.s; prevEnd=o.x+o.w;
+      });
+      out=out.replace(/[ \t]+$/,'');
+      if(out.trim()) lines.push(out);
+    });
+  }
+  return lines.join('\n');
+}
+async function prHandlePdf(file){
+  toast('Lendo PDF…');
+  try{ prImportModal(await extractPdfText(file)); }
+  catch(err){ prImportModal(''); toast(err&&err.message?err.message:'Falha ao ler o PDF — cole a lista manualmente'); }
+}
+function prImportModal(initialText){
+  const old=document.getElementById('pr-import-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='pr-import-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box">
+    <div class="modal-head"><h3>Importar lista de produtos</h3><button class="icon-btn" data-act="prImpClose" title="Fechar">✕</button></div>
+    <p class="mut" style="font-size:12px;margin:0 0 8px">Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · % à vista · % a prazo</b> (separadas por TAB ou 2+ espaços). Revise o texto extraído do PDF antes de importar. O <b>%</b> pode ser <code>0.029</code>, <code>2,9</code> ou <code>2,9%</code>; deixe o % a prazo vazio para repetir o à vista.</p>
+    <textarea id="pr-imp-txt" class="pr-imp-txt" spellcheck="false" placeholder="Empresa\tClasse\tProduto\t% à vista\t% a prazo">${esc(initialText||'')}</textarea>
+    <div class="modal-foot">
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-imp-replace"> Substituir o portfólio atual</label>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="prImpClose">Cancelar</button>
+      <button class="btn btn-primary btn-sm" data-act="prImpDo">Importar</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  const ta=ov.querySelector('#pr-imp-txt'); if(ta) ta.focus();
+}
+function _numLoose(v){
+  v=String(v==null?'':v).trim().replace('%','').trim();
+  if(!v) return null;
+  if(v.indexOf(',')>=0 && v.indexOf('.')>=0) v=v.replace(/\./g,'').replace(',','.');
+  else if(v.indexOf(',')>=0) v=v.replace(',','.');
+  const n=parseFloat(v); return isFinite(n)?n:null;
+}
+function _pctParse(raw){
+  const hadP=/%/.test(String(raw||''));
+  let n=_numLoose(raw); if(n==null) return null;
+  if(hadP || Math.abs(n)>1) n=n/100;
+  return n;
+}
+function prDoImport(){
+  const ta=document.getElementById('pr-imp-txt'); if(!ta) return;
+  const rep=document.getElementById('pr-imp-replace'); const replace=rep&&rep.checked;
+  const items=[];
+  ta.value.split('\n').forEach(l=>{
+    if(!l.trim()) return;
+    let cols = l.indexOf('\t')>=0 ? l.split(/\t+/) : l.split(/\s{2,}/);
+    cols=cols.map(c=>c.trim());
+    // ignora cabeçalho ("EMPRESA CLASSE PRODUTO …")
+    if(/^empresa$/i.test(cols[0]||'') || (/classe/i.test(cols[1]||'')&&/produto/i.test(cols[2]||''))) return;
+    const it={ empresa:cols[0]||'', classe:(cols[1]||'').toUpperCase(), produto:cols[2]||'',
+      pct:_pctParse(cols[3]), pctPrazo:_pctParse(cols[4]) };
+    if(it.pct==null) it.pct=0;
+    if(!it.produto && !it.classe) return;
+    items.push(it);
+  });
+  if(!items.length){ toast('Nenhuma linha reconhecida'); return; }
+  const s=safraAtual();
+  s.itens = replace ? items : s.itens.concat(items);
+  savePrecos();
+  const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove();
+  route(); toast((replace?'Portfólio substituído — ':'')+'Importados '+items.length+' produtos');
 }
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
 function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
-const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' (qual módulo está ativo)
+const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
-  empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'planejamento',
+  empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
   maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
-function currentModule(){ return localStorage.getItem(MOD_KEY)==='campo'?'campo':'planejamento'; }
-function moduleHome(m){ return m==='campo'?'#/campo':'#/dashboard'; }
-const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'} };
+function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
+function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
+const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
 function applyModule(){
   const m=currentModule();
   document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
@@ -651,7 +753,8 @@ V.precos = function(){
       <td><input class="txt" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa"></td>
       <td><input class="txt" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe"></td>
       <td><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${it.pct!=null?it.pct:''}" placeholder="0" title="% sobre o preço de referência (ex.: 0.029 = +2,9%)"></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${it.pct!=null?it.pct:''}" placeholder="0" title="% sobre o preço de referência à vista (ex.: 0.029 = +2,9%)"></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${it.pctPrazo!=null?it.pctPrazo:''}" placeholder="= à vista" title="% sobre o preço de referência a prazo (vazio = usa o mesmo % à vista)"></td>
       <td class="num">${pv>0?brl(pv):(semRef?'<span class="pill pill-noprice">sem ref.</span>':'—')}</td>
       <td class="num">${pp>0?brl(pp):'—'}</td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
@@ -673,11 +776,15 @@ V.precos = function(){
   </div>
   <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">preço composto = referência da classe × (1 + %)</span></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">% ref.</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th></th></tr></thead>
-      <tbody>${itemRows||'<tr><td colspan="7" class="mut" style="padding:12px 14px">Nenhum produto. Adicione abaixo.</td></tr>'}</tbody></table></div>
-    <div class="op-add"><button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button></div>
+      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">% à vista</th><th class="num">% a prazo</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th></th></tr></thead>
+      <tbody>${itemRows||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum produto. Adicione abaixo.</td></tr>'}</tbody></table></div>
+    <div class="op-add">
+      <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
+      <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
+      <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
+    </div>
   </div>
-  <p class="mut" style="font-size:12px">O <b>% ref.</b> é o fator sobre o preço de referência da classe (ex.: <code>0.029</code> = +2,9%; <code>0</code> = o próprio produto de referência). Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
+  <p class="mut" style="font-size:12px">O <b>%</b> é o fator sobre o preço de referência da classe (ex.: <code>0.029</code> = +2,9%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
 };
 
 V.maquinas = function(){
@@ -921,6 +1028,8 @@ V.inicio = function(){
         ['Painel','Talhões','Empreendimentos','Demanda de Compras','Cotação','Máquinas','DRE'],'ec-plan')}
       ${card('campo','🧑‍🌾','Campo','Execute e registre as operações na lavoura.',
         ['Operação de Campo','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
+      ${card('precos','💲','Preços','Componha e mantenha os preços dos insumos.',
+        ['Portfólio do ano','Preços de referência','Composição à vista e a prazo','Histórico por safra'],'ec-precos')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
   </div>`;
@@ -1361,6 +1470,7 @@ function copiaMaquinas(srcId,dstId,plano){
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
+  if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.matches('input[data-pr]')){ applyPrecoEdit(e.target); return; }
   if(e.target.matches('input[data-edit], select[data-edit], textarea[data-edit]')) applyEdit(e.target);
 });
@@ -1448,6 +1558,9 @@ document.addEventListener('click',e=>{
       if(nome){ if(!PRECOS.safras[nome]) PRECOS.safras[nome]={refs:[],itens:[]}; PRECOS.atual=nome; savePrecos(); route(); toast('Safra '+nome+' criada'); } }
     else if(a.act==='prDupSafra'){ const nome=(prompt('Duplicar a safra '+PRECOS.atual+' para (nome):')||'').trim();
       if(nome){ PRECOS.safras[nome]=JSON.parse(JSON.stringify(safraAtual())); PRECOS.atual=nome; savePrecos(); route(); toast('Duplicado em '+nome); } }
+    else if(a.act==='prImportPdf'){ const fi=$('#pr-pdf-file'); if(fi) fi.click(); }
+    else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
+    else if(a.act==='prImpDo'){ prDoImport(); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
       const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));
