@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.16-31';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.16-32';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -18,6 +18,8 @@ function loadPrecos(){
 }
 function savePrecos(){ try{ localStorage.setItem(PRECOS_KEY, JSON.stringify(PRECOS)); }catch(e){} }
 function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
+// fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
+function pctToField(f){ if(f==null||f==='') return ''; return +((f*100).toFixed(4)); }
 // preço composto de um item: preço de referência da classe × (1 + %)
 function precoComposto(it, tipo){
   const s=safraAtual();
@@ -37,8 +39,9 @@ function applyPrecoEdit(el){
   else if(k==='itEmpresa'){ s.itens[i].empresa=el.value.trim(); }
   else if(k==='itClasse'){ s.itens[i].classe=el.value.trim().toUpperCase(); }
   else if(k==='itProduto'){ s.itens[i].produto=el.value.trim(); }
-  else if(k==='itPct'){ s.itens[i].pct=numv(el.value); }
-  else if(k==='itPctPrazo'){ s.itens[i].pctPrazo=(String(el.value).trim()===''?null:numv(el.value)); }
+  // as colunas % são percentuais no campo (2,9 = +2,9%); guardamos o fator (0,029)
+  else if(k==='itPct'){ s.itens[i].pct=numv(el.value)/100; }
+  else if(k==='itPctPrazo'){ s.itens[i].pctPrazo=(String(el.value).trim()===''?null:numv(el.value)/100); }
   savePrecos(); route();
 }
 /* ---- Importar lista de produtos de um PDF (portfólio do ano) ---- */
@@ -800,8 +803,8 @@ V.precos = function(){
       <td><input class="txt" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa"></td>
       <td><input class="txt" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe"></td>
       <td><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${it.pct!=null?it.pct:''}" placeholder="0" title="% sobre o preço de referência à vista (ex.: 0.029 = +2,9%)"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${it.pctPrazo!=null?it.pctPrazo:''}" placeholder="= à vista" title="% sobre o preço de referência a prazo (vazio = usa o mesmo % à vista)"></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre o preço de referência à vista (ex.: 2,9 = +2,9%; -46,7 = -46,7%)"></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% sobre o preço de referência a prazo (vazio = usa o mesmo % à vista)"></td>
       <td class="num">${pv>0?brl(pv):(semRef?'<span class="pill pill-noprice">sem ref.</span>':'—')}</td>
       <td class="num">${pp>0?brl(pp):'—'}</td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
@@ -831,7 +834,7 @@ V.precos = function(){
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
     </div>
   </div>
-  <p class="mut" style="font-size:12px">O <b>%</b> é o fator sobre o preço de referência da classe (ex.: <code>0.029</code> = +2,9%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
+  <p class="mut" style="font-size:12px">O <b>%</b> é a variação sobre o preço de referência da classe — digite em <b>porcentagem</b> (ex.: <code>2,9</code> = +2,9%; <code>-46,7</code> = −46,7%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
 };
 
 V.maquinas = function(){
