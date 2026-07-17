@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.16-30';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.16-31';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -55,32 +55,80 @@ function loadPdfJs(){
   });
   return _pdfjsLoading;
 }
-// extrai o texto do PDF preservando as colunas (TAB nos vãos grandes) e uma linha por fileira
+// Portfólio do padrão favbalança: tabela EMPRESA · CLASSE · PRODUTO · ATIVOS · … .
+// Cada produto pode ocupar várias linhas (ativos/classe quebram), mas a EMPRESA
+// fica centralizada na fileira. Por isso separamos por colunas (posição X) e
+// agrupamos cada célula à empresa mais próxima em Y. Retorna só "empresa\tclasse\tproduto".
+const _PORT_SKIP=new Set(['EMPRESA','CLASSE','PRODUTO','ATIVOS','CONCENTRAÇÃO','EMBALAGEM','VOLUME','INDICADO','ENTREGA']);
+function _isEmpresa(t){ return /^[A-ZÀ-Ú][A-ZÀ-Ú0-9/.\- ]{1,}$/.test(t) && !_PORT_SKIP.has(t); }
+async function extractPortfolio(pdf){
+  const out=[];
+  for(let pg=1;pg<=pdf.numPages;pg++){
+    const page=await pdf.getPage(pg);
+    const tc=await page.getTextContent();
+    // y para baixo = maior (invertemos o eixo do PDF, que cresce para cima)
+    const words=tc.items.filter(it=>it.str&&it.str.trim()).map(it=>({x:it.transform[4], y:-it.transform[5], s:it.str.trim()}));
+    if(!words.length) continue;
+    // localiza a linha de cabeçalho (EMPRESA/CLASSE/PRODUTO) e as fronteiras de coluna
+    const byline={}; words.forEach(w=>{ const k=Math.round(w.y); (byline[k]=byline[k]||[]).push(w); });
+    let hy=null,b1,b2,b3;
+    for(const k of Object.keys(byline).map(Number).sort((a,b)=>a-b)){
+      const map={}; byline[k].forEach(w=>{ if(!(w.s in map)) map[w.s]=w.x; });
+      if('EMPRESA' in map && 'CLASSE' in map && 'PRODUTO' in map){
+        const eX=map.EMPRESA,cX=map.CLASSE,pX=map.PRODUTO,aX=('ATIVOS' in map)?map.ATIVOS:pX+120;
+        hy=k; b1=(eX+cX)/2; b2=(cX+pX)/2; b3=(pX+aX)/2; break;
+      }
+    }
+    if(hy==null) continue;   // página sem tabela (premissas) — ignora
+    let region=words.filter(w=>w.y>hy+2 && !_PORT_SKIP.has(w.s));
+    // rodapé de premissas começa na 1ª linha cujo 1º token começa com "*"
+    const fl={}; region.forEach(w=>{ const k=Math.round(w.y); (fl[k]=fl[k]||[]).push(w); });
+    let footerY=1e9;
+    for(const k of Object.keys(fl).map(Number).sort((a,b)=>a-b)){
+      const left=fl[k].reduce((m,w)=>w.x<m.x?w:m); if(left.s.charAt(0)==='*'){ footerY=k; break; }
+    }
+    region=region.filter(w=>w.y<footerY-2);
+    const anchors=region.filter(w=>w.x<b1 && _isEmpresa(w.s)).sort((a,b)=>a.y-b.y);
+    if(!anchors.length) continue;
+    const ys=anchors.map(a=>a.y), recs=anchors.map(()=>({e:[],c:[],p:[]}));
+    region.forEach(w=>{
+      let idx=-1;
+      for(let i=0;i<anchors.length;i++){
+        const up=i===0?hy:(ys[i-1]+ys[i])/2, lo=i===anchors.length-1?footerY:(ys[i]+ys[i+1])/2;
+        if(w.y>=up && w.y<lo){ idx=i; break; }
+      }
+      if(idx<0) return;
+      if(w.x<b1) recs[idx].e.push(w); else if(w.x<b2) recs[idx].c.push(w); else if(w.x<b3) recs[idx].p.push(w);
+    });
+    const txt=ws=>ws.sort((a,b)=>Math.round(a.y)-Math.round(b.y)||a.x-b.x).map(w=>w.s).join(' ').replace(/\s+/g,' ').trim();
+    recs.forEach(r=>{ const e=txt(r.e),c=txt(r.c),p=txt(r.p); if(p&&e) out.push(e+'\t'+c+'\t'+p); });
+  }
+  return out;
+}
+// reconstrução genérica linha-a-linha (para PDFs fora do padrão portfólio)
+function _genericLines(tc){
+  const rows={};
+  tc.items.forEach(it=>{
+    if(!it.str) return;
+    const y=Math.round(it.transform[5]);
+    (rows[y]=rows[y]||[]).push({x:it.transform[4], w:it.width||0, h:Math.abs(it.height)||8, s:it.str});
+  });
+  const lines=[];
+  Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
+    const cells=rows[y].sort((a,b)=>a.x-b.x);
+    let out='', prevEnd=null;
+    cells.forEach(o=>{ if(prevEnd!=null){ const gap=o.x-prevEnd; out+=gap>o.h*0.9?'\t':(gap>0.5?' ':''); } out+=o.s; prevEnd=o.x+o.w; });
+    out=out.replace(/[ \t]+$/,''); if(out.trim()) lines.push(out);
+  });
+  return lines;
+}
 async function extractPdfText(file){
   const lib=await loadPdfJs();
-  const buf=await file.arrayBuffer();
-  const pdf=await lib.getDocument({data:buf}).promise;
+  const pdf=await lib.getDocument({data:await file.arrayBuffer()}).promise;
+  const port=await extractPortfolio(pdf);
+  if(port.length>=5) return port.join('\n');   // reconheceu o padrão portfólio
   const lines=[];
-  for(let p=1;p<=pdf.numPages;p++){
-    const page=await pdf.getPage(p);
-    const tc=await page.getTextContent();
-    const rows={};
-    tc.items.forEach(it=>{
-      if(!it.str) return;
-      const y=Math.round(it.transform[5]);
-      (rows[y]=rows[y]||[]).push({x:it.transform[4], w:it.width||0, h:Math.abs(it.height)||8, s:it.str});
-    });
-    Object.keys(rows).map(Number).sort((a,b)=>b-a).forEach(y=>{
-      const cells=rows[y].sort((a,b)=>a.x-b.x);
-      let out='', prevEnd=null;
-      cells.forEach(o=>{
-        if(prevEnd!=null){ const gap=o.x-prevEnd; out += gap>o.h*0.9?'\t':(gap>0.5?' ':''); }
-        out+=o.s; prevEnd=o.x+o.w;
-      });
-      out=out.replace(/[ \t]+$/,'');
-      if(out.trim()) lines.push(out);
-    });
-  }
+  for(let p=1;p<=pdf.numPages;p++){ const tc=await (await pdf.getPage(p)).getTextContent(); lines.push(..._genericLines(tc)); }
   return lines.join('\n');
 }
 async function prHandlePdf(file){
@@ -93,7 +141,7 @@ function prImportModal(initialText){
   const ov=document.createElement('div'); ov.id='pr-import-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box">
     <div class="modal-head"><h3>Importar lista de produtos</h3><button class="icon-btn" data-act="prImpClose" title="Fechar">✕</button></div>
-    <p class="mut" style="font-size:12px;margin:0 0 8px">Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · % à vista · % a prazo</b> (separadas por TAB ou 2+ espaços). Revise o texto extraído do PDF antes de importar. O <b>%</b> pode ser <code>0.029</code>, <code>2,9</code> ou <code>2,9%</code>; deixe o % a prazo vazio para repetir o à vista.</p>
+    <p class="mut" style="font-size:12px;margin:0 0 8px">Do PDF de portfólio (padrão favbalança) já vêm <b>só os produtos</b> — Empresa · Classe · Produto — sem as premissas. Revise/edite antes de importar; o <b>%</b> você preenche depois na tabela. Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · % à vista · % a prazo</b> (TAB ou 2+ espaços). O <b>%</b> aceita <code>0.029</code>, <code>2,9</code> ou <code>2,9%</code>.</p>
     <textarea id="pr-imp-txt" class="pr-imp-txt" spellcheck="false" placeholder="Empresa\tClasse\tProduto\t% à vista\t% a prazo">${esc(initialText||'')}</textarea>
     <div class="modal-foot">
       <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-imp-replace"> Substituir o portfólio atual</label>
@@ -129,7 +177,6 @@ function prDoImport(){
     if(/^empresa$/i.test(cols[0]||'') || (/classe/i.test(cols[1]||'')&&/produto/i.test(cols[2]||''))) return;
     const it={ empresa:cols[0]||'', classe:(cols[1]||'').toUpperCase(), produto:cols[2]||'',
       pct:_pctParse(cols[3]), pctPrazo:_pctParse(cols[4]) };
-    if(it.pct==null) it.pct=0;
     if(!it.produto && !it.classe) return;
     items.push(it);
   });
