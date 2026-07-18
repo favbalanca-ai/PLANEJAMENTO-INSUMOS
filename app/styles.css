@@ -533,3 +533,13 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .monit-efic.ef-parc{background:var(--amber-soft);color:var(--amber)}
 .monit-efic.ef-bad{background:var(--red-soft);color:var(--red)}
 .monit-efic.ef-pend{background:#eef2f4;color:var(--muted)}
+/* Chuva (pluviômetro) */
+.chuva-list{padding:10px 14px}
+.chuva-group{margin-bottom:12px}
+.chuva-ghead{font-size:12px;font-weight:800;color:var(--ink);text-transform:capitalize;padding:6px 2px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.chuva-row{display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid #eef2f4;flex-wrap:wrap}
+.chuva-mm{font-weight:800;color:var(--ink);min-width:74px}
+.chuva-mm small{font-weight:600;color:var(--muted)}
+.chuva-dt{font-size:12px;color:var(--muted);min-width:64px}
+.chuva-loc{font-size:13px;color:var(--ink2)}
+.chuva-obs{font-size:12px}

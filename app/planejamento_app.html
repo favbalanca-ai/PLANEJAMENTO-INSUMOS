@@ -548,6 +548,16 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .monit-efic.ef-parc{background:var(--amber-soft);color:var(--amber)}
 .monit-efic.ef-bad{background:var(--red-soft);color:var(--red)}
 .monit-efic.ef-pend{background:#eef2f4;color:var(--muted)}
+/* Chuva (pluviômetro) */
+.chuva-list{padding:10px 14px}
+.chuva-group{margin-bottom:12px}
+.chuva-ghead{font-size:12px;font-weight:800;color:var(--ink);text-transform:capitalize;padding:6px 2px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.chuva-row{display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid #eef2f4;flex-wrap:wrap}
+.chuva-mm{font-weight:800;color:var(--ink);min-width:74px}
+.chuva-mm small{font-weight:600;color:var(--muted)}
+.chuva-dt{font-size:12px;color:var(--muted);min-width:64px}
+.chuva-loc{font-size:13px;color:var(--ink2)}
+.chuva-obs{font-size:12px}
 
 </style>
 </head>
@@ -572,6 +582,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/dre" data-view="dre" data-mod="planejamento"><span class="ico">💰</span><span class="lbl">DRE Orçada</span><span class="lbl-s">DRE</span></a>
       <a href="#/campo" data-view="campo" data-mod="campo"><span class="ico">🧑‍🌾</span><span class="lbl">Operação de Campo</span><span class="lbl-s">Campo</span></a>
       <a href="#/monitoramento" data-view="monitoramento" data-mod="campo"><span class="ico">🐛</span><span class="lbl">Monitoramento</span><span class="lbl-s">Monitor.</span></a>
+      <a href="#/chuva" data-view="chuva" data-mod="campo"><span class="ico">🌧️</span><span class="lbl">Chuva</span><span class="lbl-s">Chuva</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
     </nav>
     <div class="sidebar-foot">
@@ -619,7 +630,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-36';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-37';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -816,7 +827,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
-  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', chuva:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
@@ -1960,6 +1971,61 @@ V.monitoramento=function(arg){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Os registros ficam salvos <b>no aparelho</b>. Em breve: sincronizar com a planilha e ver no mapa.</p>`;
 };
 
+/* ================= CHUVA (registro pluviométrico) ================= */
+const CHUVA_KEY='planejamento_chuva';
+let CHUVA=null;
+const _MESN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const nfmm=n=>String(Math.round((+n||0)*10)/10).replace('.',',');
+function loadChuva(){ try{ const d=JSON.parse(localStorage.getItem(CHUVA_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
+function saveChuva(){ try{ localStorage.setItem(CHUVA_KEY, JSON.stringify(CHUVA)); }catch(e){} }
+function chuvaSave(){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value.trim():''; };
+  if(_numc(g('chuva-mm'))==null){ toast('Informe a chuva em mm'); return; }
+  CHUVA.registros.push({ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    data:g('chuva-data')||new Date().toISOString().slice(0,10), local:g('chuva-local'), mm:g('chuva-mm'), obs:g('chuva-obs'), ts:Date.now() });
+  saveChuva(); route(); toast('Chuva registrada');
+}
+V.chuva=function(){
+  const regs=CHUVA.registros.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0));
+  const hoje=new Date().toISOString().slice(0,10), mesAtual=hoje.slice(0,7);
+  const somaMM=list=>list.reduce((s,r)=>s+(_numc(r.mm)||0),0);
+  const totalMes=somaMM(regs.filter(r=>String(r.data||'').slice(0,7)===mesAtual)), totalGeral=somaMM(regs);
+  const locais=[...new Set(talhoesAll().map(t=>`${t.id} · ${t.nome||''}`.trim()).concat(regs.map(r=>r.local).filter(Boolean)))];
+  const groups={}; regs.forEach(r=>{ const k=String(r.data||'').slice(0,7)||'0000-00'; (groups[k]=groups[k]||[]).push(r); });
+  const groupsHtml=Object.keys(groups).sort().reverse().map(k=>{
+    const y=k.slice(0,4), m=+k.slice(5,7); const tit=(m>=1&&m<=12)?`${_MESN[m-1]}/${y}`:'sem data';
+    const rows=groups[k].map(r=>`<div class="chuva-row">
+      <span class="chuva-mm">${esc(r.mm||'—')}<small> mm</small></span>
+      <span class="chuva-dt">${esc(fmtData(r.data))}</span>
+      <span class="chuva-loc">${esc(r.local||'—')}</span>
+      ${r.obs?`<span class="chuva-obs mut">${esc(r.obs)}</span>`:''}
+      <span class="spacer"></span>
+      <button class="icon-btn del" title="Remover" data-act="chuvaDel" data-id="${esc(r.id)}">🗑</button>
+    </div>`).join('');
+    return `<div class="chuva-group"><div class="chuva-ghead">${tit} <span class="mut">— ${nfmm(somaMM(groups[k]))} mm</span></div>${rows}</div>`;
+  }).join('')||'<div class="mut" style="padding:14px">Nenhuma chuva registrada ainda.</div>';
+  return `<datalist id="chuva-locais">${locais.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+  <div class="kpi-grid" style="margin-bottom:16px">
+    <div class="kpi accent"><div class="k-label">Chuva no mês</div><div class="k-value">${nfmm(totalMes)} mm</div><div class="k-sub">${_MESN[+mesAtual.slice(5,7)-1]}/${mesAtual.slice(0,4)}</div></div>
+    <div class="kpi"><div class="k-label">Acumulado registrado</div><div class="k-value">${nfmm(totalGeral)} mm</div><div class="k-sub">${regs.length} registro(s)</div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Registrar chuva</h2><span class="sub">mm por local e data</span></div>
+    <div class="app-grid" style="padding:14px 16px">
+      <label>Data<input type="date" id="chuva-data" value="${hoje}"></label>
+      <label>Chuva (mm)<input class="cell" inputmode="decimal" id="chuva-mm" placeholder="ex.: 24"></label>
+      <label>Local<input class="txt" id="chuva-local" list="chuva-locais" placeholder="talhão, pivô, sede…"></label>
+      <label>Observações<input class="txt" id="chuva-obs" placeholder="opcional"></label>
+    </div>
+    <div style="padding:0 16px 14px;display:flex;justify-content:flex-end">
+      <button class="btn btn-primary btn-sm" data-act="chuvaSave">Registrar chuva</button>
+    </div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">por mês</span></div>
+    <div class="chuva-list">${groupsHtml}</div>
+  </div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Registros salvos <b>no aparelho</b>. Em breve: sincronizar com a planilha.</p>`;
+};
+
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
@@ -2089,7 +2155,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',chuva:'Chuva (pluviômetro)',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
@@ -2372,6 +2438,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitGPS'){ monitCaptureGPS(); }
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
+    else if(a.act==='chuvaSave'){ chuvaSave(); }
+    else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
@@ -2963,7 +3031,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
