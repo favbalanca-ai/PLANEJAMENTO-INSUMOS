@@ -125,6 +125,19 @@ function writePrecosSheet(precos){
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
 }
+// Aba plana "PREÇOS" no Banco: PRODUTO | À VISTA | A PRAZO | SAFRA.
+// É a lista que o PORTIFÓLIO do planejamento busca por VLOOKUP+IMPORTRANGE.
+function writeFlatPrecos(list, safra){
+  var b = precosSS(), s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
+  s.clearContents();
+  var rows = [['PRODUTO', 'À VISTA', 'A PRAZO', 'SAFRA']];
+  (list || []).forEach(function(it){
+    rows.push([S(it.p), (it.v == null || it.v === '') ? '' : N(it.v), (it.z == null || it.z === '') ? '' : N(it.z), S(safra)]);
+  });
+  s.getRange(1, 1, rows.length, 4).setValues(rows);
+  try { s.setFrozenRows(1); } catch (e) {}
+  return { rows: rows.length - 1 };
+}
 
 // operações (com itens) de uma faixa de linhas — lê de um array já carregado (big[L-1])
 function readOpsArr(big, r0, r1){
@@ -333,8 +346,10 @@ function doPost(e){
   var out = { ok:0, fail:0, msgs:[] };
   try {
     var payload = JSON.parse(e.postData.contents);
-    if (payload && payload.__precos){         // módulo Preços: regrava a aba inteira
+    if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows;
+    } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
+      var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }
