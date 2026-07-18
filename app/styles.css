@@ -510,3 +510,26 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pr-imp-txt{width:100%;min-height:280px;flex:1;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:12.5px;line-height:1.5;white-space:pre;overflow:auto;tab-size:20;border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink)}
 .pr-imp-txt:focus{outline:none;border-color:var(--teal)}
+/* Monitoramento de campo (scouting) */
+.monit-gpsrow{padding:0 16px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.monit-list{display:flex;flex-direction:column;gap:10px;padding:12px 14px}
+.monit-card{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--card)}
+.monit-card.monit-alert{border-color:var(--amber);background:var(--amber-soft)}
+.monit-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.monit-card-body{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;margin-top:6px;color:var(--ink2)}
+.monit-acao{font-size:13px;margin-top:5px}
+.monit-obs{font-size:12px;margin-top:4px}
+.monit-card-foot{margin-top:6px;font-size:12px}
+.monit-gpslink{color:var(--ink2);font-weight:600;text-decoration:none}
+.monit-gpslink:hover{text-decoration:underline}
+.monit-flag{color:var(--amber);font-weight:700;font-size:12px}
+.monit-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;color:#fff}
+.monit-badge.mc-praga{background:#b7791f}
+.monit-badge.mc-doenca{background:#b00020}
+.monit-badge.mc-daninha{background:#2e7d32}
+.monit-badge.mc-outro{background:#64757d}
+.monit-efic{font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;border:1px solid var(--line)}
+.monit-efic.ef-ok{background:var(--green-soft);color:var(--green)}
+.monit-efic.ef-parc{background:var(--amber-soft);color:var(--amber)}
+.monit-efic.ef-bad{background:var(--red-soft);color:var(--red)}
+.monit-efic.ef-pend{background:#eef2f4;color:var(--muted)}
