@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.16-32';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.16-33';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -16,7 +16,8 @@ function loadPrecos(){
   const s=d.safras[d.atual]; s.refs=s.refs||[]; s.itens=s.itens||[];
   return d;
 }
-function savePrecos(){ try{ localStorage.setItem(PRECOS_KEY, JSON.stringify(PRECOS)); }catch(e){} }
+function savePrecos(){ try{ localStorage.setItem(PRECOS_KEY, JSON.stringify(PRECOS)); }catch(e){}
+  try{ if(typeof schedulePrecosPush==='function') schedulePrecosPush(); }catch(e){} }
 function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
 // fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
 function pctToField(f){ if(f==null||f==='') return ''; return +((f*100).toFixed(4)); }
@@ -809,7 +810,18 @@ V.precos = function(){
       <td class="num">${pp>0?brl(pp):'—'}</td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
   }).join('');
+  const temUrl=!!syncUrl();
   return `<datalist id="pr-classes">${s.refs.map(r=>`<option value="${esc(r.classe)}">`).join('')}</datalist>
+  <div class="panel pr-sync">
+    <div class="panel-head"><h2>Sincronização</h2><span class="sub">${temUrl?('planilha · '+lastSyncTxt()):'não configurada'}</span></div>
+    <div class="bulk-add" style="align-items:center">
+      ${temUrl
+        ? `<button class="btn btn-outline btn-sm" data-act="prSyncPull">⬇ Puxar da planilha</button>
+           <button class="btn btn-primary btn-sm" data-act="prSyncPush">⬆ Enviar para a planilha</button>
+           <span class="mut" style="font-size:12px">Puxar substitui pelos preços da planilha; ${autoOn()?'com a sincronização automática ligada, o módulo puxa ao abrir e envia sozinho após editar.':'a sincronização automática está desligada.'}</span>`
+        : `<span class="mut" style="font-size:12px">Configure a URL na tela <b>Sincronizar</b> (módulo Planejamento) para sincronizar os preços com a planilha.</span>`}
+    </div>
+  </div>
   <div class="panel"><div class="panel-head"><h2>Safra</h2><span class="sub">${s.itens.length} produtos · ${s.refs.length} classes</span></div>
     <div class="bulk-add">
       <label class="mut" style="font-size:12px;font-weight:700">Safra ativa
@@ -1353,7 +1365,11 @@ function route(opts){
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
+  // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
+  if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
+  _lastView=view;
 }
+let _lastView=null;
 // está editando? (campo focado ou digitou há pouco) — usado para não puxar/re-renderizar por cima
 function isEditing(){
   const a=document.activeElement;
@@ -1608,6 +1624,8 @@ document.addEventListener('click',e=>{
       if(nome){ if(!PRECOS.safras[nome]) PRECOS.safras[nome]={refs:[],itens:[]}; PRECOS.atual=nome; savePrecos(); route(); toast('Safra '+nome+' criada'); } }
     else if(a.act==='prDupSafra'){ const nome=(prompt('Duplicar a safra '+PRECOS.atual+' para (nome):')||'').trim();
       if(nome){ PRECOS.safras[nome]=JSON.parse(JSON.stringify(safraAtual())); PRECOS.atual=nome; savePrecos(); route(); toast('Duplicado em '+nome); } }
+    else if(a.act==='prSyncPull'){ precosPull({}); }
+    else if(a.act==='prSyncPush'){ precosPush({}); }
     else if(a.act==='prImportPdf'){ const fi=$('#pr-pdf-file'); if(fi) fi.click(); }
     else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
     else if(a.act==='prImpDo'){ prDoImport(); }
@@ -2031,6 +2049,55 @@ async function syncPush(opts){
       syncLog(aborted?'✖ A planilha demorou demais para gravar. Toque em "Enviar agora" de novo — as edições que já entraram não se perdem.':'✖ Erro ao enviar: '+e.message);
       toast(aborted?'Planilha lenta — tente enviar de novo':'Falha ao enviar');
     } }
+}
+/* ---- Sincronização do módulo PREÇOS (troca a aba "PREÇOS APP" inteira) ----
+   Modelo simples e seguro: PUXAR substitui os preços locais pela planilha (fonte
+   da verdade), ENVIAR grava o conjunto local na planilha. Auto: puxa ao abrir o
+   módulo e envia (debounce) após editar, quando a sincronização automática está ligada. */
+let precosPushTimer=null, lastPrecosPushSig='';
+function precosApplyPulled(pa){
+  if(!pa||!pa.safras) return false;
+  const keys=Object.keys(pa.safras);
+  const hasContent=keys.some(k=>{ const s=pa.safras[k]||{}; return (s.refs&&s.refs.length)||(s.itens&&s.itens.length); });
+  if(!hasContent) return false;            // planilha ainda sem preços: não apaga o que é local
+  Object.keys(pa.safras).forEach(k=>{ const s=pa.safras[k]; s.refs=s.refs||[]; s.itens=s.itens||[]; });
+  const sig=JSON.stringify({atual:PRECOS.atual,safras:pa.safras});
+  if(sig===JSON.stringify({atual:PRECOS.atual,safras:PRECOS.safras})) { lastPrecosPushSig=JSON.stringify(PRECOS); return false; }
+  PRECOS.safras=pa.safras;
+  if(!PRECOS.atual||!PRECOS.safras[PRECOS.atual]) PRECOS.atual=keys.sort()[0];
+  savePrecos(); lastPrecosPushSig=JSON.stringify(PRECOS);   // evita reenviar o que acabou de chegar
+  return true;
+}
+async function precosPull(opts){
+  opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL de sincronização (tela Sincronizar do Planejamento)'); return; }
+  if(syncBusy){ if(!opts.auto) toast('Sincronização ocupada — tente de novo'); return; }
+  syncBusy=true; setSyncStatus('busy');
+  try{
+    const d=await syncGet(url,{auto:opts.auto});
+    const changed=precosApplyPulled(d&&d.precos_app);
+    syncBusy=false; setSyncStatus('ok'); markSynced();
+    if(changed){ if(!opts.auto) toast('Preços atualizados da planilha'); route({keepScroll:true}); }
+    else if(!opts.auto){ toast('Sem mudanças na planilha'); }
+  }catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto){ toast('Falha ao puxar preços'); addHist('pull',false,'Preços: '+(e&&e.message||'')); } }
+}
+async function precosPush(opts){
+  opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL de sincronização (tela Sincronizar do Planejamento)'); return; }
+  if(syncBusy){ if(opts.auto) schedulePrecosPush(); else toast('Sincronização ocupada — tente de novo'); return; }
+  const sig=JSON.stringify(PRECOS);
+  if(opts.auto && sig===lastPrecosPushSig) return;
+  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando preços…');
+  try{
+    const r=await syncPost(url, JSON.stringify({__precos:PRECOS}));
+    lastPrecosPushSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced();
+    addHist('push', !(r&&r.fail), 'Preços: '+((r&&r.ok)||0)+' linhas');
+    if(!opts.auto) toast('Preços enviados à planilha ('+((r&&r.ok)||0)+' linhas)');
+  }catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto){ toast('Falha ao enviar preços'); addHist('push',false,'Preços: '+(e&&e.message||'')); } }
+}
+function schedulePrecosPush(){
+  if(!syncUrl()||!autoOn()) return;
+  clearTimeout(precosPushTimer);
+  precosPushTimer=setTimeout(()=>{ if(JSON.stringify(PRECOS)===lastPrecosPushSig) return;
+    if(!syncBusy) precosPush({auto:true}); else schedulePrecosPush(); }, PUSH_DEBOUNCE);
 }
 // agenda um envio automático (debounce) após edições
 function scheduleAutoPush(){

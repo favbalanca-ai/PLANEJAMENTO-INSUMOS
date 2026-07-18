@@ -68,7 +68,56 @@ function readData(){
   }
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
-    precos_cultura:precos, maquinas:maquinas };
+    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet() };
+}
+
+/* --------- MÓDULO PREÇOS (composição de preços por safra do app) ---------
+   Guarda numa aba "PREÇOS APP" (criada automaticamente) uma tabela legível:
+   SAFRA | TIPO(REF/ITEM) | EMPRESA | CLASSE | PRODUTO | VISTA_RS | PRAZO_RS | PCT_VISTA | PCT_PRAZO
+   REF  = 1 produto de referência por classe (preço à vista/à prazo).
+   ITEM = produto do portfólio (% em relação à referência da classe; em PORCENTAGEM).
+   O app envia o objeto inteiro ({__precos:{...}}) e regravamos a aba (fonte da verdade). */
+var PRECOS_SHEET = 'PREÇOS APP';
+function precosSheet(){ var s = sh(PRECOS_SHEET); if (!s) s = ss().insertSheet(PRECOS_SHEET); return s; }
+function readPrecosSheet(){
+  var s = sh(PRECOS_SHEET); if (!s) return { safras:{} };
+  var last = s.getLastRow(); if (last < 2) return { safras:{} };
+  var v = s.getRange(2, 1, last - 1, 9).getValues(), safras = {};
+  for (var i = 0; i < v.length; i++){
+    var r = v[i], safra = S(r[0]), tipo = S(r[1]).toUpperCase();
+    if (!safra) continue;
+    var sf = safras[safra] || (safras[safra] = { refs:[], itens:[] });
+    if (tipo === 'REF'){
+      if (!S(r[3]) && !S(r[4])) continue;
+      sf.refs.push({ classe:S(r[3]), produto:S(r[4]), vista:N(r[5]), prazo:N(r[6]) });
+    } else if (tipo === 'ITEM'){
+      if (!S(r[4]) && !S(r[3])) continue;
+      var pv = (r[7] === '' || r[7] == null) ? null : N(r[7]) / 100;   // % -> fator
+      var pp = (r[8] === '' || r[8] == null) ? null : N(r[8]) / 100;
+      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), pct:pv, pctPrazo:pp });
+    }
+  }
+  return { safras:safras };
+}
+function writePrecosSheet(precos){
+  var s = precosSheet();
+  s.clearContents();
+  var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO']];
+  var safras = (precos && precos.safras) || {};
+  Object.keys(safras).forEach(function(nm){
+    var sf = safras[nm] || {};
+    (sf.refs || []).forEach(function(r){
+      rows.push([nm, 'REF', '', S(r.classe), S(r.produto),
+        r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '']);
+    });
+    (sf.itens || []).forEach(function(it){
+      rows.push([nm, 'ITEM', S(it.empresa), S(it.classe), S(it.produto), '', '',
+        it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100)]);
+    });
+  });
+  s.getRange(1, 1, rows.length, 9).setValues(rows);
+  try { s.setFrozenRows(1); } catch (e) {}
+  return { rows: rows.length - 1 };
 }
 
 // operações (com itens) de uma faixa de linhas — lê de um array já carregado (big[L-1])
@@ -268,8 +317,12 @@ function doGet(e){
 function doPost(e){
   var out = { ok:0, fail:0, msgs:[] };
   try {
-    var edits = JSON.parse(e.postData.contents);
-    applyEditsBatch(edits, out);      // grava em lote (rápido)
+    var payload = JSON.parse(e.postData.contents);
+    if (payload && payload.__precos){         // módulo Preços: regrava a aba inteira
+      var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows;
+    } else {
+      applyEditsBatch(payload, out);           // grava em lote (rápido)
+    }
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
   cacheClear();                       // invalida o cache: o próximo puxar traz o dado fresco
   return json(out);
