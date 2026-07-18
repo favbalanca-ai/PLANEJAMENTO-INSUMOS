@@ -558,6 +558,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .chuva-dt{font-size:12px;color:var(--muted);min-width:64px}
 .chuva-loc{font-size:13px;color:var(--ink2)}
 .chuva-obs{font-size:12px}
+/* Recomendação de aplicação */
+.recom-prod{font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;line-height:1.5}
 
 </style>
 </head>
@@ -583,6 +585,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/campo" data-view="campo" data-mod="campo"><span class="ico">🧑‍🌾</span><span class="lbl">Operação de Campo</span><span class="lbl-s">Campo</span></a>
       <a href="#/monitoramento" data-view="monitoramento" data-mod="campo"><span class="ico">🐛</span><span class="lbl">Monitoramento</span><span class="lbl-s">Monitor.</span></a>
       <a href="#/chuva" data-view="chuva" data-mod="campo"><span class="ico">🌧️</span><span class="lbl">Chuva</span><span class="lbl-s">Chuva</span></a>
+      <a href="#/stand" data-view="stand" data-mod="campo"><span class="ico">🌱</span><span class="lbl">Contagem de Stand</span><span class="lbl-s">Stand</span></a>
+      <a href="#/recomendacao" data-view="recomendacao" data-mod="campo"><span class="ico">💊</span><span class="lbl">Recomendação</span><span class="lbl-s">Recom.</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
     </nav>
     <div class="sidebar-foot">
@@ -630,7 +634,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-37';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-38';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -827,7 +831,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
-  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', chuva:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
@@ -2026,6 +2030,144 @@ V.chuva=function(){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Registros salvos <b>no aparelho</b>. Em breve: sincronizar com a planilha.</p>`;
 };
 
+/* ================= CONTAGEM DE STAND (população de plantas) ================= */
+const STAND_KEY='planejamento_stand';
+let STAND=null;
+const nfpop=n=>Math.round(+n||0).toLocaleString('pt-BR');
+function loadStand(){ try{ const d=JSON.parse(localStorage.getItem(STAND_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
+function saveStand(){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} }
+function parsePontos(s){ return String(s||'').split(/[,;\s]+/).filter(Boolean); }
+// população/ha = (média de plantas por ponto / comprimento avaliado) / espaçamento × 10000
+function standCompute(esp,comp,pontos,meta){
+  const nums=pontos.map(_numc).filter(n=>n!=null&&n>=0);
+  esp=_numc(esp); comp=_numc(comp); meta=_numc(meta);
+  if(!nums.length||!(esp>0)||!(comp>0)) return null;
+  const media=nums.reduce((a,b)=>a+b,0)/nums.length, pop=(media/comp)/esp*10000;
+  return {media, pop, n:nums.length, pctMeta:meta>0?pop/meta*100:null, falha:meta>0?Math.max(0,(1-pop/meta)*100):null};
+}
+function standPreview(){
+  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
+  const c=standCompute(g('stand-esp'),g('stand-comp'),parsePontos(g('stand-pontos')),g('stand-meta'));
+  const el=document.getElementById('stand-prev'); if(!el) return;
+  el.innerHTML=c?`População estimada: <b>${nfpop(c.pop)} plantas/ha</b>${c.pctMeta!=null?` · ${Math.round(c.pctMeta)}% da meta`:''}${c.falha!=null&&c.falha>0?` · <span style="color:var(--amber);font-weight:700">falha ${Math.round(c.falha)}%</span>`:''} <span class="mut">(média ${Math.round(c.media*10)/10} em ${c.n} ponto(s))</span>`:'';
+}
+function standSave(talhao){
+  const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
+  const pontos=parsePontos(g('stand-pontos'));
+  const c=standCompute(g('stand-esp'),g('stand-comp'),pontos,g('stand-meta'));
+  if(!c){ toast('Preencha espaçamento, comprimento e ao menos 1 ponto'); return; }
+  STAND.registros.push({ id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), talhao,
+    data:g('stand-data')||new Date().toISOString().slice(0,10), cultura:g('stand-cult'),
+    esp:g('stand-esp'), comp:g('stand-comp'), meta:g('stand-meta'), pontos:pontos.join(', '),
+    pop:Math.round(c.pop), pctMeta:c.pctMeta!=null?Math.round(c.pctMeta):null, falha:c.falha!=null?Math.round(c.falha):null,
+    obs:g('stand-obs'), ts:Date.now() });
+  saveStand(); route(); toast('Contagem salva');
+}
+V.stand=function(arg){
+  const all=talhoesAll();
+  if(!all.length) return `<div class="empty">Nenhum talhão para contar.</div>`;
+  const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
+  const regs=STAND.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const tOpt=all.map(x=>{ const n=STAND.registros.filter(r=>r.talhao===x.id).length;
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n}`:''}</option>`; }).join('');
+  const hoje=new Date().toISOString().slice(0,10);
+  const cards=regs.map(r=>`<div class="monit-card${r.falha!=null&&r.falha>=10?' monit-alert':''}">
+    <div class="monit-card-top"><b>${nfpop(r.pop)} plantas/ha</b>
+      ${r.pctMeta!=null?`<span class="monit-efic ${r.falha>=10?'ef-bad':(r.falha>0?'ef-parc':'ef-ok')}">${r.pctMeta}% da meta</span>`:''}
+      <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}${r.cultura?` · ${esc(r.cultura)}`:''}</span>
+      <span class="spacer"></span><button class="icon-btn del" data-act="standDel" data-id="${esc(r.id)}">🗑</button></div>
+    <div class="monit-card-body"><span>Espaç.: <b>${esc(r.esp)}</b> m</span><span>Compr.: <b>${esc(r.comp)}</b> m</span><span>Meta: <b>${r.meta?nfpop(r.meta):'—'}</b>/ha</span>${r.falha!=null&&r.falha>0?`<span class="monit-flag">⚠️ falha ${r.falha}%</span>`:''}</div>
+    <div class="monit-obs mut">Pontos: ${esc(r.pontos)}${r.obs?` · ${esc(r.obs)}`:''}</div></div>`).join('')||'<div class="mut" style="padding:14px">Sem contagens neste talhão ainda.</div>';
+  return `<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="stand-talhao">${tOpt}</select></div></div>
+  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="panel"><div class="panel-head"><h2>Nova contagem</h2><span class="sub">população de plantas</span></div>
+    <div class="app-grid" style="padding:14px 16px">
+      <label>Data<input type="date" id="stand-data" value="${hoje}"></label>
+      <label>Cultura/variedade<input class="txt" id="stand-cult" placeholder="opcional"></label>
+      <label>Espaçamento (m)<input class="cell stand-f" inputmode="decimal" id="stand-esp" placeholder="ex.: 0,5"></label>
+      <label>Comprimento avaliado (m)<input class="cell stand-f" inputmode="decimal" id="stand-comp" value="5" placeholder="ex.: 5"></label>
+      <label>Meta (plantas/ha)<input class="cell stand-f" inputmode="numeric" id="stand-meta" placeholder="ex.: 300000"></label>
+      <label>Plantas por ponto<input class="txt stand-f" id="stand-pontos" placeholder="ex.: 18, 20, 17, 19"></label>
+    </div>
+    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Observações</label>
+      <input class="txt" id="stand-obs" placeholder="opcional" style="width:100%"></div>
+    <div style="padding:0 16px 6px;font-size:13px" id="stand-prev"></div>
+    <div style="padding:0 16px 14px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-act="standSave" data-t="${esc(selId)}">Salvar contagem</button></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} contagem(ns)</span></div>
+    <div class="monit-list">${cards}</div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">População = (média de plantas ÷ comprimento ÷ espaçamento) × 10.000. Salvo <b>no aparelho</b>.</p>`;
+};
+
+/* ================= RECOMENDAÇÃO DE APLICAÇÃO (receituário) ================= */
+const RECOM_KEY='planejamento_recomendacao';
+let RECOM=null;
+function loadRecom(){ try{ const d=JSON.parse(localStorage.getItem(RECOM_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
+function saveRecom(){ try{ localStorage.setItem(RECOM_KEY, JSON.stringify(RECOM)); }catch(e){} }
+function recomSave(talhao){
+  const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
+  if(!g('recom-produtos')){ toast('Informe ao menos um produto'); return; }
+  RECOM.registros.push({ id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), talhao,
+    data:g('recom-data')||new Date().toISOString().slice(0,10), janela:g('recom-janela'), alvo:g('recom-alvo'),
+    produtos:g('recom-produtos'), calda:g('recom-calda'), adjuvante:g('recom-adj'), cond:g('recom-cond'),
+    resp:g('recom-resp'), obs:g('recom-obs'), ts:Date.now() });
+  saveRecom(); route(); toast('Recomendação salva');
+}
+function recomWhats(id){
+  const r=RECOM.registros.find(x=>x.id===id); if(!r) return;
+  const t=findTalhao(r.talhao);
+  let x=`*Recomendação de aplicação*\nTalhão: ${r.talhao}${t&&t.nome?` · ${t.nome}`:''}\n`;
+  if(r.data) x+=`Data: ${fmtData(r.data)}${r.janela?` · janela: ${r.janela}`:''}\n`;
+  if(r.alvo) x+=`Alvo: ${r.alvo}\n`;
+  x+=`\nProdutos:\n`+(r.produtos||'').split('\n').filter(Boolean).map(l=>`• ${l.trim()}`).join('\n')+'\n';
+  if(r.calda) x+=`\nVolume de calda: ${r.calda} L/ha\n`;
+  if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
+  if(r.cond) x+=`Condições: ${r.cond}\n`;
+  if(r.resp) x+=`Responsável: ${r.resp}\n`;
+  if(r.obs) x+=`Obs: ${r.obs}\n`;
+  window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
+}
+V.recomendacao=function(arg){
+  const all=talhoesAll();
+  if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
+  const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
+  const regs=RECOM.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const tOpt=all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n}`:''}</option>`; }).join('');
+  const hoje=new Date().toISOString().slice(0,10);
+  const cards=regs.map(r=>`<div class="monit-card">
+    <div class="monit-card-top">${r.alvo?`<span class="monit-badge mc-outro">${esc(r.alvo)}</span>`:''}
+      <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}${r.janela?` · ${esc(r.janela)}`:''}</span>
+      <span class="spacer"></span>
+      <button class="btn btn-wa btn-sm" data-act="recomWa" data-id="${esc(r.id)}">📲 WhatsApp</button>
+      <button class="icon-btn del" data-act="recomDel" data-id="${esc(r.id)}">🗑</button></div>
+    <div class="recom-prod">${esc(r.produtos||'').split('\n').filter(Boolean).map(l=>`• ${esc(l.trim())}`).join('<br>')}</div>
+    <div class="monit-card-body">${r.calda?`<span>Calda: <b>${esc(r.calda)}</b> L/ha</span>`:''}${r.adjuvante?`<span>Adjuvante: ${esc(r.adjuvante)}</span>`:''}${r.cond?`<span>Condições: ${esc(r.cond)}</span>`:''}</div>
+    ${r.obs?`<div class="monit-obs mut">${esc(r.obs)}${r.resp?` · resp.: ${esc(r.resp)}`:''}</div>`:(r.resp?`<div class="monit-obs mut">resp.: ${esc(r.resp)}</div>`:'')}</div>`).join('')||'<div class="mut" style="padding:14px">Sem recomendações neste talhão ainda.</div>';
+  return `<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
+  <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div></div>
+  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="panel"><div class="panel-head"><h2>Nova recomendação</h2><span class="sub">produto · dose · janela · calda · condições</span></div>
+    <div class="app-grid" style="padding:14px 16px">
+      <label>Data<input type="date" id="recom-data" value="${hoje}"></label>
+      <label>Janela / período<input class="txt" id="recom-janela" placeholder="ex.: aplicar em até 3 dias"></label>
+      <label>Alvo<input class="txt" id="recom-alvo" list="monit-alvos" placeholder="ex.: Ferrugem-asiática"></label>
+      <label>Volume de calda (L/ha)<input class="cell" inputmode="decimal" id="recom-calda" placeholder="ex.: 120"></label>
+      <label>Adjuvante<input class="txt" id="recom-adj" placeholder="ex.: óleo mineral 0,5%"></label>
+      <label>Condições<input class="txt" id="recom-cond" placeholder="ex.: vento <10 km/h, UR >55%"></label>
+      <label>Responsável<input class="txt" id="recom-resp" placeholder="agrônomo"></label>
+    </div>
+    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Produtos e doses (um por linha — ex.: FOX XPRO — 0,5 L/ha)</label>
+      <textarea id="recom-produtos" rows="3" placeholder="FOX XPRO — 0,5 L/ha&#10;ÓLEO — 0,5 L/ha" style="width:100%"></textarea></div>
+    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Observações</label>
+      <input class="txt" id="recom-obs" placeholder="opcional" style="width:100%"></div>
+    <div style="padding:0 16px 14px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-act="recomSave" data-t="${esc(selId)}">Salvar recomendação</button></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} recomendação(ões)</span></div>
+    <div class="monit-list">${cards}</div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação pronta por WhatsApp para a equipe.</p>`;
+};
+
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
@@ -2155,7 +2297,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',chuva:'Chuva (pluviômetro)',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
@@ -2344,12 +2486,15 @@ function copiaMaquinas(srcId,dstId,plano){
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.matches('input[data-pr]')){ applyPrecoEdit(e.target); return; }
   if(e.target.matches('input[data-edit], select[data-edit], textarea[data-edit]')) applyEdit(e.target);
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
+document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('stand-f')) standPreview(); });
 document.addEventListener('click',e=>{
   const cf=e.target.closest('#emp-cfilter .chip-f');
   if(cf){ cf.parentElement.querySelectorAll('.chip-f').forEach(bb=>bb.classList.remove('on')); cf.classList.add('on'); applyEmpFilter(); return; }
@@ -2440,6 +2585,11 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
+    else if(a.act==='standSave'){ standSave(a.t); }
+    else if(a.act==='standDel'){ if(ask('Remover esta contagem?')){ STAND.registros=STAND.registros.filter(r=>r.id!==a.id); saveStand(); route(); toast('Removido'); } }
+    else if(a.act==='recomSave'){ recomSave(a.t); }
+    else if(a.act==='recomWa'){ recomWhats(a.id); }
+    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
@@ -3031,7 +3181,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
