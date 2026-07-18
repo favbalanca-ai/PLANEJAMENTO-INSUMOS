@@ -595,10 +595,11 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-34';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-35';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
+const BANCO_ID = '1-pNApvSfw9oUbfec5Tm7g-DEh9xCgupAEpjsZp7EBKg';   // planilha "Banco de Preços" (p/ a fórmula IMPORTRANGE)
 let PRECOS = null;
 function loadPrecos(){
   let d; try{ d=JSON.parse(localStorage.getItem(PRECOS_KEY)); }catch(e){}
@@ -1439,14 +1440,24 @@ V.precos = function(){
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
     </div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Alimentar planejamento</h2><span class="sub">grava os preços desta safra no PORTIFÓLIO do planejamento</span></div>
+  <div class="panel"><div class="panel-head"><h2>Levar os preços ao planejamento</h2><span class="sub">recomendado: o planejamento busca por fórmula (não sobrescreve nada)</span></div>
+    ${temUrl ? `
     <div class="bulk-add" style="align-items:center">
-      ${temUrl
-        ? `<button class="btn btn-primary btn-sm" data-act="prAlimVista">▶ Alimentar (à vista)</button>
-           <button class="btn btn-outline btn-sm" data-act="prAlimPrazo">▶ Alimentar (a prazo)</button>
-           <span class="mut" style="font-size:12px">Casa pelo nome do produto e mostra um resumo antes de gravar (atualizados · sem preço nesta safra · novos).</span>`
-        : `<span class="mut" style="font-size:12px">Configure a URL na tela <b>Sincronizar</b> (módulo Planejamento) para alimentar o planejamento.</span>`}
+      <button class="btn btn-primary btn-sm" data-act="prPublicar">▶ Publicar preços — safra ${esc(PRECOS.atual)}</button>
+      <span class="mut" style="font-size:12px">Grava a lista <b>produto → preço</b> no Banco. O planejamento atualiza sozinho pela fórmula.</span>
     </div>
+    <details class="panel-collapse" style="margin-top:10px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700">📋 Fórmula para colar no PORTIFÓLIO (só uma vez)</summary>
+      <p class="mut" style="font-size:12px;margin:8px 0 4px">Na planilha de planejamento → aba <b>PORTIFÓLIO</b> → célula <b>S4</b> (VALOR R$/L OU KG): cole e arraste pra baixo. Preço <b>à vista</b>:</p>
+      <textarea class="pr-imp-txt" style="min-height:54px" readonly onclick="this.select()">=IFERROR(VLOOKUP(C4;IMPORTRANGE("${BANCO_ID}";"PREÇOS!A:C");2;FALSO);"")</textarea>
+      <p class="mut" style="font-size:12px;margin:6px 0 0">Para <b>a prazo</b>, troque o <code>2</code> por <code>3</code>. Na 1ª vez o Sheets pede para <b>Permitir acesso</b> (IMPORTRANGE) — clique em Permitir.</p>
+    </details>
+    <div class="bulk-add" style="align-items:center;margin-top:10px">
+      <span class="mut" style="font-size:12px">Opcional — carimbar valor fixo (perde a fórmula de busca):</span>
+      <button class="btn btn-ghost btn-sm" data-act="prAlimVista">à vista</button>
+      <button class="btn btn-ghost btn-sm" data-act="prAlimPrazo">a prazo</button>
+    </div>`
+    : `<div class="bulk-add"><span class="mut" style="font-size:12px">Configure a URL na tela <b>Sincronizar</b> (módulo Planejamento) para levar os preços ao planejamento.</span></div>`}
   </div>
   <p class="mut" style="font-size:12px">O <b>%</b> é a variação sobre o preço de referência da classe — digite em <b>porcentagem</b> (ex.: <code>2,9</code> = +2,9%; <code>-46,7</code> = −46,7%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
 };
@@ -2228,6 +2239,7 @@ document.addEventListener('click',e=>{
       if(nome){ PRECOS.safras[nome]=JSON.parse(JSON.stringify(safraAtual())); PRECOS.atual=nome; savePrecos(); route(); toast('Duplicado em '+nome); } }
     else if(a.act==='prSyncPull'){ precosPull({}); }
     else if(a.act==='prSyncPush'){ precosPush({}); }
+    else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -2750,6 +2762,23 @@ function prAlimModal(pv){
       <button class="btn btn-primary btn-sm" data-act="prAlimGo"${pv.upd.length?'':' disabled'}>Atualizar ${pv.upd.length} preços</button>
     </div></div>`;
   document.body.appendChild(ov);
+}
+// Publica a lista plana "produto -> preço" da safra atual no Banco (aba PREÇOS).
+// O PORTIFÓLIO do planejamento busca por fórmula (IMPORTRANGE), sem sobrescrever nada.
+async function publicarPlanejamento(){
+  const url=syncUrl(); if(!url){ toast('Configure a URL de sincronização primeiro'); return; }
+  if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
+  const s=safraAtual();
+  const flat=s.itens.map(it=>({p:it.produto, v:+precoComposto(it,'vista').toFixed(2), z:+precoComposto(it,'prazo').toFixed(2)}))
+                    .filter(x=>x.p && (x.v>0||x.z>0));
+  if(!flat.length){ toast('Nenhum preço composto para publicar — defina as referências das classes'); return; }
+  syncBusy=true; setSyncStatus('busy'); toast('Publicando preços da safra '+PRECOS.atual+'…');
+  try{
+    const r=await syncPost(url, JSON.stringify({__flatPrecos:flat, safra:PRECOS.atual}));
+    syncBusy=false; setSyncStatus('ok'); markSynced();
+    addHist('push', !(r&&r.fail), 'Publicar preços: '+((r&&r.ok)||0)+' produtos');
+    toast('Publicado: '+((r&&r.ok)||0)+' preços (safra '+PRECOS.atual+'). O planejamento busca pela fórmula.');
+  }catch(e){ syncBusy=false; setSyncStatus('err'); toast('Falha ao publicar os preços'); }
 }
 async function prAlimRun(kind){
   const pv=_alimPrev; if(!pv) return;
