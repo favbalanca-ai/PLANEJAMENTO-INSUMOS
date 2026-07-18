@@ -543,3 +543,5 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .chuva-dt{font-size:12px;color:var(--muted);min-width:64px}
 .chuva-loc{font-size:13px;color:var(--ink2)}
 .chuva-obs{font-size:12px}
+/* Recomendação de aplicação */
+.recom-prod{font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;line-height:1.5}
