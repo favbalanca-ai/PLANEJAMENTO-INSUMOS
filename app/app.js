@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-35';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-36';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -199,7 +199,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
-  maquinas:'planejamento', dre:'planejamento', campo:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
@@ -1109,7 +1109,7 @@ V.inicio = function(){
       ${card('planejamento','📋','Planejamento','Monte e ajuste o plano da safra.',
         ['Painel','Talhões','Empreendimentos','Demanda de Compras','Cotação','Máquinas','DRE'],'ec-plan')}
       ${card('campo','🧑‍🌾','Campo','Execute e registre as operações na lavoura.',
-        ['Operação de Campo','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
+        ['Operação de Campo','Monitoramento (GPS)','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
       ${card('precos','💲','Preços','Componha e mantenha os preços dos insumos.',
         ['Portfólio do ano','Preços de referência','Composição à vista e a prazo','Histórico por safra'],'ec-precos')}
     </div>
@@ -1238,6 +1238,111 @@ function campoProgress(){
     if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento') running++; } }));
   return {total,done,running};
 }
+/* ================= MONITORAMENTO DE CAMPO (scouting, estilo Aqila) ================= */
+const MONIT_KEY='planejamento_monitoramento';
+let MONIT=null, _monitGPS=null;
+function loadMonit(){ try{ const d=JSON.parse(localStorage.getItem(MONIT_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
+function saveMonit(){ try{ localStorage.setItem(MONIT_KEY, JSON.stringify(MONIT)); }catch(e){} }
+const fmtData=s=>{ if(!s) return ''; const p=String(s).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; };
+const MONIT_ALVOS=['Lagarta-do-cartucho','Lagarta-da-soja','Helicoverpa','Percevejo-marrom','Percevejo-verde','Mosca-branca','Tripes','Ácaro-rajado','Ferrugem-asiática','Mancha-alvo','Mancha-parda','Antracnose','Oídio','Cercospora','Mofo-branco','Buva','Capim-amargoso','Caruru','Corda-de-viola','Trapoeraba','Picão-preto','Falha de stand'];
+const MONIT_CAT={praga:{lbl:'Praga',cls:'mc-praga'},doenca:{lbl:'Doença',cls:'mc-doenca'},daninha:{lbl:'Daninha',cls:'mc-daninha'},outro:{lbl:'Outro',cls:'mc-outro'}};
+const MONIT_EFIC={'':{lbl:''},pendente:{lbl:'Pendente',cls:'ef-pend'},eficaz:{lbl:'Eficaz',cls:'ef-ok'},parcial:{lbl:'Parcial',cls:'ef-parc'},ineficaz:{lbl:'Ineficaz',cls:'ef-bad'}};
+const _numc=v=>{ const n=parseFloat(String(v==null?'':v).replace(',','.')); return isFinite(n)?n:null; };
+function monitCaptureGPS(){
+  const st=document.getElementById('monit-gps');
+  if(!('geolocation' in navigator)){ if(st) st.textContent='GPS não suportado neste aparelho'; return; }
+  if(st) st.textContent='📍 obtendo localização…';
+  navigator.geolocation.getCurrentPosition(p=>{
+    _monitGPS={lat:+p.coords.latitude.toFixed(6), lng:+p.coords.longitude.toFixed(6), acc:Math.round(p.coords.accuracy||0)};
+    if(st) st.innerHTML=`📍 <b>${_monitGPS.lat}, ${_monitGPS.lng}</b> <span class="mut">(±${_monitGPS.acc} m)</span> · <a href="https://maps.google.com/?q=${_monitGPS.lat},${_monitGPS.lng}" target="_blank" rel="noopener">ver</a>`;
+  }, err=>{ if(st) st.textContent='✖ não foi possível obter o GPS ('+((err&&err.message)||'')+'). Permita o acesso à localização.'; },
+  {enableHighAccuracy:true, timeout:12000, maximumAge:0});
+}
+function monitSave(talhao){
+  const g=id=>{ const el=document.getElementById(id); return el?el.value.trim():''; };
+  const alvo=g('monit-alvo');
+  if(!alvo){ toast('Informe o alvo (praga/doença/daninha)'); return; }
+  MONIT.registros.push({
+    id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+    talhao, data:g('monit-data')||new Date().toISOString().slice(0,10),
+    categoria:g('monit-cat')||'praga', alvo,
+    nivel:g('monit-nivel'), unidade:g('monit-unid'), limiar:g('monit-limiar'),
+    acao:g('monit-acao'), eficacia:g('monit-efic'), obs:g('monit-obs'),
+    lat:_monitGPS?_monitGPS.lat:null, lng:_monitGPS?_monitGPS.lng:null, acc:_monitGPS?_monitGPS.acc:null,
+    ts:Date.now()
+  });
+  saveMonit(); _monitGPS=null; route(); toast('Registro salvo');
+}
+V.monitoramento=function(arg){
+  const all=talhoesAll();
+  if(!all.length) return `<div class="empty">Nenhum talhão para monitorar.</div>`;
+  const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id;
+  const t=all.find(x=>x.id===selId);
+  const regs=MONIT.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const tOpt=all.map(x=>{ const n=MONIT.registros.filter(r=>r.talhao===x.id).length;
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n} reg.`:''}</option>`; }).join('');
+  const hoje=new Date().toISOString().slice(0,10);
+  const cards=regs.map(r=>{
+    const cat=MONIT_CAT[r.categoria]||MONIT_CAT.outro;
+    const nv=_numc(r.nivel), lm=_numc(r.limiar), acima=(nv!=null&&lm!=null&&nv>=lm);
+    const ef=MONIT_EFIC[r.eficacia||'']||MONIT_EFIC[''];
+    const gps=(r.lat!=null&&r.lng!=null)
+      ? `<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" class="monit-gpslink">📍 ${r.lat}, ${r.lng}${r.acc?` <span class="mut">(±${r.acc}m)</span>`:''}</a>`
+      : '<span class="mut">sem GPS</span>';
+    return `<div class="monit-card${acima?' monit-alert':''}">
+      <div class="monit-card-top">
+        <span class="monit-badge ${cat.cls}">${cat.lbl}</span>
+        <b>${esc(r.alvo||'—')}</b>
+        <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}</span>
+        ${ef.cls?`<span class="monit-efic ${ef.cls}">${ef.lbl}</span>`:''}
+        <span class="spacer"></span>
+        <button class="icon-btn del" title="Remover" data-act="monitDel" data-id="${esc(r.id)}">🗑</button>
+      </div>
+      <div class="monit-card-body">
+        <span>Nível: <b>${esc(r.nivel||'—')}</b>${r.unidade?` ${esc(r.unidade)}`:''}</span>
+        <span>Limiar: <b>${esc(r.limiar||'—')}</b></span>
+        ${acima?'<span class="monit-flag">⚠️ acima do limiar</span>':''}
+      </div>
+      ${r.acao?`<div class="monit-acao"><b>Ação:</b> ${esc(r.acao)}</div>`:''}
+      ${r.obs?`<div class="monit-obs mut">${esc(r.obs)}</div>`:''}
+      <div class="monit-card-foot">${gps}</div>
+    </div>`;
+  }).join('')||'<div class="mut" style="padding:14px">Sem registros neste talhão ainda.</div>';
+  return `<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
+  <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="monit-talhao">${tOpt}</select></div></div>
+  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="panel"><div class="panel-head"><h2>Novo registro</h2><span class="sub">monitoramento de campo</span></div>
+    <div class="app-grid" style="padding:14px 16px">
+      <label>Data<input type="date" id="monit-data" value="${hoje}"></label>
+      <label>Categoria<select class="sel" id="monit-cat">
+        <option value="praga">Praga</option><option value="doenca">Doença</option>
+        <option value="daninha">Daninha</option><option value="outro">Outro</option></select></label>
+      <label>Alvo<input class="txt" id="monit-alvo" list="monit-alvos" placeholder="ex.: Lagarta-da-soja"></label>
+      <label>Nível / incidência<input class="cell" inputmode="decimal" id="monit-nivel" placeholder="ex.: 4"></label>
+      <label>Unidade<input class="txt" id="monit-unid" placeholder="ex.: lagartas/m · %"></label>
+      <label>Limiar de ação<input class="cell" inputmode="decimal" id="monit-limiar" placeholder="ex.: 3"></label>
+      <label>Ação / controle<input class="txt" id="monit-acao" placeholder="ex.: aplicar inseticida"></label>
+      <label>Eficácia<select class="sel" id="monit-efic">
+        <option value="">—</option><option value="pendente">Pendente</option><option value="eficaz">Eficaz</option>
+        <option value="parcial">Parcial</option><option value="ineficaz">Ineficaz</option></select></label>
+    </div>
+    <div style="padding:0 16px 8px">
+      <label style="font-size:12px;font-weight:700;color:var(--muted)">Observações</label>
+      <textarea id="monit-obs" rows="2" placeholder="condições, local dentro do talhão, detalhes" style="width:100%"></textarea>
+    </div>
+    <div class="monit-gpsrow">
+      <button class="btn btn-outline btn-sm" data-act="monitGPS">📍 Capturar GPS</button>
+      <span id="monit-gps" class="mut" style="font-size:12px">GPS não capturado</span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary btn-sm" data-act="monitSave" data-t="${esc(selId)}">Salvar registro</button>
+    </div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} registro(s)</span></div>
+    <div class="monit-list">${cards}</div>
+  </div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Os registros ficam salvos <b>no aparelho</b>. Em breve: sincronizar com a planilha e ver no mapa.</p>`;
+};
+
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
@@ -1367,7 +1472,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
@@ -1555,6 +1660,7 @@ function copiaMaquinas(srcId,dstId,plano){
 
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.matches('input[data-pr]')){ applyPrecoEdit(e.target); return; }
@@ -1646,6 +1752,9 @@ document.addEventListener('click',e=>{
       if(nome){ PRECOS.safras[nome]=JSON.parse(JSON.stringify(safraAtual())); PRECOS.atual=nome; savePrecos(); route(); toast('Duplicado em '+nome); } }
     else if(a.act==='prSyncPull'){ precosPull({}); }
     else if(a.act==='prSyncPush'){ precosPush({}); }
+    else if(a.act==='monitGPS'){ monitCaptureGPS(); }
+    else if(a.act==='monitSave'){ monitSave(a.t); }
+    else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
@@ -2237,7 +2346,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
