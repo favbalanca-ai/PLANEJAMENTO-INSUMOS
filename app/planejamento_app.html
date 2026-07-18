@@ -595,7 +595,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.16-33';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-34';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1439,6 +1439,15 @@ V.precos = function(){
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
     </div>
   </div>
+  <div class="panel"><div class="panel-head"><h2>Alimentar planejamento</h2><span class="sub">grava os preços desta safra no PORTIFÓLIO do planejamento</span></div>
+    <div class="bulk-add" style="align-items:center">
+      ${temUrl
+        ? `<button class="btn btn-primary btn-sm" data-act="prAlimVista">▶ Alimentar (à vista)</button>
+           <button class="btn btn-outline btn-sm" data-act="prAlimPrazo">▶ Alimentar (a prazo)</button>
+           <span class="mut" style="font-size:12px">Casa pelo nome do produto e mostra um resumo antes de gravar (atualizados · sem preço nesta safra · novos).</span>`
+        : `<span class="mut" style="font-size:12px">Configure a URL na tela <b>Sincronizar</b> (módulo Planejamento) para alimentar o planejamento.</span>`}
+    </div>
+  </div>
   <p class="mut" style="font-size:12px">O <b>%</b> é a variação sobre o preço de referência da classe — digite em <b>porcentagem</b> (ex.: <code>2,9</code> = +2,9%; <code>-46,7</code> = −46,7%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
 };
 
@@ -2219,6 +2228,11 @@ document.addEventListener('click',e=>{
       if(nome){ PRECOS.safras[nome]=JSON.parse(JSON.stringify(safraAtual())); PRECOS.atual=nome; savePrecos(); route(); toast('Duplicado em '+nome); } }
     else if(a.act==='prSyncPull'){ precosPull({}); }
     else if(a.act==='prSyncPush'){ precosPush({}); }
+    else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
+    else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
+    else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
+    else if(a.act==='prAlimGo'){ prAlimRun('upd'); }
+    else if(a.act==='prAlimNovos'){ prAlimRun('novos'); }
     else if(a.act==='prImportPdf'){ const fi=$('#pr-pdf-file'); if(fi) fi.click(); }
     else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
     else if(a.act==='prImpDo'){ prDoImport(); }
@@ -2691,6 +2705,69 @@ function schedulePrecosPush(){
   clearTimeout(precosPushTimer);
   precosPushTimer=setTimeout(()=>{ if(JSON.stringify(PRECOS)===lastPrecosPushSig) return;
     if(!syncBusy) precosPush({auto:true}); else schedulePrecosPush(); }, PUSH_DEBOUNCE);
+}
+/* ---- Alimentar planejamento: leva os preços compostos da safra p/ o PORTIFÓLIO ---- */
+async function sendEdits(edits){
+  const url=syncUrl(); if(!url) throw new Error('sem URL');
+  const CHUNK=40; let ok=0, fail=0, msgs=[];
+  for(let i=0;i<edits.length;i+=CHUNK){
+    const pr=await syncPost(url, JSON.stringify(edits.slice(i,i+CHUNK)));
+    ok+=(pr.ok||0); fail+=(pr.fail||0); if(pr.msgs&&pr.msgs.length) msgs=msgs.concat(pr.msgs);
+  }
+  return {ok,fail,msgs};
+}
+const normKey=s=>String(s||'').toUpperCase().replace(/\s+/g,' ').trim();
+let _alimPrev=null;
+function alimentarPreview(tipo){
+  const s=safraAtual(), comp={};                 // normKey -> {price, it}
+  s.itens.forEach(it=>{ if(!it.produto) return; comp[normKey(it.produto)]={price:precoComposto(it,tipo), it}; });
+  const planNorm={};                             // normKey -> nome exato no planejamento
+  (DATA.produtos||[]).forEach(pp=>{ if(pp.produto) planNorm[normKey(pp.produto)]=pp.produto; });
+  const upd=[], semRef=[], orf=[], novos=[];
+  Object.keys(planNorm).forEach(k=>{ const c=comp[k], nome=planNorm[k];
+    if(c){ if(c.price>0) upd.push({produto:nome, price:c.price}); else semRef.push(nome); }
+    else orf.push(nome); });
+  s.itens.forEach(it=>{ if(it.produto && !(normKey(it.produto) in planNorm)) novos.push(it); });
+  return {tipo, upd, semRef, orf, novos};
+}
+function prAlimModal(pv){
+  const old=document.getElementById('pr-alim-ov'); if(old) old.remove();
+  const nomeTipo=pv.tipo==='prazo'?'a prazo':'à vista';
+  const li=arr=>arr.map(x=>`<span class="chip-f" style="cursor:default">${esc(typeof x==='string'?x:x.produto)}</span>`).join(' ');
+  const ov=document.createElement('div'); ov.id='pr-alim-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box">
+    <div class="modal-head"><h3>Alimentar planejamento — ${esc(PRECOS.atual)} · preço ${nomeTipo}</h3><button class="icon-btn" data-act="prAlimClose" title="Fechar">✕</button></div>
+    <div style="overflow:auto;max-height:58vh">
+      <p style="font-size:13px;margin:0 0 6px"><b>✅ ${pv.upd.length}</b> produto(s) do planejamento terão o preço ${nomeTipo} atualizado.</p>
+      ${pv.semRef.length?`<p class="mut" style="font-size:12px;margin:6px 0">⚠️ ${pv.semRef.length} casaram, mas sem preço (falta a referência da classe): ${li(pv.semRef)}</p>`:''}
+      ${pv.orf.length?`<div style="margin:10px 0"><div style="font-size:12px;font-weight:700;color:var(--amber)">⚠️ ${pv.orf.length} no planejamento SEM preço nesta safra — podem ter saído de linha (troque ou remova):</div><div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:5px">${li(pv.orf)}</div></div>`:''}
+      ${pv.novos.length?`<div style="margin:10px 0"><div style="font-size:12px;font-weight:700;color:var(--ink2)">➕ ${pv.novos.length} novos disponíveis nesta safra (ainda fora do planejamento):</div><div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:5px">${li(pv.novos)}</div></div>`:''}
+    </div>
+    <div class="modal-foot">
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="prAlimClose">Cancelar</button>
+      ${pv.novos.length?`<button class="btn btn-outline btn-sm" data-act="prAlimNovos">+ Adicionar ${pv.novos.length} novos</button>`:''}
+      <button class="btn btn-primary btn-sm" data-act="prAlimGo"${pv.upd.length?'':' disabled'}>Atualizar ${pv.upd.length} preços</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
+async function prAlimRun(kind){
+  const pv=_alimPrev; if(!pv) return;
+  if(!syncUrl()){ toast('Configure a URL de sincronização primeiro'); return; }
+  if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
+  let edits;
+  if(kind==='novos') edits=pv.novos.map(it=>{ const p=precoComposto(it,pv.tipo); return {type:'addprod',empresa:it.empresa,classe:it.classe,produto:it.produto,value:p>0?+p.toFixed(2):''}; });
+  else edits=pv.upd.map(u=>({type:'preco',produto:u.produto,value:+u.price.toFixed(2)}));
+  if(!edits.length){ toast('Nada para enviar'); return; }
+  syncBusy=true; setSyncStatus('busy'); toast('Enviando ao planejamento…');
+  try{
+    const r=await sendEdits(edits);
+    syncBusy=false; setSyncStatus('ok'); markSynced();
+    addHist('push', !r.fail, 'Alimentar: '+r.ok+' ok, '+r.fail+' falhas');
+    toast((kind==='novos'?'Produtos adicionados: ':'Preços atualizados: ')+r.ok+(r.fail?(' · '+r.fail+' falhas'):''));
+    const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove();
+    await syncPull({auto:true, force:true, silentToast:true});   // traz o planejamento já atualizado
+  }catch(e){ syncBusy=false; setSyncStatus('err'); toast('Falha ao alimentar o planejamento'); }
 }
 // agenda um envio automático (debounce) após edições
 function scheduleAutoPush(){
