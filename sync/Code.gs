@@ -78,9 +78,15 @@ function readData(){
    ITEM = produto do portfólio (% em relação à referência da classe; em PORCENTAGEM).
    O app envia o objeto inteiro ({__precos:{...}}) e regravamos a aba (fonte da verdade). */
 var PRECOS_SHEET = 'PREÇOS APP';
-function precosSheet(){ var s = sh(PRECOS_SHEET); if (!s) s = ss().insertSheet(PRECOS_SHEET); return s; }
+// ID da planilha PERMANENTE "Banco de Preços" (guarda os portfólios ano a ano,
+// independente do planejamento, que é trocado a cada safra). Deixe '' para usar
+// a própria planilha de planejamento (comportamento antigo). NÃO mude ao criar
+// um planejamento novo: assim o histórico de preços é sempre o mesmo.
+var PRECOS_DB_ID = '1-pNApvSfw9oUbfec5Tm7g-DEh9xCgupAEpjsZp7EBKg';
+function precosSS(){ if (PRECOS_DB_ID){ try { return SpreadsheetApp.openById(PRECOS_DB_ID); } catch(e){} } return ss(); }
+function precosSheet(){ var b = precosSS(), s = b.getSheetByName(PRECOS_SHEET); if (!s) s = b.insertSheet(PRECOS_SHEET); return s; }
 function readPrecosSheet(){
-  var s = sh(PRECOS_SHEET); if (!s) return { safras:{} };
+  var s = precosSS().getSheetByName(PRECOS_SHEET); if (!s) return { safras:{} };
   var last = s.getLastRow(); if (last < 2) return { safras:{} };
   var v = s.getRange(2, 1, last - 1, 9).getValues(), safras = {};
   for (var i = 0; i < v.length; i++){
@@ -140,7 +146,7 @@ function applyEditsBatch(edits, out){
   var byTalhao = {}, port = [], area = [];
   edits.forEach(function(ed){
     var t = ed.type;
-    if (t === 'estoque' || t === 'preco' || t === 'pedido') port.push(ed);
+    if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'addprod') port.push(ed);
     else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
     else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
     else { out.fail++; if (out.msgs.length < 10) out.msgs.push('tipo/sem talhão: ' + t); }
@@ -156,12 +162,21 @@ function applyPortifolio(edits, out){
   if (!P){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba PORTIFÓLIO não encontrada'); return; }
   var pcol = pedidoColOf(P), r0 = 4, r1 = 433, nn = r1 - r0 + 1;
   var cvals = P.getRange(r0, 3, nn, 1).getValues();     // C = produto (mapa)
-  var map = {};
-  for (var i = 0; i < nn; i++){ var pr = S(cvals[i][0]); if (pr && !(pr in map)) map[pr] = r0 + i; }
+  var map = {}, emptyRows = [];
+  for (var i = 0; i < nn; i++){ var pr = S(cvals[i][0]); if (pr){ if (!(pr in map)) map[pr] = r0 + i; } else emptyRows.push(r0 + i); }
+  var ei = 0;
   var est = P.getRange(r0, 20, nn, 1).getValues(), estDirty = false;
   var ped = P.getRange(r0, pcol, nn, 1).getValues(), pedDirty = false;
   edits.forEach(function(ed){
     try {
+      if (ed.type === 'addprod'){                              // novo produto do portfólio -> 1ª linha vazia
+        if (map[S(ed.produto)]){ out.ok++; return; }           // já existe: não duplica
+        var La = emptyRows[ei++]; if (!La) throw 'PORTIFÓLIO sem linha vazia p/ ' + ed.produto;
+        P.getRange(La, 1, 1, 3).clearDataValidations();
+        P.getRange(La, 1, 1, 3).setValues([[S(ed.empresa), S(ed.classe), S(ed.produto)]]);
+        if (ed.value !== '' && ed.value != null) P.getRange(La, 19).setValue(ed.value);
+        map[S(ed.produto)] = La; out.ok++; return;
+      }
       var L = map[S(ed.produto)]; if (!L) throw 'produto não encontrado: ' + ed.produto;
       var idx = L - r0;
       if (ed.type === 'estoque'){ est[idx][0] = ed.value; estDirty = true; }
