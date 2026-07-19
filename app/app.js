@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-38';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-39';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -199,7 +199,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
-  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
@@ -1536,6 +1536,60 @@ V.recomendacao=function(arg){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação pronta por WhatsApp para a equipe.</p>`;
 };
 
+/* ================= MAPA (pontos de monitoramento em satélite) ================= */
+let _leafletLoading=null, _map=null;
+function loadLeaflet(){
+  if(window.L) return Promise.resolve(window.L);
+  if(_leafletLoading) return _leafletLoading;
+  _leafletLoading=new Promise((res,rej)=>{
+    const css=document.createElement('link'); css.rel='stylesheet'; css.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'; document.head.appendChild(css);
+    const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    s.onload=()=>res(window.L); s.onerror=()=>{ _leafletLoading=null; rej(new Error('sem internet')); };
+    document.head.appendChild(s);
+  });
+  return _leafletLoading;
+}
+const MONIT_CATCOLOR={praga:'#b7791f',doenca:'#b00020',daninha:'#2e7d32',outro:'#64757d'};
+async function mapaInit(){
+  const el=document.getElementById('mapa-canvas'); if(!el) return;
+  let L; try{ L=await loadLeaflet(); }catch(e){
+    el.innerHTML='<div class="mut" style="padding:26px;text-align:center">🌐 O mapa precisa de internet para carregar. Sem conexão, use os links 📍 de cada registro na tela de Monitoramento.</div>'; return; }
+  const pts=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null);
+  if(_map){ try{ _map.remove(); }catch(e){} _map=null; }
+  _map=L.map(el).setView(pts.length?[pts[0].lat,pts[0].lng]:[-15.78,-47.93], pts.length?14:4);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {maxZoom:19, attribution:'Esri World Imagery'}).addTo(_map);
+  const bounds=[];
+  pts.forEach(r=>{
+    const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
+    L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
+      .bindPopup(`<b>${esc(r.alvo||'—')}</b><br>${esc((MONIT_CAT[r.categoria]||{}).lbl||'')} · ${esc(fmtData(r.data))}<br>Nível ${esc(r.nivel||'—')} · limiar ${esc(r.limiar||'—')}`);
+    bounds.push([r.lat,r.lng]);
+  });
+  if(bounds.length>1){ try{ _map.fitBounds(bounds,{padding:[30,30]}); }catch(e){} }
+  setTimeout(()=>{ try{ _map.invalidateSize(); }catch(e){} }, 120);
+}
+function mapaLocate(){
+  if(!_map||!navigator.geolocation){ toast('Mapa/GPS indisponível'); return; }
+  navigator.geolocation.getCurrentPosition(p=>{
+    const ll=[p.coords.latitude,p.coords.longitude];
+    window.L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#1e88e5',fillOpacity:1}).addTo(_map).bindPopup('Você').openPopup();
+    _map.setView(ll,15);
+  }, ()=>toast('Não foi possível obter o GPS'), {enableHighAccuracy:true,timeout:12000});
+}
+V.mapa=function(){
+  const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
+  return `<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${n} ponto(s) de monitoramento com GPS</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button></div>
+    <div id="mapa-canvas" class="mapa-canvas"></div>
+    <div class="mapa-leg">
+      <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
+      <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
+    </div>
+    <p class="mut" style="font-size:12px;padding:10px 16px">Mostra os pontos do <b>Monitoramento</b> com GPS, sobre imagem de satélite (precisa de internet). <br><b>Em breve:</b> desenhar o <b>contorno dos talhões</b> colorido por cultura — pra isso eu preciso do arquivo de contorno (KML/KMZ/GeoJSON), que dá pra exportar do Aqila ou do SICAR/CAR.</p>
+  </div>`;
+};
+
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
@@ -1665,7 +1719,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
@@ -1685,6 +1739,7 @@ function route(opts){
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
+  if(view==='mapa'){ setTimeout(mapaInit, 40); }   // inicializa o Leaflet após o HTML entrar no DOM
   _lastView=view;
 }
 let _lastView=null;
@@ -1951,6 +2006,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitGPS'){ monitCaptureGPS(); }
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
+    else if(a.act==='mapaLoc'){ mapaLocate(); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }

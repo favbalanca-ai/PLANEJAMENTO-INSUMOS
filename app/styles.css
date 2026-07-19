@@ -545,3 +545,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .chuva-obs{font-size:12px}
 /* Recomendação de aplicação */
 .recom-prod{font-size:13px;font-weight:600;color:var(--ink);margin:6px 0;line-height:1.5}
+/* Mapa (Leaflet) */
+.mapa-canvas{height:62vh;min-height:340px;width:100%;background:#dfe7ea;z-index:0}
+.mapa-leg{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 16px;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
+.mapa-leg i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:middle;border:1px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+.leaflet-popup-content{font-size:13px}
