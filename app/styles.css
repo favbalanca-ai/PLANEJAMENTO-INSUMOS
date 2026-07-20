@@ -381,8 +381,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .ico{font-size:17px;width:auto}
   #nav a .lbl{display:none}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .main{padding-bottom:66px}
-  .topbar{padding:10px 12px;gap:8px}.safra-chip{display:none}
+  .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
+  .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
+  /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
+  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px}.safra-chip{display:none}
+  /* Preços no celular: some com as colunas de %, aperta os campos (usa preço direto) */
+  .pr-pct{display:none!important}
+  .pr-imp-txt{min-height:200px}
+  .pr-tbl input.cell{width:70px;min-height:40px}
+  .pr-tbl input.txt{min-height:40px;min-width:96px}
+  .pr-tbl thead th{padding:8px 7px}
+  .pr-tbl tbody td{padding:6px 7px}
   #page-title{display:none}   /* no celular o módulo atual + a barra de baixo já indicam onde você está */
   .mod-cur{margin-right:auto}
   .content{padding:14px 12px 24px}
