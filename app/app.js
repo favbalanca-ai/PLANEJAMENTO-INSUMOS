@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-43';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-44';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -863,23 +863,23 @@ V.precos = function(){
   const d=PRECOS, s=safraAtual();
   const safras=Object.keys(d.safras).sort();
   const refRows=s.refs.map((r,i)=>`<tr>
-      <td><input class="txt" data-pr="refClasse" data-i="${i}" value="${esc(r.classe||'')}" placeholder="classe"></td>
-      <td><input class="txt" data-pr="refProd" data-i="${i}" value="${esc(r.produto||'')}" placeholder="produto de referência"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="refVista" data-i="${i}" value="${r.vista||''}" placeholder="0"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="refPrazo" data-i="${i}" value="${r.prazo||''}" placeholder="0"></td>
-      <td><button class="icon-btn del" title="Remover" data-act="prDelRef" data-i="${i}">🗑</button></td></tr>`).join('');
+      <td data-th="Classe"><input class="txt" data-pr="refClasse" data-i="${i}" value="${esc(r.classe||'')}" placeholder="classe"></td>
+      <td data-th="Produto de referência" class="pr-prod"><input class="txt" data-pr="refProd" data-i="${i}" value="${esc(r.produto||'')}" placeholder="produto de referência"></td>
+      <td class="num" data-th="À vista (R$)"><input class="cell" inputmode="decimal" data-pr="refVista" data-i="${i}" value="${r.vista||''}" placeholder="0"></td>
+      <td class="num" data-th="A prazo (R$)"><input class="cell" inputmode="decimal" data-pr="refPrazo" data-i="${i}" value="${r.prazo||''}" placeholder="0"></td>
+      <td class="pr-del"><button class="icon-btn del" title="Remover" data-act="prDelRef" data-i="${i}">🗑</button></td></tr>`).join('');
   const fmtn=v=>(Math.round((+v||0)*100)/100).toFixed(2).replace('.',',');
   const itemRows=s.itens.map((it,i)=>{
     const compV=precoComposto(it,'vista'), compP=precoComposto(it,'prazo');
     return `<tr>
-      <td><input class="txt" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa"></td>
-      <td><input class="txt" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe"></td>
-      <td><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
-      <td class="num"><input class="cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'preço'}" title="Preço à vista do produto. Vazio = usa o composto (referência × %)."></td>
-      <td class="num"><input class="cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'preço'}" title="Preço a prazo. Vazio = usa o composto."></td>
-      <td class="num pr-pct"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre a referência da classe (opcional; só usado se o preço acima estiver vazio)"></td>
-      <td class="num pr-pct"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% a prazo (opcional)"></td>
-      <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
+      <td data-th="Empresa"><input class="txt" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa"></td>
+      <td data-th="Classe"><input class="txt" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe"></td>
+      <td data-th="Produto" class="pr-prod"><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
+      <td class="num" data-th="Preço à vista"><input class="cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'preço'}" title="Preço à vista do produto. Vazio = usa o composto (referência × %)."></td>
+      <td class="num" data-th="Preço a prazo"><input class="cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'preço'}" title="Preço a prazo. Vazio = usa o composto."></td>
+      <td class="num pr-pct" data-th="% à vista"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre a referência da classe (opcional; só usado se o preço acima estiver vazio)"></td>
+      <td class="num pr-pct" data-th="% a prazo"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% a prazo (opcional)"></td>
+      <td class="pr-del"><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
   }).join('');
   const temUrl=!!syncUrl();
   return `<datalist id="pr-classes">${s.refs.map(r=>`<option value="${esc(r.classe)}">`).join('')}</datalist>
