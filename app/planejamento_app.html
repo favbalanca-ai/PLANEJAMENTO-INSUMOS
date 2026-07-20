@@ -231,6 +231,11 @@ tbody tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tfoot td{font-weight:700;background:#f2f6f7;color:var(--ink);border-top:2px solid var(--line)}
 .table-wrap{overflow-x:auto}
+.cc-tbl{font-size:12px;white-space:nowrap}
+.cc-tbl th,.cc-tbl td{padding:7px 10px}
+.cc-tbl tfoot th{text-align:left;background:#f2f6f7;color:var(--ink);font-weight:700;border-top:2px solid var(--line);
+  text-transform:none;letter-spacing:0;font-size:12px;position:static}
+.cc-tbl tfoot th.num{text-align:right}
 .link{color:var(--ink2);font-weight:600;cursor:pointer;text-decoration:none}
 .link:hover{text-decoration:underline}
 
@@ -696,7 +701,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-51';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-52';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1267,15 +1272,19 @@ const pill=st=>`<span class="pill ${PILL[st][0]}">${PILL[st][1]}</span>`;
 const V = {};
 
 V.dashboard = function(){
-  const compras=calcCompras();
-  const areaTotal=talhoesAll().reduce((a,t)=>a+areaDe(t),0);
-  const custoTotal=talhoesAll().reduce((a,t)=>a+custoTalhao(t).total,0);
+  // filtro por empreendimento (afeta o painel todo)
+  const empsAll=[...new Set(talhoesAll().map(t=>empDe(t)).filter(e=>e&&e!=='—'))].sort();
+  const fEmp = painelEmpSel.size ? painelEmpSel : null;
+  const tais = talhoesAll().filter(t=> !fEmp || fEmp.has(empDe(t)));
+  const compras=calcCompras(fEmp);
+  const areaTotal=tais.reduce((a,t)=>a+areaDe(t),0);
+  const custoTotal=tais.reduce((a,t)=>a+custoTalhao(t).total,0);
   const totalCompra=compras.reduce((a,r)=>a+r.valor,0);
   const itensComprar=compras.filter(r=>r.comprar>0).length;
   const semPreco=compras.filter(r=>r.comprar>0&&r.preco<=0).length;
   // custo por cultura
   const porCultura={};
-  cultivos().forEach(cv=>{ porCultura[cv.emp]=(porCultura[cv.emp]||0)+cv.ins; });
+  cultivos().filter(cv=>!fEmp||fEmp.has(cv.emp)).forEach(cv=>{ porCultura[cv.emp]=(porCultura[cv.emp]||0)+cv.ins; });
   const culturas=Object.entries(porCultura).sort((a,b)=>b[1]-a[1]);
   const maxC=Math.max(1,...culturas.map(c=>c[1]));
   // custo por classe (insumo)
@@ -1284,14 +1293,23 @@ V.dashboard = function(){
   const classes=Object.entries(porClasse).filter(c=>c[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxK=Math.max(1,...classes.map(c=>c[1]));
   // maiores demandas de compra por empreendimento (valor da demanda = dose × área × preço)
-  const empsD=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'))];
+  const empsD=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&(!fEmp||fEmp.has(e))))];
   const demEmp=empsD.map(e=>{ const dem=calcDemanda(new Set([e])); let v=0; for(const pr in dem) v+=dem[pr]*precoDe(pr); return [e,v]; })
     .filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   const maxE=Math.max(1,...demEmp.map(x=>x[1]));
+  // custo por ha por classe × talhão
+  const tCC = tais.map(t=>({t, area:areaDe(t), cc:custoClasseHa(t)})).sort((a,b)=>{
+    const sa=Object.values(a.cc).reduce((x,y)=>x+y,0), sb=Object.values(b.cc).reduce((x,y)=>x+y,0); return sb-sa; });
+  const ccTot={}; tCC.forEach(o=>{ for(const k in o.cc) ccTot[k]=(ccTot[k]||0)+o.cc[k]; });
+  const ccCols=Object.entries(ccTot).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
 
   return `
+  <div class="classe-filter" id="painel-empf" style="margin-bottom:14px">
+    <button class="chip-f ${painelEmpSel.size===0?'on':''}" data-empf="">Todos</button>
+    ${empsAll.map(e=>`<button class="chip-f ${painelEmpSel.has(e)?'on':''}" data-empf="${esc(e)}">${esc(e)}</button>`).join('')}
+  </div>
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Área total</div><div class="k-value">${num(areaTotal)} ha</div><div class="k-sub">${talhoesAll().length} talhões</div></div>
+    <div class="kpi"><div class="k-label">Área total</div><div class="k-value">${num(areaTotal)} ha</div><div class="k-sub">${tais.length} talhões</div></div>
     <div class="kpi accent"><div class="k-label">Demanda de compras</div><div class="k-value">${brl0(totalCompra)}</div><div class="k-sub">${itensComprar} itens a comprar</div></div>
     <div class="kpi"><div class="k-label">Custo de insumos (plano)</div><div class="k-value">${brl0(custoTotal)}</div><div class="k-sub">${areaTotal>0?brl(custoTotal/areaTotal):'—'} / ha</div></div>
     <div class="kpi"><div class="k-label">Itens sem preço</div><div class="k-value" style="color:${semPreco?'var(--red)':'var(--green)'}">${semPreco}</div><div class="k-sub">a cadastrar preço</div></div>
@@ -1308,6 +1326,22 @@ V.dashboard = function(){
         <div class="bar-track"><div class="bar-fill" style="width:${v/maxK*100}%"></div></div>
         <div class="bar-val">${brl0(v)}</div></div>`).join('')||'<div class="empty">Sem dados</div>'}</div></div>
   </div>
+  <div class="panel"><div class="panel-head"><h2>Custo por ha · classe × talhão</h2><span class="sub">R$/ha de cada classe de insumo em cada talhão${ccCols.length?` — top ${ccCols.length} classes`:''}</span></div>
+    <div class="table-wrap"><table class="cc-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th>${ccCols.map(c=>`<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total/ha</th></tr></thead>
+    <tbody>${tCC.slice(0,40).map(o=>{ const tot=Object.values(o.cc).reduce((x,y)=>x+y,0); const e=empDe(o.t);
+      return `<tr><td><b>${esc(o.t.id)}</b>${o.t.nome?` <span class="mut">${esc(o.t.nome)}</span>`:''}${e&&e!=='—'?`<br><span class="mut" style="font-size:11px">${esc(e)}</span>`:''}</td>
+      <td class="num">${num(o.area)}</td>${ccCols.map(c=>`<td class="num">${o.cc[c]?brl(o.cc[c]):'·'}</td>`).join('')}<td class="num"><b>${brl(tot)}</b></td></tr>`;}).join('')||`<tr><td colspan="${ccCols.length+3}" class="empty" style="padding:16px">Sem dados</td></tr>`}</tbody>
+    ${tais.length?`<tfoot><tr><th>Média ponderada / ha</th><th class="num">${num(areaTotal)}</th>${ccCols.map(c=>{ let s=0; tCC.forEach(o=>{ s+=(o.cc[c]||0)*o.area; }); return `<th class="num">${areaTotal>0?brl(s/areaTotal):'·'}</th>`; }).join('')}<th class="num">${areaTotal>0?brl(custoTotal/areaTotal):'·'}</th></tr></tfoot>`:''}</table></div>
+    ${tCC.length>40?`<p class="mut" style="font-size:12px;padding:6px 16px">Mostrando os 40 talhões de maior custo/ha de ${tCC.length}.</p>`:''}</div>
+  ${(()=>{ const aFazer=compras.filter(r=>r.comprar>0).sort((a,b)=>b.valor-a.valor);
+    const totAF=aFazer.reduce((a,r)=>a+r.valor,0); const semP=aFazer.filter(r=>r.preco<=0).length;
+    return `<div class="panel"><div class="panel-head"><h2>Compras a fazer</h2><span class="sub">demanda − estoque − em pedido — ${aFazer.length} itens · ${brl0(totAF)}${semP?` · ${semP} sem preço`:''}</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">Comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
+    <tbody>${aFazer.slice(0,30).map(r=>`
+      <tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
+      <td class="num">${num(r.demanda)}</td><td class="num">${num(r.estoque||0)}</td><td class="num">${num(r.pedido||0)}</td>
+      <td class="num"><b>${num(r.comprar)}</b></td><td>${esc(r.un)}</td><td class="num">${r.preco>0?brl(r.valor):'<span style="color:var(--red)">s/ preço</span>'}</td></tr>`).join('')||'<tr><td colspan="8" class="empty" style="padding:16px">Nada a comprar 🎉</td></tr>'}</tbody></table></div>
+    ${aFazer.length>30?`<p class="mut" style="font-size:12px;padding:6px 16px">Mostrando os 30 maiores de ${aFazer.length}.</p>`:''}</div>`; })()}
   <div class="panel"><div class="panel-head"><h2>Maiores demandas de compra</h2><span class="sub">por empreendimento</span></div>
     <div class="panel-body">${demEmp.map(([n,v])=>`
       <div class="bar-row"><div class="bl" title="${esc(n)}">${esc(n)}</div>
@@ -1470,6 +1504,15 @@ V.talhao = function(id){
 
 const cotaEmpSel = new Set();      // filtro da Cotação (vazio = todos) — sessão
 const comprasEmpSel = new Set();   // filtro de empreendimento da Demanda de Compras — sessão
+const painelEmpSel = new Set();    // filtro de empreendimento do Painel — sessão
+// custo de insumos por classe (R$/ha) de um talhão -> { CLASSE: rs_ha }
+function custoClasseHa(t){
+  const m={};
+  eachOp(t,(seq,tag,oi,op,tagoi)=>{ effItems(t.id,tagoi,op.itens).forEach(it=>{ if(!it.produto) return;
+    const cl=(((PROD[it.produto]&&PROD[it.produto].classe)||it.classe||'—')+'').toUpperCase();
+    m[cl]=(m[cl]||0)+it.dose*precoDe(it.produto); }); });
+  return m;
+}
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
   const sel=comprasEmpSel, tsel=comprasTalSel;
@@ -2717,8 +2760,8 @@ document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList
 document.addEventListener('click',e=>{
   const cf=e.target.closest('#emp-cfilter .chip-f');
   if(cf){ cf.parentElement.querySelectorAll('.chip-f').forEach(bb=>bb.classList.remove('on')); cf.classList.add('on'); applyEmpFilter(); return; }
-  const ef=e.target.closest('#cot-empf .chip-f, #compras-empf .chip-f');
-  if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel;
+  const ef=e.target.closest('#cot-empf .chip-f, #compras-empf .chip-f, #painel-empf .chip-f');
+  if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#painel-empf')?painelEmpSel:(ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel);
     if(v===''){ setSel.clear(); } else if(setSel.has(v)){ setSel.delete(v); } else { setSel.add(v); }
     route(); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
