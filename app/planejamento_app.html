@@ -640,7 +640,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-40';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-41';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -787,13 +787,75 @@ async function prHandlePdf(file){
   try{ prImportModal(await extractPdfText(file)); }
   catch(err){ prImportModal(''); toast(err&&err.message?err.message:'Falha ao ler o PDF — cole a lista manualmente'); }
 }
+/* ---- Importar tabela de Excel (.xlsx/.xls) ou CSV, com preços ---- */
+let _xlsxLoading=null;
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  if(_xlsxLoading) return _xlsxLoading;
+  _xlsxLoading=new Promise((res,rej)=>{
+    const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=()=>res(window.XLSX); s.onerror=()=>{ _xlsxLoading=null; rej(new Error('Não foi possível carregar o leitor de Excel (precisa de internet).')); };
+    document.head.appendChild(s);
+  });
+  return _xlsxLoading;
+}
+// linhas (matriz) -> texto do modal: Empresa\tClasse\tProduto\tPreço à vista\tPreço a prazo
+function _rowsToImportText(rows){
+  if(!rows||!rows.length) return '';
+  const norm=s=>String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim();
+  let hIdx=-1;
+  for(let i=0;i<Math.min(rows.length,10);i++){ const r=(rows[i]||[]).map(norm);
+    if(r.some(c=>c.indexOf('PRODUTO')>=0) || (r.some(c=>c.indexOf('EMPRESA')>=0)&&r.some(c=>c.indexOf('CLASSE')>=0))){ hIdx=i; break; } }
+  let map=null, start=0;
+  if(hIdx>=0){ const H=(rows[hIdx]||[]).map(norm);
+    const find=(...keys)=>H.findIndex(h=>keys.some(k=>h.indexOf(k)>=0));
+    let pv=find('À VISTA','A VISTA','VISTA'); if(pv<0) pv=find('VALOR','PREÇO','PRECO','CUSTO','R$/');
+    map={ emp:find('EMPRESA','FORNECEDOR','FABRICANTE'), cls:find('CLASSE','CATEGORIA','GRUPO'),
+      prod:find('PRODUTO','DESCRI','MERCADORIA'), pv:pv, pp:find('A PRAZO','PRAZO') };
+    start=hIdx+1;
+  }
+  const g=(r,idx)=> (idx>=0 && idx<r.length) ? r[idx] : '';
+  const out=[];
+  for(let i=start;i<rows.length;i++){ const r=rows[i]||[]; let emp,cls,prod,pv,pp;
+    if(map){ emp=g(r,map.emp); cls=g(r,map.cls); prod=g(r,map.prod); pv=g(r,map.pv); pp=g(r,map.pp); }
+    else { emp=r[0]; cls=r[1]; prod=r[2]; pv=r[3]; pp=r[4]; }
+    if(!String(prod==null?'':prod).trim()) continue;
+    out.push([emp,cls,prod,pv,pp].map(v=>String(v==null?'':v).trim()).join('\t'));
+  }
+  return out.join('\n');
+}
+async function prHandleExcel(file){
+  toast('Lendo tabela…');
+  try{
+    let rows;
+    if(/\.csv$/i.test(file.name)){
+      const txt=await file.text();
+      rows=txt.split(/\r?\n/).filter(l=>l.length).map(l=>{ const sep=(l.split(';').length>l.split(',').length)?';':','; return l.split(sep).map(c=>c.replace(/^"|"$/g,'').trim()); });
+    } else {
+      const XLSX=await loadXLSX();
+      const wb=XLSX.read(await file.arrayBuffer(), {type:'array'});
+      rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
+    }
+    const text=_rowsToImportText(rows);
+    if(!text){ toast('Não encontrei produtos na tabela — revise/cole manualmente'); prImportModal(''); return; }
+    prImportModal(text);
+  }catch(err){ prImportModal(''); toast(err&&err.message?err.message:'Falha ao ler a tabela — cole manualmente'); }
+}
+// preço solto: "R$ 1.234,56" / "16,49" / "16.49" -> número
+function _priceLoose(v){
+  v=String(v==null?'':v).replace(/[^\d.,-]/g,'').trim();
+  if(!v) return null;
+  if(v.indexOf(',')>=0 && v.indexOf('.')>=0) v=v.replace(/\./g,'').replace(',','.');
+  else if(v.indexOf(',')>=0) v=v.replace(',','.');
+  const n=parseFloat(v); return isFinite(n)?n:null;
+}
 function prImportModal(initialText){
   const old=document.getElementById('pr-import-ov'); if(old) old.remove();
   const ov=document.createElement('div'); ov.id='pr-import-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box">
     <div class="modal-head"><h3>Importar lista de produtos</h3><button class="icon-btn" data-act="prImpClose" title="Fechar">✕</button></div>
-    <p class="mut" style="font-size:12px;margin:0 0 8px">Do PDF de portfólio (padrão favbalança) já vêm <b>só os produtos</b> — Empresa · Classe · Produto — sem as premissas. Revise/edite antes de importar; o <b>%</b> você preenche depois na tabela. Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · % à vista · % a prazo</b> (TAB ou 2+ espaços). O <b>%</b> aceita <code>0.029</code>, <code>2,9</code> ou <code>2,9%</code>.</p>
-    <textarea id="pr-imp-txt" class="pr-imp-txt" spellcheck="false" placeholder="Empresa\tClasse\tProduto\t% à vista\t% a prazo">${esc(initialText||'')}</textarea>
+    <p class="mut" style="font-size:12px;margin:0 0 8px">Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · Preço à vista · Preço a prazo</b> (TAB ou 2+ espaços). Do <b>PDF de portfólio</b> vêm só os produtos (sem preço). Da <b>tabela Excel</b> os preços já vêm juntos — revise e importe. Preço aceita <code>16,49</code>, <code>R$ 16,49</code> ou <code>16.49</code>.</p>
+    <textarea id="pr-imp-txt" class="pr-imp-txt" spellcheck="false" placeholder="Empresa\tClasse\tProduto\tPreço à vista\tPreço a prazo">${esc(initialText||'')}</textarea>
     <div class="modal-foot">
       <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-imp-replace"> Substituir o portfólio atual</label>
       <span class="spacer"></span>
@@ -827,7 +889,7 @@ function prDoImport(){
     // ignora cabeçalho ("EMPRESA CLASSE PRODUTO …")
     if(/^empresa$/i.test(cols[0]||'') || (/classe/i.test(cols[1]||'')&&/produto/i.test(cols[2]||''))) return;
     const it={ empresa:cols[0]||'', classe:(cols[1]||'').toUpperCase(), produto:cols[2]||'',
-      pct:_pctParse(cols[3]), pctPrazo:_pctParse(cols[4]) };
+      precoVista:_priceLoose(cols[3]), precoPrazo:_priceLoose(cols[4]) };
     if(!it.produto && !it.classe) return;
     items.push(it);
   });
@@ -1490,8 +1552,10 @@ V.precos = function(){
     <div class="op-add">
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
       <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
+      <button class="btn btn-outline btn-sm" data-act="prImportXlsx">📊 Importar tabela Excel</button>
       <button class="btn btn-ghost btn-sm" data-act="prPctToPreco" title="Se você digitou o PREÇO no campo de %, isto move os valores para a coluna Preço à vista">↦ usar % como preço</button>
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
+      <input type="file" id="pr-xlsx-file" accept=".xlsx,.xls,.csv" hidden>
     </div>
   </div>
   <div class="panel"><div class="panel-head"><h2>Levar os preços ao planejamento</h2><span class="sub">recomendado: o planejamento busca por fórmula (não sobrescreve nada)</span></div>
@@ -2560,6 +2624,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
+  if(e.target.id==='pr-xlsx-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandleExcel(f); return; }
   if(e.target.matches('input[data-pr]')){ applyPrecoEdit(e.target); return; }
   if(e.target.matches('input[data-edit], select[data-edit], textarea[data-edit]')) applyEdit(e.target);
 });
@@ -2668,6 +2733,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='prAlimGo'){ prAlimRun('upd'); }
     else if(a.act==='prAlimNovos'){ prAlimRun('novos'); }
     else if(a.act==='prImportPdf'){ const fi=$('#pr-pdf-file'); if(fi) fi.click(); }
+    else if(a.act==='prImportXlsx'){ const fi=$('#pr-xlsx-file'); if(fi) fi.click(); }
     else if(a.act==='prPctToPreco'){
       if(!ask('Usar o número da coluna % como PREÇO do produto?\n\nUse isto se você digitou o preço no campo de %. O valor vai para a coluna "Preço à vista" (e "a prazo").')) return;
       let n=0; safraAtual().itens.forEach(it=>{
