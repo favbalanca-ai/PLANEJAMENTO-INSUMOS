@@ -396,8 +396,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .ico{font-size:17px;width:auto}
   #nav a .lbl{display:none}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-  .main{padding-bottom:66px}
-  .topbar{padding:10px 12px;gap:8px}.safra-chip{display:none}
+  .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
+  .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
+  /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
+  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px}.safra-chip{display:none}
+  /* Preços no celular: some com as colunas de %, aperta os campos (usa preço direto) */
+  .pr-pct{display:none!important}
+  .pr-imp-txt{min-height:200px}
+  .pr-tbl input.cell{width:70px;min-height:40px}
+  .pr-tbl input.txt{min-height:40px;min-width:96px}
+  .pr-tbl thead th{padding:8px 7px}
+  .pr-tbl tbody td{padding:6px 7px}
   #page-title{display:none}   /* no celular o módulo atual + a barra de baixo já indicam onde você está */
   .mod-cur{margin-right:auto}
   .content{padding:14px 12px 24px}
@@ -640,7 +649,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-41';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-42';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1515,8 +1524,8 @@ V.precos = function(){
       <td><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
       <td class="num"><input class="cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'preço'}" title="Preço à vista do produto. Vazio = usa o composto (referência × %)."></td>
       <td class="num"><input class="cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'preço'}" title="Preço a prazo. Vazio = usa o composto."></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre a referência da classe (opcional; só usado se o preço acima estiver vazio)"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% a prazo (opcional)"></td>
+      <td class="num pr-pct"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre a referência da classe (opcional; só usado se o preço acima estiver vazio)"></td>
+      <td class="num pr-pct"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% a prazo (opcional)"></td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
   }).join('');
   const temUrl=!!syncUrl();
@@ -1540,14 +1549,14 @@ V.precos = function(){
     </div>
   </div>
   <div class="panel"><div class="panel-head"><h2>Preços de referência por classe</h2><span class="sub">1 produto de referência por classe (à vista e a prazo)</span></div>
-    <div class="table-wrap"><table>
+    <div class="table-wrap"><table class="pr-tbl">
       <thead><tr><th>Classe</th><th>Produto de referência</th><th class="num">À vista (R$)</th><th class="num">A prazo (R$)</th><th></th></tr></thead>
       <tbody>${refRows||'<tr><td colspan="5" class="mut" style="padding:12px 14px">Nenhuma classe. Adicione abaixo.</td></tr>'}</tbody></table></div>
     <div class="op-add"><button class="btn btn-primary btn-sm" data-act="prAddRef">+ adicionar classe de referência</button></div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">preço composto = referência da classe × (1 + %)</span></div>
-    <div class="table-wrap"><table>
-      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th class="num">% à vista</th><th class="num">% a prazo</th><th></th></tr></thead>
+  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">digite o preço à vista/a prazo (ou use referência + %)</span></div>
+    <div class="table-wrap"><table class="pr-tbl">
+      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th class="num pr-pct">% à vista</th><th class="num pr-pct">% a prazo</th><th></th></tr></thead>
       <tbody>${itemRows||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum produto. Adicione abaixo.</td></tr>'}</tbody></table></div>
     <div class="op-add">
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
