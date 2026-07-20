@@ -422,6 +422,23 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .detail-head{gap:12px 18px;padding:14px 16px}
   .detail-head .di{min-width:96px}
   .btn{padding:10px 15px}
+  /* ===== fontes menores no celular ===== */
+  body{font-size:12.5px}
+  .panel-head{flex-wrap:wrap;gap:1px 10px;padding:12px 14px}
+  .panel-head h2{font-size:14px}
+  .panel-head .sub{font-size:10.5px}
+  .mod-cur{font-size:12px;padding:6px 10px}.mod-cur .mc-ico{font-size:14px}
+  .mod-trocar{font-size:11px;padding:6px 9px}
+  #edit-badge,.badge{font-size:10px}
+  .sync-status{font-size:11px}
+  .kpi .k-value{font-size:17px}.kpi .k-label{font-size:10px}.kpi .k-sub{font-size:10.5px}
+  .btn{font-size:12.5px;padding:9px 13px}.btn-sm{font-size:11.5px;padding:7px 10px}
+  thead th{font-size:9.5px;padding:8px 8px}
+  tbody td{font-size:12.5px;padding:8px 8px}
+  .mut{font-size:11px}
+  .camp-tinfo{font-size:11.5px}
+  h1{font-size:17px}h2{font-size:14px}h3{font-size:13px}
+  /* campos ficam em 16px de propósito (evita o zoom automático do iOS ao focar) */
 
   /* culturas do talhão: empilha e ocupa a largura toda */
   .bulk-add{padding:12px 14px;gap:10px}
