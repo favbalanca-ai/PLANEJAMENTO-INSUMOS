@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-46';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-47';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -923,6 +923,8 @@ V.precos = function(){
       <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
       <button class="btn btn-outline btn-sm" data-act="prImportXlsx">📊 Importar tabela Excel</button>
       <button class="btn btn-ghost btn-sm" data-act="prPctToPreco" title="Se você digitou o PREÇO no campo de %, isto move os valores para a coluna Preço à vista">↦ usar % como preço</button>
+      <button class="btn btn-ghost btn-sm" data-act="prLimparDup" title="Mantém 1 de cada produto (prioriza o que tem preço)">⧉ Limpar duplicados</button>
+      <button class="btn btn-ghost btn-sm" data-act="prLimparLista" title="Apaga todos os produtos desta safra">🗑 Limpar lista</button>
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
       <input type="file" id="pr-xlsx-file" accept=".xlsx,.xls,.csv" hidden>
     </div>
@@ -2110,6 +2112,18 @@ document.addEventListener('click',e=>{
         if((it.precoPrazo==null||it.precoPrazo==='') && it.pctPrazo!=null){ it.precoPrazo=+(+it.pctPrazo*100).toFixed(2); it.pctPrazo=null; }
       });
       savePrecos(); route(); toast(n+' preços convertidos'); }
+    else if(a.act==='prLimparLista'){
+      const n=safraAtual().itens.length;
+      if(n && ask('Apagar TODOS os '+n+' produtos do portfólio desta safra?\n\n(Não afeta o que você já publicou na planilha.)')){ safraAtual().itens=[]; savePrecos(); route(); toast('Lista limpa'); } }
+    else if(a.act==='prLimparDup'){
+      const s=safraAtual(), seen={}, out=[]; let removed=0;
+      const hasP=x=>(x.precoVista!=null&&x.precoVista!=='')||(x.precoPrazo!=null&&x.precoPrazo!=='');
+      s.itens.forEach(it=>{ const k=normKey(it.produto);
+        if(!k){ out.push(it); return; }
+        if(k in seen){ if(hasP(it)&&!hasP(out[seen[k]])) out[seen[k]]=it; removed++; }
+        else { seen[k]=out.length; out.push(it); } });
+      if(!removed){ toast('Nenhum produto duplicado'); return; }
+      if(ask(removed+' produto(s) duplicado(s) — remover, mantendo 1 de cada?')){ s.itens=out; savePrecos(); route(); toast(removed+' duplicados removidos'); } }
     else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
     else if(a.act==='prImpDo'){ prDoImport(); }
     else if(a.act==='ajustVazao'){
