@@ -216,6 +216,11 @@ tbody tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tfoot td{font-weight:700;background:#f2f6f7;color:var(--ink);border-top:2px solid var(--line)}
 .table-wrap{overflow-x:auto}
+.cc-tbl{font-size:12px;white-space:nowrap}
+.cc-tbl th,.cc-tbl td{padding:7px 10px}
+.cc-tbl tfoot th{text-align:left;background:#f2f6f7;color:var(--ink);font-weight:700;border-top:2px solid var(--line);
+  text-transform:none;letter-spacing:0;font-size:12px;position:static}
+.cc-tbl tfoot th.num{text-align:right}
 .link{color:var(--ink2);font-weight:600;cursor:pointer;text-decoration:none}
 .link:hover{text-decoration:underline}
 
