@@ -585,3 +585,24 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .mapa-leg{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 16px;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
 .mapa-leg i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:middle;border:1px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
 .leaflet-popup-content{font-size:13px}
+/* Portfólio de Preços como LISTA agrupada por classe */
+.pr-list{padding:4px 12px 12px}
+.pr-grp{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;color:var(--ink);
+  text-transform:uppercase;letter-spacing:.4px;background:#eef4f5;padding:6px 11px;border-radius:8px;margin:14px 0 4px}
+.pr-grp span{font-weight:700;color:var(--muted);font-size:11px}
+.pr-item{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:7px 4px;border-bottom:1px solid #eef2f4}
+.pr-item input{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-family:inherit;font-size:13px;background:#fff;min-height:36px}
+.pr-item input:focus{outline:none;border-color:var(--teal)}
+.pr-item input.edited{border-color:var(--teal);background:var(--teal-soft)}
+.pr-prodname{flex:1 1 190px;font-weight:600;color:var(--ink);min-width:0}
+.pr-emp{flex:1 1 120px;color:var(--muted);font-size:12px;min-width:0}
+.pr-cls{flex:0 1 130px;color:var(--muted);font-size:12px;min-width:0}
+.pr-price{width:98px;flex:0 0 auto;text-align:right}
+.pr-item .icon-btn{flex:0 0 auto;width:36px;height:36px;font-size:16px}
+@media(max-width:640px){
+  .pr-item{gap:6px;padding:9px 4px}
+  .pr-item input{font-size:16px;min-height:40px}   /* 16px evita o zoom do iOS ao focar */
+  .pr-prodname{flex:1 1 100%}
+  .pr-emp,.pr-cls{flex:1 1 calc(50% - 4px)}
+  .pr-price{flex:1 1 calc(50% - 24px);width:auto;text-align:left}
+}
