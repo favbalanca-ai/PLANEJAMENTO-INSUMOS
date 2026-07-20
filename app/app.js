@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-39';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-40';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -31,6 +31,12 @@ function precoComposto(it, tipo){
   const pct=tipo==='prazo'?(it.pctPrazo!=null?+it.pctPrazo:(+it.pct||0)):(+it.pct||0);
   return (+ref[tipo]||0)*(1+(pct||0));
 }
+// preço final: usa o preço DIRETO do produto (se informado); senão o composto (referência × (1+%))
+function precoFinal(it, tipo){
+  const d = tipo==='prazo' ? it.precoPrazo : it.precoVista;
+  if(d!=null && String(d).trim()!=='' && +d>0) return +d;
+  return precoComposto(it, tipo);
+}
 function applyPrecoEdit(el){
   const k=el.dataset.pr, i=+el.dataset.i, s=safraAtual();
   const numv=v=>{ const n=parseFloat(String(v||'').replace(',','.')); return isFinite(n)?n:0; };
@@ -44,6 +50,8 @@ function applyPrecoEdit(el){
   // as colunas % são percentuais no campo (2,9 = +2,9%); guardamos o fator (0,029)
   else if(k==='itPct'){ s.itens[i].pct=numv(el.value)/100; }
   else if(k==='itPctPrazo'){ s.itens[i].pctPrazo=(String(el.value).trim()===''?null:numv(el.value)/100); }
+  else if(k==='itPrecoVista'){ s.itens[i].precoVista=(String(el.value).trim()===''?null:numv(el.value)); }
+  else if(k==='itPrecoPrazo'){ s.itens[i].precoPrazo=(String(el.value).trim()===''?null:numv(el.value)); }
   savePrecos(); route();
 }
 /* ---- Importar lista de produtos de um PDF (portfólio do ano) ---- */
@@ -798,17 +806,17 @@ V.precos = function(){
       <td class="num"><input class="cell" inputmode="decimal" data-pr="refVista" data-i="${i}" value="${r.vista||''}" placeholder="0"></td>
       <td class="num"><input class="cell" inputmode="decimal" data-pr="refPrazo" data-i="${i}" value="${r.prazo||''}" placeholder="0"></td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelRef" data-i="${i}">🗑</button></td></tr>`).join('');
+  const fmtn=v=>(Math.round((+v||0)*100)/100).toFixed(2).replace('.',',');
   const itemRows=s.itens.map((it,i)=>{
-    const pv=precoComposto(it,'vista'), pp=precoComposto(it,'prazo');
-    const semRef=(it.classe||'')&&!s.refs.some(r=>(r.classe||'').toUpperCase().trim()===(it.classe||'').toUpperCase().trim());
+    const compV=precoComposto(it,'vista'), compP=precoComposto(it,'prazo');
     return `<tr>
       <td><input class="txt" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa"></td>
       <td><input class="txt" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe"></td>
       <td><input class="txt" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre o preço de referência à vista (ex.: 2,9 = +2,9%; -46,7 = -46,7%)"></td>
-      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% sobre o preço de referência a prazo (vazio = usa o mesmo % à vista)"></td>
-      <td class="num">${pv>0?brl(pv):(semRef?'<span class="pill pill-noprice">sem ref.</span>':'—')}</td>
-      <td class="num">${pp>0?brl(pp):'—'}</td>
+      <td class="num"><input class="cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'preço'}" title="Preço à vista do produto. Vazio = usa o composto (referência × %)."></td>
+      <td class="num"><input class="cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'preço'}" title="Preço a prazo. Vazio = usa o composto."></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="0" title="% sobre a referência da classe (opcional; só usado se o preço acima estiver vazio)"></td>
+      <td class="num"><input class="cell" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="= à vista" title="% a prazo (opcional)"></td>
       <td><button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></td></tr>`;
   }).join('');
   const temUrl=!!syncUrl();
@@ -839,11 +847,12 @@ V.precos = function(){
   </div>
   <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">preço composto = referência da classe × (1 + %)</span></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">% à vista</th><th class="num">% a prazo</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th></th></tr></thead>
+      <thead><tr><th>Empresa</th><th>Classe</th><th>Produto</th><th class="num">Preço à vista</th><th class="num">Preço a prazo</th><th class="num">% à vista</th><th class="num">% a prazo</th><th></th></tr></thead>
       <tbody>${itemRows||'<tr><td colspan="8" class="mut" style="padding:12px 14px">Nenhum produto. Adicione abaixo.</td></tr>'}</tbody></table></div>
     <div class="op-add">
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
       <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
+      <button class="btn btn-ghost btn-sm" data-act="prPctToPreco" title="Se você digitou o PREÇO no campo de %, isto move os valores para a coluna Preço à vista">↦ usar % como preço</button>
       <input type="file" id="pr-pdf-file" accept="application/pdf,.pdf" hidden>
     </div>
   </div>
@@ -866,7 +875,7 @@ V.precos = function(){
     </div>`
     : `<div class="bulk-add"><span class="mut" style="font-size:12px">Configure a URL na tela <b>Sincronizar</b> (módulo Planejamento) para levar os preços ao planejamento.</span></div>`}
   </div>
-  <p class="mut" style="font-size:12px">O <b>%</b> é a variação sobre o preço de referência da classe — digite em <b>porcentagem</b> (ex.: <code>2,9</code> = +2,9%; <code>-46,7</code> = −46,7%; <code>0</code> = o próprio produto de referência). Use <b>% à vista</b> e <b>% a prazo</b> separados quando a diferença entre as condições não for a mesma para todos os produtos — deixe o <b>% a prazo</b> vazio para repetir o % à vista. Tudo é salvo por <b>safra</b> (histórico). <br><b>Em breve (Fase 2):</b> importar o portfólio da planilha de preços e alimentar o planejamento automaticamente.</p>`;
+  <p class="mut" style="font-size:12px">Duas formas de definir o preço: <b>(1) direto</b> — digite o <b>Preço à vista/a prazo</b> de cada produto (o que você recebe pronto na cotação); ou <b>(2) composto</b> — cadastre a <b>referência por classe</b> e o <b>%</b> de cada produto (o preço aparece sozinho). Se o campo de preço estiver preenchido, ele <b>manda</b>; senão, usa o composto. Tudo é salvo por <b>safra</b>.<br>💡 Se você tinha digitado o <b>preço no campo de %</b>, clique em <b>“↦ usar % como preço”</b> para mover tudo de uma vez.</p>`;
 };
 
 V.maquinas = function(){
@@ -2021,6 +2030,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='prAlimGo'){ prAlimRun('upd'); }
     else if(a.act==='prAlimNovos'){ prAlimRun('novos'); }
     else if(a.act==='prImportPdf'){ const fi=$('#pr-pdf-file'); if(fi) fi.click(); }
+    else if(a.act==='prPctToPreco'){
+      if(!ask('Usar o número da coluna % como PREÇO do produto?\n\nUse isto se você digitou o preço no campo de %. O valor vai para a coluna "Preço à vista" (e "a prazo").')) return;
+      let n=0; safraAtual().itens.forEach(it=>{
+        if((it.precoVista==null||it.precoVista==='') && it.pct!=null){ it.precoVista=+(+it.pct*100).toFixed(2); it.pct=null; n++; }
+        if((it.precoPrazo==null||it.precoPrazo==='') && it.pctPrazo!=null){ it.precoPrazo=+(+it.pctPrazo*100).toFixed(2); it.pctPrazo=null; }
+      });
+      savePrecos(); route(); toast(n+' preços convertidos'); }
     else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
     else if(a.act==='prImpDo'){ prDoImport(); }
     else if(a.act==='ajustVazao'){
@@ -2507,7 +2523,7 @@ const normKey=s=>String(s||'').toUpperCase().replace(/\s+/g,' ').trim();
 let _alimPrev=null;
 function alimentarPreview(tipo){
   const s=safraAtual(), comp={};                 // normKey -> {price, it}
-  s.itens.forEach(it=>{ if(!it.produto) return; comp[normKey(it.produto)]={price:precoComposto(it,tipo), it}; });
+  s.itens.forEach(it=>{ if(!it.produto) return; comp[normKey(it.produto)]={price:precoFinal(it,tipo), it}; });
   const planNorm={};                             // normKey -> nome exato no planejamento
   (DATA.produtos||[]).forEach(pp=>{ if(pp.produto) planNorm[normKey(pp.produto)]=pp.produto; });
   const upd=[], semRef=[], orf=[], novos=[];
@@ -2544,7 +2560,7 @@ async function publicarPlanejamento(){
   const url=syncUrl(); if(!url){ toast('Configure a URL de sincronização primeiro'); return; }
   if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
   const s=safraAtual();
-  const flat=s.itens.map(it=>({p:it.produto, v:+precoComposto(it,'vista').toFixed(2), z:+precoComposto(it,'prazo').toFixed(2)}))
+  const flat=s.itens.map(it=>({p:it.produto, v:+precoFinal(it,"vista").toFixed(2), z:+precoFinal(it,"prazo").toFixed(2)}))
                     .filter(x=>x.p && (x.v>0||x.z>0));
   if(!flat.length){ toast('Nenhum preço composto para publicar — defina as referências das classes'); return; }
   syncBusy=true; setSyncStatus('busy'); toast('Publicando preços da safra '+PRECOS.atual+'…');
@@ -2560,7 +2576,7 @@ async function prAlimRun(kind){
   if(!syncUrl()){ toast('Configure a URL de sincronização primeiro'); return; }
   if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
   let edits;
-  if(kind==='novos') edits=pv.novos.map(it=>{ const p=precoComposto(it,pv.tipo); return {type:'addprod',empresa:it.empresa,classe:it.classe,produto:it.produto,value:p>0?+p.toFixed(2):''}; });
+  if(kind==='novos') edits=pv.novos.map(it=>{ const p=precoFinal(it,pv.tipo); return {type:'addprod',empresa:it.empresa,classe:it.classe,produto:it.produto,value:p>0?+p.toFixed(2):''}; });
   else edits=pv.upd.map(u=>({type:'preco',produto:u.produto,value:+u.price.toFixed(2)}));
   if(!edits.length){ toast('Nada para enviar'); return; }
   syncBusy=true; setSyncStatus('busy'); toast('Enviando ao planejamento…');
