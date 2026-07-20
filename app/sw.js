@@ -2,7 +2,7 @@
    Estratégia "network-first": quando há internet, SEMPRE busca a versão mais
    nova da rede; o cache é só reserva para funcionar offline. Assim o app se
    atualiza sozinho e acaba a briga com o cache do celular. */
-const CACHE = 'planejamento-cache-v1';
+const CACHE = 'planejamento-cache-v2';
 
 self.addEventListener('install', () => {
   // assume o controle imediatamente (não espera fechar as abas antigas)
@@ -24,7 +24,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // só mexe nos arquivos do próprio app
   e.respondWith(
-    fetch(req)
+    // {cache:'no-store'} = ignora o cache HTTP do navegador/GitHub Pages e
+    // busca SEMPRE da rede; sem isso o "network-first" ainda servia o arquivo
+    // velho enquanto o cache HTTP (10 min) não expirava — por isso a web não atualizava.
+    fetch(req, { cache: 'no-store' })
       .then((res) => {
         // guarda uma cópia boa para uso offline
         if (res && res.status === 200 && (res.type === 'basic' || res.type === 'default')) {
