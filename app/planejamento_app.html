@@ -696,7 +696,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-49';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-50';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1283,6 +1283,11 @@ V.dashboard = function(){
   compras.forEach(r=>{porClasse[r.classe]=(porClasse[r.classe]||0)+r.valor;});
   const classes=Object.entries(porClasse).filter(c=>c[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxK=Math.max(1,...classes.map(c=>c[1]));
+  // maiores demandas de compra por empreendimento (valor da demanda = dose × área × preço)
+  const empsD=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'))];
+  const demEmp=empsD.map(e=>{ const dem=calcDemanda(new Set([e])); let v=0; for(const pr in dem) v+=dem[pr]*precoDe(pr); return [e,v]; })
+    .filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  const maxE=Math.max(1,...demEmp.map(x=>x[1]));
 
   return `
   <div class="kpi-grid">
@@ -1303,6 +1308,11 @@ V.dashboard = function(){
         <div class="bar-track"><div class="bar-fill" style="width:${v/maxK*100}%"></div></div>
         <div class="bar-val">${brl0(v)}</div></div>`).join('')||'<div class="empty">Sem dados</div>'}</div></div>
   </div>
+  <div class="panel"><div class="panel-head"><h2>Maiores demandas de compra</h2><span class="sub">por empreendimento</span></div>
+    <div class="panel-body">${demEmp.map(([n,v])=>`
+      <div class="bar-row"><div class="bl" title="${esc(n)}">${esc(n)}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${v/maxE*100}%"></div></div>
+      <div class="bar-val">${brl0(v)}</div></div>`).join('')||'<div class="empty">Sem dados</div>'}</div></div>
   <div class="panel"><div class="panel-head"><h2>Maiores compras</h2><span class="sub">top 10 itens</span></div>
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">A comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
     <tbody>${compras.filter(r=>r.valor>0).sort((a,b)=>b.valor-a.valor).slice(0,10).map(r=>`
