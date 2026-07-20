@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-50';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-51';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -623,7 +623,15 @@ V.dashboard = function(){
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">A comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
     <tbody>${compras.filter(r=>r.valor>0).sort((a,b)=>b.valor-a.valor).slice(0,10).map(r=>`
       <tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
-      <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td><td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody></table></div></div>`;
+      <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td><td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody></table></div></div>
+  ${(()=>{ const naoEfet=compras.filter(r=>r.comprar>0 && (r.pedido||0)<=0).sort((a,b)=>b.valor-a.valor);
+    const totNE=naoEfet.reduce((a,r)=>a+r.valor,0);
+    return `<div class="panel"><div class="panel-head"><h2>Compras não efetivadas</h2><span class="sub">falta comprar · sem "em pedido" — ${naoEfet.length} itens · ${brl0(totNE)}</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">A comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
+    <tbody>${naoEfet.slice(0,20).map(r=>`
+      <tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
+      <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td><td class="num">${brl(r.valor)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty" style="padding:16px">Tudo em pedido ou comprado 🎉</td></tr>'}</tbody></table></div>
+    ${naoEfet.length>20?`<p class="mut" style="font-size:12px;padding:6px 16px">Mostrando as 20 maiores de ${naoEfet.length}. Marque "EM PEDIDO" na tela <b>Demanda</b> conforme for efetivando.</p>`:''}</div>`; })()}`;
 };
 
 V.talhoes = function(){
