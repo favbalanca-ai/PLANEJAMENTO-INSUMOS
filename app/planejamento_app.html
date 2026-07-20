@@ -696,7 +696,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.18-48';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.18-49';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1616,6 +1616,7 @@ V.precos = function(){
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
       <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
       <button class="btn btn-outline btn-sm" data-act="prImportXlsx">📊 Importar tabela Excel</button>
+      <button class="btn btn-outline btn-sm" data-act="prBuscarValor" title="Traz o preço da coluna VALOR do planejamento para o Preço à vista">⬇ Buscar preços (VALOR)</button>
       <button class="btn btn-ghost btn-sm" data-act="prPctToPreco" title="Se você digitou o PREÇO no campo de %, isto move os valores para a coluna Preço à vista">↦ usar % como preço</button>
       <button class="btn btn-ghost btn-sm" data-act="prLimparDup" title="Mantém 1 de cada produto (prioriza o que tem preço)">⧉ Limpar duplicados</button>
       <button class="btn btn-ghost btn-sm" data-act="prLimparLista" title="Apaga todos os produtos desta safra">🗑 Limpar lista</button>
@@ -2792,6 +2793,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomWa'){ recomWhats(a.id); }
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
+    else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -3351,6 +3353,27 @@ async function publicarPlanejamento(){
     addHist('push', !(r&&r.fail), 'Publicar preços: '+((r&&r.ok)||0)+' produtos');
     toast('Publicado: '+((r&&r.ok)||0)+' preços (safra '+PRECOS.atual+'). O planejamento busca pela fórmula.');
   }catch(e){ syncBusy=false; setSyncStatus('err'); toast('Falha ao publicar os preços'); }
+}
+// Busca o preço da coluna VALOR (col S do PORTIFÓLIO) do planejamento e traz para
+// o Preço à vista do módulo: atualiza os que já existem e acrescenta os que faltam.
+async function precosBuscarValor(){
+  const url=syncUrl(); if(!url){ toast('Configure a URL de sincronização primeiro'); return; }
+  if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
+  syncBusy=true; setSyncStatus('busy'); toast('Buscando preços (VALOR) do planejamento…');
+  try{
+    const d=await syncGet(url,{auto:true});
+    const prods=(d&&d.produtos)||[];
+    const s=safraAtual(); const have={}; let upd=0, add=0;
+    s.itens.forEach((it,idx)=>{ have[normKey(it.produto)]=idx; });
+    const byName={}; prods.forEach(pp=>{ if(pp.produto) byName[normKey(pp.produto)]=pp; });
+    // atualiza os produtos do módulo com o VALOR do planejamento
+    s.itens.forEach(it=>{ const pp=byName[normKey(it.produto)]; if(pp && +pp.preco>0){ it.precoVista=+(+pp.preco).toFixed(2); upd++; } });
+    // acrescenta os produtos do planejamento (com preço) que ainda não estão no módulo
+    prods.forEach(pp=>{ const k=normKey(pp.produto); if(!k || (k in have)) return; if(+pp.preco>0){
+      s.itens.push({empresa:pp.empresa||'', classe:(pp.classe||'').toUpperCase(), produto:pp.produto, precoVista:+(+pp.preco).toFixed(2)}); have[k]=1; add++; } });
+    syncBusy=false; setSyncStatus('ok'); markSynced(); savePrecos(); route();
+    toast(upd+' preço(s) atualizado(s)'+(add?' · '+add+' novo(s)':'')+' do planejamento');
+  }catch(e){ syncBusy=false; setSyncStatus('err'); toast('Falha ao buscar os preços'); }
 }
 async function prAlimRun(kind){
   const pv=_alimPrev; if(!pv) return;
