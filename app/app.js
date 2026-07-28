@@ -573,13 +573,21 @@ const pill=st=>`<span class="pill ${PILL[st][0]}">${PILL[st][1]}</span>`;
 const V = {};
 
 V.dashboard = function(){
-  // filtro por empreendimento (afeta o painel todo)
-  const empsAll=[...new Set(talhoesAll().map(t=>empDe(t)).filter(e=>e&&e!=='—'))].sort();
+  // filtro por empreendimento (afeta o painel todo) — inclui 1ª safra e safrinha (2ª safra)
+  const empsAll=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'))].sort();
   const fEmp = painelEmpSel.size ? painelEmpSel : null;
-  const tais = talhoesAll().filter(t=> !fEmp || fEmp.has(empDe(t)));
+  // safras de um talhão que batem com o filtro (principal e/ou safrinha)
+  const safrasSel = t => {
+    const out=[];
+    if(!fEmp || fEmp.has(empDe(t)||'—')) out.push('principal');
+    if(temSafrinha(t) && (!fEmp || fEmp.has(empSafDe(t)))) out.push('safrinha');
+    return out;
+  };
+  const taisSeq = talhoesAll().map(t=>({t, seqs:safrasSel(t)})).filter(o=>o.seqs.length);
+  const tais = taisSeq.map(o=>o.t);
   const compras=calcCompras(fEmp);
   const areaTotal=tais.reduce((a,t)=>a+areaDe(t),0);
-  const custoTotal=tais.reduce((a,t)=>a+custoTalhao(t).total,0);
+  const custoTotal=taisSeq.reduce((a,o)=>a+areaDe(o.t)*o.seqs.reduce((s,seq)=>s+custoSeqHa(o.t,seq),0),0);
   const totalCompra=compras.reduce((a,r)=>a+r.valor,0);
   const itensComprar=compras.filter(r=>r.comprar>0).length;
   const semPreco=compras.filter(r=>r.comprar>0&&r.preco<=0).length;
@@ -599,7 +607,7 @@ V.dashboard = function(){
     .filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   const maxE=Math.max(1,...demEmp.map(x=>x[1]));
   // custo por ha por classe × talhão
-  const tCC = tais.map(t=>({t, area:areaDe(t), cc:custoClasseHa(t)})).sort((a,b)=>{
+  const tCC = taisSeq.map(o=>({t:o.t, area:areaDe(o.t), cc:custoClasseHaSeqs(o.t,o.seqs)})).sort((a,b)=>{
     const sa=Object.values(a.cc).reduce((x,y)=>x+y,0), sb=Object.values(b.cc).reduce((x,y)=>x+y,0); return sb-sa; });
   const ccTot={}; tCC.forEach(o=>{ for(const k in o.cc) ccTot[k]=(ccTot[k]||0)+o.cc[k]; });
   const ccCols=Object.entries(ccTot).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
@@ -812,6 +820,17 @@ function custoClasseHa(t){
   eachOp(t,(seq,tag,oi,op,tagoi)=>{ effItems(t.id,tagoi,op.itens).forEach(it=>{ if(!it.produto) return;
     const cl=(((PROD[it.produto]&&PROD[it.produto].classe)||it.classe||'—')+'').toUpperCase();
     m[cl]=(m[cl]||0)+it.dose*precoDe(it.produto); }); });
+  return m;
+}
+// custo por ha × classe restrito às safras selecionadas (principal e/ou safrinha)
+function custoClasseHaSeqs(t, seqs){
+  const m={};
+  (seqs||['principal','safrinha']).forEach(seq=>{
+    const tag=seq==='safrinha'?'S':'P';
+    opsOf(t.id,seq).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{ if(!it.produto) return;
+      const cl=(((PROD[it.produto]&&PROD[it.produto].classe)||it.classe||'—')+'').toUpperCase();
+      m[cl]=(m[cl]||0)+it.dose*precoDe(it.produto); }));
+  });
   return m;
 }
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
