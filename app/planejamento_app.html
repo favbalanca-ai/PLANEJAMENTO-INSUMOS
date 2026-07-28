@@ -701,7 +701,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-53';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-54';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1513,6 +1513,8 @@ V.talhao = function(id){
 const cotaEmpSel = new Set();      // filtro da Cotação (vazio = todos) — sessão
 const comprasEmpSel = new Set();   // filtro de empreendimento da Demanda de Compras — sessão
 const painelEmpSel = new Set();    // filtro de empreendimento do Painel — sessão
+let precoQ = '';                   // busca do Portfólio (Preços) — sessão
+let precoSemPreco = false;         // filtro "só sem preço" do Portfólio (Preços) — sessão
 // custo de insumos por classe (R$/ha) de um talhão -> { CLASSE: rs_ha }
 function custoClasseHa(t){
   const m={};
@@ -1653,7 +1655,8 @@ V.precos = function(){
     const c=normc(it.classe)||'—';
     if(c!==_lastCls){ _lastCls=c; itemsList+=`<div class="pr-grp">${esc(it.classe||'(sem classe)')}<span>${clsCount[c]}</span></div>`; }
     const compV=precoComposto(it,'vista'), compP=precoComposto(it,'prazo');
-    itemsList+=`<div class="pr-item">
+    const semPreco = !(precoFinal(it,'vista')>0);
+    itemsList+=`<div class="pr-item" data-search="${esc((it.produto+' '+it.empresa+' '+it.classe).toLowerCase())}" data-noprice="${semPreco?1:0}">
       <input class="pr-prodname" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto">
       <input class="pr-emp" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa">
       <input class="pr-cls" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe">
@@ -1691,6 +1694,12 @@ V.precos = function(){
     <div class="op-add"><button class="btn btn-primary btn-sm" data-act="prAddRef">+ adicionar classe de referência</button></div>
   </div>
   <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">por classe · A→Z · digite o preço à vista/a prazo</span></div>
+    <div class="toolbar" style="margin:12px 12px 4px">
+      <div class="search"><input id="q-preco" value="${esc(precoQ)}" placeholder="Buscar produto, empresa ou classe…" autocomplete="off"></div>
+      <button class="chip-f${precoSemPreco?' on':''}" data-act="prToggleSemPreco" title="Mostrar só produtos sem preço à vista">só sem preço</button>
+      <div class="spacer"></div>
+      <span class="badge badge-muted"><b id="pr-count">${idxed.length}</b> de ${idxed.length} itens</span>
+    </div>
     <div class="pr-list">${itemsList}</div>
     <div class="op-add">
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
@@ -2594,6 +2603,8 @@ function route(opts){
   try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
+  // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
+  if(view==='precos' && (precoQ || precoSemPreco)) filterPrecos();
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }   // inicializa o Leaflet após o HTML entrar no DOM
@@ -2874,6 +2885,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
+    else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -2931,7 +2943,34 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-emp') applyEmpFilter();
   if(e.target.id==='q-maq') filterTable('#tbl-maq',e.target.value);
   if(e.target.id==='q-cot') filterCotacao(e.target.value);
+  if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
 });
+// busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
+function filterPrecos(){
+  const list=document.querySelector('.pr-list'); if(!list) return;
+  const q=(precoQ||'').toLowerCase().trim();
+  const kids=[...list.children];
+  let shown=0;
+  kids.forEach(el=>{
+    if(!el.classList.contains('pr-item')) return;
+    const okQ=!q||(el.dataset.search||'').includes(q);
+    const okS=!precoSemPreco||el.dataset.noprice==='1';
+    const show=okQ&&okS;
+    el.style.display=show?'':'none';
+    if(show) shown++;
+  });
+  // esconde o cabeçalho de uma classe se nenhum item dela estiver visível
+  kids.forEach((el,idx)=>{
+    if(!el.classList.contains('pr-grp')) return;
+    let any=false;
+    for(let j=idx+1;j<kids.length;j++){
+      if(kids[j].classList.contains('pr-grp')) break;
+      if(kids[j].classList.contains('pr-item')&&kids[j].style.display!=='none'){ any=true; break; }
+    }
+    el.style.display=any?'':'none';
+  });
+  const cnt=document.querySelector('#pr-count'); if(cnt) cnt.textContent=shown;
+}
 // busca na Cotação: filtra em todos os fornecedores e esconde painéis vazios
 function filterCotacao(q){
   q=(q||'').toLowerCase().trim();
