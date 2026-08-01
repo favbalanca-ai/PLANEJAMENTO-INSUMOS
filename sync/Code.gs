@@ -98,9 +98,11 @@ function readPrecosSheet(){
       sf.refs.push({ classe:S(r[3]), produto:S(r[4]), vista:N(r[5]), prazo:N(r[6]) });
     } else if (tipo === 'ITEM'){
       if (!S(r[4]) && !S(r[3])) continue;
+      var dv = (r[5] === '' || r[5] == null) ? null : N(r[5]);         // preço à vista direto
+      var dz = (r[6] === '' || r[6] == null) ? null : N(r[6]);         // preço a prazo direto
       var pv = (r[7] === '' || r[7] == null) ? null : N(r[7]) / 100;   // % -> fator
       var pp = (r[8] === '' || r[8] == null) ? null : N(r[8]) / 100;
-      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), pct:pv, pctPrazo:pp });
+      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), precoVista:dv, precoPrazo:dz, pct:pv, pctPrazo:pp });
     }
   }
   return { safras:safras };
@@ -117,7 +119,9 @@ function writePrecosSheet(precos){
         r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '']);
     });
     (sf.itens || []).forEach(function(it){
-      rows.push([nm, 'ITEM', S(it.empresa), S(it.classe), S(it.produto), '', '',
+      rows.push([nm, 'ITEM', S(it.empresa), S(it.classe), S(it.produto),
+        (it.precoVista == null || it.precoVista === '') ? '' : N(it.precoVista),
+        (it.precoPrazo == null || it.precoPrazo === '') ? '' : N(it.precoPrazo),
         it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100)]);
     });
   });

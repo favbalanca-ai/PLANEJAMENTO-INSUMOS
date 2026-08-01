@@ -701,7 +701,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-54';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-55';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -897,6 +897,9 @@ async function prHandleExcel(file){
       const wb=XLSX.read(await file.arrayBuffer(), {type:'array'});
       rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, defval:''});
     }
+    // layout "LISTA DE PREÇOS" (referência por classe + %)? importa direto, calculando
+    const lista=_prParseLista(rows);
+    if(lista && lista.refs.length){ _prListaPrev=lista; prListaModal(lista); return; }
     const text=_rowsToImportText(rows);
     if(!text){ toast('Não encontrei produtos na tabela — revise/cole manualmente'); prImportModal(''); return; }
     prImportModal(text);
@@ -960,6 +963,96 @@ function prDoImport(){
   savePrecos();
   const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove();
   route(); toast((replace?'Portfólio substituído — ':'')+'Importados '+items.length+' produtos');
+}
+/* ---- Importador da "LISTA DE PREÇOS" (layout favbalança) ----
+   Tabela principal: EMPRESA · CLASSE · PRODUTO · … · VALOR R$ REFERÊNCIA · %xPRODUTO REF.
+   Tabela de referência ao lado: CLASSE · PRODUTO REFERÊNCIA · PREÇO.
+   Produtos de classe COM referência entram pelo % (preço = referência × (1+%));
+   os SEM referência entram com o preço direto (coluna VALOR). Retorna null se não for esse layout. */
+let _prListaPrev=null;
+function _prParseLista(rows){
+  if(!rows||!rows.length) return null;
+  const norm=s=>String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim();
+  let hIdx=-1;
+  for(let i=0;i<Math.min(rows.length,20);i++){ const r=(rows[i]||[]).map(norm);
+    if(r.some(c=>c==='EMPRESA')&&r.some(c=>c==='CLASSE')&&r.some(c=>c==='PRODUTO')){ hIdx=i; break; } }
+  if(hIdx<0) return null;
+  const H=(rows[hIdx]||[]).map(norm);
+  const firstIdx=pred=>H.findIndex(pred);
+  const clsCols=[]; H.forEach((h,j)=>{ if(h==='CLASSE') clsCols.push(j); });
+  const cEmp=firstIdx(h=>h==='EMPRESA'||h.indexOf('FORNECED')>=0||h.indexOf('FABRICA')>=0);
+  const cClsMain=clsCols.length?clsCols[0]:-1;
+  const cProdMain=firstIdx(h=>h==='PRODUTO');
+  const cValor=firstIdx(h=>h.indexOf('VALOR')>=0);
+  const cPct=firstIdx(h=>h.indexOf('%')>=0);
+  const cClsRef=clsCols.length>1?clsCols[1]:-1;
+  const cProdRef=firstIdx(h=>h.indexOf('PRODUTO REFEREN')>=0);
+  let cPrecoRef=firstIdx(h=>h==='PREÇO'||h==='PRECO');
+  if(cPrecoRef<0 && cProdRef>=0) cPrecoRef=cProdRef+1;
+  if(cClsMain<0||cProdMain<0) return null;
+  if(cClsRef<0||cPrecoRef<0) return null;                 // sem tabela de referência: usa o import genérico
+  // 1) referências por classe (só à vista)
+  const refs=[], refByCls={};
+  for(let i=hIdx+1;i<rows.length;i++){ const r=rows[i]||[];
+    const cl=norm(r[cClsRef]); if(!cl || cl in refByCls) continue;
+    const rp=_priceLoose(r[cPrecoRef]); if(rp==null||rp<=0) continue;
+    const rprod=String((cProdRef>=0?r[cProdRef]:'')||'').trim();
+    refByCls[cl]=rp; refs.push({classe:cl, produto:rprod, vista:rp, prazo:0});
+  }
+  // 2) itens da tabela principal
+  const items=[]; let comPct=0, comDireto=0, semPreco=0;
+  for(let i=hIdx+1;i<rows.length;i++){ const r=rows[i]||[];
+    const prod=String(r[cProdMain]||'').trim(); if(!prod) continue;
+    const cl=norm(r[cClsMain]); const emp=String((cEmp>=0?r[cEmp]:'')||'').trim();
+    const it={empresa:emp, classe:cl, produto:prod};
+    const hasRef=cl in refByCls;
+    const pct=cPct>=0?_numLoose(r[cPct]):null;             // fração direta (0,029 = +2,9%)
+    const valor=cValor>=0?_priceLoose(r[cValor]):null;
+    if(hasRef){ it.pct=(pct!=null?pct:0); comPct++; }
+    else if(valor!=null && valor>0){ it.precoVista=Math.round(valor*100)/100; comDireto++; }
+    else if(pct!=null){ it.pct=pct; comPct++; }            // % sem referência ainda (ex.: RC) — guarda p/ depois
+    else semPreco++;
+    items.push(it);
+  }
+  if(!items.length) return null;
+  return {refs, items, comPct, comDireto, semPreco};
+}
+function prListaModal(p){
+  const old=document.getElementById('pr-lista-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='pr-lista-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box">
+    <div class="modal-head"><h3>Importar LISTA DE PREÇOS</h3><button class="icon-btn" data-act="prListaClose" title="Fechar">✕</button></div>
+    <div style="font-size:13px">
+      <p style="margin:0 0 8px">Reconheci o layout com <b>referência por classe</b> + <b>%</b>:</p>
+      <ul style="margin:0 0 8px 18px;padding:0">
+        <li><b>${p.refs.length}</b> classe(s) de referência (preço-base)</li>
+        <li><b>${p.comPct}</b> produto(s) por <b>%</b> — preço = referência × (1 + %)</li>
+        <li><b>${p.comDireto}</b> produto(s) com <b>preço direto</b> (classe sem referência)</li>
+        ${p.semPreco?`<li class="mut">${p.semPreco} sem preço (nem % nem valor)</li>`:''}
+      </ul>
+      <p class="mut" style="font-size:12px;margin:0">Ao trocar o preço de uma referência, todos os produtos daquela classe recalculam sozinhos.</p>
+    </div>
+    <div class="modal-foot">
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-lista-replace" checked> Substituir o portfólio atual</label>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="prListaClose">Cancelar</button>
+      <button class="btn btn-primary btn-sm" data-act="prListaDo">Importar ${p.items.length}</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
+function prListaApply(){
+  const p=_prListaPrev; if(!p) return;
+  const rep=document.getElementById('pr-lista-replace'); const replace=!rep||rep.checked;
+  const s=safraAtual();
+  const byCls={}; (s.refs||[]).forEach(r=>{ byCls[(r.classe||'').toUpperCase().trim()]=r; });
+  p.refs.forEach(nr=>{ const k=(nr.classe||'').toUpperCase().trim();
+    if(byCls[k]){ byCls[k].vista=nr.vista; if(nr.produto) byCls[k].produto=nr.produto; }
+    else { s.refs.push(nr); byCls[k]=nr; } });
+  s.itens = replace ? p.items : (s.itens||[]).concat(p.items);
+  savePrecos();
+  const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove();
+  route(); toast('Importado: '+p.items.length+' produtos · '+p.refs.length+' referências');
+  if(syncUrl()&&autoOn()) schedulePrecosPush();
 }
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
@@ -2914,6 +3007,8 @@ document.addEventListener('click',e=>{
       if(ask(removed+' produto(s) duplicado(s) — remover, mantendo 1 de cada?')){ s.itens=out; savePrecos(); route(); toast(removed+' duplicados removidos'); } }
     else if(a.act==='prImpClose'){ const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove(); }
     else if(a.act==='prImpDo'){ prDoImport(); }
+    else if(a.act==='prListaClose'){ const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove(); }
+    else if(a.act==='prListaDo'){ prListaApply(); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
       const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));
