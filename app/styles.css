@@ -604,6 +604,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pr-cls{flex:0 1 130px;color:var(--muted);font-size:12px;min-width:0}
 .pr-price{width:98px;flex:0 0 auto;text-align:right}
 .pr-item .icon-btn{flex:0 0 auto;width:36px;height:36px;font-size:16px}
+/* preço final calculado + variação e alerta de referência */
+.pr-final{flex:0 1 auto;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-weight:700;font-size:12px;
+  color:var(--ink);background:#eef4f5;border-radius:8px;padding:5px 9px;min-height:30px}
+.pr-final.zero{color:var(--muted);font-weight:600;background:transparent}
+.pr-final.falta{color:var(--red);background:var(--red-soft,#fde8e8);font-weight:700}
+.pr-var{font-size:11px;font-weight:800}
+.pr-var.up{color:var(--red)}          /* preço subiu = ruim (vermelho) */
+.pr-var.down{color:var(--green)}      /* preço caiu = bom (verde) */
+.pr-var.flat{color:var(--muted);font-weight:700}
+.pr-item.pr-falta{background:var(--red-soft,#fdecec)}
+@media(max-width:640px){ .pr-final{flex:1 1 100%;justify-content:flex-start} }
 @media(max-width:640px){
   .pr-item{gap:6px;padding:9px 4px}
   .pr-item input{font-size:16px;min-height:40px}   /* 16px evita o zoom do iOS ao focar */

@@ -2,7 +2,7 @@
    Estratégia "network-first": quando há internet, SEMPRE busca a versão mais
    nova da rede; o cache é só reserva para funcionar offline. Assim o app se
    atualiza sozinho e acaba a briga com o cache do celular. */
-const CACHE = 'planejamento-cache-v5';
+const CACHE = 'planejamento-cache-v6';
 
 self.addEventListener('install', () => {
   // assume o controle imediatamente (não espera fechar as abas antigas)

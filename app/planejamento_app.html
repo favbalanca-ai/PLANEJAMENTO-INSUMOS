@@ -619,6 +619,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pr-cls{flex:0 1 130px;color:var(--muted);font-size:12px;min-width:0}
 .pr-price{width:98px;flex:0 0 auto;text-align:right}
 .pr-item .icon-btn{flex:0 0 auto;width:36px;height:36px;font-size:16px}
+/* preço final calculado + variação e alerta de referência */
+.pr-final{flex:0 1 auto;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;font-weight:700;font-size:12px;
+  color:var(--ink);background:#eef4f5;border-radius:8px;padding:5px 9px;min-height:30px}
+.pr-final.zero{color:var(--muted);font-weight:600;background:transparent}
+.pr-final.falta{color:var(--red);background:var(--red-soft,#fde8e8);font-weight:700}
+.pr-var{font-size:11px;font-weight:800}
+.pr-var.up{color:var(--red)}          /* preço subiu = ruim (vermelho) */
+.pr-var.down{color:var(--green)}      /* preço caiu = bom (verde) */
+.pr-var.flat{color:var(--muted);font-weight:700}
+.pr-item.pr-falta{background:var(--red-soft,#fdecec)}
+@media(max-width:640px){ .pr-final{flex:1 1 100%;justify-content:flex-start} }
 @media(max-width:640px){
   .pr-item{gap:6px;padding:9px 4px}
   .pr-item input{font-size:16px;min-height:40px}   /* 16px evita o zoom do iOS ao focar */
@@ -701,7 +712,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-55';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-56';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -722,20 +733,21 @@ function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
 // fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
 function pctToField(f){ if(f==null||f==='') return ''; return +((f*100).toFixed(4)); }
 // preço composto de um item: preço de referência da classe × (1 + %)
-function precoComposto(it, tipo){
-  const s=safraAtual();
-  const ref=s.refs.find(r=>(r.classe||'').toUpperCase().trim()===(it.classe||'').toUpperCase().trim());
+function precoCompostoIn(it, tipo, refs){
+  const ref=(refs||[]).find(r=>(r.classe||'').toUpperCase().trim()===(it.classe||'').toUpperCase().trim());
   if(!ref) return 0;
   // % à vista usa it.pct; % a prazo usa it.pctPrazo (se não informado, cai no it.pct)
   const pct=tipo==='prazo'?(it.pctPrazo!=null?+it.pctPrazo:(+it.pct||0)):(+it.pct||0);
   return (+ref[tipo]||0)*(1+(pct||0));
 }
+function precoComposto(it, tipo){ return precoCompostoIn(it, tipo, safraAtual().refs); }
 // preço final: usa o preço DIRETO do produto (se informado); senão o composto (referência × (1+%))
-function precoFinal(it, tipo){
+function precoFinalIn(it, tipo, refs){
   const d = tipo==='prazo' ? it.precoPrazo : it.precoVista;
   if(d!=null && String(d).trim()!=='' && +d>0) return +d;
-  return precoComposto(it, tipo);
+  return precoCompostoIn(it, tipo, refs);
 }
+function precoFinal(it, tipo){ return precoFinalIn(it, tipo, safraAtual().refs); }
 function applyPrecoEdit(el){
   const k=el.dataset.pr, i=+el.dataset.i, s=safraAtual();
   const numv=v=>{ const n=parseFloat(String(v||'').replace(',','.')); return isFinite(n)?n:0; };
@@ -920,8 +932,13 @@ function prImportModal(initialText){
     <div class="modal-head"><h3>Importar lista de produtos</h3><button class="icon-btn" data-act="prImpClose" title="Fechar">✕</button></div>
     <p class="mut" style="font-size:12px;margin:0 0 8px">Uma linha por produto, colunas na ordem <b>Empresa · Classe · Produto · Preço à vista · Preço a prazo</b> (TAB ou 2+ espaços). Do <b>PDF de portfólio</b> vêm só os produtos (sem preço). Da <b>tabela Excel</b> os preços já vêm juntos — revise e importe. Preço aceita <code>16,49</code>, <code>R$ 16,49</code> ou <code>16.49</code>.</p>
     <textarea id="pr-imp-txt" class="pr-imp-txt" spellcheck="false" placeholder="Empresa\tClasse\tProduto\tPreço à vista\tPreço a prazo">${esc(initialText||'')}</textarea>
-    <div class="modal-foot">
-      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-imp-replace"> Substituir o portfólio atual</label>
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:6px">Ao importar:
+        <select class="sel" id="pr-imp-mode">
+          <option value="update">Atualizar (casar por produto)</option>
+          <option value="add">Adicionar ao final</option>
+          <option value="replace">Substituir tudo</option>
+        </select></label>
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-act="prImpClose">Cancelar</button>
       <button class="btn btn-primary btn-sm" data-act="prImpDo">Importar</button>
@@ -944,7 +961,7 @@ function _pctParse(raw){
 }
 function prDoImport(){
   const ta=document.getElementById('pr-imp-txt'); if(!ta) return;
-  const rep=document.getElementById('pr-imp-replace'); const replace=rep&&rep.checked;
+  const modeEl=document.getElementById('pr-imp-mode'); const mode=modeEl?modeEl.value:'update';
   const items=[];
   ta.value.split('\n').forEach(l=>{
     if(!l.trim()) return;
@@ -959,10 +976,13 @@ function prDoImport(){
   });
   if(!items.length){ toast('Nenhuma linha reconhecida'); return; }
   const s=safraAtual();
-  s.itens = replace ? items : s.itens.concat(items);
+  let msg;
+  if(mode==='replace'){ s.itens=items; msg='Portfólio substituído — '+items.length+' produtos'; }
+  else if(mode==='add'){ s.itens=s.itens.concat(items); msg='Adicionados '+items.length+' produtos'; }
+  else { const r=_mergePortfolio(s, items, false); msg='Atualizados '+r.upd+' · novos '+r.add; }
   savePrecos();
   const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove();
-  route(); toast((replace?'Portfólio substituído — ':'')+'Importados '+items.length+' produtos');
+  route(); toast(msg);
 }
 /* ---- Importador da "LISTA DE PREÇOS" (layout favbalança) ----
    Tabela principal: EMPRESA · CLASSE · PRODUTO · … · VALOR R$ REFERÊNCIA · %xPRODUTO REF.
@@ -1032,26 +1052,53 @@ function prListaModal(p){
       </ul>
       <p class="mut" style="font-size:12px;margin:0">Ao trocar o preço de uma referência, todos os produtos daquela classe recalculam sozinhos.</p>
     </div>
-    <div class="modal-foot">
-      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-lista-replace" checked> Substituir o portfólio atual</label>
+    <div class="modal-foot" style="flex-wrap:wrap;gap:8px">
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:6px">Ao importar:
+        <select class="sel" id="pr-lista-mode">
+          <option value="update">Atualizar (casar por produto)</option>
+          <option value="replace">Substituir tudo</option>
+          <option value="add">Adicionar ao final</option>
+        </select></label>
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-act="prListaClose">Cancelar</button>
       <button class="btn btn-primary btn-sm" data-act="prListaDo">Importar ${p.items.length}</button>
     </div></div>`;
   document.body.appendChild(ov);
 }
+// casa por nome de produto e atualiza os campos de preço/%; adiciona os que não existem.
+// authoritative=true (lista completa): substitui os campos de preço mesmo p/ vazio;
+// authoritative=false (import genérico/PDF): só sobrescreve o que veio preenchido (não zera preço).
+function _mergePortfolio(s, incoming, authoritative){
+  const key=x=>String(x||'').toUpperCase().replace(/\s+/g,' ').trim();
+  const byKey={}; (s.itens=s.itens||[]).forEach((it,idx)=>{ const k=key(it.produto); if(k && !(k in byKey)) byKey[k]=idx; });
+  let upd=0, add=0;
+  incoming.forEach(nit=>{ const k=key(nit.produto);
+    if(k && (k in byKey)){ const cur=s.itens[byKey[k]];
+      if(authoritative){ cur.precoVista=(nit.precoVista!=null)?nit.precoVista:null; cur.precoPrazo=(nit.precoPrazo!=null)?nit.precoPrazo:null;
+        cur.pct=(nit.pct!=null)?nit.pct:null; cur.pctPrazo=(nit.pctPrazo!=null)?nit.pctPrazo:null; }
+      else { if(nit.precoVista!=null) cur.precoVista=nit.precoVista; if(nit.precoPrazo!=null) cur.precoPrazo=nit.precoPrazo;
+        if(nit.pct!=null) cur.pct=nit.pct; if(nit.pctPrazo!=null) cur.pctPrazo=nit.pctPrazo; }
+      if(nit.empresa) cur.empresa=nit.empresa; if(nit.classe) cur.classe=nit.classe;
+      upd++;
+    } else { s.itens.push(nit); if(k) byKey[k]=s.itens.length-1; add++; } });
+  return {upd, add};
+}
 function prListaApply(){
   const p=_prListaPrev; if(!p) return;
-  const rep=document.getElementById('pr-lista-replace'); const replace=!rep||rep.checked;
+  const modeEl=document.getElementById('pr-lista-mode'); const mode=modeEl?modeEl.value:'update';
   const s=safraAtual();
+  // referências: sempre atualiza/insere por classe
   const byCls={}; (s.refs||[]).forEach(r=>{ byCls[(r.classe||'').toUpperCase().trim()]=r; });
   p.refs.forEach(nr=>{ const k=(nr.classe||'').toUpperCase().trim();
     if(byCls[k]){ byCls[k].vista=nr.vista; if(nr.produto) byCls[k].produto=nr.produto; }
     else { s.refs.push(nr); byCls[k]=nr; } });
-  s.itens = replace ? p.items : (s.itens||[]).concat(p.items);
+  let msg;
+  if(mode==='replace'){ s.itens=p.items.slice(); msg=p.items.length+' produtos (substituído)'; }
+  else if(mode==='add'){ s.itens=(s.itens||[]).concat(p.items); msg=p.items.length+' produtos adicionados'; }
+  else { const r=_mergePortfolio(s, p.items, true); msg=r.upd+' atualizados · '+r.add+' novos'; }
   savePrecos();
   const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove();
-  route(); toast('Importado: '+p.items.length+' produtos · '+p.refs.length+' referências');
+  route(); toast('Importação: '+msg+' · '+p.refs.length+' referências');
   if(syncUrl()&&autoOn()) schedulePrecosPush();
 }
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
@@ -1608,6 +1655,7 @@ const comprasEmpSel = new Set();   // filtro de empreendimento da Demanda de Com
 const painelEmpSel = new Set();    // filtro de empreendimento do Painel — sessão
 let precoQ = '';                   // busca do Portfólio (Preços) — sessão
 let precoSemPreco = false;         // filtro "só sem preço" do Portfólio (Preços) — sessão
+let precoClasse = '';              // filtro por classe do Portfólio (Preços) — sessão
 // custo de insumos por classe (R$/ha) de um talhão -> { CLASSE: rs_ha }
 function custoClasseHa(t){
   const m={};
@@ -1740,19 +1788,43 @@ V.precos = function(){
   const fmtn=v=>(Math.round((+v||0)*100)/100).toFixed(2).replace('.',',');
   // lista agrupada por CLASSE (A→Z) e produtos em ordem alfabética
   const normc=x=>String(x||'').toUpperCase().trim();
+  const pkey=x=>String(x||'').toUpperCase().replace(/\s+/g,' ').trim();
+  // safra anterior (para comparar preços): a que vem antes da atual na ordem
+  const prevName=(()=>{ const i=safras.indexOf(d.atual); return i>0?safras[i-1]:null; })();
+  const prevSafra=prevName?d.safras[prevName]:null;
+  const prevMap={};
+  if(prevSafra){ (prevSafra.itens||[]).forEach(pit=>{ if(!pit.produto) return; const p=precoFinalIn(pit,'vista',prevSafra.refs||[]); if(p>0) prevMap[pkey(pit.produto)]=p; }); }
+  // classes que têm referência (preço-base à vista > 0) — p/ alertar produtos por % sem referência
+  const refClasses={}; (s.refs||[]).forEach(r=>{ if(+r.vista>0) refClasses[normc(r.classe)]=true; });
   const idxed=s.itens.map((it,i)=>({it,i})).sort((a,b)=>
     normc(a.it.classe).localeCompare(normc(b.it.classe),'pt') || normc(a.it.produto).localeCompare(normc(b.it.produto),'pt'));
   const clsCount={}; idxed.forEach(({it})=>{ const c=normc(it.classe)||'—'; clsCount[c]=(clsCount[c]||0)+1; });
-  let _lastCls=null, itemsList='';
+  const classesList=Object.keys(clsCount).sort((a,b)=>a.localeCompare(b,'pt'));
+  let _lastCls=null, itemsList='', faltaRefCount=0;
   idxed.forEach(({it,i})=>{
     const c=normc(it.classe)||'—';
     if(c!==_lastCls){ _lastCls=c; itemsList+=`<div class="pr-grp">${esc(it.classe||'(sem classe)')}<span>${clsCount[c]}</span></div>`; }
     const compV=precoComposto(it,'vista'), compP=precoComposto(it,'prazo');
-    const semPreco = !(precoFinal(it,'vista')>0);
-    itemsList+=`<div class="pr-item" data-search="${esc((it.produto+' '+it.empresa+' '+it.classe).toLowerCase())}" data-noprice="${semPreco?1:0}">
+    const finalV=precoFinal(it,'vista');
+    const usaPct=(it.pct!=null||it.pctPrazo!=null) && !(+it.precoVista>0);
+    const faltaRef=usaPct && !refClasses[c];             // depende de % mas a classe não tem referência
+    if(faltaRef) faltaRefCount++;
+    const semPreco=!(finalV>0);
+    // variação vs safra anterior (preço final à vista)
+    let varBadge='';
+    const pv=prevMap[pkey(it.produto)];
+    if(pv>0 && finalV>0){ const dd=(finalV-pv)/pv;
+      if(Math.abs(dd)>=0.005){ const up=dd>0; varBadge=` <span class="pr-var ${up?'up':'down'}" title="${esc(prevName||'')}: ${fmtn(pv)} → ${fmtn(finalV)}">${up?'▲':'▼'}${Math.abs(dd*100).toFixed(0)}%</span>`; }
+      else varBadge=` <span class="pr-var flat" title="igual à ${esc(prevName||'')}">=</span>`; }
+    const finalCell = faltaRef
+      ? `<span class="pr-final falta" title="Usa %, mas a classe '${esc(it.classe||'')}' não tem preço de referência — cadastre a referência da classe">⚠ sem ref.</span>`
+      : (finalV>0 ? `<span class="pr-final" title="Preço final à vista usado no planejamento">R$ ${fmtn(finalV)}${varBadge}</span>`
+                  : `<span class="pr-final zero" title="Sem preço">—</span>`);
+    itemsList+=`<div class="pr-item${faltaRef?' pr-falta':''}" data-search="${esc((it.produto+' '+it.empresa+' '+it.classe).toLowerCase())}" data-cls="${esc(c)}" data-noprice="${semPreco?1:0}">
       <input class="pr-prodname" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto">
       <input class="pr-emp" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa">
       <input class="pr-cls" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe">
+      ${finalCell}
       <input class="pr-price cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'à vista'}" title="Preço à vista">
       <input class="pr-price cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'a prazo'}" title="Preço a prazo">
       <input class="pr-price cell pr-pct" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="% vista" title="% sobre a referência da classe (só usado se o preço à vista estiver vazio)">
@@ -1786,12 +1858,17 @@ V.precos = function(){
       <tbody>${refRows||'<tr><td colspan="5" class="mut" style="padding:12px 14px">Nenhuma classe. Adicione abaixo.</td></tr>'}</tbody></table></div>
     <div class="op-add"><button class="btn btn-primary btn-sm" data-act="prAddRef">+ adicionar classe de referência</button></div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">por classe · A→Z · digite o preço à vista/a prazo</span></div>
+  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">por classe · A→Z · preço final = referência × (1 + %)${prevName?` · variação vs ${esc(prevName)}`:''}</span></div>
     <div class="toolbar" style="margin:12px 12px 4px">
       <div class="search"><input id="q-preco" value="${esc(precoQ)}" placeholder="Buscar produto, empresa ou classe…" autocomplete="off"></div>
       <button class="chip-f${precoSemPreco?' on':''}" data-act="prToggleSemPreco" title="Mostrar só produtos sem preço à vista">só sem preço</button>
+      ${faltaRefCount?`<span class="badge" style="background:var(--red-soft,#fde8e8);color:var(--red)" title="Produtos que usam % mas a classe não tem referência cadastrada">⚠ ${faltaRefCount} sem referência</span>`:''}
       <div class="spacer"></div>
       <span class="badge badge-muted"><b id="pr-count">${idxed.length}</b> de ${idxed.length} itens</span>
+    </div>
+    <div class="classe-filter" id="pr-clsf" style="margin:2px 12px 8px">
+      <button class="chip-f${precoClasse===''?' on':''}" data-clsf="">Todas</button>
+      ${classesList.map(c=>`<button class="chip-f${precoClasse===c?' on':''}" data-clsf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('')}
     </div>
     <div class="pr-list">${itemsList}</div>
     <div class="op-add">
@@ -2697,7 +2774,7 @@ function route(opts){
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
   // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
-  if(view==='precos' && (precoQ || precoSemPreco)) filterPrecos();
+  if(view==='precos' && (precoQ || precoSemPreco || precoClasse)) filterPrecos();
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }   // inicializa o Leaflet após o HTML entrar no DOM
@@ -2887,6 +2964,8 @@ document.addEventListener('click',e=>{
   if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#painel-empf')?painelEmpSel:(ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel);
     if(v===''){ setSel.clear(); } else if(setSel.has(v)){ setSel.delete(v); } else { setSel.add(v); }
     route(); return; }
+  const clf=e.target.closest('#pr-clsf .chip-f');
+  if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
   if(tf){ const v=tf.dataset.talf;
     if(v===''){ comprasTalSel.clear(); } else if(comprasTalSel.has(v)){ comprasTalSel.delete(v); } else { comprasTalSel.add(v); }
@@ -3050,7 +3129,8 @@ function filterPrecos(){
     if(!el.classList.contains('pr-item')) return;
     const okQ=!q||(el.dataset.search||'').includes(q);
     const okS=!precoSemPreco||el.dataset.noprice==='1';
-    const show=okQ&&okS;
+    const okC=!precoClasse||(el.dataset.cls||'')===precoClasse;
+    const show=okQ&&okS&&okC;
     el.style.display=show?'':'none';
     if(show) shown++;
   });
