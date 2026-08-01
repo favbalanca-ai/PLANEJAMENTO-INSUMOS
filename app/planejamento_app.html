@@ -712,7 +712,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-56';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-57';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -939,6 +939,7 @@ function prImportModal(initialText){
           <option value="add">Adicionar ao final</option>
           <option value="replace">Substituir tudo</option>
         </select></label>
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-imp-sopreco"> Só produtos com preço</label>
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-act="prImpClose">Cancelar</button>
       <button class="btn btn-primary btn-sm" data-act="prImpDo">Importar</button>
@@ -962,7 +963,7 @@ function _pctParse(raw){
 function prDoImport(){
   const ta=document.getElementById('pr-imp-txt'); if(!ta) return;
   const modeEl=document.getElementById('pr-imp-mode'); const mode=modeEl?modeEl.value:'update';
-  const items=[];
+  let items=[];
   ta.value.split('\n').forEach(l=>{
     if(!l.trim()) return;
     let cols = l.indexOf('\t')>=0 ? l.split(/\t+/) : l.split(/\s{2,}/);
@@ -976,10 +977,13 @@ function prDoImport(){
   });
   if(!items.length){ toast('Nenhuma linha reconhecida'); return; }
   const s=safraAtual();
+  const soEl=document.getElementById('pr-imp-sopreco'); let pulados=0;
+  if(soEl&&soEl.checked){ const antes=items.length; items=items.filter(it=>precoFinalIn(it,'vista',s.refs)>0); pulados=antes-items.length; }
   let msg;
   if(mode==='replace'){ s.itens=items; msg='Portfólio substituído — '+items.length+' produtos'; }
   else if(mode==='add'){ s.itens=s.itens.concat(items); msg='Adicionados '+items.length+' produtos'; }
   else { const r=_mergePortfolio(s, items, false); msg='Atualizados '+r.upd+' · novos '+r.add; }
+  if(pulados) msg+=' · '+pulados+' sem preço ignorados';
   savePrecos();
   const ov=document.getElementById('pr-import-ov'); if(ov) ov.remove();
   route(); toast(msg);
@@ -1059,9 +1063,10 @@ function prListaModal(p){
           <option value="replace">Substituir tudo</option>
           <option value="add">Adicionar ao final</option>
         </select></label>
+      <label class="mut" style="font-size:12px;display:flex;align-items:center;gap:5px"><input type="checkbox" id="pr-lista-sopreco" checked> Só produtos com preço</label>
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-act="prListaClose">Cancelar</button>
-      <button class="btn btn-primary btn-sm" data-act="prListaDo">Importar ${p.items.length}</button>
+      <button class="btn btn-primary btn-sm" data-act="prListaDo">Importar</button>
     </div></div>`;
   document.body.appendChild(ov);
 }
@@ -1092,10 +1097,15 @@ function prListaApply(){
   p.refs.forEach(nr=>{ const k=(nr.classe||'').toUpperCase().trim();
     if(byCls[k]){ byCls[k].vista=nr.vista; if(nr.produto) byCls[k].produto=nr.produto; }
     else { s.refs.push(nr); byCls[k]=nr; } });
+  // "só com preço": ignora produtos sem preço direto e sem cálculo por referência
+  const soEl=document.getElementById('pr-lista-sopreco'); const soPreco=!soEl||soEl.checked;
+  let items=p.items; let pulados=0;
+  if(soPreco){ const antes=items.length; items=items.filter(it=>precoFinalIn(it,'vista',s.refs)>0); pulados=antes-items.length; }
   let msg;
-  if(mode==='replace'){ s.itens=p.items.slice(); msg=p.items.length+' produtos (substituído)'; }
-  else if(mode==='add'){ s.itens=(s.itens||[]).concat(p.items); msg=p.items.length+' produtos adicionados'; }
-  else { const r=_mergePortfolio(s, p.items, true); msg=r.upd+' atualizados · '+r.add+' novos'; }
+  if(mode==='replace'){ s.itens=items.slice(); msg=items.length+' produtos (substituído)'; }
+  else if(mode==='add'){ s.itens=(s.itens||[]).concat(items); msg=items.length+' produtos adicionados'; }
+  else { const r=_mergePortfolio(s, items, true); msg=r.upd+' atualizados · '+r.add+' novos'; }
+  if(pulados) msg+=' · '+pulados+' sem preço ignorados';
   savePrecos();
   const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove();
   route(); toast('Importação: '+msg+' · '+p.refs.length+' referências');
