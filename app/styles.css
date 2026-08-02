@@ -126,6 +126,9 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .dre-mixval{text-align:right;font-weight:800;font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap}
 .dre-mixval.pos{color:var(--green)} .dre-mixval.neg{color:var(--red)}
 .dre-mixval small{font-weight:600;font-size:10px;color:var(--muted)}
+.dre-prod{display:inline-flex;gap:4px;align-items:center;justify-content:flex-end}
+.dre-prod input{width:74px} .dre-prod .dre-unit{width:58px;text-align:left}
+.dre-cards tbody td.num .dre-prod input{width:74px} .dre-cards tbody td.num .dre-prod .dre-unit{width:58px}
 @media(max-width:640px){
   .dre-mixrow{grid-template-columns:1fr auto} .dre-mixbar{grid-column:1 / -1;order:3}
   .dre-cl{grid-template-columns:1fr auto 52px;gap:8px;font-size:13px}
