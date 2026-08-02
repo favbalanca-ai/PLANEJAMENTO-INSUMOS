@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-57';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-58';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -438,6 +438,7 @@ function loadOverrides(){
   OV.opMaq   = OV.opMaq   || {};   // "TL|tagOp" -> conjunto atribuído
   OV.dreOp   = OV.dreOp   || {};   // empreendimento -> custo operação R$/ha
   OV.arrend  = OV.arrend  || {};   // empreendimento -> arrendamento/outros R$/ha
+  OV.dreCfg  = OV.dreCfg  || {};   // premissas gerenciais da DRE: {impostoPct, estruturaHa, financeiroPct, outrasHa}
   OV.itemRemoved = OV.itemRemoved || {}; // "TL|tagOp|ii" -> true (insumo base removido)
   OV.itemProd    = OV.itemProd    || {}; // "TL|tagOp|ii" -> produto (troca do insumo base)
   OV.itemAdd     = OV.itemAdd     || {}; // "TL|tagOp" -> [{produto,dose}] (insumos adicionados)
@@ -459,7 +460,7 @@ function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.dose).length +
          Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
-         Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + (OV.diesel!==6.00?1:0) +
+         Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + Object.keys(OV.dreCfg||{}).length + (OV.diesel!==6.00?1:0) +
          Object.keys(OV.itemRemoved).length + Object.keys(OV.itemProd).length +
          Object.values(OV.itemAdd).reduce((a,arr)=>a+arr.length,0) +
          OV.talhaoAdd.length + Object.keys(OV.talhaoRemoved).length +
@@ -1253,95 +1254,164 @@ V.maquinas = function(){
 };
 
 V.dre = function(){
+  // premissas gerenciais globais (rateadas por cultura)
+  const cfg=OV.dreCfg||{};
+  const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0, outrasHa=+cfg.outrasHa||0;
+  const tfrac=(impostoPct+financeiroPct)/100;
   const emps={};
   cultivos().forEach(cv=>{   // 1 linha por cultura; safrinha entra como cultivo próprio
-    const g=emps[cv.emp]||(emps[cv.emp]={area:0,prod:0,ins:0,opDefault:0});
+    const g=emps[cv.emp]||(emps[cv.emp]={area:0,prod:0,ins:0,opDefault:0,cc:{}});
     g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area;
+    const cc=custoClasseHaSeqs(cv.t,[cv.seq]); for(const k in cc) g.cc[k]=(g.cc[k]||0)+cc[k]*cv.area;   // R$ por classe
   });
   const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
-  // dados calculados por cultura (reaproveitados na tabela e no gráfico)
   const R=list.map(([e,g])=>{
     const preco=precoCultura(e), receita=g.prod*preco;
     const opHa=(e in OV.dreOp)?+OV.dreOp[e]:(g.area>0?g.opDefault/g.area:0);
     const arrHa=(e in OV.arrend)?+OV.arrend[e]:0;
     const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
-    const custoTot=g.ins+custoMaq+custoArr, result=receita-custoTot;
-    return {e,g,preco,opHa,arrHa,receita,custoMaq,custoArr,custoTot,result};
+    const custoVar=g.ins+custoMaq;                 // variáveis = insumos + operações
+    const estrutura=estruturaHa*g.area, imposto=receita*impostoPct/100, financeiro=receita*financeiroPct/100, outras=outrasHa*g.area;
+    const receitaLiq=receita-imposto;
+    const margContrib=receitaLiq-custoVar;
+    const resultOper=margContrib-custoArr-estrutura;
+    const resultLiq=resultOper-financeiro+outras;
+    const custoTot=imposto+custoVar+custoArr+estrutura+financeiro;   // todos os custos (sem abater outras receitas)
+    // ponto de equilíbrio
+    const fixos=custoVar+custoArr+estrutura-outras;
+    const receitaEq=(1-tfrac)>0?fixos/(1-tfrac):0;
+    const precoEq=g.prod>0?receitaEq/g.prod:0;
+    const prodEq=(preco>0&&g.area>0)?(receitaEq/preco)/g.area:0;
+    const margSeg=receita>0?(receita-receitaEq)/receita*100:0;
+    const resHa=g.area>0?resultLiq/g.area:0, custoSaca=g.prod>0?custoTot/g.prod:0, margLiq=receita>0?resultLiq/receita*100:0;
+    const prodHa=g.area>0?g.prod/g.area:0;
+    return {e,g,preco,opHa,arrHa,receita,custoMaq,custoVar,custoArr,estrutura,imposto,financeiro,outras,receitaLiq,margContrib,resultOper,resultLiq,custoTot,precoEq,prodEq,margSeg,resHa,custoSaca,margLiq,prodHa};
   });
-  const tA=R.reduce((s,r)=>s+r.g.area,0), tR=R.reduce((s,r)=>s+r.receita,0);
-  const tI=R.reduce((s,r)=>s+r.g.ins,0), tM=R.reduce((s,r)=>s+r.custoMaq,0), tX=R.reduce((s,r)=>s+r.custoArr,0);
-  const tCusto=tI+tM+tX, res=tR-tCusto, marg=tR>0?res/tR*100:0;
-  const body=R.map(r=>{
-    return `<tr><td class="c-full"><b>${esc(r.e)}</b></td>
-      <td class="num" data-th="Área (ha)">${num(r.g.area)}</td>
-      <td class="num" data-th="Produção (sc)">${nf0.format(r.g.prod)}</td>
-      <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(r.e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(r.e)}" value="${r.preco}"></td>
-      <td class="num" data-th="Receita">${brl0(r.receita)}</td>
-      <td class="num" data-th="Custo insumos">${brl0(r.g.ins)}</td>
-      <td class="num" data-th="Máq. R$/ha"><input class="cell ${(r.e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(r.e)}" value="${r.opHa.toFixed(2)}"></td>
-      <td class="num" data-th="Custo máquinas">${brl0(r.custoMaq)}</td>
-      <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(r.e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(r.e)}" value="${r.arrHa.toFixed(2)}"></td>
-      <td class="num" data-th="Arrend./Outros">${brl0(r.custoArr)}</td>
-      <td class="num" data-th="Custo total">${brl0(r.custoTot)}</td>
-      <td class="num c-res" data-th="Resultado"><b style="color:${r.result>=0?'var(--green)':'var(--red)'}">${brl0(r.result)}</b></td></tr>`;
-  }).join('');
-  // gráfico por cultura: barra de receita x custo (escala comum) + resultado/margem
-  const maxRef=Math.max(1,...R.map(r=>Math.max(r.receita,r.custoTot)));
-  const pct=v=>Math.max(0,Math.min(100,v/maxRef*100)).toFixed(1);
-  const chart=R.map(r=>{
-    const m=r.receita>0?r.result/r.receita*100:0;
-    return `<div class="dre-crow">
-      <div class="dre-clabel">${esc(r.e)}<small>${num(r.g.area)} ha</small></div>
-      <div class="dre-cbars">
-        <div class="dre-barline"><span class="dre-bt rec">Receita</span><div class="dre-track"><div class="dre-fill rec" style="width:${pct(r.receita)}%"></div></div><span class="dre-bv">${brl0(r.receita)}</span></div>
-        <div class="dre-barline"><span class="dre-bt cost">Custo</span><div class="dre-track"><div class="dre-fill cost" style="width:${pct(r.custoTot)}%"></div></div><span class="dre-bv">${brl0(r.custoTot)}</span></div>
-      </div>
-      <div class="dre-cres ${r.result>=0?'pos':'neg'}">${brl0(r.result)}<small>${r.receita>0?nf1.format(m)+'%':'—'}</small></div>
-    </div>`;
-  }).join('');
-  // composição do custo (sempre bem definida) para a barra do resumo
-  const cd=tCusto>0?tCusto:1;
+  const T=(f)=>R.reduce((s,r)=>s+f(r),0);
+  const tA=T(r=>r.g.area), tProd=T(r=>r.g.prod), tR=T(r=>r.receita), tOut=T(r=>r.outras), tImp=T(r=>r.imposto);
+  const tIns=T(r=>r.g.ins), tMaq=T(r=>r.custoMaq), tArr=T(r=>r.custoArr), tEstr=T(r=>r.estrutura), tFin=T(r=>r.financeiro);
+  const tVar=tIns+tMaq, tRecLiq=tR-tImp, tMargC=tRecLiq-tVar, tResOper=tMargC-tArr-tEstr, tResLiq=tResOper-tFin+tOut;
+  const tCustoTot=tImp+tVar+tArr+tEstr+tFin, margLiqT=tR>0?tResLiq/tR*100:0, margCT=tR>0?tMargC/tR*100:0;
+  const resHaT=tA>0?tResLiq/tA:0;
+  const av=v=>tR>0?nf1.format(v/tR*100)+'%':'—';
+  const sgn=v=>`<b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b>`;
+  // ---- premissas (inputs globais) ----
+  const cfgInp=(field,val,suf,ph)=>`<label class="dre-cfg-it"><span>${ph}</span><span class="dre-cfg-in"><input class="cell ${val?'edited':''}" inputmode="decimal" data-edit="dreCfg" data-field="${field}" value="${val||''}" placeholder="0">${suf}</span></label>`;
+  const premissas=`<div class="panel"><div class="panel-head"><h2>Premissas gerenciais</h2><span class="sub">valem para toda a operação (rateadas por cultura)</span></div>
+    <div class="dre-cfg">
+      ${cfgInp('impostoPct',impostoPct,'%','Impostos s/ venda')}
+      ${cfgInp('estruturaHa',estruturaHa,'R$/ha','Estrutura/Admin.')}
+      ${cfgInp('financeiroPct',financeiroPct,'%','Custo financeiro')}
+      ${cfgInp('outrasHa',outrasHa,'R$/ha','Outras receitas')}
+    </div></div>`;
+  // ---- DRE em cascata (análise vertical) ----
+  const cRow=(lbl,val,cls,inp)=>`<div class="dre-cl ${cls||''}"><span class="dre-cl-lbl">${lbl}${inp||''}</span><span class="dre-cl-val">${brl0(val)}</span><span class="dre-cl-pct">${av(val)}</span></div>`;
+  const cascata=`<div class="panel"><div class="panel-head"><h2>DRE gerencial</h2><span class="sub">consolidado · % da receita bruta</span></div>
+    <div class="dre-casc">
+      <div class="dre-cl head"><span class="dre-cl-lbl">Conta</span><span class="dre-cl-val">Valor</span><span class="dre-cl-pct">% rec.</span></div>
+      ${cRow('Receita bruta',tR,'strong')}
+      ${cRow('(−) Impostos sobre venda',-tImp,'neg')}
+      ${cRow('= Receita líquida',tRecLiq,'sub')}
+      ${cRow('(−) Insumos',-tIns,'neg')}
+      ${cRow('(−) Operações / máquinas',-tMaq,'neg')}
+      ${cRow('= Margem de contribuição',tMargC,'sub hl')}
+      ${cRow('(−) Arrendamento',-tArr,'neg')}
+      ${cRow('(−) Estrutura / administrativo',-tEstr,'neg')}
+      ${cRow('= Resultado operacional',tResOper,'sub')}
+      ${cRow('(−) Custo financeiro',-tFin,'neg')}
+      ${cRow('(+) Outras receitas',tOut,'pos')}
+      ${cRow('= Resultado líquido',tResLiq,'fin '+(tResLiq>=0?'ok':'bad'))}
+    </div></div>`;
+  // ---- KPIs / ponto de equilíbrio por cultura ----
+  const kpiBody=R.map(r=>`<tr><td class="c-full"><b>${esc(r.e)}</b></td>
+    <td class="num" data-th="Resultado/ha"><b style="color:${r.resHa>=0?'var(--green)':'var(--red)'}">${brl0(r.resHa)}</b></td>
+    <td class="num" data-th="Margem líq.">${r.receita>0?nf1.format(r.margLiq)+'%':'—'}</td>
+    <td class="num" data-th="Custo/saca">${r.g.prod>0?brl(r.custoSaca):'—'}</td>
+    <td class="num" data-th="Preço equil.">${r.g.prod>0?brl(r.precoEq):'—'}</td>
+    <td class="num" data-th="Preço atual">${brl(r.preco)}</td>
+    <td class="num" data-th="Produt. equil.">${r.prodEq>0?num(r.prodEq)+' sc/ha':'—'}</td>
+    <td class="num" data-th="Produt. atual">${num(r.prodHa)} sc/ha</td>
+    <td class="num" data-th="Margem seg."><b style="color:${r.margSeg>=0?'var(--green)':'var(--red)'}">${r.receita>0?nf1.format(r.margSeg)+'%':'—'}</b></td></tr>`).join('');
+  const kpis=`<div class="panel"><div class="panel-head"><h2>Indicadores por cultura</h2><span class="sub">ponto de equilíbrio e margem de segurança</span></div>
+    <div class="table-wrap"><table class="cards-sm dre-cards"><thead><tr><th>Cultura</th><th class="num">Resultado/ha</th><th class="num">Margem líq.</th><th class="num">Custo/saca</th><th class="num">Preço equil.</th><th class="num">Preço atual</th><th class="num">Produt. equil.</th><th class="num">Produt. atual</th><th class="num">Margem seg.</th></tr></thead>
+    <tbody>${kpiBody||'<tr><td colspan="9" class="mut" style="padding:14px">Sem culturas.</td></tr>'}</tbody></table></div>
+    <p class="mut" style="font-size:12px;padding:6px 14px 12px">Preço de equilíbrio = preço mínimo por saca para o resultado zerar. Produtividade de equilíbrio = sacas/ha mínimas. Margem de segurança = quanto o preço (ou a produtividade) pode cair antes do prejuízo.</p></div>`;
+  // ---- tabela detalhada (editáveis) ----
+  const body=R.map(r=>`<tr><td class="c-full"><b>${esc(r.e)}</b></td>
+    <td class="num" data-th="Área (ha)">${num(r.g.area)}</td>
+    <td class="num" data-th="Produção (sc)">${nf0.format(r.g.prod)}</td>
+    <td class="num" data-th="Preço (R$/sc)"><input class="cell ${(r.e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(r.e)}" value="${r.preco}"></td>
+    <td class="num" data-th="Receita">${brl0(r.receita)}</td>
+    <td class="num" data-th="Custo insumos">${brl0(r.g.ins)}</td>
+    <td class="num" data-th="Máq. R$/ha"><input class="cell ${(r.e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(r.e)}" value="${r.opHa.toFixed(2)}"></td>
+    <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(r.e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(r.e)}" value="${r.arrHa.toFixed(2)}"></td>
+    <td class="num" data-th="Custo total">${brl0(r.custoTot)}</td>
+    <td class="num c-res" data-th="Resultado líq.">${sgn(r.resultLiq)}</td>
+    <td class="num" data-th="R$/ha">${brl0(r.resHa)}</td>
+    <td class="num" data-th="Margem">${r.receita>0?nf1.format(r.margLiq)+'%':'—'}</td></tr>`).join('');
+  const tabela=`<div class="toolbar"><span class="badge badge-muted">Custo total inclui impostos, estrutura e financeiro (das premissas). Campos em azul são editáveis (preço e R$/ha).</span></div>
+  <div class="panel"><div class="table-wrap"><table class="cards-sm dre-cards">
+    <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th><th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th><th class="num">Máq. R$/ha</th><th class="num">Arrend. R$/ha</th><th class="num">Custo total</th><th class="num">Resultado líq.</th><th class="num">R$/ha</th><th class="num">Margem</th></tr></thead>
+    <tbody>${body}</tbody>
+    <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tA)}</td><td class="num">${nf0.format(tProd)}</td><td></td><td class="num">${brl0(tR)}</td><td class="num">${brl0(tIns)}</td><td></td><td></td><td class="num">${brl0(tCustoTot)}</td><td class="num">${sgn(tResLiq)}</td><td class="num">${brl0(resHaT)}</td><td class="num">${nf1.format(margLiqT)}%</td></tr></tfoot>
+  </table></div></div>`;
+  // ---- custo de insumos por classe (R$/ha) ----
+  const ccTot={}; R.forEach(r=>{ for(const k in r.g.cc) ccTot[k]=(ccTot[k]||0)+r.g.cc[k]; });
+  const ccCols=Object.entries(ccTot).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
+  const classePanel=ccCols.length?`<div class="panel"><div class="panel-head"><h2>Custo de insumos por classe</h2><span class="sub">R$/ha · top ${ccCols.length} classes</span></div>
+    <div class="table-wrap"><table class="cc-tbl"><thead><tr><th>Cultura</th><th class="num">Área</th>${ccCols.map(c=>`<th class="num">${esc(c)}</th>`).join('')}<th class="num">Insumos/ha</th></tr></thead>
+    <tbody>${R.map(r=>`<tr><td><b>${esc(r.e)}</b></td><td class="num">${num(r.g.area)}</td>${ccCols.map(c=>`<td class="num">${r.g.cc[c]&&r.g.area>0?brl(r.g.cc[c]/r.g.area):'·'}</td>`).join('')}<td class="num"><b>${r.g.area>0?brl(r.g.ins/r.g.area):'·'}</b></td></tr>`).join('')}</tbody>
+    <tfoot><tr><th>Média ponderada</th><th class="num">${num(tA)}</th>${ccCols.map(c=>`<th class="num">${tA>0?brl((ccTot[c]||0)/tA):'·'}</th>`).join('')}<th class="num">${tA>0?brl(tIns/tA):'·'}</th></tr></tfoot></table></div></div>`:'';
+  // ---- mix e ranking (R$/ha) ----
+  const rk=R.slice().sort((a,b)=>b.resHa-a.resHa);
+  const maxAbs=Math.max(1,...rk.map(r=>Math.abs(r.resHa)));
+  const ranking=`<div class="panel"><div class="panel-head"><h2>Mix e ranking</h2><span class="sub">participação e resultado por hectare</span></div>
+    <div class="dre-mix">${rk.map(r=>{const w=Math.abs(r.resHa)/maxAbs*100;const pos=r.resHa>=0;return `<div class="dre-mixrow">
+      <div class="dre-mixlbl">${esc(r.e)}<small>${num(r.g.area)} ha · ${tA>0?nf1.format(r.g.area/tA*100):'0'}% área · ${tR>0?nf1.format(r.receita/tR*100):'0'}% receita</small></div>
+      <div class="dre-mixbar"><div class="dre-mixfill ${pos?'pos':'neg'}" style="width:${w.toFixed(1)}%"></div></div>
+      <div class="dre-mixval ${pos?'pos':'neg'}">${brl0(r.resHa)}<small>/ha</small></div></div>`;}).join('')||'<p class="mut" style="padding:0 14px 12px">Sem culturas.</p>'}</div></div>`;
+  // ---- sensibilidade ----
+  const scales=[-0.10,-0.05,0,0.05,0.10];
+  const varCost=tVar+tArr+tEstr;
+  const resRec=k=>tR*(1+k)*(1-tfrac)-varCost+tOut;      // varia receita (preço ou produtividade)
+  const resCost=k=>tR*(1-tfrac)-varCost*(1+k)+tOut;     // varia custos operacionais
+  const sHead=scales.map(k=>`<th class="num">${k>0?'+':''}${Math.round(k*100)}%</th>`).join('');
+  const sRow=(lbl,fn)=>`<tr><td>${lbl}</td>${scales.map(k=>{const v=fn(k);return `<td class="num"${k===0?' style="font-weight:800"':''}><b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b></td>`;}).join('')}</tr>`;
+  const sens=`<div class="panel"><div class="panel-head"><h2>Sensibilidade do resultado</h2><span class="sub">resultado líquido conforme variação</span></div>
+    <div class="table-wrap"><table class="cc-tbl"><thead><tr><th>Cenário</th>${sHead}</tr></thead>
+    <tbody>${sRow('Preço / produtividade',resRec)}${sRow('Custos operacionais',resCost)}</tbody></table></div>
+    <p class="mut" style="font-size:12px;padding:6px 14px 12px">Cada célula é o resultado líquido total se a linha variar aquele percentual (o resto constante).</p></div>`;
   return `
   <div class="dre-hero">
     <div class="dre-hero-main">
-      <div class="dre-hero-label">Resultado da safra</div>
-      <div class="dre-hero-val ${res>=0?'pos':'neg'}">${brl0(res)}</div>
-      <div class="dre-hero-sub">${tR>0?'<b>'+nf1.format(marg)+'%</b> da receita · ':''}Receita ${brl0(tR)} · Custo ${brl0(tCusto)} · ${num(tA)} ha</div>
+      <div class="dre-hero-label">Resultado líquido da safra</div>
+      <div class="dre-hero-val ${tResLiq>=0?'pos':'neg'}">${brl0(tResLiq)}</div>
+      <div class="dre-hero-sub">${tR>0?'<b>'+nf1.format(margLiqT)+'%</b> margem líq. · ':''}${brl0(resHaT)}/ha · Receita ${brl0(tR)} · ${num(tA)} ha</div>
     </div>
     <div class="dre-hero-split">
-      <div class="dre-split-cap">Composição do custo</div>
+      <div class="dre-split-cap">Composição do custo · margem de contribuição <b>${nf1.format(margCT)}%</b></div>
       <div class="dre-split-bar">
-        <div class="seg seg-ins" style="width:${(tI/cd*100).toFixed(1)}%"></div>
-        <div class="seg seg-maq" style="width:${(tM/cd*100).toFixed(1)}%"></div>
-        <div class="seg seg-arr" style="width:${(tX/cd*100).toFixed(1)}%"></div>
+        <div class="seg seg-ins" style="width:${(tIns/(tCustoTot||1)*100).toFixed(1)}%"></div>
+        <div class="seg seg-maq" style="width:${(tMaq/(tCustoTot||1)*100).toFixed(1)}%"></div>
+        <div class="seg seg-arr" style="width:${((tArr+tEstr)/(tCustoTot||1)*100).toFixed(1)}%"></div>
+        <div class="seg seg-fin" style="width:${((tImp+tFin)/(tCustoTot||1)*100).toFixed(1)}%"></div>
       </div>
       <div class="dre-split-leg">
-        <span><i class="d-ins"></i>Insumos ${brl0(tI)}</span>
-        <span><i class="d-maq"></i>Máquinas ${brl0(tM)}</span>
-        <span><i class="d-arr"></i>Arrend./Outros ${brl0(tX)}</span>
+        <span><i class="d-ins"></i>Insumos ${brl0(tIns)}</span>
+        <span><i class="d-maq"></i>Máquinas ${brl0(tMaq)}</span>
+        <span><i class="d-arr"></i>Arrend./Estrut. ${brl0(tArr+tEstr)}</span>
+        <span><i class="d-fin"></i>Impostos/Financ. ${brl0(tImp+tFin)}</span>
       </div>
     </div>
   </div>
-  <div class="dre-chart">
-    <div class="dre-chart-head"><h3>Resultado por cultura</h3>
-      <span class="dre-chart-leg"><i class="d-rec"></i>Receita <i class="d-cost"></i>Custo</span></div>
-    ${chart||'<p class="mut" style="padding:0 14px 12px">Sem culturas para exibir.</p>'}
-  </div>
-  <div class="toolbar"><span class="badge badge-muted">Resultado = Receita − insumos − máquinas − arrendamento/outros. Campos em azul são editáveis (R$/ha ou preço).</span></div>
-  <div class="panel"><div class="table-wrap"><table class="cards-sm dre-cards">
-    <thead><tr><th>Cultura / Empreendimento</th><th class="num">Área (ha)</th><th class="num">Produção (sc)</th>
-      <th class="num">Preço (R$/sc)</th><th class="num">Receita</th><th class="num">Custo insumos</th>
-      <th class="num">Máq. R$/ha</th><th class="num">Custo máquinas</th>
-      <th class="num">Arrend. R$/ha</th><th class="num">Arrend./Outros</th>
-      <th class="num">Custo total</th><th class="num">Resultado</th></tr></thead>
-    <tbody>${body}</tbody>
-    <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tA)}</td><td></td><td></td>
-      <td class="num">${brl0(tR)}</td><td class="num">${brl0(tI)}</td><td></td><td class="num">${brl0(tM)}</td>
-      <td></td><td class="num">${brl0(tX)}</td>
-      <td class="num">${brl0(tI+tM+tX)}</td>
-      <td class="num"><b style="color:${res>=0?'var(--green)':'var(--red)'}">${brl0(res)}</b></td></tr></tfoot>
-  </table></div></div>
-  <p style="color:var(--muted);font-size:12px;margin-top:8px">Cada talhão com 2ª safra entra como <b>dois cultivos</b> (principal + safrinha), então a coluna Área soma a <b>área plantada</b> por cultura (a mesma terra pode aparecer em duas culturas). O custo de máquinas soma o custo de cada operação. Ajuste o R$/ha por cultura se quiser sobrescrever. Arrendamento e custos fixos são editáveis por cultura.</p>`;
+  ${premissas}
+  ${cascata}
+  ${kpis}
+  ${tabela}
+  ${classePanel}
+  ${ranking}
+  ${sens}
+  <p style="color:var(--muted);font-size:12px;margin-top:8px">Cada talhão com 2ª safra entra como <b>dois cultivos</b> (principal + safrinha) — a Área soma a <b>área plantada</b> por cultura. Insumos e operações são <b>custos variáveis</b>; arrendamento, estrutura, impostos e financeiro entram pelas premissas acima.</p>`;
 };
 
 // insumos consolidados de um empreendimento (produto -> {classe,un,qtd,doses,talhoes})
@@ -2168,6 +2238,7 @@ function applyEdit(el){
   else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
   else if(kind==='dreOp'){ const e=el.dataset.emp; if(n==null) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
   else if(kind==='arrend'){ const e=el.dataset.emp; if(n==null||n===0) delete OV.arrend[e]; else OV.arrend[e]=n; }
+  else if(kind==='dreCfg'){ const f=el.dataset.field; OV.dreCfg=OV.dreCfg||{}; if(n==null||n===0) delete OV.dreCfg[f]; else OV.dreCfg[f]=n; }
   else if(kind==='prodSaf'){ const id=el.dataset.id, tt=findTalhao(id); OV.talhao[id]=OV.talhao[id]||{}; const base=(tt.prod_safrinha||0); if(n==null||n===base) delete OV.talhao[id].prod_safrinha; else OV.talhao[id].prod_safrinha=n; if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id]; }
   else if(kind==='dose'){ const k=doseKey(el.dataset.id,el.dataset.op,el.dataset.item); if(n==null) delete OV.dose[k]; else OV.dose[k]=n; }
   else if(kind==='doseAdd'){ const arr=OV.itemAdd[`${el.dataset.id}|${el.dataset.op}`]; if(arr&&arr[+el.dataset.ai]) arr[+el.dataset.ai].dose=(n==null?0:n); }
