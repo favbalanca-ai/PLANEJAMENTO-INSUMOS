@@ -748,7 +748,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-60';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-61';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1221,6 +1221,20 @@ function countEdits(){
 const estoqueDe = p => (p in OV.estoque) ? +OV.estoque[p] : (PROD[p] ? PROD[p].estoque : 0);
 const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : (PROD[p] ? (+PROD[p].pedido||0) : 0);
 const precoDe   = p => (PROD[p] ? PROD[p].preco : 0);   // preço SEMPRE da planilha (lista importada)
+// Torna os produtos do módulo Preços "válidos" no planejamento: os que ainda não
+// existem no cadastro do planejamento entram como produto sintético (com o preço da
+// lista de preços), para poderem ser escolhidos nas operações e aparecerem na demanda.
+function mergePrecosProdutos(){
+  try{
+    if(!DATA||!DATA.produtos||typeof safraAtual!=='function') return;
+    const s=safraAtual(); if(!s||!s.itens) return;
+    s.itens.forEach(it=>{
+      const nm=String(it.produto||'').trim(); if(!nm||PROD[nm]) return;
+      const p={produto:nm, classe:(it.classe||'').toUpperCase(), un:'', preco:+precoFinal(it,'vista')||0, estoque:0, pedido:0, _precos:true};
+      DATA.produtos.push(p); PROD[nm]=p;
+    });
+  }catch(e){}
+}
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
 function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null ? +o.produtividade : t.produtividade; }
 const doseKey = (tid,oi,ii)=>`${tid}|${oi}|${ii}`;
@@ -2887,6 +2901,7 @@ V.sync = function(){
 /* ================= ROUTER ================= */
 const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
+  mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
   const toTop = opts && opts.toTop===true;
