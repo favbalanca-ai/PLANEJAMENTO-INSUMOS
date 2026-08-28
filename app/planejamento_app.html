@@ -748,7 +748,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-61';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-62';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3749,8 +3749,8 @@ let _alimPrev=null;
 function alimentarPreview(tipo){
   const s=safraAtual(), comp={};                 // normKey -> {price, it}
   s.itens.forEach(it=>{ if(!it.produto) return; comp[normKey(it.produto)]={price:precoFinal(it,tipo), it}; });
-  const planNorm={};                             // normKey -> nome exato no planejamento
-  (DATA.produtos||[]).forEach(pp=>{ if(pp.produto) planNorm[normKey(pp.produto)]=pp.produto; });
+  const planNorm={};                             // normKey -> nome exato no planejamento (só os REAIS da planilha, não os sintéticos do módulo Preços)
+  (DATA.produtos||[]).forEach(pp=>{ if(pp.produto && !pp._precos) planNorm[normKey(pp.produto)]=pp.produto; });
   const upd=[], semRef=[], orf=[], novos=[];
   Object.keys(planNorm).forEach(k=>{ const c=comp[k], nome=planNorm[k];
     if(c){ if(c.price>0) upd.push({produto:nome, price:c.price}); else semRef.push(nome); }
