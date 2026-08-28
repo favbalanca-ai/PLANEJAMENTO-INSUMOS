@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-59';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-60';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -858,7 +858,13 @@ V.talhoes = function(){
 };
 
 function prodDatalist(){
-  return `<datalist id="prodlist">${DATA.produtos.map(p=>`<option value="${esc(p.produto)}">`).join('')}</datalist>`;
+  // produtos do planejamento + produtos do módulo Preços (portfólio da safra),
+  // para dar para escolher no planejamento itens que ainda só existem na lista de preços.
+  const names=new Set();
+  DATA.produtos.forEach(p=>{ if(p.produto) names.add(String(p.produto).trim()); });
+  try{ const s=safraAtual(); (s&&s.itens||[]).forEach(it=>{ if(it.produto) names.add(String(it.produto).trim()); }); }catch(e){}
+  const opts=[...names].sort((a,b)=>a.localeCompare(b,'pt')).map(p=>`<option value="${esc(p)}">`).join('');
+  return `<datalist id="prodlist">${opts}</datalist>`;
 }
 V.talhao = function(id){
   const t=findTalhao(id);
