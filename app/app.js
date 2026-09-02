@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-62';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-63';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1451,8 +1451,9 @@ function insumosDoEmp(emp){
     opsOf(t.id,seq).forEach((op,oi)=>{
       effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{
         if(!it.produto) return;
-        const m=map[it.produto]||(map[it.produto]={classe:it.classe,un:it.un,qtd:0,doses:new Set(),talhoes:new Set()});
-        m.qtd+=it.dose*area; m.doses.add(Math.round(it.dose*1e6)/1e6); m.talhoes.add(t.id);
+        const m=map[it.produto]||(map[it.produto]={classe:it.classe,un:it.un,qtd:0,area:0,doses:new Set(),talhoes:new Set()});
+        m.qtd+=it.dose*area; m.doses.add(Math.round(it.dose*1e6)/1e6);
+        if(!m.talhoes.has(t.id)){ m.talhoes.add(t.id); m.area+=area; }   // área do talhão conta 1x por produto
       });
     });
   });
@@ -1485,7 +1486,7 @@ V.empreendimentos = function(arg){
       <td class="c-more" data-th="Un">${esc(m.un)}</td>
       <td class="num c-more" data-th="Qtd total">${num(m.qtd)}</td>
       <td class="num c-more" data-th="Preço">${preco>0?brl(preco):'—'}</td>
-      <td class="num c-more" data-th="Nos talhões">${m.talhoes.size}</td>
+      <td class="num c-more" data-th="Nos talhões">${m.talhoes.size} · ${num(m.area)} ha</td>
       <td class="c-del c-more"><button class="icon-btn del" title="Excluir de todos os talhões desta cultura"
         data-act="bulkdel" data-emp="${esc(sel)}" data-prod="${esc(prod)}">🗑</button></td></tr>`;
   }).join('');
