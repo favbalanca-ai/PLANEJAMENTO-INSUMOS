@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-63';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-64';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1478,6 +1478,9 @@ V.empreendimentos = function(arg){
   });
   const rows=prods.map(prod=>{
     const m=map[prod], doseCommon=m.doses.size===1?[...m.doses][0]:null, preco=precoDe(prod);
+    // nº de aplicações = qtd / (dose × área). >1 = produto aplicado em mais de uma operação (ex.: 2 passadas)
+    const aplic=(doseCommon&&doseCommon>0&&m.area>0)?(m.qtd/(doseCommon*m.area)):null;
+    const aplicN=(aplic&&aplic>1.05)?(Math.abs(aplic-Math.round(aplic))<0.05?String(Math.round(aplic)):nf1.format(aplic)):null;
     return `<tr data-search="${esc((prod+' '+(m.classe||'')).toLowerCase())}" data-classe="${esc(m.classe||'')}" data-cardkey="ce|${esc(prod)}"${openCards.has('ce|'+prod)?' class="open"':''}>
       <td class="c-more" data-th="Classe">${m.classe?`<span class="classe-tag">${esc(m.classe)}</span>`:'—'}</td>
       <td class="c-full" data-th="Produto"><input list="prodlist" class="txt prod-in" data-edit="bulkProd" data-emp="${esc(sel)}" data-prod="${esc(prod)}" value="${esc(prod)}" title="Trocar este insumo por outro em todos os talhões desta cultura"></td>
@@ -1486,7 +1489,7 @@ V.empreendimentos = function(arg){
       <td class="c-more" data-th="Un">${esc(m.un)}</td>
       <td class="num c-more" data-th="Qtd total">${num(m.qtd)}</td>
       <td class="num c-more" data-th="Preço">${preco>0?brl(preco):'—'}</td>
-      <td class="num c-more" data-th="Nos talhões">${m.talhoes.size} · ${num(m.area)} ha</td>
+      <td class="num c-more" data-th="Nos talhões" title="${aplicN?'Aplicado em mais de uma operação — Qtd total = dose × área × nº de aplicações':''}">${m.talhoes.size} · ${num(m.area)} ha${aplicN?` · ${aplicN}× aplic.`:''}</td>
       <td class="c-del c-more"><button class="icon-btn del" title="Excluir de todos os talhões desta cultura"
         data-act="bulkdel" data-emp="${esc(sel)}" data-prod="${esc(prod)}">🗑</button></td></tr>`;
   }).join('');
