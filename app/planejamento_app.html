@@ -674,6 +674,18 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .pr-price{flex:1 1 calc(50% - 24px);width:auto;text-align:left}
 }
 
+/* --- Timeline / Painel de Campo --- */
+.tl{display:flex;flex-direction:column;padding:4px 0}
+.tl-row{display:flex;gap:12px;align-items:flex-start;padding:11px 14px;border-top:1px solid var(--line)}
+.tl-wrap:first-child .tl-row,.tl .tl-row:first-child{border-top:0}
+.tl-ico{flex:0 0 auto;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:17px}
+.tl-body{flex:1;min-width:0}
+.tl-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.tl-top b{font-size:14px;color:var(--ink);font-weight:700}
+.tl-date{flex:0 0 auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tl-sub{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}
+.tl-tal{color:var(--ink2);font-weight:600}
+
 </style>
 </head>
 <body>
@@ -695,12 +707,15 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/precos" data-view="precos" data-mod="precos"><span class="ico">💲</span><span class="lbl">Preços</span><span class="lbl-s">Preços</span></a>
       <a href="#/maquinas" data-view="maquinas" data-mod="planejamento"><span class="ico">🚜</span><span class="lbl">Máquinas</span><span class="lbl-s">Máquinas</span></a>
       <a href="#/dre" data-view="dre" data-mod="planejamento"><span class="ico">💰</span><span class="lbl">DRE Orçada</span><span class="lbl-s">DRE</span></a>
+      <a href="#/campopainel" data-view="campopainel" data-mod="campo"><span class="ico">📋</span><span class="lbl">Painel de Campo</span><span class="lbl-s">Painel</span></a>
+      <a href="#/timeline" data-view="timeline" data-mod="campo"><span class="ico">📈</span><span class="lbl">Timeline</span><span class="lbl-s">Timeline</span></a>
       <a href="#/campo" data-view="campo" data-mod="campo"><span class="ico">🧑‍🌾</span><span class="lbl">Operação de Campo</span><span class="lbl-s">Campo</span></a>
       <a href="#/monitoramento" data-view="monitoramento" data-mod="campo"><span class="ico">🐛</span><span class="lbl">Monitoramento</span><span class="lbl-s">Monitor.</span></a>
       <a href="#/mapa" data-view="mapa" data-mod="campo"><span class="ico">🗺️</span><span class="lbl">Mapa</span><span class="lbl-s">Mapa</span></a>
       <a href="#/chuva" data-view="chuva" data-mod="campo"><span class="ico">🌧️</span><span class="lbl">Chuva</span><span class="lbl-s">Chuva</span></a>
       <a href="#/stand" data-view="stand" data-mod="campo"><span class="ico">🌱</span><span class="lbl">Contagem de Stand</span><span class="lbl-s">Stand</span></a>
       <a href="#/recomendacao" data-view="recomendacao" data-mod="campo"><span class="ico">💊</span><span class="lbl">Recomendação</span><span class="lbl-s">Recom.</span></a>
+      <a href="#/relatorios" data-view="relatorios" data-mod="campo"><span class="ico">📄</span><span class="lbl">Relatórios</span><span class="lbl-s">Relat.</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
     </nav>
     <div class="sidebar-foot">
@@ -748,7 +763,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-64';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-65';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1154,9 +1169,9 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
-  maquinas:'planejamento', dre:'planejamento', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
-function moduleHome(m){ return m==='campo'?'#/campo':(m==='precos'?'#/precos':'#/dashboard'); }
+function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':'#/dashboard'); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
 function applyModule(){
   const m=currentModule();
@@ -2761,6 +2776,124 @@ function mapaLocate(){
     _map.setView(ll,15);
   }, ()=>toast('Não foi possível obter o GPS'), {enableHighAccuracy:true,timeout:12000});
 }
+/* ============ Módulo Campo: Painel, Timeline e Relatórios (visão consolidada) ============ */
+function _capf(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
+function _talNomeC(id){ const t=talhoesAll().find(x=>x.id===id); return t?(t.id+(t.nome?' · '+t.nome:'')):(id||'—'); }
+function _dtBRc(s){ if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; }
+function _tsC(r){ return r.ts || (r.data?(Date.parse(String(r.data).slice(0,10)+'T12:00:00')||0):0); }
+function _diasC(ts){ if(!ts) return null; return Math.floor((Date.now()-ts)/86400000); }
+function _mmC(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }
+const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
+  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
+// lista unificada de eventos de campo (mais recentes primeiro)
+function camposEventos(){
+  const ev=[];
+  (MONIT&&MONIT.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'monitoramento',talhao:r.talhao,
+    titulo:(r.categoria?_capf(r.categoria):'Monitoramento'), resumo:[r.alvo, r.nivel?('nível '+r.nivel+(r.unidade?' '+r.unidade:'')):'', r.acao].filter(Boolean).join(' · ')}));
+  (CHUVA&&CHUVA.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'chuva',talhao:'',
+    titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
+  (STAND&&STAND.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
+    titulo:'Contagem de stand'+(r.cultura?' · '+r.cultura:''), resumo:[r.pop?nf0.format(r.pop)+' pl/ha':'', r.pctMeta!=null?r.pctMeta+'% da meta':''].filter(Boolean).join(' · ')}));
+  (RECOM&&RECOM.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'recomendacao',talhao:r.talhao,
+    titulo:'Recomendação'+(r.janela?' · '+r.janela:''), resumo:[r.alvo, r.produtos].filter(Boolean).join(' — ')}));
+  talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key);
+    if(r&&r.status==='concluido') ev.push({ts:_tsC(r),data:r.data||'',tipo:'operacao',talhao:t.id,
+      titulo:'Operação concluída', resumo:(o.op&&o.op.nome)?o.op.nome:''}); }));
+  ev.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  return ev;
+}
+function tlRow(e){
+  const ti=CAMPO_TIPOS[e.tipo]||{lbl:e.tipo,ico:'•',cor:'#8aa'};
+  return `<div class="tl-row">
+    <div class="tl-ico" style="background:${ti.cor}22;color:${ti.cor}">${ti.ico}</div>
+    <div class="tl-body"><div class="tl-top"><b>${esc(e.titulo)}</b><span class="tl-date">${_dtBRc(e.data)||''}</span></div>
+      <div class="tl-sub">${e.talhao?`<span class="tl-tal">${esc(_talNomeC(e.talhao))}</span>${e.resumo?' · ':''}`:''}${esc(e.resumo||'')}</div></div></div>`;
+}
+V.campopainel = function(){
+  const tals=talhoesAll();
+  const prog=campoProgress(), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
+  const ev=camposEventos();
+  const d30=Date.now()-30*86400000;
+  const monit=(MONIT&&MONIT.registros||[]), monit30=monit.filter(r=>_tsC(r)>=d30);
+  const chuva=(CHUVA&&CHUVA.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const mm30=(CHUVA&&CHUVA.registros||[]).filter(r=>_tsC(r)>=d30).reduce((a,r)=>a+_mmC(r.mm),0);
+  const stand=(STAND&&STAND.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const recom=(RECOM&&RECOM.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const talAtiv=new Set(ev.filter(e=>e.talhao).map(e=>e.talhao)).size;
+  const ult=ev[0];
+  const ultTxt=ult?(_diasC(ult.ts)===0?'hoje':(_diasC(ult.ts)===1?'ontem':_diasC(ult.ts)+' dias atrás')):'—';
+  return `
+  <div class="kpi-grid">
+    <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
+    <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
+    <div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>
+    <div class="kpi"><div class="k-label">Talhões com atividade</div><div class="k-value">${talAtiv}</div><div class="k-sub">de ${tals.length} talhões</div></div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi"><div class="k-label">Contagens de stand</div><div class="k-value">${stand.length}</div><div class="k-sub">${stand[0]?'última '+_dtBRc(stand[0].data):'—'}</div></div>
+    <div class="kpi"><div class="k-label">Recomendações</div><div class="k-value">${recom.length}</div><div class="k-sub">${recom[0]?'última '+_dtBRc(recom[0].data):'—'}</div></div>
+    <div class="kpi"><div class="k-label">Última atividade</div><div class="k-value" style="font-size:20px">${ultTxt}</div><div class="k-sub">${ult?CAMPO_TIPOS[ult.tipo].lbl:'nenhuma'}</div></div>
+    <div class="kpi"><div class="k-label">Eventos no histórico</div><div class="k-value">${ev.length}</div><div class="k-sub"><a class="link" data-go="#/timeline">ver timeline →</a></div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Atividade recente</h2><span class="sub"><a class="link" data-go="#/timeline">ver tudo →</a></span></div>
+    <div class="tl">${ev.slice(0,8).map(tlRow).join('')||'<p class="mut" style="padding:16px">Nenhum evento ainda. Registre monitoramentos, chuva, stand e recomendações nos atalhos abaixo.</p>'}</div></div>
+  <div class="panel"><div class="panel-head"><h2>Registrar</h2></div>
+    <div class="bulk-add" style="flex-wrap:wrap;padding:12px 14px">
+      <button class="btn btn-outline btn-sm" data-go="#/campo">🧑‍🌾 Operação de campo</button>
+      <button class="btn btn-outline btn-sm" data-go="#/monitoramento">🐛 Monitoramento</button>
+      <button class="btn btn-outline btn-sm" data-go="#/chuva">🌧️ Chuva</button>
+      <button class="btn btn-outline btn-sm" data-go="#/stand">🌱 Contagem de stand</button>
+      <button class="btn btn-outline btn-sm" data-go="#/recomendacao">💊 Recomendação</button>
+      <button class="btn btn-outline btn-sm" data-go="#/mapa">🗺️ Mapa</button>
+    </div></div>`;
+};
+let timelineTipo='', timelineQ='';
+V.timeline = function(){
+  const ev=camposEventos();
+  const chips=`<button class="chip-f${timelineTipo===''?' on':''}" data-tlf="">Todos</button>`+
+    Object.keys(CAMPO_TIPOS).map(t=>`<button class="chip-f${timelineTipo===t?' on':''}" data-tlf="${t}">${CAMPO_TIPOS[t].ico} ${CAMPO_TIPOS[t].lbl}</button>`).join('');
+  const rows=ev.map(e=>`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')+' '+_talNomeC(e.talhao)).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(e)}</div>`).join('');
+  return `
+  <div class="toolbar"><div class="search"><input id="q-tl" value="${esc(timelineQ)}" placeholder="Buscar na timeline…" autocomplete="off"></div>
+    <div class="spacer"></div><span class="badge badge-muted"><b id="tl-count">${ev.length}</b> eventos</span></div>
+  <div class="classe-filter" id="tl-filter" style="margin:2px 0 10px">${chips}</div>
+  <div class="panel"><div class="tl" id="tl-list">${rows||'<p class="mut" style="padding:18px;text-align:center">Nenhum evento encontrado. Registre atividades no Painel de Campo.</p>'}</div></div>`;
+};
+function filterTimeline(){
+  const list=document.querySelector('#tl-list'); if(!list) return;
+  const q=(timelineQ||'').toLowerCase().trim(); let n=0;
+  list.querySelectorAll('.tl-wrap').forEach(el=>{
+    const show=(!timelineTipo||el.dataset.tipo===timelineTipo)&&(!q||(el.dataset.search||'').includes(q));
+    el.style.display=show?'':'none'; if(show) n++;
+  });
+  const c=document.querySelector('#tl-count'); if(c) c.textContent=n;
+}
+V.relatorios = function(){
+  const tals=talhoesAll(), ev=camposEventos();
+  const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,oper:0,ult:0});
+  ev.forEach(e=>{ const b=byTal[e.talhao]; if(!b) return;
+    if(e.tipo==='monitoramento')b.monit++; else if(e.tipo==='stand')b.stand++; else if(e.tipo==='recomendacao')b.recom++; else if(e.tipo==='operacao')b.oper++;
+    if((e.ts||0)>b.ult) b.ult=e.ts; });
+  const rows=tals.map(t=>{ const b=byTal[t.id];
+    return `<tr><td class="c-full"><b>${esc(t.id)}</b>${t.nome?` <span class="mut">${esc(t.nome)}</span>`:''}</td>
+      <td class="num" data-th="Monit.">${b.monit||'·'}</td><td class="num" data-th="Stand">${b.stand||'·'}</td>
+      <td class="num" data-th="Recom.">${b.recom||'·'}</td><td class="num" data-th="Operações">${b.oper||'·'}</td>
+      <td class="num" data-th="Última atividade">${b.ult?_dtBRc(new Date(b.ult).toISOString().slice(0,10)):'—'}</td></tr>`;}).join('');
+  const chuvaTot=(CHUVA&&CHUVA.registros||[]).reduce((a,r)=>a+_mmC(r.mm),0);
+  return `
+  <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
+  <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
+    <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="6" class="mut" style="padding:14px">Sem talhões.</td></tr>'}</tbody></table></div></div>`;
+};
+function exportCampoCsv(){
+  const ev=camposEventos();
+  const esc2=s=>`"${String(s==null?'':s).replace(/"/g,'""')}"`;
+  const linhas=[['Data','Tipo','Talhão','Título','Detalhe'].map(esc2).join(';')];
+  ev.forEach(e=>linhas.push([_dtBRc(e.data), (CAMPO_TIPOS[e.tipo]||{}).lbl||e.tipo, e.talhao?_talNomeC(e.talhao):'', e.titulo, e.resumo].map(esc2).join(';')));
+  download('relatorio_campo.csv', '﻿'+linhas.join('\r\n'), 'text/csv');
+}
 V.mapa=function(){
   const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
   return `<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${n} ponto(s) de monitoramento com GPS</span>
@@ -2903,7 +3036,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -2924,6 +3057,7 @@ function route(opts){
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
   // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
   if(view==='precos' && (precoQ || precoSemPreco || precoClasse)) filterPrecos();
+  if(view==='timeline' && (timelineTipo || timelineQ)) filterTimeline();
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }   // inicializa o Leaflet após o HTML entrar no DOM
@@ -3116,6 +3250,8 @@ document.addEventListener('click',e=>{
   if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#painel-empf')?painelEmpSel:(ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel);
     if(v===''){ setSel.clear(); } else if(setSel.has(v)){ setSel.delete(v); } else { setSel.add(v); }
     route(); return; }
+  const tlf=e.target.closest('#tl-filter .chip-f');
+  if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
   if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
@@ -3208,6 +3344,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomWa'){ recomWhats(a.id); }
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
+    else if(a.act==='relCsv'){ exportCampoCsv(); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
@@ -3270,6 +3407,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-maq') filterTable('#tbl-maq',e.target.value);
   if(e.target.id==='q-cot') filterCotacao(e.target.value);
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
+  if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
 });
 // busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
 function filterPrecos(){
