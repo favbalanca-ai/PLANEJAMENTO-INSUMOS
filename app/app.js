@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-66';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-67';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1963,7 +1963,17 @@ function recomSetField(el){
   saveRecom();
   if(rerender) route();
 }
-// mensagem de WhatsApp com os itens estruturados e o total planejado na área
+// base do site (mesma pasta do app) — para montar o link da página do operador
+function recomBase(){ try{ return location.origin + location.pathname.replace(/[^/]*$/,''); }catch(e){ return ''; } }
+// link da página "retorno.html" com a recomendação embutida (o operador dosa e dá baixa)
+function recomLink(r){
+  const t=findTalhao(r.talhao);
+  const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
+    a:+r.area||0, v:_mmC(r.calda), al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
+    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
+  return recomBase()+'retorno.html#'+encodeURIComponent(JSON.stringify(payload));
+}
+// mensagem de WhatsApp: resumo + link para o operador dosar no tanque e dar baixa
 function recomWhats(id){
   const r=recomById(id); if(!r) return; recomNorm(r);
   const t=findTalhao(r.talhao), area=+r.area||0;
@@ -1980,10 +1990,27 @@ function recomWhats(id){
   if(r.calda) x+=`\nVolume de calda: ${r.calda} L/ha\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
   if(r.cond) x+=`Condições: ${r.cond}\n`;
-  if(r.resp) x+=`Responsável: ${r.resp}\n`;
-  if(r.obs) x+=`Obs: ${r.obs}\n`;
-  x+=`\n_Ao terminar, informe o volume TOTAL utilizado de cada produto._`;
+  x+=`\n👉 *Abrir para dosar no tanque e dar baixa:*\n${recomLink(r)}\n`;
+  if(!syncUrl()) x+=`\n_(configure a Sincronização no app para a baixa do operador voltar automática)_`;
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
+}
+// baixa dos operadores (aba RETORNOS APP) → preenche o "Utilizado" e move p/ "retorno recebido"
+function applyRetornos(retornos){
+  if(!Array.isArray(retornos)||!retornos.length||!RECOM) return false;
+  let changed=false; const byId={};
+  retornos.forEach(row=>{ if(row&&row.id) (byId[row.id]=byId[row.id]||[]).push(row); });
+  Object.keys(byId).forEach(id=>{
+    const r=recomById(id); if(!r) return; recomNorm(r);
+    if(r.status!=='enviada' && r.status!=='rascunho') return;   // já em retorno/aprovada: não sobrescreve
+    const rows=byId[id];
+    (r.itens||[]).forEach(it=>{ const row=rows.find(x=>x.produto&&it.produto&&String(x.produto).toLowerCase()===String(it.produto).toLowerCase());
+      if(row) it.real=+row.real||0; });
+    const last=rows.reduce((a,b)=>((b.ts||0)>(a.ts||0)?b:a), rows[0]);
+    r.retorno={quem:last.operador||'', obs:last.obs||'', ts:last.ts||Date.now()};
+    r.status='retorno'; changed=true;
+  });
+  if(changed) saveRecom();
+  return changed;
 }
 // cartão de uma recomendação, com aparência/ações conforme o estado
 function recomCard(r,t){
@@ -2091,7 +2118,8 @@ V.recomendacao=function(arg){
       <span class="spacer"></span>
       <button class="btn btn-primary btn-sm" data-act="recomNova" data-t="${esc(selId)}">✏️ Em branco</button>
     </div></div>
-  <div class="panel"><div class="panel-head"><h2>Recomendações</h2><span class="sub">${regs.length} registro(s) · rascunho → enviada → retorno → aprovada</span></div>
+  <div class="panel"><div class="panel-head"><h2>Recomendações</h2><span class="sub">${regs.length} registro(s) · rascunho → enviada → retorno → aprovada</span>
+      <div class="spacer"></div>${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
     <div class="recom-list">${cards}</div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação por WhatsApp, registre o retorno do operador e aprove para gerar o histórico da aplicação no talhão.</p>`;
 };
@@ -2719,6 +2747,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomEnviar'){ const r=recomById(a.id); if(r){ if(!(r.itens||[]).some(it=>it.produto)){ toast('Adicione ao menos um produto'); return; }
       r.status='enviada'; r.enviadaTs=Date.now(); saveRecom(); recomWhats(a.id); route(); toast('Marcada como enviada ao operador'); } }
     else if(a.act==='recomWa'){ recomWhats(a.id); }
+    else if(a.act==='recomBuscar'){ toast('Buscando retornos…'); syncPull({force:true}).then(()=>route()); }
     else if(a.act==='recomRetorno'){ const r=recomById(a.id); if(r){ r.status='retorno';
       r.retorno={quem:(r.retorno&&r.retorno.quem)||'', obs:(r.retorno&&r.retorno.obs)||'', ts:Date.now()};
       (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
@@ -3066,6 +3095,7 @@ function applyPulledData(d){
   // (ou seja, que já foi salvo). O que ainda não foi salvo é PRESERVADO — evita "minhas edições somem".
   reconcileOverrides();
   saveOverrides();
+  try{ applyRetornos(d.retornos); }catch(e){}   // baixas dos operadores → recomendações
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
