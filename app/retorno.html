@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Recomendação no Campo</title>
+<meta name="theme-color" content="#12353f">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --ground:#eef2f3; --surface:#ffffff; --surface-2:#f7fafa;
+  --ink:#12353f; --ink-soft:#5a6f75; --line:#dce5e7;
+  --teal:#2f8f9d; --teal-soft:#e3f1f2;
+  --green:#2e7d32; --green-soft:#e4f3e2;
+  --amber:#a8701a; --amber-soft:#f8ecce;
+  --red:#b00020; --wa:#1faa52;
+  --shadow:0 1px 2px rgba(18,53,63,.06),0 6px 20px rgba(18,53,63,.07);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0d1a1e; --surface:#14282e; --surface-2:#102227;
+    --ink:#e9f3f4; --ink-soft:#98aeb3; --line:#254149;
+    --teal:#54b6c4; --teal-soft:#173940;
+    --green:#63c069; --green-soft:#16302a;
+    --amber:#e0a445; --amber-soft:#33290f;
+    --red:#ff6b81; --wa:#25d366;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0d1a1e; --surface:#14282e; --surface-2:#102227;
+  --ink:#e9f3f4; --ink-soft:#98aeb3; --line:#254149;
+  --teal:#54b6c4; --teal-soft:#173940;
+  --green:#63c069; --green-soft:#16302a;
+  --amber:#e0a445; --amber-soft:#33290f;
+  --red:#ff6b81; --wa:#25d366;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--ground);color:var(--ink);
+  font-family:"Instrument Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+img{max-width:100%}
+.wrap{max-width:470px;margin:0 auto;padding:0 0 132px;min-height:100vh;background:var(--ground)}
+.top{background:#0a161a;color:#eaf3f4;padding:15px 18px 17px}
+.brand{display:flex;align-items:center;gap:9px;font-size:12.5px;font-weight:600;opacity:.85;letter-spacing:.2px}
+.brand .leaf{font-size:17px}
+.top h1{font-size:20px;font-weight:700;margin:9px 0 2px;letter-spacing:-.2px;text-wrap:balance}
+.top .op{font-size:13.5px;opacity:.82;font-weight:500}
+.talhao{padding:13px 18px;background:var(--surface);border-bottom:1px solid var(--line)}
+.talhao-top{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap}
+.talhao-id{font-size:18px;font-weight:700;letter-spacing:-.2px}
+.talhao-nome{font-size:13.5px;color:var(--ink-soft);font-weight:500}
+.talhao-cult{font-size:12.5px;color:var(--teal);font-weight:600;margin-top:1px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{background:var(--teal-soft);color:var(--teal);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.sec{padding:18px 16px 0}
+.sec-h{display:flex;align-items:baseline;gap:8px;margin:0 2px 11px}
+.sec-n{width:23px;height:23px;flex:0 0 auto;border-radius:50%;background:var(--teal);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.sec-t{font-size:16.5px;font-weight:700;letter-spacing:-.2px}
+.sec-s{font-size:12.5px;color:var(--ink-soft);font-weight:500;margin-left:auto;text-align:right}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow)}
+.cfg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--line);border-radius:14px 14px 0 0;overflow:hidden}
+.cfg .c{background:var(--surface);padding:11px 12px}
+.cfg .c-lbl{font-size:11px;color:var(--ink-soft);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.cfg .c input{width:100%;border:none;background:transparent;color:var(--ink);font:inherit;font-size:18px;font-weight:700;padding:2px 0 0;outline:none;font-variant-numeric:tabular-nums}
+.cfg .c.ro{background:var(--surface-2)}
+.cfg .c .val{font-size:18px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.cfg .c .u{font-size:12px;color:var(--ink-soft);font-weight:600}
+.cfg-hint{font-size:11.5px;color:var(--ink-soft);padding:8px 12px 0}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
+.tile{background:var(--teal-soft);border-radius:12px;padding:12px 13px;text-align:center}
+.tile.alt{background:var(--surface-2);border:1px solid var(--line)}
+.tile .t-v{font-size:24px;font-weight:700;color:var(--teal);letter-spacing:-.5px;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile.alt .t-v{color:var(--ink)}
+.tile .t-l{font-size:12px;color:var(--ink-soft);font-weight:600;margin-top:3px}
+.recipe{margin-top:2px;border-top:1px solid var(--line)}
+.recipe-h{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:9px 14px 7px;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);font-weight:700}
+.recipe-h .r2{text-align:right;width:88px}
+.recipe-h .r3{text-align:right;width:64px}
+.rrow{display:grid;grid-template-columns:1fr auto auto;gap:10px;padding:11px 14px;border-top:1px solid var(--line);align-items:center}
+.rrow .r-prod{font-size:15px;font-weight:700;letter-spacing:-.1px}
+.rrow .r-cls{font-size:11px;color:var(--ink-soft);font-weight:500}
+.rrow .r-tank{width:88px;text-align:right}
+.rrow .r-tank .big{font-size:19px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;line-height:1.1}
+.rrow .r-tank .un{font-size:11px;color:var(--ink-soft);font-weight:600}
+.rrow .r-tot{width:64px;text-align:right;font-size:13.5px;font-weight:600;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.sub-h{padding:10px 14px 2px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);font-weight:700;border-top:1px solid var(--line)}
+.recipe-note{display:flex;gap:8px;padding:11px 14px;border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 15px 15px;font-size:12.5px;color:var(--ink-soft)}
+.recipe-note b{color:var(--ink)}
+.prod-list{display:flex;flex-direction:column;gap:11px}
+.prod{padding:13px 15px 14px}
+.prod-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.prod-name{font-size:15.5px;font-weight:700;letter-spacing:-.1px}
+.prod-plan{font-size:11.5px;color:var(--ink-soft);font-weight:500;margin-top:2px}
+.prod-plan b{color:var(--amber);font-weight:700}
+.inp-row{display:flex;align-items:stretch;border:1.5px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2);transition:border-color .15s;margin-top:11px}
+.inp-row:focus-within{border-color:var(--teal);background:var(--surface)}
+.inp-row input{flex:1;min-width:0;border:none;background:transparent;color:var(--ink);font:inherit;font-size:19px;font-weight:700;padding:11px 13px;font-variant-numeric:tabular-nums;outline:none}
+.inp-row .unit{display:flex;align-items:center;padding:0 14px;font-size:14px;font-weight:600;color:var(--ink-soft);background:var(--surface);border-left:1px solid var(--line)}
+.diff{font-size:12px;font-weight:600;margin-top:6px;min-height:16px;display:flex;align-items:center;gap:6px}
+.diff .dot{width:7px;height:7px;border-radius:50%;flex:0 0 auto}
+.diff.ok{color:var(--green)} .diff.ok .dot{background:var(--green)}
+.diff.over{color:var(--amber)} .diff.over .dot{background:var(--amber)}
+.diff.none{color:var(--ink-soft)} .diff.none .dot{background:var(--ink-soft);opacity:.5}
+.field{margin-top:11px}
+.field label{display:block;font-size:12.5px;font-weight:600;margin-bottom:6px}
+.field label .req{color:var(--amber)}
+.field input,.field textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--ink);font:inherit;font-size:15px;padding:11px 13px;outline:none;transition:border-color .15s}
+.field input:focus,.field textarea:focus{border-color:var(--teal);background:var(--surface)}
+.field input.err{border-color:var(--red)}
+.field textarea{resize:vertical;min-height:60px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:linear-gradient(to top,var(--ground) 72%,transparent);padding:14px 16px calc(15px + env(safe-area-inset-bottom));z-index:20}
+.bar-in{max-width:470px;margin:0 auto}
+.send{width:100%;border:none;border-radius:14px;background:var(--wa);color:#fff;font:inherit;font-size:17px;font-weight:700;padding:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 6px 18px rgba(31,170,82,.32);transition:transform .08s,filter .15s}
+.send:active{transform:translateY(1px)} .send:hover{filter:brightness(1.05)}
+.send:disabled{opacity:.6;cursor:default}
+.send-err{color:var(--red);font-size:12.5px;font-weight:600;text-align:center;margin:0 0 9px;min-height:15px}
+.foot{font-size:11.5px;color:var(--ink-soft);text-align:center;padding:14px 24px 2px;line-height:1.5}
+.done,.fail{position:fixed;inset:0;background:var(--ground);z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px;gap:6px}
+.done.on,.fail.on{display:flex}
+.big-ic{width:82px;height:82px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:42px;margin-bottom:12px}
+.done .big-ic{background:var(--green-soft);color:var(--green)}
+.fail .big-ic{background:#fce4e4;color:var(--red)}
+h2.st{font-size:23px;font-weight:700;margin:0}
+p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
+.again{margin-top:22px;background:none;border:1.5px solid var(--line);color:var(--ink-soft);border-radius:11px;font:inherit;font-weight:600;font-size:13.5px;padding:10px 18px;cursor:pointer}
+.err-page{padding:48px 26px;text-align:center;color:var(--ink-soft)}
+.err-page h2{color:var(--ink);font-size:20px;margin:0 0 8px}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap"><div class="err-page">Carregando…</div></div>
+
+<div class="bar" id="bar" hidden><div class="bar-in">
+  <p class="send-err" id="sendErr"></p>
+  <button class="send" id="send">📲 Enviar baixa da aplicação</button>
+</div></div>
+
+<div class="done" id="done">
+  <div class="big-ic">✓</div>
+  <h2 class="st">Baixa enviada!</h2>
+  <p class="st">Obrigado. O volume utilizado foi registrado no planejamento — o administrador vai conferir e aprovar.</p>
+  <button class="again" id="againOk">Fechar</button>
+</div>
+<div class="fail" id="fail">
+  <div class="big-ic">!</div>
+  <h2 class="st">Não deu para enviar</h2>
+  <p class="st" id="failMsg">Verifique a internet e tente de novo.</p>
+  <button class="again" id="againFail">◂ Voltar e tentar de novo</button>
+</div>
+
+<script>
+(function(){
+  var nf=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
+  var nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
+  function num(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  // ---- decodifica a recomendação do link (#) ----
+  var REC=null;
+  try{ var h=location.hash.slice(1); if(h) REC=JSON.parse(decodeURIComponent(h)); }catch(e){ REC=null; }
+  var wrap=document.getElementById('wrap');
+  if(!REC || !REC.it || !REC.it.length){
+    wrap.innerHTML='<div class="err-page"><h2>Link incompleto</h2><p>Peça para reenviarem a recomendação pelo app. O link precisa vir completo do WhatsApp.</p></div>';
+    return;
+  }
+  var ITENS=REC.it.map(function(x){ return {produto:x.p, un:x.u||'', dose:+x.d||0, liquido:!!x.l}; });
+  var AREA=+REC.a||0, VAZAO=+REC.v||0;
+  var LIQ=ITENS.filter(function(i){return i.liquido;}), SOL=ITENS.filter(function(i){return !i.liquido;});
+
+  var lastTank=2000; try{ var t0=localStorage.getItem('retorno_tanque'); if(t0) lastTank=num(t0); }catch(e){}
+
+  // ---- monta a página ----
+  var chips=[];
+  if(AREA) chips.push('📐 '+nf.format(AREA)+' ha');
+  if(VAZAO) chips.push('💧 Calda '+nf.format(VAZAO)+' L/ha');
+  if(REC.aj) chips.push('🧪 '+REC.aj);
+  if(REC.jn) chips.push('⏱ '+REC.jn);
+  if(REC.cd) chips.push('🌬 '+REC.cd);
+
+  var recipeSec = VAZAO>0 && LIQ.length ? (
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Como dosar no tanque</span>'+
+      '<span class="sec-s">ajuste o tanque<br>e veja a dose</span></div>'+
+    '<div class="card">'+
+      '<div class="cfg">'+
+        '<div class="c"><div class="c-lbl">Seu tanque</div><input id="tanque" type="text" inputmode="numeric" value="'+nf0.format(lastTank)+'"><span class="u">litros</span></div>'+
+        '<div class="c ro"><div class="c-lbl">Calda (vazão)</div><div class="val">'+nf.format(VAZAO)+'<span class="u"> L/ha</span></div></div>'+
+        '<div class="c ro"><div class="c-lbl">Área</div><div class="val">'+nf.format(AREA)+'<span class="u"> ha</span></div></div>'+
+      '</div>'+
+      '<div class="cfg-hint" id="cfgHint"></div>'+
+      '<div class="tiles">'+
+        '<div class="tile"><div class="t-v" id="tTanks">—</div><div class="t-l">tanques na área</div></div>'+
+        '<div class="tile alt"><div class="t-v" id="tCalda">—</div><div class="t-l">calda total (L)</div></div>'+
+      '</div>'+
+      '<div class="recipe">'+
+        '<div class="recipe-h"><span>Produto (no tanque)</span><span class="r2">Por tanque</span><span class="r3">Total</span></div>'+
+        '<div id="recipeRows"></div>'+
+        (SOL.length?('<div class="sub-h">Sólidos — distribuição (não vão no tanque)</div>'+SOL.map(function(it){
+          return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div><div class="r-cls">'+nf.format(it.dose)+' '+esc(it.un)+'/ha</div></div>'+
+            '<div class="r-tank"><div class="big" style="color:var(--ink)">'+nf.format(it.dose)+'</div><div class="un">'+esc(it.un)+'/ha</div></div>'+
+            '<div class="r-tot">'+nf.format(it.dose*AREA)+' '+esc(it.un)+'</div></div>';
+        }).join('')):'')+
+        '<div class="recipe-note" id="recipeNote"></div>'+
+      '</div>'+
+    '</div></section>'
+  ) : (
+    // sem calda/vazão informada: mostra só os totais por produto
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Produtos a aplicar</span></div>'+
+    '<div class="card"><div class="recipe" style="border-top:none">'+
+      '<div class="recipe-h"><span>Produto</span><span class="r2">Dose/ha</span><span class="r3">Total</span></div>'+
+      ITENS.map(function(it){ return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div></div>'+
+        '<div class="r-tank"><div class="big" style="color:var(--ink)">'+nf.format(it.dose)+'</div><div class="un">'+esc(it.un)+'/ha</div></div>'+
+        '<div class="r-tot">'+(AREA?nf.format(it.dose*AREA)+' '+esc(it.un):'—')+'</div></div>'; }).join('')+
+    '</div></div></section>'
+  );
+
+  var baixaSec =
+    '<section class="sec"><div class="sec-h"><span class="sec-n">'+(VAZAO>0&&LIQ.length?'2':'2')+'</span><span class="sec-t">Dar baixa após aplicar</span>'+
+      '<span class="sec-s">volume usado<br>de cada produto</span></div>'+
+    '<div class="prod-list" id="baixaList"></div>'+
+    '<div class="card" style="padding:14px 16px;margin-top:11px">'+
+      '<div class="field"><label>Seu nome <span class="req">*</span></label><input id="operador" type="text" placeholder="ex.: José da Silva"></div>'+
+      '<div class="field"><label>Observações (opcional)</label><textarea id="obs" placeholder="ex.: sobrou meio tanque; parei 1h por chuva"></textarea></div>'+
+    '</div>'+
+    '<p class="foot">Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.</p>'+
+    '</section>';
+
+  wrap.innerHTML =
+    '<header class="top"><div class="brand"><span class="leaf">🌱</span> Planejamento de Safra 26/27</div>'+
+      '<h1>Recomendação de aplicação</h1>'+
+      '<div class="op">'+(REC.op?esc(REC.op):'Aplicação')+(REC.al?' · alvo: '+esc(REC.al):'')+'</div></header>'+
+    '<div class="talhao"><div class="talhao-top"><span class="talhao-id">'+esc(REC.t||'')+'</span>'+
+      (REC.tn?'<span class="talhao-nome">· '+esc(REC.tn)+'</span>':'')+'</div>'+
+      (REC.c?'<div class="talhao-cult">'+esc(REC.c)+'</div>':'')+
+      (chips.length?'<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>':'')+
+    '</div>'+ recipeSec + baixaSec;
+
+  // ---- receita do tanque (recalcula quando muda o tanque) ----
+  function renderRecipe(){
+    var el=document.getElementById('tanque'); if(!el) return;
+    var tanque=num(el.value), caldaTotal=AREA*VAZAO;
+    var haTanque=(tanque>0&&VAZAO>0)?tanque/VAZAO:0;
+    var nTanques=(tanque>0)?Math.ceil(caldaTotal/tanque):0;
+    document.getElementById('tTanks').textContent=nTanques||'—';
+    document.getElementById('tCalda').textContent=nf0.format(caldaTotal);
+    document.getElementById('cfgHint').innerHTML= haTanque? 'Cada tanque cobre <b style="color:var(--ink)">'+nf.format(haTanque)+' ha</b>.':'Informe o volume do seu tanque.';
+    document.getElementById('recipeRows').innerHTML=LIQ.map(function(it){
+      var porTanque=it.dose*haTanque, total=it.dose*AREA;
+      return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div><div class="r-cls">'+nf.format(it.dose)+' '+esc(it.un)+'/ha</div></div>'+
+        '<div class="r-tank"><div class="big">'+(haTanque?nf.format(porTanque):'—')+'</div><div class="un">'+esc(it.un)+' / tanque</div></div>'+
+        '<div class="r-tot">'+nf.format(total)+' '+esc(it.un)+'</div></div>';
+    }).join('');
+    var note=document.getElementById('recipeNote');
+    if(tanque>0){ var cheios=Math.floor(caldaTotal/tanque), resto=caldaTotal-cheios*tanque;
+      note.innerHTML='🛈 São <b>'+cheios+' tanque(s) cheios</b>'+(resto>1?' + 1 parcial (~'+nf0.format(resto)+' L)':'')+'. Meça a dose "por tanque" de cada produto em cada carga.'; }
+    else note.innerHTML='';
+    try{ localStorage.setItem('retorno_tanque', String(tanque)); }catch(e){}
+  }
+  var tk=document.getElementById('tanque'); if(tk){ tk.addEventListener('input',renderRecipe); renderRecipe(); }
+
+  // ---- baixa (volume usado por produto) ----
+  document.getElementById('baixaList').innerHTML=ITENS.map(function(it,i){
+    var total=it.dose*AREA;
+    return '<div class="card prod" data-i="'+i+'" data-plan="'+total+'" data-un="'+esc(it.un)+'">'+
+      '<div class="prod-head"><div><div class="prod-name">'+esc(it.produto)+'</div>'+
+      '<div class="prod-plan">Planejado: <b>'+(total?nf.format(total)+' '+esc(it.un):'—')+'</b>'+(it.dose?' ('+nf.format(it.dose)+' '+esc(it.un)+'/ha)':'')+'</div></div></div>'+
+      '<div class="inp-row"><input type="text" inputmode="decimal" placeholder="0" aria-label="Total usado"><span class="unit">'+esc(it.un||'un')+'</span></div>'+
+      '<div class="diff none"><span class="dot"></span>Quanto usou no total?</div></div>';
+  }).join('');
+  document.querySelectorAll('.prod').forEach(function(card){
+    var plan=parseFloat(card.dataset.plan)||0, un=card.dataset.un||'';
+    var inp=card.querySelector('input'), diff=card.querySelector('.diff');
+    inp.addEventListener('input',function(){
+      var raw=inp.value.trim();
+      if(raw===''){ diff.className='diff none'; diff.innerHTML='<span class="dot"></span>Quanto usou no total?'; return; }
+      var d=num(raw)-plan;
+      if(!plan){ diff.className='diff none'; diff.innerHTML='<span class="dot"></span>Registrado'; }
+      else if(Math.abs(d)<0.001){ diff.className='diff ok'; diff.innerHTML='<span class="dot"></span>Igual ao planejado'; }
+      else if(d<0){ diff.className='diff ok'; diff.innerHTML='<span class="dot"></span>'+nf.format(-d)+' '+un+' abaixo do planejado'; }
+      else{ diff.className='diff over'; diff.innerHTML='<span class="dot"></span>'+nf.format(d)+' '+un+' acima do planejado'; }
+    });
+  });
+
+  // ---- enviar ----
+  document.getElementById('bar').hidden=false;
+  var sendBtn=document.getElementById('send'), sendErr=document.getElementById('sendErr');
+  var done=document.getElementById('done'), fail=document.getElementById('fail');
+
+  function coleta(){
+    var operador=(document.getElementById('operador').value||'').trim();
+    var obs=(document.getElementById('obs').value||'').trim();
+    var itens=[]; document.querySelectorAll('.prod').forEach(function(card){
+      var i=+card.dataset.i, it=ITENS[i], v=card.querySelector('input').value.trim();
+      itens.push({produto:it.produto, un:it.un, plan:+(it.dose*AREA).toFixed(2), real:v===''?0:num(v)});
+    });
+    return {operador:operador, obs:obs, itens:itens};
+  }
+
+  sendBtn.addEventListener('click',function(){
+    sendErr.textContent='';
+    var dados=coleta();
+    var opEl=document.getElementById('operador');
+    if(!dados.operador){ opEl.classList.add('err'); opEl.focus(); sendErr.textContent='Informe o seu nome.'; return; }
+    opEl.classList.remove('err');
+    if(!dados.itens.some(function(x){return x.real>0;})){ sendErr.textContent='Informe o volume usado de pelo menos um produto.'; return; }
+    if(!REC.u){ // sem sincronização: manda os valores de volta por WhatsApp como plano B
+      var txt='*Baixa da aplicação* ('+(REC.t||'')+')\nOperador: '+dados.operador+'\n'+
+        dados.itens.filter(function(x){return x.real>0;}).map(function(x){return '• '+x.produto+': '+nf.format(x.real)+' '+x.un;}).join('\n')+
+        (dados.obs?'\nObs: '+dados.obs:'');
+      window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+      done.classList.add('on'); window.scrollTo(0,0); return;
+    }
+    sendBtn.disabled=true; sendBtn.textContent='Enviando…';
+    var payload={__retorno:{ id:REC.id, talhao:REC.t, operador:dados.operador, obs:dados.obs, itens:dados.itens }};
+    fetch(REC.u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
+      .then(function(r){ return r.json().catch(function(){ return {ok:1}; }); })
+      .then(function(){ done.classList.add('on'); window.scrollTo(0,0); })
+      .catch(function(){ fail.classList.add('on'); window.scrollTo(0,0); })
+      .then(function(){ sendBtn.disabled=false; sendBtn.textContent='📲 Enviar baixa da aplicação'; });
+  });
+  document.getElementById('againOk').addEventListener('click',function(){ done.classList.remove('on'); });
+  document.getElementById('againFail').addEventListener('click',function(){ fail.classList.remove('on'); });
+})();
+</script>
+</body>
+</html>

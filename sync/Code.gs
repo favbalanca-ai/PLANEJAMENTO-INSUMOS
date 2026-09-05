@@ -68,7 +68,43 @@ function readData(){
   }
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
-    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet() };
+    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos() };
+}
+
+/* --------- RETORNOS DE APLICAÇÃO (baixa do operador pela página retorno.html) ---------
+   O operador abre o link do WhatsApp, dosa no tanque e informa o volume TOTAL usado de
+   cada produto. Isso cai aqui via doPost ({__retorno:{...}}) e vira 1 linha por produto
+   na aba "RETORNOS APP". O app puxa esses retornos, preenche o "Utilizado" da recomendação
+   (casando pelo id) e o Adm aprova para o histórico. */
+var RETORNOS_SHEET = 'RETORNOS APP';
+function retornosSheet(){
+  var s = ss().getSheetByName(RETORNOS_SHEET);
+  if (!s){ s = ss().insertSheet(RETORNOS_SHEET);
+    s.appendRow(['DATA/HORA','RECOM_ID','TALHÃO','OPERADOR','PRODUTO','UN','PLANEJADO','UTILIZADO','OBS']);
+    s.setFrozenRows(1);
+  }
+  return s;
+}
+function readRetornos(){
+  var s = ss().getSheetByName(RETORNOS_SHEET); if (!s) return [];
+  var last = s.getLastRow(); if (last < 2) return [];
+  var v = s.getRange(2, 1, last - 1, 9).getValues(), out = [];
+  for (var i = 0; i < v.length; i++){
+    var r = v[i], id = S(r[1]); if (!id) continue;
+    out.push({ ts:(r[0] instanceof Date)?r[0].getTime():N(r[0]), id:id, talhao:S(r[2]), operador:S(r[3]),
+      produto:S(r[4]), un:S(r[5]), plan:N(r[6]), real:N(r[7]), obs:S(r[8]) });
+  }
+  return out;
+}
+function writeRetorno(ret){
+  var s = retornosSheet(), when = new Date(), n = 0, itens = (ret && ret.itens) || [];
+  for (var i = 0; i < itens.length; i++){
+    var it = itens[i];
+    s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), S(it.produto), S(it.un), N(it.plan), N(it.real), S(ret.obs)]);
+    n++;
+  }
+  if (!n){ s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), '', '', 0, 0, S(ret.obs)]); }
+  return { rows:n };
 }
 
 /* --------- MÓDULO PREÇOS (composição de preços por safra do app) ---------
@@ -354,6 +390,8 @@ function doPost(e){
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
       var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows;
+    } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
+      var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }
