@@ -670,3 +670,33 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .tl-date{flex:0 0 auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
 .tl-sub{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}
 .tl-tal{color:var(--ink2);font-weight:600}
+
+/* ===== Recomendação: cartões com fluxo rascunho → enviada → retorno → aprovada ===== */
+.recom-list{display:flex;flex-direction:column;gap:12px;padding:12px 14px}
+.recom-card{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.recom-card.rc-rasc{border-left-color:var(--muted)}
+.recom-card.rc-env{border-left-color:#25d366}
+.recom-card.rc-ret{border-left-color:var(--amber)}
+.recom-card.rc-apr{border-left-color:var(--green)}
+.rc-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:#fafcfc}
+.rc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.rc-badge.rc-rasc{background:#eef1f2;color:var(--muted)}
+.rc-badge.rc-env{background:#e6f8ee;color:#1a8a4a}
+.rc-badge.rc-ret{background:var(--amber-soft);color:var(--amber)}
+.rc-badge.rc-apr{background:var(--green-soft);color:var(--green)}
+.rc-op{font-size:12px;font-weight:700;color:var(--ink2)}
+.rc-meta{display:flex;flex-wrap:wrap;gap:5px 12px;padding:9px 12px;font-size:12.5px;color:var(--ink2)}
+.rc-meta span{white-space:nowrap}
+.rc-tbl input.cell{width:78px}
+.rc-tbl input.prod-in{width:100%;min-width:120px}
+.rc-tbl td.rc-del{width:34px;text-align:center}
+.rc-dif{font-size:11px;font-weight:700;padding:1px 6px;border-radius:10px}
+.rc-dif.up{background:var(--red-soft);color:var(--red)}
+.rc-dif.down{background:var(--green-soft);color:var(--green)}
+.rc-obs{padding:6px 12px 10px;font-size:12.5px}
+.rc-ret-in{background:var(--amber-soft);border-top:1px solid var(--line)}
+.rc-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fafcfc}
+.rc-actions .btn-wa{width:auto;margin-top:0}
+.rc-actions .spacer{flex:1}
+.rc-hint{font-size:12px;color:var(--muted);font-weight:600}
+.rc-ok{font-size:12.5px;font-weight:700;color:var(--green)}
