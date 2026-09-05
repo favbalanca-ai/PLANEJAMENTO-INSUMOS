@@ -686,6 +686,36 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .tl-sub{font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.4;overflow-wrap:anywhere}
 .tl-tal{color:var(--ink2);font-weight:600}
 
+/* ===== Recomendação: cartões com fluxo rascunho → enviada → retorno → aprovada ===== */
+.recom-list{display:flex;flex-direction:column;gap:12px;padding:12px 14px}
+.recom-card{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.recom-card.rc-rasc{border-left-color:var(--muted)}
+.recom-card.rc-env{border-left-color:#25d366}
+.recom-card.rc-ret{border-left-color:var(--amber)}
+.recom-card.rc-apr{border-left-color:var(--green)}
+.rc-head{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--line);background:#fafcfc}
+.rc-badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+.rc-badge.rc-rasc{background:#eef1f2;color:var(--muted)}
+.rc-badge.rc-env{background:#e6f8ee;color:#1a8a4a}
+.rc-badge.rc-ret{background:var(--amber-soft);color:var(--amber)}
+.rc-badge.rc-apr{background:var(--green-soft);color:var(--green)}
+.rc-op{font-size:12px;font-weight:700;color:var(--ink2)}
+.rc-meta{display:flex;flex-wrap:wrap;gap:5px 12px;padding:9px 12px;font-size:12.5px;color:var(--ink2)}
+.rc-meta span{white-space:nowrap}
+.rc-tbl input.cell{width:78px}
+.rc-tbl input.prod-in{width:100%;min-width:120px}
+.rc-tbl td.rc-del{width:34px;text-align:center}
+.rc-dif{font-size:11px;font-weight:700;padding:1px 6px;border-radius:10px}
+.rc-dif.up{background:var(--red-soft);color:var(--red)}
+.rc-dif.down{background:var(--green-soft);color:var(--green)}
+.rc-obs{padding:6px 12px 10px;font-size:12.5px}
+.rc-ret-in{background:var(--amber-soft);border-top:1px solid var(--line)}
+.rc-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);background:#fafcfc}
+.rc-actions .btn-wa{width:auto;margin-top:0}
+.rc-actions .spacer{flex:1}
+.rc-hint{font-size:12px;color:var(--muted);font-weight:600}
+.rc-ok{font-size:12.5px;font-weight:700;color:var(--green)}
+
 </style>
 </head>
 <body>
@@ -763,7 +793,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-65';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-66';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2666,73 +2696,195 @@ V.stand=function(arg){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">População = (média de plantas ÷ comprimento ÷ espaçamento) × 10.000. Salvo <b>no aparelho</b>.</p>`;
 };
 
-/* ================= RECOMENDAÇÃO DE APLICAÇÃO (receituário) ================= */
+/* ============ RECOMENDAÇÃO DE APLICAÇÃO (receituário → envio → retorno → aprovação) ============
+   Fluxo: rascunho → enviada (WhatsApp ao operador) → retorno (Adm registra o volume utilizado)
+   → aprovada (vira histórico de aplicação no talhão / timeline). Tudo salvo no aparelho. */
 const RECOM_KEY='planejamento_recomendacao';
 let RECOM=null;
 function loadRecom(){ try{ const d=JSON.parse(localStorage.getItem(RECOM_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
 function saveRecom(){ try{ localStorage.setItem(RECOM_KEY, JSON.stringify(RECOM)); }catch(e){} }
-function recomSave(talhao){
-  const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
-  if(!g('recom-produtos')){ toast('Informe ao menos um produto'); return; }
-  RECOM.registros.push({ id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), talhao,
-    data:g('recom-data')||new Date().toISOString().slice(0,10), janela:g('recom-janela'), alvo:g('recom-alvo'),
-    produtos:g('recom-produtos'), calda:g('recom-calda'), adjuvante:g('recom-adj'), cond:g('recom-cond'),
-    resp:g('recom-resp'), obs:g('recom-obs'), ts:Date.now() });
-  saveRecom(); route(); toast('Recomendação salva');
+const RECOM_ST={
+  rascunho:{lbl:'Rascunho',cls:'rc-rasc',ico:'✏️'},
+  enviada:{lbl:'Enviada ao operador',cls:'rc-env',ico:'📲'},
+  retorno:{lbl:'Retorno recebido',cls:'rc-ret',ico:'↩️'},
+  aprovada:{lbl:'Aplicação aprovada',cls:'rc-apr',ico:'✅'}
+};
+function recomById(id){ return RECOM.registros.find(x=>x.id===id)||null; }
+function recomNovoId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+// normaliza registros legados (texto livre, sem status/itens) para o novo modelo estruturado
+function recomNorm(r){
+  if(!r.status) r.status='enviada';
+  if(!Array.isArray(r.itens)){
+    r.itens=(r.produtos||'').split('\n').map(l=>l.trim()).filter(Boolean).map(l=>{
+      const m=l.match(/^(.*?)[\s—\-–:]+([\d.,]+)\s*(\S+)?/);
+      if(m){ const p=(m[1]||'').trim(); return {produto:p, un:(PROD[p]&&PROD[p].un)||(m[3]||''), dose:_mmC(m[2]), real:null}; }
+      return {produto:l, un:(PROD[l]&&PROD[l].un)||'', dose:0, real:null};
+    });
+  }
+  if(r.area==null){ const t=findTalhao(r.talhao); r.area=t?areaDe(t):0; }
+  if(r.opNome==null) r.opNome='';
+  return r;
 }
+// itens prontos a partir de uma operação planejada do talhão (produto · dose · unidade)
+function recomItensFromOp(t, opKey){
+  const o=opsDoTalhao(t).find(x=>x.key===opKey); if(!o) return [];
+  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto)
+    .map(it=>({produto:it.produto, un:it.un||'', dose:+it.dose||0, real:null}));
+}
+function recomCreate(talId, opKey){
+  const t=findTalhao(talId); if(!t) return null;
+  const o=opKey?opsDoTalhao(t).find(x=>x.key===opKey):null;
+  const r={ id:recomNovoId(), talhao:talId, opKey:opKey||'', opNome:(o&&o.op&&o.op.nome)||'',
+    data:new Date().toISOString().slice(0,10), janela:'', alvo:'', calda:'', adjuvante:'', cond:'', resp:'', obs:'',
+    area:areaDe(t)||0, itens: opKey?recomItensFromOp(t,opKey):[{produto:'',un:'',dose:0,real:null}],
+    produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
+  RECOM.registros.push(r); saveRecom(); return r;
+}
+// atualiza campo do registro / item a partir de um input (data-recf / data-reci)
+function recomSetField(el){
+  const r=recomById(el.dataset.id); if(!r) return;
+  const f=el.dataset.recf, i=el.dataset.reci, v=el.value; let rerender=false;
+  if(f==='area'){ r.area=_mmC(v); rerender=true; }
+  else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
+  else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
+  else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]) r.itens[+i].un=PROD[p].un||r.itens[+i].un; rerender=true; }
+  else if(f==='retQuem'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.quem=v; }
+  else if(f==='retObs'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.obs=v; }
+  else { r[f]=v; }
+  saveRecom();
+  if(rerender) route();
+}
+// mensagem de WhatsApp com os itens estruturados e o total planejado na área
 function recomWhats(id){
-  const r=RECOM.registros.find(x=>x.id===id); if(!r) return;
-  const t=findTalhao(r.talhao);
-  let x=`*Recomendação de aplicação*\nTalhão: ${r.talhao}${t&&t.nome?` · ${t.nome}`:''}\n`;
+  const r=recomById(id); if(!r) return; recomNorm(r);
+  const t=findTalhao(r.talhao), area=+r.area||0;
+  let x=`*Recomendação de aplicação*\n`;
+  x+=`Talhão: ${r.talhao}${t&&t.nome?` · ${t.nome}`:''}${area?` (${num(area)} ha)`:''}\n`;
+  if(r.opNome) x+=`Operação: ${r.opNome}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}${r.janela?` · janela: ${r.janela}`:''}\n`;
   if(r.alvo) x+=`Alvo: ${r.alvo}\n`;
-  x+=`\nProdutos:\n`+(r.produtos||'').split('\n').filter(Boolean).map(l=>`• ${l.trim()}`).join('\n')+'\n';
+  const its=(r.itens||[]).filter(it=>it.produto);
+  if(its.length){ x+=`\n*Produtos e doses:*\n`+its.map(it=>{
+    const tot=(area&&it.dose)?` = ${num(it.dose*area)} ${it.un||''} no talhão`:'';
+    return `• ${it.produto} — ${num(it.dose)} ${it.un||''}/ha${tot}`;
+  }).join('\n')+'\n'; }
   if(r.calda) x+=`\nVolume de calda: ${r.calda} L/ha\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
   if(r.cond) x+=`Condições: ${r.cond}\n`;
   if(r.resp) x+=`Responsável: ${r.resp}\n`;
   if(r.obs) x+=`Obs: ${r.obs}\n`;
+  x+=`\n_Ao terminar, informe o volume TOTAL utilizado de cada produto._`;
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
+}
+// cartão de uma recomendação, com aparência/ações conforme o estado
+function recomCard(r,t){
+  const st=RECOM_ST[r.status]||RECOM_ST.rascunho;
+  const area=+r.area||0, its=r.itens||[];
+  const editable=(r.status==='rascunho'), retEdit=(r.status==='retorno');
+  const rows=its.map((it,i)=>{
+    const planTot=(it.dose&&area)?it.dose*area:0;
+    const prodCell=editable
+      ? `<input list="prodlist" class="txt prod-in" data-id="${esc(r.id)}" data-recf="itProd" data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo">`
+      : `<b>${esc(it.produto||'—')}</b>`;
+    const doseCell=editable
+      ? `<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="itDose" data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
+      : `${num(it.dose)}<small> ${esc(it.un||'')}/ha</small>`;
+    let realCell;
+    if(r.status==='rascunho'||r.status==='enviada'){ realCell='<span class="mut">—</span>'; }
+    else if(retEdit){ realCell=`<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="itReal" data-reci="${i}" value="${it.real!=null?it.real:''}" placeholder="${planTot?num(planTot):'total'}"><small> ${esc(it.un||'')}</small>`; }
+    else { realCell=(it.real!=null?`${num(it.real)}<small> ${esc(it.un||'')}</small>`:'<span class="mut">—</span>'); }
+    const dif=(it.real!=null&&planTot)?(it.real-planTot):null;
+    const difTag=(dif!=null&&Math.abs(dif)>0.0001)?` <span class="rc-dif ${dif>0?'up':'down'}">${dif>0?'+':''}${num(dif)}</span>`:'';
+    const del=editable?`<button class="icon-btn del" data-act="recomDelItem" data-id="${esc(r.id)}" data-i="${i}" title="Remover">🗑</button>`:'';
+    return `<tr>
+      <td class="c-full">${prodCell}</td>
+      <td class="num">${doseCell}</td>
+      <td class="num">${planTot?num(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="num">${realCell}${difTag}</td>
+      <td class="rc-del">${del}</td></tr>`;
+  }).join('');
+  const head = editable ? `
+    <div class="app-grid" style="padding:10px 12px">
+      <label>Data<input type="date" data-id="${esc(r.id)}" data-recf="data" value="${esc(r.data||'')}"></label>
+      <label>Área (ha)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="area" value="${area||''}"></label>
+      <label>Alvo<input class="txt" list="monit-alvos" data-id="${esc(r.id)}" data-recf="alvo" value="${esc(r.alvo||'')}" placeholder="ex.: Ferrugem"></label>
+      <label>Janela<input class="txt" data-id="${esc(r.id)}" data-recf="janela" value="${esc(r.janela||'')}" placeholder="ex.: até 3 dias"></label>
+      <label>Calda (L/ha)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="calda" value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
+      <label>Adjuvante<input class="txt" data-id="${esc(r.id)}" data-recf="adjuvante" value="${esc(r.adjuvante||'')}"></label>
+      <label>Condições<input class="txt" data-id="${esc(r.id)}" data-recf="cond" value="${esc(r.cond||'')}"></label>
+      <label>Responsável<input class="txt" data-id="${esc(r.id)}" data-recf="resp" value="${esc(r.resp||'')}"></label>
+    </div>` : `
+    <div class="rc-meta">
+      ${r.data?`<span>📅 ${esc(fmtData(r.data))}</span>`:''}${r.janela?`<span>⏱ ${esc(r.janela)}</span>`:''}
+      ${r.alvo?`<span>🎯 ${esc(r.alvo)}</span>`:''}${area?`<span>📐 ${num(area)} ha</span>`:''}
+      ${r.calda?`<span>💧 ${esc(r.calda)} L/ha</span>`:''}${r.adjuvante?`<span>Adj.: ${esc(r.adjuvante)}</span>`:''}
+      ${r.cond?`<span>${esc(r.cond)}</span>`:''}${r.resp?`<span>👤 ${esc(r.resp)}</span>`:''}
+    </div>`;
+  let retBlock='';
+  if(retEdit){
+    retBlock=`<div class="rc-ret-in"><div class="app-grid" style="padding:8px 12px">
+      <label>Quem retornou<input class="txt" data-id="${esc(r.id)}" data-recf="retQuem" value="${esc((r.retorno&&r.retorno.quem)||'')}" placeholder="operador"></label>
+      <label>Obs. do retorno<input class="txt" data-id="${esc(r.id)}" data-recf="retObs" value="${esc((r.retorno&&r.retorno.obs)||'')}" placeholder="opcional"></label>
+    </div></div>`;
+  } else if(r.status==='aprovada' && r.retorno && (r.retorno.quem||r.retorno.obs)){
+    retBlock=`<div class="rc-meta"><span>↩️ Retorno: ${esc(r.retorno.quem||'—')}</span>${r.retorno.obs?`<span>${esc(r.retorno.obs)}</span>`:''}</div>`;
+  }
+  let actions='';
+  if(r.status==='rascunho'){
+    actions=`<button class="btn btn-wa btn-sm" data-act="recomEnviar" data-id="${esc(r.id)}">📲 Enviar por WhatsApp</button>
+      <button class="icon-btn del" data-act="recomDel" data-id="${esc(r.id)}" title="Excluir">🗑</button>`;
+  } else if(r.status==='enviada'){
+    actions=`<button class="btn btn-primary btn-sm" data-act="recomRetorno" data-id="${esc(r.id)}">↩️ Registrar retorno</button>
+      <button class="btn btn-wa btn-sm" data-act="recomWa" data-id="${esc(r.id)}">📲 Reenviar</button>
+      <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">✏️ Editar</button>
+      <button class="icon-btn del" data-act="recomDel" data-id="${esc(r.id)}" title="Excluir">🗑</button>`;
+  } else if(r.status==='retorno'){
+    actions=`<span class="rc-hint">Confira o volume utilizado e aprove:</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="recomReprovar" data-id="${esc(r.id)}">✖ Reprovar</button>
+      <button class="btn btn-primary btn-sm" data-act="recomAprovar" data-id="${esc(r.id)}">✅ Aprovar aplicação</button>`;
+  } else if(r.status==='aprovada'){
+    actions=`<span class="rc-ok">✅ Registrada no histórico do talhão</span>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">↩️ Reabrir</button>`;
+  }
+  return `<div class="recom-card ${st.cls}">
+    <div class="rc-head"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
+      ${r.opNome?`<span class="rc-op">${esc(r.opNome)}</span>`:''}<span class="spacer"></span>
+      <span class="mut" style="font-size:11px">${esc(fmtData(r.data))}</span></div>
+    ${head}
+    <div class="table-wrap"><table class="camp-ins rc-tbl">
+      <thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Planejado</th><th class="num">Utilizado</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table></div>
+    ${editable?`<div style="padding:4px 12px 8px"><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}">+ insumo</button></div>`:''}
+    ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
+    ${retBlock}
+    <div class="rc-actions">${actions}</div></div>`;
 }
 V.recomendacao=function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
   const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
-  const regs=RECOM.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const regs=RECOM.registros.filter(r=>r.talhao===selId).map(recomNorm).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const tOpt=all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n}`:''}</option>`; }).join('');
-  const hoje=new Date().toISOString().slice(0,10);
-  const cards=regs.map(r=>`<div class="monit-card">
-    <div class="monit-card-top">${r.alvo?`<span class="monit-badge mc-outro">${esc(r.alvo)}</span>`:''}
-      <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}${r.janela?` · ${esc(r.janela)}`:''}</span>
-      <span class="spacer"></span>
-      <button class="btn btn-wa btn-sm" data-act="recomWa" data-id="${esc(r.id)}">📲 WhatsApp</button>
-      <button class="icon-btn del" data-act="recomDel" data-id="${esc(r.id)}">🗑</button></div>
-    <div class="recom-prod">${esc(r.produtos||'').split('\n').filter(Boolean).map(l=>`• ${esc(l.trim())}`).join('<br>')}</div>
-    <div class="monit-card-body">${r.calda?`<span>Calda: <b>${esc(r.calda)}</b> L/ha</span>`:''}${r.adjuvante?`<span>Adjuvante: ${esc(r.adjuvante)}</span>`:''}${r.cond?`<span>Condições: ${esc(r.cond)}</span>`:''}</div>
-    ${r.obs?`<div class="monit-obs mut">${esc(r.obs)}${r.resp?` · resp.: ${esc(r.resp)}`:''}</div>`:(r.resp?`<div class="monit-obs mut">resp.: ${esc(r.resp)}</div>`:'')}</div>`).join('')||'<div class="mut" style="padding:14px">Sem recomendações neste talhão ainda.</div>';
-  return `<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
+  const ops=opsDoTalhao(t);
+  const opBtns=ops.map(o=>`<button class="btn btn-outline btn-sm" data-act="recomFromOp" data-t="${esc(selId)}" data-op="${esc(o.key)}">➕ ${esc(o.op.nome)}${o.seq==='safrinha'?' · 2ª':''}</button>`).join('')
+    || '<span class="mut" style="font-size:12px">Sem operações planejadas neste talhão.</span>';
+  const cards=regs.map(r=>recomCard(r,t)).join('')
+    || '<div class="mut" style="padding:14px">Sem recomendações neste talhão ainda. Crie a partir de uma operação do planejamento ou em branco.</div>';
+  return `${prodDatalist()}<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
   <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div></div>
   <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
-  <div class="panel"><div class="panel-head"><h2>Nova recomendação</h2><span class="sub">produto · dose · janela · calda · condições</span></div>
-    <div class="app-grid" style="padding:14px 16px">
-      <label>Data<input type="date" id="recom-data" value="${hoje}"></label>
-      <label>Janela / período<input class="txt" id="recom-janela" placeholder="ex.: aplicar em até 3 dias"></label>
-      <label>Alvo<input class="txt" id="recom-alvo" list="monit-alvos" placeholder="ex.: Ferrugem-asiática"></label>
-      <label>Volume de calda (L/ha)<input class="cell" inputmode="decimal" id="recom-calda" placeholder="ex.: 120"></label>
-      <label>Adjuvante<input class="txt" id="recom-adj" placeholder="ex.: óleo mineral 0,5%"></label>
-      <label>Condições<input class="txt" id="recom-cond" placeholder="ex.: vento <10 km/h, UR >55%"></label>
-      <label>Responsável<input class="txt" id="recom-resp" placeholder="agrônomo"></label>
-    </div>
-    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Produtos e doses (um por linha — ex.: FOX XPRO — 0,5 L/ha)</label>
-      <textarea id="recom-produtos" rows="3" placeholder="FOX XPRO — 0,5 L/ha&#10;ÓLEO — 0,5 L/ha" style="width:100%"></textarea></div>
-    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Observações</label>
-      <input class="txt" id="recom-obs" placeholder="opcional" style="width:100%"></div>
-    <div style="padding:0 16px 14px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-act="recomSave" data-t="${esc(selId)}">Salvar recomendação</button></div>
-  </div>
-  <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} recomendação(ões)</span></div>
-    <div class="monit-list">${cards}</div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação pronta por WhatsApp para a equipe.</p>`;
+  <div class="panel"><div class="panel-head"><h2>Nova recomendação</h2><span class="sub">puxe do planejamento ou crie em branco</span></div>
+    <div class="bulk-add" style="flex-wrap:wrap;padding:12px 14px;gap:8px;align-items:center">
+      <span class="mut" style="font-size:12px;font-weight:700">Do planejamento:</span>${opBtns}
+      <span class="spacer"></span>
+      <button class="btn btn-primary btn-sm" data-act="recomNova" data-t="${esc(selId)}">✏️ Em branco</button>
+    </div></div>
+  <div class="panel"><div class="panel-head"><h2>Recomendações</h2><span class="sub">${regs.length} registro(s) · rascunho → enviada → retorno → aprovada</span></div>
+    <div class="recom-list">${cards}</div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação por WhatsApp, registre o retorno do operador e aprove para gerar o histórico da aplicação no talhão.</p>`;
 };
 
 /* ================= MAPA (pontos de monitoramento em satélite) ================= */
@@ -2783,7 +2935,8 @@ function _dtBRc(s){ if(!s) return ''; const p=String(s).slice(0,10).split('-'); 
 function _tsC(r){ return r.ts || (r.data?(Date.parse(String(r.data).slice(0,10)+'T12:00:00')||0):0); }
 function _diasC(ts){ if(!ts) return null; return Math.floor((Date.now()-ts)/86400000); }
 function _mmC(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }
-const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
+const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicacao:{lbl:'Aplicação',ico:'🚿',cor:'#2e7d32'},
+  monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
   chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
 // lista unificada de eventos de campo (mais recentes primeiro)
 function camposEventos(){
@@ -2794,8 +2947,16 @@ function camposEventos(){
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
   (STAND&&STAND.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
     titulo:'Contagem de stand'+(r.cultura?' · '+r.cultura:''), resumo:[r.pop?nf0.format(r.pop)+' pl/ha':'', r.pctMeta!=null?r.pctMeta+'% da meta':''].filter(Boolean).join(' · ')}));
-  (RECOM&&RECOM.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'recomendacao',talhao:r.talhao,
-    titulo:'Recomendação'+(r.janela?' · '+r.janela:''), resumo:[r.alvo, r.produtos].filter(Boolean).join(' — ')}));
+  (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0);
+    const prods=(r.itens||[]).filter(it=>it.produto).map(it=>it.produto).join(', ');
+    if(r.status==='aprovada'){
+      ev.push({ts:(r.aprov&&r.aprov.ts)||_tsC(r),data:r.data,tipo:'aplicacao',talhao:r.talhao,
+        titulo:'Aplicação'+(r.opNome?' · '+r.opNome:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
+    } else {
+      ev.push({ts:_tsC(r),data:r.data,tipo:'recomendacao',talhao:r.talhao,
+        titulo:'Recomendação'+(r.janela?' · '+r.janela:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
+    }
+  });
   talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key);
     if(r&&r.status==='concluido') ev.push({ts:_tsC(r),data:r.data||'',tipo:'operacao',talhao:t.id,
       titulo:'Operação concluída', resumo:(o.op&&o.op.nome)?o.op.nome:''}); }));
@@ -2870,22 +3031,23 @@ function filterTimeline(){
 }
 V.relatorios = function(){
   const tals=talhoesAll(), ev=camposEventos();
-  const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,oper:0,ult:0});
+  const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,apl:0,oper:0,ult:0});
   ev.forEach(e=>{ const b=byTal[e.talhao]; if(!b) return;
-    if(e.tipo==='monitoramento')b.monit++; else if(e.tipo==='stand')b.stand++; else if(e.tipo==='recomendacao')b.recom++; else if(e.tipo==='operacao')b.oper++;
+    if(e.tipo==='monitoramento')b.monit++; else if(e.tipo==='stand')b.stand++; else if(e.tipo==='recomendacao')b.recom++;
+    else if(e.tipo==='aplicacao')b.apl++; else if(e.tipo==='operacao')b.oper++;
     if((e.ts||0)>b.ult) b.ult=e.ts; });
   const rows=tals.map(t=>{ const b=byTal[t.id];
     return `<tr><td class="c-full"><b>${esc(t.id)}</b>${t.nome?` <span class="mut">${esc(t.nome)}</span>`:''}</td>
       <td class="num" data-th="Monit.">${b.monit||'·'}</td><td class="num" data-th="Stand">${b.stand||'·'}</td>
-      <td class="num" data-th="Recom.">${b.recom||'·'}</td><td class="num" data-th="Operações">${b.oper||'·'}</td>
+      <td class="num" data-th="Recom.">${b.recom||'·'}</td><td class="num" data-th="Aplic.">${b.apl||'·'}</td><td class="num" data-th="Operações">${b.oper||'·'}</td>
       <td class="num" data-th="Última atividade">${b.ult?_dtBRc(new Date(b.ult).toISOString().slice(0,10)):'—'}</td></tr>`;}).join('');
   const chuvaTot=(CHUVA&&CHUVA.registros||[]).reduce((a,r)=>a+_mmC(r.mm),0);
   return `
   <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
   <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
-    <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
-    <tbody>${rows||'<tr><td colspan="6" class="mut" style="padding:14px">Sem talhões.</td></tr>'}</tbody></table></div></div>`;
+    <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Aplic.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" class="mut" style="padding:14px">Sem talhões.</td></tr>'}</tbody></table></div></div>`;
 };
 function exportCampoCsv(){
   const ev=camposEventos();
@@ -3235,6 +3397,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.id==='pr-xlsx-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandleExcel(f); return; }
@@ -3340,8 +3503,20 @@ document.addEventListener('click',e=>{
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }
     else if(a.act==='standDel'){ if(ask('Remover esta contagem?')){ STAND.registros=STAND.registros.filter(r=>r.id!==a.id); saveStand(); route(); toast('Removido'); } }
-    else if(a.act==='recomSave'){ recomSave(a.t); }
+    else if(a.act==='recomFromOp'){ if(recomCreate(a.t,a.op)){ route(); toast('Recomendação criada do planejamento'); } }
+    else if(a.act==='recomNova'){ if(recomCreate(a.t,'')){ route(); toast('Recomendação em branco criada'); } }
+    else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
+    else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
+    else if(a.act==='recomEnviar'){ const r=recomById(a.id); if(r){ if(!(r.itens||[]).some(it=>it.produto)){ toast('Adicione ao menos um produto'); return; }
+      r.status='enviada'; r.enviadaTs=Date.now(); saveRecom(); recomWhats(a.id); route(); toast('Marcada como enviada ao operador'); } }
     else if(a.act==='recomWa'){ recomWhats(a.id); }
+    else if(a.act==='recomRetorno'){ const r=recomById(a.id); if(r){ r.status='retorno';
+      r.retorno={quem:(r.retorno&&r.retorno.quem)||'', obs:(r.retorno&&r.retorno.obs)||'', ts:Date.now()};
+      (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
+      saveRecom(); route(); toast('Registre o volume utilizado e aprove'); } }
+    else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; saveRecom(); route(); toast('Aplicação aprovada — no histórico do talhão'); } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; saveRecom(); route(); toast('Reaberta para edição'); } }
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
