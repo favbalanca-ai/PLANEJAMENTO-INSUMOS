@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-71';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-72';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1945,7 +1945,8 @@ function recomCreate(talId, opKey){
   const o=opKey?opsDoTalhao(t).find(x=>x.key===opKey):null;
   // DAP (dias após plantio) da operação -> janela e data sugerida (plantio + DAP)
   const dap=(o&&o.op&&o.op.dap)?+o.op.dap:0;
-  const plantio=((planoDe(talId)||{}).plantio)||'';
+  const pl=planoDe(talId)||{};
+  const plantio=(o&&o.seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
   let data=new Date().toISOString().slice(0,10), janela='';
   if(dap){ janela=dap+' dias após plantio';
     if(/^\d{4}-\d{2}-\d{2}/.test(plantio)){ const d=new Date(plantio.slice(0,10)+'T12:00:00'); d.setDate(d.getDate()+dap); data=d.toISOString().slice(0,10); } }

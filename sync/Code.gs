@@ -53,6 +53,7 @@ function readData(){
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
     planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:S(big[3][1]),
+      plantio_safrinha: (n >= 234 ? S(big[233][1]) : ''),   // B234 = data de plantio da safrinha (se houver)
       principal: readOpsArr(big, 10, Math.min(224, n), m), safrinha: readOpsArr(big, 238, Math.min(451, n), m) };
   });
 
@@ -280,7 +281,8 @@ function applyAddTalhao(ed, out){
     A.getRange(L, 10).setFormula(custoHaFormula(L)); A.getRange(L, 11).setFormula(custoTotalFormula(L));
     A.getRange(L, 10, 1, 2).setNumberFormat('R$ #,##0.00');
     var s = ss().getSheetByName(id) || ss().insertSheet(id);
-    var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento), produtividade:N(ed.produtividade) };
+    var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento), produtividade:N(ed.produtividade),
+      emp_safrinha:S(ed.emp_safrinha), prod_safrinha:N(ed.prod_safrinha), plantio:'', plantio_safrinha:'' };
     escreveAbaTalhao(s, t, ed.plano || { principal:[], safrinha:[] });
     out.ok++;
   } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
@@ -666,7 +668,9 @@ function gerarPlanilhaLimpa(){
   (D.talhoes || []).forEach(function(t){
     var s = nb.insertSheet(t.id);
     var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
-    escreveAbaTalhao(s, t, plano);
+    var t2 = { id:t.id, nome:t.nome, area:t.area, empreendimento:t.empreendimento, produtividade:t.produtividade,
+      emp_safrinha:t.emp_safrinha, prod_safrinha:t.prod_safrinha, plantio:plano.plantio || '', plantio_safrinha:plano.plantio_safrinha || '' };
+    escreveAbaTalhao(s, t2, plano);
   });
   garantirCustoAreaPlantioIn(A);   // custo R$/ha por talhão na ÁREA PLANTIO
 
@@ -800,22 +804,31 @@ function escreveAbaTalhao(s, t, plano){
 function talhaoMatrix(t, plano){
   var N = 451, v = [];
   for (var i = 0; i < N; i++) v.push(blank(TAL_COLS));
-  // ---- resumo no topo ----
-  v[0][1] = t.nome || t.id;                                   // B1 título
-  v[0][2] = 'Custo estimado R$/ha';                           // C1
-  v[0][3] = '=IFERROR(SUMIF($A10:$A224,"OPERA*",$H10:$H224)+SUMIF($A238:$A451,"OPERA*",$H238:$H451),0)'; // D1 total R$/ha
-  v[1][0] = 'Área:';            v[1][1] = t.area || 0;        // A2 · B2 (o app lê B2)
-  v[1][2] = 'Produtividade estimada Sc/ha'; v[1][3] = t.produtividade || 0;   // C2 · D2
-  v[2][0] = 'Empreendimento:';  v[2][1] = t.empreendimento || '';             // A3 · B3 (o app lê B3)
-  v[2][2] = 'Custo estimado por Sc'; v[2][3] = '=IFERROR($D$1/$D$2,0)';       // C3 · D3
-  v[3][0] = 'Data de plantio:';  v[3][1] = t.plantio || '';                   // A4 · B4 (o app lê B4)
-  // ---- cabeçalho da tabela (linha 9) — mesmas colunas do app ----
-  var hdr = ['OPERAÇÃO','DAP (dias)','CLASSE','PRODUTO','DOSE/HA','UN','PREÇO','CUSTO/HA','CUSTO TOTAL'];
-  for (var c = 0; c < TAL_COLS; c++) v[8][c] = hdr[c];
-  // ---- operações ----
+  // ---- 1ª safra: resumo (linhas 1-4, o app lê B2/B3/B4), cabeçalho (9) e operações (10-224) ----
+  resumoBloco(v, 1, (t.nome || t.id), t.area || 0, t.produtividade || 0, t.empreendimento || '', t.plantio || '', 10, 224);
+  hdrRow(v, 9);
   preencheOps(v, plano.principal || [], 10, 17);
-  preencheOps(v, plano.safrinha  || [], 238, 17);
+  // ---- safrinha: resumo (231-234), cabeçalho (237) e operações (238-451) ----
+  resumoBloco(v, 231, (t.nome || t.id) + ' — Safrinha', t.area || 0, t.prod_safrinha || 0, t.emp_safrinha || '', t.plantio_safrinha || '', 238, 451);
+  hdrRow(v, 237);
+  preencheOps(v, plano.safrinha || [], 238, 17);
   return v;
+}
+// bloco de resumo do talhão a partir da linha r (1-based): título, área, produtividade, cultura, plantio + custos
+function resumoBloco(v, r, titulo, area, prod, cultura, plantio, opR0, opR1){
+  v[r - 1][1] = titulo;                              // B{r} título
+  v[r - 1][2] = 'Custo estimado R$/ha';              // C{r}
+  v[r - 1][3] = '=IFERROR(SUMIF($A' + opR0 + ':$A' + opR1 + ',"OPERA*",$H' + opR0 + ':$H' + opR1 + '),0)';  // D{r} total R$/ha
+  v[r][0]     = 'Área:';                    v[r][1]     = area;                            // A{r+1} · B{r+1} (área)
+  v[r][2]     = 'Produtividade estimada Sc/ha'; v[r][3] = prod;                            // C{r+1} · D{r+1}
+  v[r + 1][0] = 'Empreendimento:';          v[r + 1][1] = cultura;                         // A{r+2} · B{r+2} (cultura)
+  v[r + 1][2] = 'Custo estimado por Sc';    v[r + 1][3] = '=IFERROR($D' + r + '/$D' + (r + 1) + ',0)';  // C{r+2} · D{r+2}
+  v[r + 2][0] = 'Data de plantio:';         v[r + 2][1] = plantio;                         // A{r+3} · B{r+3} (plantio)
+}
+// cabeçalho da tabela (mesmas colunas do app) na linha row
+function hdrRow(v, row){
+  var hdr = ['OPERAÇÃO','DAP (dias)','CLASSE','PRODUTO','DOSE/HA','UN','PREÇO','CUSTO/HA','CUSTO TOTAL'];
+  for (var c = 0; c < TAL_COLS; c++) v[row - 1][c] = hdr[c];
 }
 // 12 operações a cada BLK linhas; cabeçalho "OPERAÇÃO n" (+DAP) + itens + fórmulas de custo
 function preencheOps(v, ops, base, BLK){
@@ -845,24 +858,33 @@ function preencheOps(v, ops, base, BLK){
     }
   }
 }
-// visual: cabeçalho azul, moldura, formatos R$ e realce das operações
+// visual: cabeçalho azul, moldura, formatos R$ e realce das operações (1ª safra + safrinha)
 function estilizarTalhao(s){
   var AZUL = '#1f3864', CINZA = '#c9d3dd';
+  // resumos (1ª safra: 1-4 · safrinha: 231-234)
   s.getRange('B1').setFontWeight('bold').setFontSize(12);
+  s.getRange('B231').setFontWeight('bold').setFontSize(12);
   s.getRange('A2:A4').setFontWeight('bold');
+  s.getRange('A232:A234').setFontWeight('bold');
   s.getRange('C1:C3').setFontWeight('bold').setFontColor('#5a6f75');
+  s.getRange('C231:C233').setFontWeight('bold').setFontColor('#5a6f75');
   s.getRange('D1').setNumberFormat('R$ #,##0.00').setFontWeight('bold');
+  s.getRange('D231').setNumberFormat('R$ #,##0.00').setFontWeight('bold');
   s.getRange('D3').setNumberFormat('R$ #,##0.00');
+  s.getRange('D233').setNumberFormat('R$ #,##0.00');
+  // cabeçalhos azuis (linha 9 e 237)
   s.getRange('A9:I9').setBackground(AZUL).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+  s.getRange('A237:I237').setBackground(AZUL).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+  // formatos de número em toda a faixa de operações
   s.getRange('B10:B451').setNumberFormat('0');           // DAP (inteiro)
   s.getRange('E10:E451').setNumberFormat('#,##0.00');    // dose/ha
   s.getRange('G10:I451').setNumberFormat('R$ #,##0.00'); // preço / custo/ha / custo total
-  s.getRange('A9:I451').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
+  s.getRange('A9:I224').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
+  s.getRange('A237:I451').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
   try { s.setColumnWidth(4, 240); } catch (e) {}
   s.setFrozenRows(9);
-  var rng = s.getRange('A10:I451');
   var rule = SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied('=REGEXMATCH($A10,"^OPERA")')
-    .setBackground('#dce6f4').setBold(true).setRanges([rng]).build();
+    .setBackground('#dce6f4').setBold(true).setRanges([s.getRange('A10:I451')]).build();
   s.setConditionalFormatRules([rule]);
 }
