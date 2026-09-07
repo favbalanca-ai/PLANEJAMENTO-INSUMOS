@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-68';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-69';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3098,6 +3098,13 @@ function buildFieldEdits(){
     const prod=op.itens[ii].produto; if(!prod) continue;
     eds.push({type:'delitem',talhao:tid,tag,op:oi,produto:prod,rk:rk});
   }
+  // talhões criados no app (ainda não existem na planilha) -> cria lá: linha na ÁREA PLANTIO + aba com o plano
+  (OV.talhaoAdd||[]).forEach(t=>{ if(isBase(t.id)) return;
+    const ov=OV.talhao[t.id]||{};
+    eds.push({type:'addtalhao', talhao:t.id, nome:t.nome||'',
+      empreendimento:empDe(t)||'', area:+areaDe(t)||0, produtividade:+prodvDe(t)||0,
+      emp_safrinha:empSafDe(t)||'', prod_safrinha:(ov.prod_safrinha!=null?+ov.prod_safrinha:(+t.prod_safrinha||0)),
+      plano: snapshotPlano(t.id) }); });
   return eds;
 }
 function applyPulledData(d){
@@ -3236,11 +3243,14 @@ async function syncPush(opts){
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
     // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
-    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem');
-    if(res.fail===0 && (adds.length||dels.length)){
+    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao');
+    if(res.fail===0 && (adds.length||dels.length||newT.length)){
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
       dels.forEach(e=>{ if(e.rk) delete OV.itemRemoved[e.rk]; });
+      // talhão novo agora vive na planilha: remove a cópia local e limpa os overlays (virão da planilha)
+      newT.forEach(e=>{ const i=OV.talhaoAdd.findIndex(t=>t.id===e.talhao);
+        if(i>=0) OV.talhaoAdd.splice(i,1); cleanTalhaoOverlays(e.talhao); });
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
       syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;
