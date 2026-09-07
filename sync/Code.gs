@@ -51,8 +51,9 @@ function readData(){
     var s = sh(t.id); if (!s) return;
     var n = Math.min(451, s.getMaxRows());               // 1 leitura por aba (em vez de 4)
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
-    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]),
-      principal: readOpsArr(big, 10, Math.min(224, n)), safrinha: readOpsArr(big, 238, Math.min(451, n)) };
+    var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
+    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:S(big[3][1]),
+      principal: readOpsArr(big, 10, Math.min(224, n), m), safrinha: readOpsArr(big, 238, Math.min(451, n), m) };
   });
 
   var precos = {}, D = sh('DRE ORÇADA');
@@ -196,14 +197,35 @@ function writeFlatPrecos(list, safra){
   return { rows: rows.length - 1 };
 }
 
+// mapa das colunas da tabela do talhão, detectado pelo cabeçalho (linha 9), 0-based.
+// Suporta o layout NOVO (igual ao app) e o ORIGINAL (retrocompatível: Classe=B, Produto=C, Un=F, Dose=I).
+function talColMap(headerRow){
+  var m = { op:0, dap:-1, classe:1, produto:2, un:5, dose:8 };   // padrão = layout original
+  if (headerRow && headerRow.length){
+    for (var c = 0; c < headerRow.length; c++){
+      var h = S(headerRow[c]).toUpperCase();
+      if (h === 'CLASSE') m.classe = c;
+      else if (h === 'PRODUTO') m.produto = c;
+      else if (h === 'UN' || h === 'UNIDADE') m.un = c;
+      else if (h.indexOf('DOSE') === 0) m.dose = c;           // "DOSE" ou "DOSE/HA"
+      else if (h === 'DAP (DIAS)' || h === 'DAP') m.dap = c;  // dias após plantio (op)
+    }
+  }
+  return m;
+}
 // operações (com itens) de uma faixa de linhas — lê de um array já carregado (big[L-1])
-function readOpsArr(big, r0, r1){
+function readOpsArr(big, r0, r1, m){
+  m = m || { op:0, dap:-1, classe:1, produto:2, un:5, dose:8 };
   var ops = [], cur = null;
   for (var L = r0; L <= r1; L++){
     var row = big[L - 1]; if (!row) continue;
-    var a = S(row[0]), prod = S(row[2]);
-    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { nome:a, itens:[] }; ops.push(cur); }
-    if (prod && cur) cur.itens.push({ classe:S(row[1]), produto:prod, dose:N(row[8]), un:S(row[5]) });
+    var a = S(row[m.op]), prod = S(row[m.produto]);
+    if (a.toUpperCase().indexOf('OPERA') === 0){
+      cur = { nome:a, itens:[] };
+      if (m.dap >= 0){ var d = N(row[m.dap]); if (d > 0) cur.dap = d; }   // dias após plantio
+      ops.push(cur);
+    }
+    if (prod && cur) cur.itens.push({ classe:S(row[m.classe]), produto:prod, dose:N(row[m.dose]), un:S(row[m.un]) });
   }
   return ops;   // TODAS as operações (por posição) — inclusive as vazias; o app revela/preenche os slots livres
 }
@@ -322,63 +344,66 @@ function applyTalhao(tid, edits, out){
   if (!s){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba não encontrada: ' + tid); return; }
   var n = Math.min(451, s.getMaxRows());
   var vals = s.getRange(1, 1, n, 9).getValues();   // 0-based: linha L -> vals[L-1]
+  var m = talColMap(vals[8]);                      // colunas detectadas pelo cabeçalho
   var dirty = false;
   edits.forEach(function(ed){
     try {
       var faixa = ed.tag === 'S' ? [238, Math.min(451, n)] : [10, Math.min(224, n)];
-      var op = opByIndex(vals, faixa[0], faixa[1], ed.op);
+      var op = opByIndex(vals, faixa[0], faixa[1], ed.op, m);
       if (ed.type === 'dose'){
         if (!op) throw 'operação não encontrada (dose)';
-        var prodRows = op.body.filter(function(L){ return S(vals[L - 1][2]); });
+        var prodRows = op.body.filter(function(L){ return S(vals[L - 1][m.produto]); });
         var Ld = prodRows[ed.item]; if (!Ld) throw 'insumo não localizado (dose, item ' + ed.item + ')';
-        vals[Ld - 1][8] = ed.value; dirty = true; out.ok++;                 // I (col 9)
+        vals[Ld - 1][m.dose] = ed.value; dirty = true; out.ok++;
       } else if (ed.type === 'itemprod'){
         if (!op) throw 'operação não encontrada (troca)';
-        var Lp = findInOp(vals, op, ed.from); if (!Lp) throw 'insumo não localizado (troca): ' + ed.from;
-        vals[Lp - 1][2] = S(ed.to);                                         // C
-        if (ed.classe) vals[Lp - 1][1] = S(ed.classe);                      // B
+        var Lp = findInOp(vals, op, ed.from, m); if (!Lp) throw 'insumo não localizado (troca): ' + ed.from;
+        vals[Lp - 1][m.produto] = S(ed.to);
+        if (ed.classe) vals[Lp - 1][m.classe] = S(ed.classe);
         dirty = true; out.ok++;
       } else if (ed.type === 'additem'){
         if (!op) throw 'operação não encontrada (add)';
-        var La = findInOp(vals, op, ed.produto) || firstEmptyInOp(vals, op);
+        var La = findInOp(vals, op, ed.produto, m) || firstEmptyInOp(vals, op, m);
         if (!La) throw 'sem linha vazia na operação';
-        vals[La - 1][2] = S(ed.produto);                                    // C
-        vals[La - 1][8] = N(ed.dose);                                       // I
-        if (ed.classe) vals[La - 1][1] = S(ed.classe);                      // B
+        vals[La - 1][m.produto] = S(ed.produto);
+        vals[La - 1][m.dose] = N(ed.dose);
+        if (ed.classe) vals[La - 1][m.classe] = S(ed.classe);
         dirty = true; out.ok++;
       } else if (ed.type === 'delitem'){
-        if (op){ var Lx = findInOp(vals, op, ed.produto);
-          if (Lx){ vals[Lx - 1][1] = ''; vals[Lx - 1][2] = ''; vals[Lx - 1][8] = ''; dirty = true; } }
+        if (op){ var Lx = findInOp(vals, op, ed.produto, m);
+          if (Lx){ vals[Lx - 1][m.classe] = ''; vals[Lx - 1][m.produto] = ''; vals[Lx - 1][m.dose] = ''; dirty = true; } }
         out.ok++;                                                           // idempotente
       } else { throw 'tipo desconhecido p/ talhão: ' + ed.type; }
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
   });
   if (dirty){
-    var wr0 = 10, wn = n - wr0 + 1;                 // só as faixas das operações (não toca em B2/B3)
-    var bc = [], ii = [];
-    for (var L = wr0; L <= n; L++){ bc.push([vals[L - 1][1], vals[L - 1][2]]); ii.push([vals[L - 1][8]]); }
-    s.getRange(wr0, 2, wn, 2).clearDataValidations();   // tira validações de B:C do bloco de uma vez
-    s.getRange(wr0, 2, wn, 2).setValues(bc);            // B:C
-    s.getRange(wr0, 9, wn, 1).setValues(ii);            // I (dose) — D fica intacta (fórmula)
+    // grava só as colunas Classe/Produto (contíguas: produto = classe+1) e Dose — não toca nas fórmulas
+    var wr0 = 10, wn = n - wr0 + 1, cCla = m.classe + 1, cDose = m.dose + 1;
+    var cp = [], dz = [];
+    for (var L = wr0; L <= n; L++){ cp.push([vals[L - 1][m.classe], vals[L - 1][m.produto]]); dz.push([vals[L - 1][m.dose]]); }
+    s.getRange(wr0, cCla, wn, 2).clearDataValidations();
+    s.getRange(wr0, cCla, wn, 2).setValues(cp);
+    s.getRange(wr0, cDose, wn, 1).setValues(dz);
   }
 }
 
 // operação opIdx (por POSIÇÃO — inclui as vazias, igual ao app) dentro da faixa, no array em memória
-function opByIndex(vals, r0, r1, opIdx){
+function opByIndex(vals, r0, r1, opIdx, m){
+  m = m || { op:0, produto:2 };
   var blocks = [], cur = null;
   for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (!row) continue;
-    var a = S(row[0]);
+    var a = S(row[m.op]);
     if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
-    else if (cur){ cur.body.push(L); if (S(row[2])) cur.has = true; }
+    else if (cur){ cur.body.push(L); if (S(row[m.produto])) cur.has = true; }
   }
   return blocks[opIdx] || null;
 }
-function findInOp(vals, op, produto){
-  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (S(vals[L - 1][2]) === S(produto)) return L; }
+function findInOp(vals, op, produto, m){
+  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (S(vals[L - 1][m.produto]) === S(produto)) return L; }
   return 0;
 }
-function firstEmptyInOp(vals, op){
-  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (!S(vals[L - 1][2])) return L; }
+function firstEmptyInOp(vals, op, m){
+  for (var j = 0; j < op.body.length; j++){ var L = op.body[j]; if (!S(vals[L - 1][m.produto])) return L; }
   return 0;
 }
 
@@ -758,15 +783,13 @@ function garantirCustoAreaPlantioIn(A){
 }
 // versão para a planilha em uso (bound)
 function garantirCustoAreaPlantio(){ garantirCustoAreaPlantioIn(sh('ÁREA PLANTIO')); }
-/* Monta a aba de um talhão no MESMO layout visual do original:
-   - Resumo no topo (Área, Produtividade, Cultura, Custo estimado R$/ha, R$/Sc)
-   - Cabeçalho azul na linha 9 (Classe, Produto, Ingrediente Ativo, Unidade, Dose,
-     Total, Custo/ha, Valor total…)
-   - Operações nas faixas do app (10..224 principal · 238..451 safrinha), com
-     subtotais por operação e fórmulas de custo que puxam o preço do PORTIFÓLIO.
-   O app continua lendo o que precisa (B2=área, B3=cultura, A=operação, B=classe,
-   C=produto, F=unidade, I=dose). */
-var TAL_COLS = 12;
+/* Monta a aba de um talhão com as MESMAS colunas do app + resumo e custos:
+   A=OPERAÇÃO · B=DAP (dias) · C=CLASSE · D=PRODUTO · E=DOSE/HA · F=UN ·
+   G=PREÇO · H=CUSTO/HA · I=CUSTO TOTAL.
+   Resumo no topo (Área, Produtividade, Cultura, Data de plantio, Custo R$/ha e R$/Sc).
+   O app lê pelo cabeçalho (talColMap): B2=área, B3=cultura, B4=plantio, A=operação,
+   B(op)=DAP, C=classe, D=produto, E=dose, F=unidade. */
+var TAL_COLS = 9;
 function escreveAbaTalhao(s, t, plano){
   if (s.getMaxRows() < 451) s.insertRowsAfter(s.getMaxRows(), 451 - s.getMaxRows());
   if (s.getMaxColumns() < TAL_COLS) s.insertColumnsAfter(s.getMaxColumns(), TAL_COLS - s.getMaxColumns());
@@ -780,49 +803,49 @@ function talhaoMatrix(t, plano){
   // ---- resumo no topo ----
   v[0][1] = t.nome || t.id;                                   // B1 título
   v[0][2] = 'Custo estimado R$/ha';                           // C1
-  v[0][3] = '=IFERROR(SUMIF($A10:$A224,"OPERA*",$K10:$K224)+SUMIF($A238:$A451,"OPERA*",$K238:$K451),0)'; // D1 total R$/ha
+  v[0][3] = '=IFERROR(SUMIF($A10:$A224,"OPERA*",$H10:$H224)+SUMIF($A238:$A451,"OPERA*",$H238:$H451),0)'; // D1 total R$/ha
   v[1][0] = 'Área:';            v[1][1] = t.area || 0;        // A2 · B2 (o app lê B2)
   v[1][2] = 'Produtividade estimada Sc/ha'; v[1][3] = t.produtividade || 0;   // C2 · D2
   v[2][0] = 'Empreendimento:';  v[2][1] = t.empreendimento || '';             // A3 · B3 (o app lê B3)
   v[2][2] = 'Custo estimado por Sc'; v[2][3] = '=IFERROR($D$1/$D$2,0)';       // C3 · D3
-  v[3][0] = 'Data de plantio:';                              // A4
-  // ---- cabeçalho da tabela (linha 9) ----
-  var hdr = ['DAP da Operação','Classe','Produto','Ingrediente Ativo','Concentração','Unidade','Bula','Sugestão','Dose','Total','CUSTO/HA','VALOR TOTAL'];
+  v[3][0] = 'Data de plantio:';  v[3][1] = t.plantio || '';                   // A4 · B4 (o app lê B4)
+  // ---- cabeçalho da tabela (linha 9) — mesmas colunas do app ----
+  var hdr = ['OPERAÇÃO','DAP (dias)','CLASSE','PRODUTO','DOSE/HA','UN','PREÇO','CUSTO/HA','CUSTO TOTAL'];
   for (var c = 0; c < TAL_COLS; c++) v[8][c] = hdr[c];
   // ---- operações ----
   preencheOps(v, plano.principal || [], 10, 17);
   preencheOps(v, plano.safrinha  || [], 238, 17);
   return v;
 }
-// 12 operações a cada BLK linhas; cabeçalho "OPERAÇÃO n" + itens + fórmulas de custo
+// 12 operações a cada BLK linhas; cabeçalho "OPERAÇÃO n" (+DAP) + itens + fórmulas de custo
 function preencheOps(v, ops, base, BLK){
   for (var k = 0; k < 12; k++){
     var r = base + k * BLK, first = r + 1, last = r + BLK - 1;   // linhas 1-based
     var op = ops[k];
     var nome = (op && op.nome) ? String(op.nome) : '';
     if (nome.toUpperCase().indexOf('OPERA') !== 0) nome = 'OPERAÇÃO ' + (k + 1);
-    v[r - 1][0]  = nome;                                          // A operação
-    v[r - 1][10] = '=SUM($K' + first + ':$K' + last + ')';        // K subtotal custo/ha
-    v[r - 1][11] = '=SUM($L' + first + ':$L' + last + ')';        // L subtotal valor total
+    v[r - 1][0] = nome;                                           // A operação
+    v[r - 1][1] = (op && op.dap) ? op.dap : '';                   // B DAP (dias após plantio)
+    v[r - 1][7] = '=SUM($H' + first + ':$H' + last + ')';         // H subtotal custo/ha
+    v[r - 1][8] = '=SUM($I' + first + ':$I' + last + ')';         // I subtotal custo total
     var itens = (op && op.itens) || [];
     for (var i = 0; i < itens.length && i < BLK - 1; i++){
       var it = itens[i], rr = r + 1 + i;
-      v[rr - 1][1] = it.classe || '';   // B classe
-      v[rr - 1][2] = it.produto || '';  // C produto
+      v[rr - 1][2] = it.classe || '';   // C classe
+      v[rr - 1][3] = it.produto || '';  // D produto
+      v[rr - 1][4] = it.dose || 0;      // E dose/ha
       v[rr - 1][5] = it.un || '';       // F unidade
-      v[rr - 1][8] = it.dose || 0;      // I dose
     }
-    // fórmulas em TODAS as linhas de item da operação (guardadas por C vazio; dose/área tolerantes a texto)
+    // fórmulas nas linhas de item (guardadas por D vazio; dose/área tolerantes a texto)
     for (var L = first; L <= last; L++){
-      var dose = numCell('$I' + L), area = numCell('$B$2');
-      v[L - 1][3]  = '=IF($C' + L + '="","",IFERROR(VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$D,2,0),""))';                       // D ingrediente ativo
-      v[L - 1][9]  = '=IF($C' + L + '="","",' + dose + '*' + area + ')';                                                    // J total = dose × área
-      v[L - 1][10] = '=IF($C' + L + '="","",IFERROR(' + dose + '*VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$S,17,0),0))';           // K custo/ha = dose × preço
-      v[L - 1][11] = '=IF($C' + L + '="","",$K' + L + '*' + area + ')';                                                     // L valor total = custo/ha × área
+      var dose = numCell('$E' + L), area = numCell('$B$2');
+      v[L - 1][6] = '=IF($D' + L + '="","",IFERROR(VLOOKUP($D' + L + ',PORTIFÓLIO!$C:$S,17,0),0))';   // G preço unit.
+      v[L - 1][7] = '=IF($D' + L + '="","",' + dose + '*$G' + L + ')';                                // H custo/ha = dose × preço
+      v[L - 1][8] = '=IF($D' + L + '="","",$H' + L + '*' + area + ')';                                // I custo total = custo/ha × área
     }
   }
 }
-// visual do original: cabeçalho azul, moldura, formatos R$ e realce das operações
+// visual: cabeçalho azul, moldura, formatos R$ e realce das operações
 function estilizarTalhao(s){
   var AZUL = '#1f3864', CINZA = '#c9d3dd';
   s.getRange('B1').setFontWeight('bold').setFontSize(12);
@@ -830,14 +853,14 @@ function estilizarTalhao(s){
   s.getRange('C1:C3').setFontWeight('bold').setFontColor('#5a6f75');
   s.getRange('D1').setNumberFormat('R$ #,##0.00').setFontWeight('bold');
   s.getRange('D3').setNumberFormat('R$ #,##0.00');
-  s.getRange('A9:L9').setBackground(AZUL).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
-  s.getRange('I10:J451').setNumberFormat('#,##0.00');
-  s.getRange('K10:L451').setNumberFormat('R$ #,##0.00');
-  s.getRange('A9:L451').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
-  try { s.setColumnWidth(3, 230); s.setColumnWidth(4, 190); } catch (e) {}
+  s.getRange('A9:I9').setBackground(AZUL).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+  s.getRange('B10:B451').setNumberFormat('0');           // DAP (inteiro)
+  s.getRange('E10:E451').setNumberFormat('#,##0.00');    // dose/ha
+  s.getRange('G10:I451').setNumberFormat('R$ #,##0.00'); // preço / custo/ha / custo total
+  s.getRange('A9:I451').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
+  try { s.setColumnWidth(4, 240); } catch (e) {}
   s.setFrozenRows(9);
-  // realça as linhas de OPERAÇÃO (subtotais)
-  var rng = s.getRange('A10:L451');
+  var rng = s.getRange('A10:I451');
   var rule = SpreadsheetApp.newConditionalFormatRule()
     .whenFormulaSatisfied('=REGEXMATCH($A10,"^OPERA")')
     .setBackground('#dce6f4').setBold(true).setRanges([rng]).build();
