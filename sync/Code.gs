@@ -12,7 +12,13 @@
 function ss(){ return SpreadsheetApp.getActiveSpreadsheet(); }
 function sh(n){ return ss().getSheetByName(n); }
 function S(v){ return v == null ? '' : String(v).trim(); }
-function N(v){ var n = parseFloat(v); return isFinite(n) ? Math.round(n * 1e4) / 1e4 : 0; }
+// número tolerante a texto no padrão BR: "0,04" -> 0.04 ; "1.234,56" -> 1234.56
+function N(v){
+  if (typeof v === 'number') return isFinite(v) ? Math.round(v * 1e4) / 1e4 : 0;
+  var s = String(v == null ? '' : v).trim(); if (!s) return 0;
+  if (s.indexOf(',') >= 0) s = s.replace(/\./g, '').replace(',', '.');   // vírgula = decimal; ponto = milhar
+  var n = parseFloat(s); return isFinite(n) ? Math.round(n * 1e4) / 1e4 : 0;
+}
 
 /* ----------------------------- LEITURA ----------------------------- */
 function readData(){
@@ -686,6 +692,36 @@ function reformatarTalhoes(){
   try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
   return msg;
 }
+
+/* ------------------------- CORRIGIR DOSES (rodar à mão) -------------------------
+   Converte para NÚMERO as doses que ficaram como TEXTO (ex.: "0,04" ao colar da
+   planilha antiga), em todas as abas de talhão. Resolve o #VALUE! do Total/Custo e
+   faz o app ler a dose certa. Não reescreve a aba (mexe só na coluna Dose).
+   No editor, selecione "corrigirDoses" e Executar. */
+function corrigirDoses(){
+  var sheets = ss().getSheets(), total = 0, tocou = [];
+  sheets.forEach(function(s){ var up = s.getName().toUpperCase();
+    if (up.indexOf('TL') !== 0 && up.indexOf('NV') !== 0) return;
+    var c = corrigeColunaDose(s, 10, 224) + corrigeColunaDose(s, 238, 451);
+    if (c){ total += c; tocou.push(s.getName() + ' (' + c + ')'); }
+  });
+  var msg = total ? ('Doses corrigidas (texto→número): ' + total + ' — ' + tocou.join(', ')) : 'Nenhuma dose em texto encontrada.';
+  Logger.log(msg); try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
+  return msg;
+}
+function corrigeColunaDose(s, r0, r1){
+  var top = Math.min(r1, s.getMaxRows()); if (top < r0) return 0;
+  var rng = s.getRange(r0, 9, top - r0 + 1, 1), vals = rng.getValues(), changed = 0, dirty = false;
+  for (var i = 0; i < vals.length; i++){
+    var v = vals[i][0];
+    if (typeof v === 'string' && v.trim() !== ''){
+      var t = v.trim(), num = N(t);
+      if (num !== 0 || t === '0' || t === '0,0' || t === '0.0'){ vals[i][0] = num; changed++; dirty = true; }
+    }
+  }
+  if (dirty) rng.setValues(vals);
+  return changed;
+}
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
 // fórmula do preço automático (busca o produto no Banco de Preços; 0 se não achar)
@@ -699,6 +735,10 @@ function precoFormula(L){
 function consumoFormula(L){
   var t = "'" + MOV_SHEET + "'!";
   return '=SUMIFS(' + t + '$E:$E,' + t + '$C:$C,$C' + L + ',' + t + '$B:$B,"SAÍDA")';
+}
+// converte uma célula em número tolerando texto no padrão BR (fragmento de fórmula)
+function numCell(ref){
+  return '(IFERROR(VALUE(' + ref + '),IFERROR(VALUE(SUBSTITUTE(TO_TEXT(' + ref + '),".",",")),0)))';
 }
 // custo R$/ha do talhão da linha L da ÁREA PLANTIO (puxa o D1 da aba do talhão pelo id em A)
 function custoHaFormula(L){ return '=IFERROR(INDIRECT("\'"&$A' + L + '&"\'!$D$1"),0)'; }
@@ -772,12 +812,13 @@ function preencheOps(v, ops, base, BLK){
       v[rr - 1][5] = it.un || '';       // F unidade
       v[rr - 1][8] = it.dose || 0;      // I dose
     }
-    // fórmulas em TODAS as linhas de item da operação (guardadas por C vazio)
+    // fórmulas em TODAS as linhas de item da operação (guardadas por C vazio; dose/área tolerantes a texto)
     for (var L = first; L <= last; L++){
-      v[L - 1][3]  = '=IF($C' + L + '="","",IFERROR(VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$D,2,0),""))';                 // D ingrediente ativo
-      v[L - 1][9]  = '=IF($C' + L + '="","",$I' + L + '*$B$2)';                                                      // J total = dose × área
-      v[L - 1][10] = '=IF($C' + L + '="","",IFERROR($I' + L + '*VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$S,17,0),0))';     // K custo/ha = dose × preço
-      v[L - 1][11] = '=IF($C' + L + '="","",$K' + L + '*$B$2)';                                                      // L valor total = custo/ha × área
+      var dose = numCell('$I' + L), area = numCell('$B$2');
+      v[L - 1][3]  = '=IF($C' + L + '="","",IFERROR(VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$D,2,0),""))';                       // D ingrediente ativo
+      v[L - 1][9]  = '=IF($C' + L + '="","",' + dose + '*' + area + ')';                                                    // J total = dose × área
+      v[L - 1][10] = '=IF($C' + L + '="","",IFERROR(' + dose + '*VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$S,17,0),0))';           // K custo/ha = dose × preço
+      v[L - 1][11] = '=IF($C' + L + '="","",$K' + L + '*' + area + ')';                                                     // L valor total = custo/ha × área
     }
   }
 }
