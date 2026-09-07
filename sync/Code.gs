@@ -33,8 +33,8 @@ function readData(){
   if (A){
     var av = A.getRange(2, 1, Math.max(1, A.getLastRow() - 1), 9).getValues();
     for (var j = 0; j < av.length; j++){
-      var t = av[j], id = S(t[0]);
-      if (id.toUpperCase().indexOf('TL') !== 0) continue;
+      var t = av[j], id = S(t[0]), up = id.toUpperCase();
+      if (up.indexOf('TL') !== 0 && up.indexOf('NV') !== 0) continue;   // TL* da planilha + NV* criados no app
       talhoes.push({ id:id, nome:S(t[1]), empreendimento:S(t[2]), produtividade:N(t[3]),
         area:N(t[4]), emp_safrinha:S(t[7]), prod_safrinha:N(t[8]) });
     }
@@ -207,17 +207,40 @@ function readOpsArr(big, r0, r1){
    de reler a aba e gravar célula por célula a cada edição. Bem mais rápido.
    Não toca em colunas de fórmula (D na aba do talhão; B2/B3; preço na PORTIFÓLIO). */
 function applyEditsBatch(edits, out){
-  var byTalhao = {}, port = [], area = [];
+  var byTalhao = {}, port = [], area = [], novos = [];
   edits.forEach(function(ed){
     var t = ed.type;
-    if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'addprod') port.push(ed);
+    if (t === 'addtalhao') novos.push(ed);
+    else if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'addprod') port.push(ed);
     else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
     else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
     else { out.fail++; if (out.msgs.length < 10) out.msgs.push('tipo/sem talhão: ' + t); }
   });
+  novos.forEach(function(ed){ applyAddTalhao(ed, out); });   // cria talhões antes das demais edições
   if (port.length) applyPortifolio(port, out);
   if (area.length) applyAreaPlantio(area, out);
   for (var tid in byTalhao) applyTalhao(tid, byTalhao[tid], out);
+}
+
+// cria (ou atualiza) um talhão criado no app: linha na ÁREA PLANTIO + aba do talhão com o plano
+function applyAddTalhao(ed, out){
+  try {
+    var id = S(ed.talhao); if (!id) throw 'addtalhao sem id';
+    var A = sh('ÁREA PLANTIO'); if (!A) throw 'aba ÁREA PLANTIO não encontrada';
+    var last = A.getLastRow(), L = 0;
+    if (last >= 2){ var idv = A.getRange(2, 1, last - 1, 1).getValues();
+      for (var i = 0; i < idv.length; i++){ if (S(idv[i][0]) === id){ L = 2 + i; break; } } }
+    if (!L) L = Math.max(last, 1) + 1;
+    A.getRange(L, 1, 1, 9).clearDataValidations();
+    A.getRange(L, 1, 1, 9).setValues([[id, S(ed.nome), S(ed.empreendimento), N(ed.produtividade), N(ed.area), '', '', S(ed.emp_safrinha), N(ed.prod_safrinha)]]);
+    var s = ss().getSheetByName(id) || ss().insertSheet(id);
+    if (s.getMaxRows() < 451) s.insertRowsAfter(s.getMaxRows(), 451 - s.getMaxRows());
+    if (s.getMaxColumns() < 9) s.insertColumnsAfter(s.getMaxColumns(), 9 - s.getMaxColumns());
+    var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento) };
+    s.getRange(1, 1, 451, 9).clearContent();
+    s.getRange(1, 1, 451, 9).setValues(buildTalhaoValues(t, ed.plano || { principal:[], safrinha:[] }));
+    out.ok++;
+  } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
 }
 
 // PORTIFÓLIO: estoque (T=20) e EM PEDIDO em bloco; preço (S=19) individual (é fórmula/import)
