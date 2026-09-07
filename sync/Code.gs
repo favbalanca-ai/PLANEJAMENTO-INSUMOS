@@ -77,6 +77,14 @@ function readData(){
    na aba "RETORNOS APP". O app puxa esses retornos, preenche o "Utilizado" da recomendação
    (casando pelo id) e o Adm aprova para o histórico. */
 var RETORNOS_SHEET = 'RETORNOS APP';
+var MOV_SHEET = 'MOVIMENTAÇÃO ESTOQUE';   // razão de estoque: entradas (módulo futuro) e saídas (recomendações)
+// registra 1 linha no razão de estoque (cria a aba se faltar)
+function logMovimentacao(tipo, produto, un, qtd, origem, obs){
+  var s = ss().getSheetByName(MOV_SHEET);
+  if (!s){ s = ss().insertSheet(MOV_SHEET);
+    s.appendRow(['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']); s.setFrozenRows(1); }
+  s.appendRow([new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+}
 function retornosSheet(){
   var s = ss().getSheetByName(RETORNOS_SHEET);
   if (!s){ s = ss().insertSheet(RETORNOS_SHEET);
@@ -98,9 +106,12 @@ function readRetornos(){
 }
 function writeRetorno(ret){
   var s = retornosSheet(), when = new Date(), n = 0, itens = (ret && ret.itens) || [];
+  var origem = 'Recom ' + S(ret.id) + (ret.talhao ? ' · ' + S(ret.talhao) : '');
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
     s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), S(it.produto), S(it.un), N(it.plan), N(it.real), S(ret.obs)]);
+    // saída de estoque pela recomendação (só produtos com volume utilizado)
+    if (S(it.produto) && N(it.real) > 0) logMovimentacao('SAÍDA', it.produto, it.un, it.real, origem, S(ret.operador));
     n++;
   }
   if (!n){ s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), '', '', 0, 0, S(ret.obs)]); }
@@ -527,28 +538,49 @@ function enxugarVazios(){
    3) Implantar > Nova implantação > App da Web (Executar como: Você | Acesso: Qualquer
       pessoa) > copie a URL /exec.
    4) No app, tela Sincronizar, troque a URL. Pronto.
-   Obs.: os preços entram como VALOR atual (números). Se quiser manter o link automático
-   com o "Banco de Preços", me avise que eu troco por fórmula VLOOKUP/IMPORTRANGE. */
+
+   Preço AUTOMÁTICO: a coluna VALOR do PORTIFÓLIO puxa o preço do "Banco de Preços"
+   por fórmula (VLOOKUP + IMPORTRANGE). Na 1ª vez o Google mostra "#REF! — Permitir
+   acesso" numa célula: clique em Permitir uma vez e os preços aparecem.
+
+   Controle de estoque (base pronta):
+   - PORTIFÓLIO ganha ESTOQUE (entradas/manual), CONSUMO (soma das saídas das
+     recomendações) e SALDO (= ESTOQUE - CONSUMO).
+   - Aba "MOVIMENTAÇÃO ESTOQUE" = razão de entradas/saídas. As SAÍDAS já entram
+     sozinhas quando o operador dá baixa numa recomendação. As ENTRADAS ficam para
+     o módulo de compras (futuro) — a estrutura já está pronta. */
 function gerarPlanilhaLimpa(){
   var D = readData();
   var nb = SpreadsheetApp.create('Planejamento Safra ' + (D.safra || '') + ' — LIMPA');
   var lixo = nb.getSheets()[0];   // aba padrão, removida no final
 
+  // ---- MOVIMENTAÇÃO ESTOQUE (razão de entradas/saídas) — criada antes p/ as fórmulas do PORTIFÓLIO ----
+  var MV = nb.insertSheet(MOV_SHEET);
+  MV.getRange(1, 1, 1, 7).setValues([['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']]);
+  MV.setFrozenRows(1);
+
   // ---- PORTIFÓLIO (cabeçalho na linha 3; dados a partir da 4) ----
+  // S=VALOR (preço automático, do Banco de Preços) · T=ESTOQUE (entradas/manual) ·
+  // U=EM PEDIDO · V=CONSUMO (saídas somadas das recomendações) · W=SALDO (T-V)
   var P = nb.insertSheet('PORTIFÓLIO');
   P.getRange(1, 1).setValue('PORTIFÓLIO — produtos');
-  var phdr = blank(21);
+  var phdr = blank(23);
   phdr[0]='EMPRESA'; phdr[1]='CLASSE'; phdr[2]='PRODUTO'; phdr[3]='ATIVO'; phdr[5]='UN';
-  phdr[18]='VALOR'; phdr[19]='ESTOQUE'; phdr[20]='EM PEDIDO';
-  P.getRange(3, 1, 1, 21).setValues([phdr]);
+  phdr[18]='VALOR'; phdr[19]='ESTOQUE'; phdr[20]='EM PEDIDO'; phdr[21]='CONSUMO (recom.)'; phdr[22]='SALDO';
+  P.getRange(3, 1, 1, 23).setValues([phdr]);
   var prows = [];
-  (D.produtos || []).forEach(function(p){
-    var row = blank(21);
+  (D.produtos || []).forEach(function(p, i){
+    var L = 4 + i;                              // linha 1-based na planilha
+    var row = blank(23);
     row[0]=p.empresa||''; row[1]=p.classe||''; row[2]=p.produto||''; row[3]=p.ativos||''; row[5]=p.un||'';
-    row[18]=p.preco||0; row[19]=p.estoque||0; row[20]=p.pedido||0;
+    row[18]=precoFormula(L);                    // S VALOR — fórmula (preço automático)
+    row[19]=p.estoque||0;                       // T ESTOQUE
+    row[20]=p.pedido||0;                        // U EM PEDIDO
+    row[21]=consumoFormula(L);                  // V CONSUMO (saídas das recomendações)
+    row[22]='=$T'+L+'-$V'+L;                    // W SALDO = estoque - consumo
     prows.push(row);
   });
-  if (prows.length) P.getRange(4, 1, prows.length, 21).setValues(prows);
+  if (prows.length) P.getRange(4, 1, prows.length, 23).setValues(prows);
   P.setFrozenRows(3);
 
   // ---- ÁREA PLANTIO (cabeçalho na linha 1; dados a partir da 2) ----
@@ -599,6 +631,18 @@ function gerarPlanilhaLimpa(){
 }
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
+// fórmula do preço automático (busca o produto no Banco de Preços; 0 se não achar)
+function precoFormula(L){
+  var faixa = PRECOS_DB_ID
+    ? 'IMPORTRANGE("' + PRECOS_DB_ID + '","PREÇOS!$A:$B")'
+    : "'PREÇOS'!$A:$B";
+  return '=IFERROR(VLOOKUP($C' + L + ',' + faixa + ',2,FALSE),0)';
+}
+// fórmula do consumo (soma as SAÍDAS do razão de estoque para o produto da linha)
+function consumoFormula(L){
+  var t = "'" + MOV_SHEET + "'!";
+  return '=SUMIFS(' + t + '$E:$E,' + t + '$C:$C,$C' + L + ',' + t + '$B:$B,"SAÍDA")';
+}
 // matriz 451x9 de uma aba de talhão, com as operações nas faixas do app
 function buildTalhaoValues(t, plano){
   var N = 451, W = 9, v = [];
