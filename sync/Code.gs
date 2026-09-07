@@ -234,11 +234,8 @@ function applyAddTalhao(ed, out){
     A.getRange(L, 1, 1, 9).clearDataValidations();
     A.getRange(L, 1, 1, 9).setValues([[id, S(ed.nome), S(ed.empreendimento), N(ed.produtividade), N(ed.area), '', '', S(ed.emp_safrinha), N(ed.prod_safrinha)]]);
     var s = ss().getSheetByName(id) || ss().insertSheet(id);
-    if (s.getMaxRows() < 451) s.insertRowsAfter(s.getMaxRows(), 451 - s.getMaxRows());
-    if (s.getMaxColumns() < 9) s.insertColumnsAfter(s.getMaxColumns(), 9 - s.getMaxColumns());
-    var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento) };
-    s.getRange(1, 1, 451, 9).clearContent();
-    s.getRange(1, 1, 451, 9).setValues(buildTalhaoValues(t, ed.plano || { principal:[], safrinha:[] }));
+    var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento), produtividade:N(ed.produtividade) };
+    escreveAbaTalhao(s, t, ed.plano || { principal:[], safrinha:[] });
     out.ok++;
   } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
 }
@@ -616,12 +613,11 @@ function gerarPlanilhaLimpa(){
   if (arows.length) A.getRange(2, 1, arows.length, 9).setValues(arows);
   A.setFrozenRows(1);
 
-  // ---- ABAS DOS TALHÕES (B2=área, B3=cultura; operações 10..224 e 238..451) ----
+  // ---- ABAS DOS TALHÕES (layout do original; B2=área, B3=cultura; operações 10..224 e 238..451) ----
   (D.talhoes || []).forEach(function(t){
     var s = nb.insertSheet(t.id);
     var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
-    s.getRange(1, 1, 451, 9).setValues(buildTalhaoValues(t, plano));
-    s.setFrozenRows(3);
+    escreveAbaTalhao(s, t, plano);
   });
 
   // ---- DRE ORÇADA (o app só lê: nomes na linha 2, preço de venda na linha 7) ----
@@ -652,6 +648,24 @@ function gerarPlanilhaLimpa(){
   try { ss().toast('Planilha limpa criada! Link no Log (menu Execuções) ou abra: ' + url, 'Pronto', 20); } catch (e) {}
   return url;
 }
+
+/* ------------------------- REFORMATAR TALHÕES (rodar à mão) -------------------------
+   Reaplica o layout bonito (resumo no topo, cabeçalho azul, colunas e fórmulas de
+   custo, subtotais) em TODAS as abas de talhão desta planilha, sem criar outra.
+   Use na planilha limpa que já está em uso. Preserva os dados (lê o plano de cada
+   aba antes de reescrever). No editor, selecione "reformatarTalhoes" e Executar. */
+function reformatarTalhoes(){
+  var D = readData(), n = 0, nomes = [];
+  (D.talhoes || []).forEach(function(t){
+    var s = ss().getSheetByName(t.id); if (!s) return;
+    var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
+    escreveAbaTalhao(s, t, plano); n++; nomes.push(t.id);
+  });
+  var msg = 'Reformatado(s) ' + n + ' talhão(ões): ' + nomes.join(', ');
+  Logger.log(msg);
+  try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
+  return msg;
+}
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
 // fórmula do preço automático (busca o produto no Banco de Preços; 0 se não achar)
@@ -666,26 +680,52 @@ function consumoFormula(L){
   var t = "'" + MOV_SHEET + "'!";
   return '=SUMIFS(' + t + '$E:$E,' + t + '$C:$C,$C' + L + ',' + t + '$B:$B,"SAÍDA")';
 }
-// matriz 451x9 de uma aba de talhão, com as operações nas faixas do app
-function buildTalhaoValues(t, plano){
-  var N = 451, W = 9, v = [];
-  for (var i = 0; i < N; i++) v.push(blank(W));
-  v[0][0] = t.id + ' — ' + (t.nome || '');
-  v[1][0] = 'ÁREA (ha):';  v[1][1] = t.area || 0;               // B2
-  v[2][0] = 'CULTURA:';    v[2][1] = t.empreendimento || '';    // B3
-  fillOps(v, plano.principal || [], 10, 17);                    // 1ª safra: linhas 10..
-  fillOps(v, plano.safrinha  || [], 238, 17);                   // safrinha: linhas 238..
+/* Monta a aba de um talhão no MESMO layout visual do original:
+   - Resumo no topo (Área, Produtividade, Cultura, Custo estimado R$/ha, R$/Sc)
+   - Cabeçalho azul na linha 9 (Classe, Produto, Ingrediente Ativo, Unidade, Dose,
+     Total, Custo/ha, Valor total…)
+   - Operações nas faixas do app (10..224 principal · 238..451 safrinha), com
+     subtotais por operação e fórmulas de custo que puxam o preço do PORTIFÓLIO.
+   O app continua lendo o que precisa (B2=área, B3=cultura, A=operação, B=classe,
+   C=produto, F=unidade, I=dose). */
+var TAL_COLS = 12;
+function escreveAbaTalhao(s, t, plano){
+  if (s.getMaxRows() < 451) s.insertRowsAfter(s.getMaxRows(), 451 - s.getMaxRows());
+  if (s.getMaxColumns() < TAL_COLS) s.insertColumnsAfter(s.getMaxColumns(), TAL_COLS - s.getMaxColumns());
+  s.getRange(1, 1, 451, TAL_COLS).clearContent();
+  s.getRange(1, 1, 451, TAL_COLS).setValues(talhaoMatrix(t, plano));
+  estilizarTalhao(s);
+}
+function talhaoMatrix(t, plano){
+  var N = 451, v = [];
+  for (var i = 0; i < N; i++) v.push(blank(TAL_COLS));
+  // ---- resumo no topo ----
+  v[0][1] = t.nome || t.id;                                   // B1 título
+  v[0][2] = 'Custo estimado R$/ha';                           // C1
+  v[0][3] = '=IFERROR(SUMIF($A10:$A224,"OPERA*",$K10:$K224)+SUMIF($A238:$A451,"OPERA*",$K238:$K451),0)'; // D1 total R$/ha
+  v[1][0] = 'Área:';            v[1][1] = t.area || 0;        // A2 · B2 (o app lê B2)
+  v[1][2] = 'Produtividade estimada Sc/ha'; v[1][3] = t.produtividade || 0;   // C2 · D2
+  v[2][0] = 'Empreendimento:';  v[2][1] = t.empreendimento || '';             // A3 · B3 (o app lê B3)
+  v[2][2] = 'Custo estimado por Sc'; v[2][3] = '=IFERROR($D$1/$D$2,0)';       // C3 · D3
+  v[3][0] = 'Data de plantio:';                              // A4
+  // ---- cabeçalho da tabela (linha 9) ----
+  var hdr = ['DAP da Operação','Classe','Produto','Ingrediente Ativo','Concentração','Unidade','Bula','Sugestão','Dose','Total','CUSTO/HA','VALOR TOTAL'];
+  for (var c = 0; c < TAL_COLS; c++) v[8][c] = hdr[c];
+  // ---- operações ----
+  preencheOps(v, plano.principal || [], 10, 17);
+  preencheOps(v, plano.safrinha  || [], 238, 17);
   return v;
 }
-// escreve 12 operações a cada BLK linhas (cabeçalho "OPERAÇÃO n" em A + itens B/C/F/I)
-function fillOps(v, ops, base, BLK){
+// 12 operações a cada BLK linhas; cabeçalho "OPERAÇÃO n" + itens + fórmulas de custo
+function preencheOps(v, ops, base, BLK){
   for (var k = 0; k < 12; k++){
-    var r = base + k * BLK;                    // linha 1-based do cabeçalho
+    var r = base + k * BLK, first = r + 1, last = r + BLK - 1;   // linhas 1-based
     var op = ops[k];
-    // o app só reconhece a operação se a coluna A começar com "OPERA" — garante isso
     var nome = (op && op.nome) ? String(op.nome) : '';
     if (nome.toUpperCase().indexOf('OPERA') !== 0) nome = 'OPERAÇÃO ' + (k + 1);
-    v[r - 1][0] = nome;                         // A
+    v[r - 1][0]  = nome;                                          // A operação
+    v[r - 1][10] = '=SUM($K' + first + ':$K' + last + ')';        // K subtotal custo/ha
+    v[r - 1][11] = '=SUM($L' + first + ':$L' + last + ')';        // L subtotal valor total
     var itens = (op && op.itens) || [];
     for (var i = 0; i < itens.length && i < BLK - 1; i++){
       var it = itens[i], rr = r + 1 + i;
@@ -694,5 +734,33 @@ function fillOps(v, ops, base, BLK){
       v[rr - 1][5] = it.un || '';       // F unidade
       v[rr - 1][8] = it.dose || 0;      // I dose
     }
+    // fórmulas em TODAS as linhas de item da operação (guardadas por C vazio)
+    for (var L = first; L <= last; L++){
+      v[L - 1][3]  = '=IF($C' + L + '="","",IFERROR(VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$D,2,0),""))';                 // D ingrediente ativo
+      v[L - 1][9]  = '=IF($C' + L + '="","",$I' + L + '*$B$2)';                                                      // J total = dose × área
+      v[L - 1][10] = '=IF($C' + L + '="","",IFERROR($I' + L + '*VLOOKUP($C' + L + ',PORTIFÓLIO!$C:$S,17,0),0))';     // K custo/ha = dose × preço
+      v[L - 1][11] = '=IF($C' + L + '="","",$K' + L + '*$B$2)';                                                      // L valor total = custo/ha × área
+    }
   }
+}
+// visual do original: cabeçalho azul, moldura, formatos R$ e realce das operações
+function estilizarTalhao(s){
+  var AZUL = '#1f3864', CINZA = '#c9d3dd';
+  s.getRange('B1').setFontWeight('bold').setFontSize(12);
+  s.getRange('A2:A4').setFontWeight('bold');
+  s.getRange('C1:C3').setFontWeight('bold').setFontColor('#5a6f75');
+  s.getRange('D1').setNumberFormat('R$ #,##0.00').setFontWeight('bold');
+  s.getRange('D3').setNumberFormat('R$ #,##0.00');
+  s.getRange('A9:L9').setBackground(AZUL).setFontColor('#ffffff').setFontWeight('bold').setHorizontalAlignment('center').setWrap(true);
+  s.getRange('I10:J451').setNumberFormat('#,##0.00');
+  s.getRange('K10:L451').setNumberFormat('R$ #,##0.00');
+  s.getRange('A9:L451').setBorder(true, true, true, true, true, true, CINZA, SpreadsheetApp.BorderStyle.SOLID);
+  try { s.setColumnWidth(3, 230); s.setColumnWidth(4, 190); } catch (e) {}
+  s.setFrozenRows(9);
+  // realça as linhas de OPERAÇÃO (subtotais)
+  var rng = s.getRange('A10:L451');
+  var rule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=REGEXMATCH($A10,"^OPERA")')
+    .setBackground('#dce6f4').setBold(true).setRanges([rng]).build();
+  s.setConditionalFormatRules([rule]);
 }
