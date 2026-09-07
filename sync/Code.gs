@@ -514,3 +514,118 @@ function enxugarVazios(){
   try { ss().toast(msg, 'Pronto', 8); } catch (e) {}
   return msg;
 }
+
+/* ------------------------- GERAR PLANILHA LIMPA (rodar à mão) -------------------------
+   Cria uma planilha NOVA, enxuta e 100% no formato do app, já preenchida com os dados
+   ATUAIS (produtos, talhões, planos, máquinas, preços de venda). Fica só com as abas que
+   o app usa e nas posições certas.
+
+   Como usar:
+   1) No editor do Apps Script, selecione "gerarPlanilhaLimpa" e clique em Executar.
+      (autorize na 1ª vez). O link da nova planilha aparece no Log e num aviso (toast).
+   2) Abra a nova planilha > Extensões > Apps Script > cole ESTE MESMO Code.gs > Salvar.
+   3) Implantar > Nova implantação > App da Web (Executar como: Você | Acesso: Qualquer
+      pessoa) > copie a URL /exec.
+   4) No app, tela Sincronizar, troque a URL. Pronto.
+   Obs.: os preços entram como VALOR atual (números). Se quiser manter o link automático
+   com o "Banco de Preços", me avise que eu troco por fórmula VLOOKUP/IMPORTRANGE. */
+function gerarPlanilhaLimpa(){
+  var D = readData();
+  var nb = SpreadsheetApp.create('Planejamento Safra ' + (D.safra || '') + ' — LIMPA');
+  var lixo = nb.getSheets()[0];   // aba padrão, removida no final
+
+  // ---- PORTIFÓLIO (cabeçalho na linha 3; dados a partir da 4) ----
+  var P = nb.insertSheet('PORTIFÓLIO');
+  P.getRange(1, 1).setValue('PORTIFÓLIO — produtos');
+  var phdr = blank(21);
+  phdr[0]='EMPRESA'; phdr[1]='CLASSE'; phdr[2]='PRODUTO'; phdr[3]='ATIVO'; phdr[5]='UN';
+  phdr[18]='VALOR'; phdr[19]='ESTOQUE'; phdr[20]='EM PEDIDO';
+  P.getRange(3, 1, 1, 21).setValues([phdr]);
+  var prows = [];
+  (D.produtos || []).forEach(function(p){
+    var row = blank(21);
+    row[0]=p.empresa||''; row[1]=p.classe||''; row[2]=p.produto||''; row[3]=p.ativos||''; row[5]=p.un||'';
+    row[18]=p.preco||0; row[19]=p.estoque||0; row[20]=p.pedido||0;
+    prows.push(row);
+  });
+  if (prows.length) P.getRange(4, 1, prows.length, 21).setValues(prows);
+  P.setFrozenRows(3);
+
+  // ---- ÁREA PLANTIO (cabeçalho na linha 1; dados a partir da 2) ----
+  var A = nb.insertSheet('ÁREA PLANTIO');
+  A.getRange(1, 1, 1, 9).setValues([['ID','NOME','CULTURA','PRODUTIV.','ÁREA (ha)','','','CULTURA SAFRINHA','PROD. SAFRINHA']]);
+  var arows = [];
+  (D.talhoes || []).forEach(function(t){
+    arows.push([t.id, t.nome||'', t.empreendimento||'', t.produtividade||0, t.area||0, '', '', t.emp_safrinha||'', t.prod_safrinha||0]);
+  });
+  if (arows.length) A.getRange(2, 1, arows.length, 9).setValues(arows);
+  A.setFrozenRows(1);
+
+  // ---- ABAS DOS TALHÕES (B2=área, B3=cultura; operações 10..224 e 238..451) ----
+  (D.talhoes || []).forEach(function(t){
+    var s = nb.insertSheet(t.id);
+    var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
+    s.getRange(1, 1, 451, 9).setValues(buildTalhaoValues(t, plano));
+    s.setFrozenRows(3);
+  });
+
+  // ---- DRE ORÇADA (o app só lê: nomes na linha 2, preço de venda na linha 7) ----
+  var DR = nb.insertSheet('DRE ORÇADA');
+  DR.getRange(2, 1).setValue('CULTURA');
+  DR.getRange(7, 1).setValue('PREÇO VENDA');
+  var emps = Object.keys(D.precos_cultura || {});
+  for (var i = 0; i < emps.length && i < 14; i++){
+    DR.getRange(2, 2 + i).setValue(emps[i]);
+    DR.getRange(7, 2 + i).setValue(D.precos_cultura[emps[i]] || 0);
+  }
+
+  // ---- CUSTO OPERAÇÃO (máquinas; cabeçalho na 1, dados a partir da 2) ----
+  var C = nb.insertSheet('CUSTO OPERAÇÃO');
+  C.getRange(1, 1, 1, 13).setValues([['','MÁQUINA','IMPLEMENTO','CONJUNTO','LARGURA','VELOC.','EFIC.','HA/H','L/H','HM/HA','L/HA','CUSTO HM/HA','R$/HM']]);
+  var crows = [];
+  (D.maquinas || []).forEach(function(m){
+    crows.push(['', m.maquina||'', m.implemento||'', m.conjunto||'', m.largura||0, m.velocidade||0, m.eficiencia||0,
+      m.ha_h||0, m.l_h||0, m.hm_ha||0, m.l_ha||0, m.custo_hm_ha||0, m.rs_hm||0]);
+  });
+  if (crows.length) C.getRange(2, 1, crows.length, 13).setValues(crows);
+  C.setFrozenRows(1);
+
+  try { nb.deleteSheet(lixo); } catch (e) {}
+
+  var url = nb.getUrl();
+  Logger.log('Planilha limpa criada: ' + url);
+  try { ss().toast('Planilha limpa criada! Link no Log (menu Execuções) ou abra: ' + url, 'Pronto', 20); } catch (e) {}
+  return url;
+}
+// array de n posições em branco
+function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
+// matriz 451x9 de uma aba de talhão, com as operações nas faixas do app
+function buildTalhaoValues(t, plano){
+  var N = 451, W = 9, v = [];
+  for (var i = 0; i < N; i++) v.push(blank(W));
+  v[0][0] = t.id + ' — ' + (t.nome || '');
+  v[1][0] = 'ÁREA (ha):';  v[1][1] = t.area || 0;               // B2
+  v[2][0] = 'CULTURA:';    v[2][1] = t.empreendimento || '';    // B3
+  fillOps(v, plano.principal || [], 10, 17);                    // 1ª safra: linhas 10..
+  fillOps(v, plano.safrinha  || [], 238, 17);                   // safrinha: linhas 238..
+  return v;
+}
+// escreve 12 operações a cada BLK linhas (cabeçalho "OPERAÇÃO n" em A + itens B/C/F/I)
+function fillOps(v, ops, base, BLK){
+  for (var k = 0; k < 12; k++){
+    var r = base + k * BLK;                    // linha 1-based do cabeçalho
+    var op = ops[k];
+    // o app só reconhece a operação se a coluna A começar com "OPERA" — garante isso
+    var nome = (op && op.nome) ? String(op.nome) : '';
+    if (nome.toUpperCase().indexOf('OPERA') !== 0) nome = 'OPERAÇÃO ' + (k + 1);
+    v[r - 1][0] = nome;                         // A
+    var itens = (op && op.itens) || [];
+    for (var i = 0; i < itens.length && i < BLK - 1; i++){
+      var it = itens[i], rr = r + 1 + i;
+      v[rr - 1][1] = it.classe || '';   // B classe
+      v[rr - 1][2] = it.produto || '';  // C produto
+      v[rr - 1][5] = it.un || '';       // F unidade
+      v[rr - 1][8] = it.dose || 0;      // I dose
+    }
+  }
+}
