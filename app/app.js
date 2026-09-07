@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-67';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-68';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1949,6 +1949,19 @@ function recomCreate(talId, opKey){
     produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
   RECOM.registros.push(r); saveRecom(); return r;
 }
+// Operação de Campo → reaproveita/cria a recomendação da operação e marca como enviada,
+// para o botão de WhatsApp do Campo usar a MESMA página (retorno.html) da tela Recomendação
+function recomFromCampoOp(opKey){
+  if(!opKey) return null;
+  const i=opKey.indexOf('|'); if(i<0) return null;
+  const talId=opKey.slice(0,i), t=findTalhao(talId); if(!t) return null;
+  let r=RECOM.registros.filter(x=>x.opKey===opKey && x.status!=='aprovada').sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
+  if(!r){ r=recomCreate(talId, opKey); if(!r) return null; }
+  const rl=realOf(opKey);                                   // traz a vazão da Operação de Campo como calda (receita do tanque)
+  if(rl && rl.app && rl.app.vazao!=null && rl.app.vazao!=='' && !r.calda) r.calda=String(rl.app.vazao);
+  if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
+  saveRecom(); return r;
+}
 // atualiza campo do registro / item a partir de um input (data-recf / data-reci)
 function recomSetField(el){
   const r=recomById(el.dataset.id); if(!r) return;
@@ -2804,9 +2817,9 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
-    else if(a.act==='waApp'){ const txt=campoAppMsg(a.key);
-      if(!txt){ toast('Nada para enviar'); return; }
-      window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }
+    else if(a.act==='waApp'){ const r=recomFromCampoOp(a.key);
+      if(!r){ toast('Nada para enviar'); return; }
+      recomWhats(r.id); route(); toast('Recomendação criada — enviando pela página do operador'); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
