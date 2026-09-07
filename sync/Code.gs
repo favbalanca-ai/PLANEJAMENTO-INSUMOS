@@ -435,3 +435,82 @@ function limparValidacoesApp(){
   try { SpreadsheetApp.getActiveSpreadsheet().toast(msg, 'Pronto', 8); } catch (e) {}
   return msg;
 }
+
+/* ------------------------- AUDITORIA (rodar à mão) -------------------------
+   Cria/atualiza a aba "AUDITORIA APP" com um raio-x da planilha, para enxugá-la
+   COM SEGURANÇA: cada aba, seu tamanho, quantas fórmulas tem, se o APP usa, e
+   quais abas são citadas nas fórmulas das outras (para não apagar nada que
+   alimenta o app). NÃO apaga nem altera nada — só relata.
+   No editor do Apps Script, selecione "auditarPlanilha" e clique em Executar.
+   Não precisa reimplantar o Web App. */
+function auditarPlanilha(){
+  var sheets = ss().getSheets();
+  function usoApp(nome){
+    var up = nome.toUpperCase();
+    if (up.indexOf('TL') === 0) return 'LÊ + GRAVA (talhão)';
+    if (up === 'PORTIFÓLIO') return 'LÊ + GRAVA (produtos)';
+    if (up === 'ÁREA PLANTIO') return 'LÊ + GRAVA (talhões)';
+    if (up === 'DRE ORÇADA') return 'LÊ (culturas / preço de venda)';
+    if (up === 'CUSTO OPERAÇÃO') return 'LÊ (máquinas)';
+    if (up === RETORNOS_SHEET) return 'GRAVA (retornos)';
+    if (up === PRECOS_SHEET || up === 'PREÇOS') return 'Preços (Banco à parte)';
+    if (up === 'AUDITORIA APP') return '(este relatório)';
+    return '';
+  }
+  // 1 leitura por aba: dimensões + fórmulas da região usada
+  var info = sheets.map(function(s){
+    var lastR = s.getLastRow(), lastC = s.getLastColumn(), nForm = 0, forms = '';
+    if (lastR > 0 && lastC > 0){
+      var f = s.getRange(1, 1, lastR, lastC).getFormulas();
+      for (var i = 0; i < f.length; i++) for (var j = 0; j < f[i].length; j++){ if (f[i][j]){ nForm++; forms += f[i][j] + '\n'; } }
+    }
+    return { name:s.getName(), maxR:s.getMaxRows(), maxC:s.getMaxColumns(),
+      lastR:lastR, lastC:lastC, nForm:nForm, forms:forms.toUpperCase(), uso:usoApp(s.getName()) };
+  });
+  // detecta quem é citado nas fórmulas de quais abas (só referências LOCAIS)
+  info.forEach(function(a){
+    var refBy = [], n1 = a.name.toUpperCase();
+    info.forEach(function(b){
+      if (b.name === a.name || !b.forms) return;
+      if (b.forms.indexOf("'" + n1 + "'!") >= 0 || b.forms.indexOf(n1 + '!') >= 0) refBy.push(b.name);
+    });
+    a.refBy = refBy;
+  });
+  var rows = [['ABA','Linhas (máx)','Colunas (máx)','Dados até lin.','Dados até col.','Fórmulas','Uso no APP','Citada nas fórmulas de','Sugestão']];
+  info.forEach(function(a){
+    var sug = a.uso ? 'MANTER (app usa)'
+      : (a.refBy.length ? 'MANTER (alimenta: ' + a.refBy.join(', ') + ')' : '⚠ CANDIDATA A REMOVER — conferir');
+    rows.push([a.name, a.maxR, a.maxC, a.lastR, a.lastC, a.nForm, a.uso || '—', a.refBy.join(', ') || '—', sug]);
+  });
+  var out = ss().getSheetByName('AUDITORIA APP') || ss().insertSheet('AUDITORIA APP');
+  out.clear();
+  out.getRange(1, 1, rows.length, 9).setValues(rows);
+  out.setFrozenRows(1);
+  try { out.autoResizeColumns(1, 9); } catch (e) {}
+  try { ss().toast('Auditoria pronta na aba "AUDITORIA APP" (' + (rows.length - 1) + ' abas).', 'Pronto', 8); } catch (e) {}
+  return 'ok';
+}
+
+/* ------------------------- ENXUGAR LINHAS/COLUNAS VAZIAS (rodar à mão) -------------------------
+   Remove as linhas e colunas VAZIAS que sobram ao final de cada aba (deixa uma
+   folga de segurança). Reduz o tamanho do arquivo sem apagar dado nem fórmula.
+   Respeita o piso das abas de faixa fixa: talhões TL* até a linha 451 e
+   PORTIFÓLIO até a 433 (que o app usa por posição). NÃO apaga abas.
+   No editor, selecione "enxugarVazios" e Executar. Não precisa reimplantar. */
+function enxugarVazios(){
+  var sheets = ss().getSheets(), tocou = [];
+  sheets.forEach(function(s){
+    var up = s.getName().toUpperCase();
+    var pisoLin = (up.indexOf('TL') === 0) ? 451 : (up === 'PORTIFÓLIO' ? 433 : 0);
+    var lastR = Math.max(s.getLastRow(), pisoLin, 1) + 20;   // folga de 20 linhas
+    var lastC = Math.max(s.getLastColumn(), 1) + 3;          // folga de 3 colunas
+    var delR = 0, delC = 0;
+    if (s.getMaxRows() > lastR){ delR = s.getMaxRows() - lastR; s.deleteRows(lastR + 1, delR); }
+    if (s.getMaxColumns() > lastC){ delC = s.getMaxColumns() - lastC; s.deleteColumns(lastC + 1, delC); }
+    if (delR || delC) tocou.push(s.getName() + ' (-' + delR + ' lin, -' + delC + ' col)');
+  });
+  var msg = tocou.length ? ('Enxugado: ' + tocou.join(' · ')) : 'Nada a enxugar.';
+  Logger.log(msg);
+  try { ss().toast(msg, 'Pronto', 8); } catch (e) {}
+  return msg;
+}
