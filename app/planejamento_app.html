@@ -793,7 +793,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-69';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-70';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3849,13 +3849,14 @@ function fieldSig(){ return JSON.stringify(buildFieldEdits()); }
 function buildFieldEdits(){
   if(!DATA) return [];
   const isBase=id=>DATA.planos.hasOwnProperty(id)||DATA.talhoes.some(t=>t.id===id);
+  const gone=id=>!!(OV.talhaoRemoved&&OV.talhaoRemoved[id]);   // talhão excluído no app (não envia edições dele)
   const eds=[];
-  for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
+  for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])||gone(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
   for(const pr in OV.pedido)  eds.push({type:'pedido', produto:pr,value:+OV.pedido[pr]});
   // preço de referência: ajuste LOCAL do app (a coluna de preço da planilha é fórmula/importada) — não envia
-  for(const id in OV.talhao){ if(!isBase(id)) continue; const o=OV.talhao[id];
+  for(const id in OV.talhao){ if(!isBase(id)||gone(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
     if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade});
     if(o.empreendimento!=null) eds.push({type:'empreendimento',talhao:id,value:String(o.empreendimento)});
@@ -3863,7 +3864,7 @@ function buildFieldEdits(){
     if(o.prod_safrinha!=null) eds.push({type:'prod_safrinha',talhao:id,value:+o.prod_safrinha}); }
   // troca de produto de um insumo base -> grava classe/produto na linha (casa pelo produto ANTIGO)
   for(const rk in OV.itemProd){ const p=rk.split('|'); if(p.length<3) continue;
-    const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)) continue;
+    const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
     const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
     const from=op.itens[ii].produto, to=OV.itemProd[rk]; if(!from||!to||from===to) continue;
@@ -3872,7 +3873,7 @@ function buildFieldEdits(){
   // insumos adicionados no app -> gravam em linhas vazias da operação (só operações-base de talhões-base)
   for(const key in OV.itemAdd){ const i=key.indexOf('|'); if(i<0) continue;
     const tid=key.slice(0,i), tagoi=key.slice(i+1);
-    if(!isBase(tid)) continue;
+    if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1);
     const seq=tag==='S'?'safrinha':'principal';
     const baseLen=(planoDe(tid)[seq]||[]).length;
@@ -3883,7 +3884,7 @@ function buildFieldEdits(){
   // insumos removidos de operações-base -> apaga a linha na planilha (casa pelo nome do produto)
   for(const rk in OV.itemRemoved){ const p=rk.split('|'); if(p.length<3) continue;
     const tid=p[0], tagoi=p[1], ii=+p[2];
-    if(!isBase(tid)) continue;
+    if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
     const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
     const prod=op.itens[ii].produto; if(!prod) continue;
@@ -3896,6 +3897,8 @@ function buildFieldEdits(){
       empreendimento:empDe(t)||'', area:+areaDe(t)||0, produtividade:+prodvDe(t)||0,
       emp_safrinha:empSafDe(t)||'', prod_safrinha:(ov.prod_safrinha!=null?+ov.prod_safrinha:(+t.prod_safrinha||0)),
       plano: snapshotPlano(t.id) }); });
+  // talhões excluídos no app (que existem na planilha) -> exclui lá (linha + aba)
+  for(const id in (OV.talhaoRemoved||{})){ if(OV.talhaoRemoved[id] && isBase(id)) eds.push({type:'deltalhao', talhao:id}); }
   return eds;
 }
 function applyPulledData(d){
@@ -4034,14 +4037,16 @@ async function syncPush(opts){
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
     // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
-    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao');
-    if(res.fail===0 && (adds.length||dels.length||newT.length)){
+    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao');
+    if(res.fail===0 && (adds.length||dels.length||newT.length||delT.length)){
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
       dels.forEach(e=>{ if(e.rk) delete OV.itemRemoved[e.rk]; });
       // talhão novo agora vive na planilha: remove a cópia local e limpa os overlays (virão da planilha)
       newT.forEach(e=>{ const i=OV.talhaoAdd.findIndex(t=>t.id===e.talhao);
         if(i>=0) OV.talhaoAdd.splice(i,1); cleanTalhaoOverlays(e.talhao); });
+      // talhão excluído já saiu da planilha: limpa a marca e os overlays (não volta no próximo puxar)
+      delT.forEach(e=>{ delete OV.talhaoRemoved[e.talhao]; cleanTalhaoOverlays(e.talhao); });
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
       syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;

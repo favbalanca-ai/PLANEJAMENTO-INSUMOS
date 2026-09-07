@@ -207,10 +207,11 @@ function readOpsArr(big, r0, r1){
    de reler a aba e gravar célula por célula a cada edição. Bem mais rápido.
    Não toca em colunas de fórmula (D na aba do talhão; B2/B3; preço na PORTIFÓLIO). */
 function applyEditsBatch(edits, out){
-  var byTalhao = {}, port = [], area = [], novos = [];
+  var byTalhao = {}, port = [], area = [], novos = [], remove = [];
   edits.forEach(function(ed){
     var t = ed.type;
     if (t === 'addtalhao') novos.push(ed);
+    else if (t === 'deltalhao') remove.push(ed);
     else if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'addprod') port.push(ed);
     else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
     else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
@@ -220,6 +221,20 @@ function applyEditsBatch(edits, out){
   if (port.length) applyPortifolio(port, out);
   if (area.length) applyAreaPlantio(area, out);
   for (var tid in byTalhao) applyTalhao(tid, byTalhao[tid], out);
+  remove.forEach(function(ed){ applyDelTalhao(ed, out); });  // exclusões por último
+}
+
+// exclui um talhão: remove a linha na ÁREA PLANTIO e a aba do talhão
+function applyDelTalhao(ed, out){
+  try {
+    var id = S(ed.talhao); if (!id) throw 'deltalhao sem id';
+    var A = sh('ÁREA PLANTIO');
+    if (A){ var last = A.getLastRow();
+      if (last >= 2){ var idv = A.getRange(2, 1, last - 1, 1).getValues();
+        for (var i = idv.length - 1; i >= 0; i--){ if (S(idv[i][0]) === id) A.deleteRow(2 + i); } } }
+    var s = ss().getSheetByName(id); if (s) ss().deleteSheet(s);
+    out.ok++;
+  } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
 }
 
 // cria (ou atualiza) um talhão criado no app: linha na ÁREA PLANTIO + aba do talhão com o plano
@@ -233,6 +248,9 @@ function applyAddTalhao(ed, out){
     if (!L) L = Math.max(last, 1) + 1;
     A.getRange(L, 1, 1, 9).clearDataValidations();
     A.getRange(L, 1, 1, 9).setValues([[id, S(ed.nome), S(ed.empreendimento), N(ed.produtividade), N(ed.area), '', '', S(ed.emp_safrinha), N(ed.prod_safrinha)]]);
+    A.getRange(1, 10).setValue('CUSTO R$/ha'); A.getRange(1, 11).setValue('CUSTO TOTAL R$');
+    A.getRange(L, 10).setFormula(custoHaFormula(L)); A.getRange(L, 11).setFormula(custoTotalFormula(L));
+    A.getRange(L, 10, 1, 2).setNumberFormat('R$ #,##0.00');
     var s = ss().getSheetByName(id) || ss().insertSheet(id);
     var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento), produtividade:N(ed.produtividade) };
     escreveAbaTalhao(s, t, ed.plano || { principal:[], safrinha:[] });
@@ -619,6 +637,7 @@ function gerarPlanilhaLimpa(){
     var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
     escreveAbaTalhao(s, t, plano);
   });
+  garantirCustoAreaPlantioIn(A);   // custo R$/ha por talhão na ÁREA PLANTIO
 
   // ---- DRE ORÇADA (o app só lê: nomes na linha 2, preço de venda na linha 7) ----
   var DR = nb.insertSheet('DRE ORÇADA');
@@ -661,6 +680,7 @@ function reformatarTalhoes(){
     var plano = (D.planos && D.planos[t.id]) || { principal:[], safrinha:[] };
     escreveAbaTalhao(s, t, plano); n++; nomes.push(t.id);
   });
+  garantirCustoAreaPlantio();   // custo R$/ha por talhão na ÁREA PLANTIO
   var msg = 'Reformatado(s) ' + n + ' talhão(ões): ' + nomes.join(', ');
   Logger.log(msg);
   try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
@@ -680,6 +700,24 @@ function consumoFormula(L){
   var t = "'" + MOV_SHEET + "'!";
   return '=SUMIFS(' + t + '$E:$E,' + t + '$C:$C,$C' + L + ',' + t + '$B:$B,"SAÍDA")';
 }
+// custo R$/ha do talhão da linha L da ÁREA PLANTIO (puxa o D1 da aba do talhão pelo id em A)
+function custoHaFormula(L){ return '=IFERROR(INDIRECT("\'"&$A' + L + '&"\'!$D$1"),0)'; }
+function custoTotalFormula(L){ return '=IFERROR($J' + L + '*$E' + L + ',0)'; }
+// garante as colunas de custo (J=CUSTO R$/ha, K=CUSTO TOTAL R$) numa aba ÁREA PLANTIO
+function garantirCustoAreaPlantioIn(A){
+  if (!A) return;
+  A.getRange(1, 10).setValue('CUSTO R$/ha');
+  A.getRange(1, 11).setValue('CUSTO TOTAL R$');
+  var last = A.getLastRow(); if (last < 2) return;
+  var ids = A.getRange(2, 1, last - 1, 1).getValues(), jf = [], kf = [];
+  for (var i = 0; i < ids.length; i++){ var L = 2 + i, id = S(ids[i][0]);
+    jf.push([id ? custoHaFormula(L) : '']); kf.push([id ? custoTotalFormula(L) : '']); }
+  A.getRange(2, 10, jf.length, 1).setFormulas(jf);
+  A.getRange(2, 11, kf.length, 1).setFormulas(kf);
+  A.getRange(2, 10, jf.length, 2).setNumberFormat('R$ #,##0.00');
+}
+// versão para a planilha em uso (bound)
+function garantirCustoAreaPlantio(){ garantirCustoAreaPlantioIn(sh('ÁREA PLANTIO')); }
 /* Monta a aba de um talhão no MESMO layout visual do original:
    - Resumo no topo (Área, Produtividade, Cultura, Custo estimado R$/ha, R$/Sc)
    - Cabeçalho azul na linha 9 (Classe, Produto, Ingrediente Ativo, Unidade, Dose,
