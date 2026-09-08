@@ -52,9 +52,14 @@ function readData(){
     var n = Math.min(451, s.getMaxRows());               // 1 leitura por aba (em vez de 4)
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
-    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:S(big[3][1]),
-      plantio_safrinha: (n >= 234 ? S(big[233][1]) : ''),   // B234 = data de plantio da safrinha (se houver)
-      principal: readOpsArr(big, 10, Math.min(224, n), m), safrinha: readOpsArr(big, 238, Math.min(451, n), m) };
+    var split = findSafraSplit(big, n, m);               // linha do 2º cabeçalho = início da safrinha
+    var pR1 = (split > 0) ? split - 1 : Math.min(224, n);
+    var sR0 = (split > 0) ? split + 1 : 238;
+    var plantioSaf = '';
+    if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = big[L - 1];
+      if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0){ plantioSaf = S(rr[1]); break; } } }
+    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:S(big[3][1]), plantio_safrinha:plantioSaf,
+      principal: readOpsArr(big, 10, pR1, m), safrinha: readOpsArr(big, sR0, Math.min(451, n), m) };
   });
 
   var precos = {}, D = sh('DRE ORÇADA');
@@ -214,6 +219,14 @@ function talColMap(headerRow){
   }
   return m;
 }
+// acha o INÍCIO da safrinha = 2º cabeçalho da tabela (linha com "PRODUTO" na coluna de produto),
+// depois do cabeçalho da 1ª safra (linha 9). Retorna a linha (1-based) ou -1 se não houver safrinha.
+function findSafraSplit(big, n, m){
+  for (var L = 11; L <= n; L++){ var row = big[L - 1]; if (!row) continue;
+    if (S(row[m.produto]).toUpperCase() === 'PRODUTO') return L;
+  }
+  return -1;
+}
 // operações (com itens) de uma faixa de linhas — lê de um array já carregado (big[L-1])
 function readOpsArr(big, r0, r1, m){
   m = m || { op:0, dap:-1, classe:1, produto:2, un:5, dose:8 };
@@ -347,10 +360,13 @@ function applyTalhao(tid, edits, out){
   var n = Math.min(451, s.getMaxRows());
   var vals = s.getRange(1, 1, n, 9).getValues();   // 0-based: linha L -> vals[L-1]
   var m = talColMap(vals[8]);                      // colunas detectadas pelo cabeçalho
+  var split = findSafraSplit(vals, n, m);          // fronteira 1ª safra / safrinha
+  var pR1 = (split > 0) ? split - 1 : Math.min(224, n);
+  var sR0 = (split > 0) ? split + 1 : 238;
   var dirty = false;
   edits.forEach(function(ed){
     try {
-      var faixa = ed.tag === 'S' ? [238, Math.min(451, n)] : [10, Math.min(224, n)];
+      var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
       var op = opByIndex(vals, faixa[0], faixa[1], ed.op, m);
       if (ed.type === 'dose'){
         if (!op) throw 'operação não encontrada (dose)';
@@ -379,14 +395,19 @@ function applyTalhao(tid, edits, out){
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
   });
   if (dirty){
-    // grava só as colunas Classe/Produto (contíguas: produto = classe+1) e Dose — não toca nas fórmulas
-    var wr0 = 10, wn = n - wr0 + 1, cCla = m.classe + 1, cDose = m.dose + 1;
-    var cp = [], dz = [];
-    for (var L = wr0; L <= n; L++){ cp.push([vals[L - 1][m.classe], vals[L - 1][m.produto]]); dz.push([vals[L - 1][m.dose]]); }
-    s.getRange(wr0, cCla, wn, 2).clearDataValidations();
-    s.getRange(wr0, cCla, wn, 2).setValues(cp);
-    s.getRange(wr0, cDose, wn, 1).setValues(dz);
+    // grava só nas FAIXAS DE OPERAÇÃO (pula o resumo da safrinha, que tem fórmulas)
+    escreveColsTalhao(s, vals, 10, pR1, m);
+    escreveColsTalhao(s, vals, sR0, Math.min(451, n), m);
   }
+}
+// grava Classe/Produto (contíguas: produto = classe+1) e Dose de uma faixa — não toca em outras colunas/fórmulas
+function escreveColsTalhao(s, vals, r0, r1, m){
+  if (r1 < r0) return;
+  var wn = r1 - r0 + 1, cCla = m.classe + 1, cDose = m.dose + 1, cp = [], dz = [];
+  for (var L = r0; L <= r1; L++){ cp.push([vals[L - 1][m.classe], vals[L - 1][m.produto]]); dz.push([vals[L - 1][m.dose]]); }
+  s.getRange(r0, cCla, wn, 2).clearDataValidations();
+  s.getRange(r0, cCla, wn, 2).setValues(cp);
+  s.getRange(r0, cDose, wn, 1).setValues(dz);
 }
 
 // operação opIdx (por POSIÇÃO — inclui as vazias, igual ao app) dentro da faixa, no array em memória
