@@ -716,6 +716,11 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rc-hint{font-size:12px;color:var(--muted);font-weight:600}
 .rc-ok{font-size:12.5px;font-weight:700;color:var(--green)}
 
+/* Controle de estoque: cor do saldo */
+.est-saldo{font-variant-numeric:tabular-nums}
+.est-saldo.ok{color:var(--green)}
+.est-saldo.neg{color:var(--red)}
+
 </style>
 </head>
 <body>
@@ -733,6 +738,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/talhoes" data-view="talhoes" data-mod="planejamento"><span class="ico">🗺️</span><span class="lbl">Talhões</span><span class="lbl-s">Talhões</span></a>
       <a href="#/empreendimentos" data-view="empreendimentos" data-mod="planejamento"><span class="ico">🌾</span><span class="lbl">Empreendimentos</span><span class="lbl-s">Culturas</span></a>
       <a href="#/compras" data-view="compras" data-mod="planejamento"><span class="ico">🛒</span><span class="lbl">Demanda</span><span class="lbl-s">Demanda</span></a>
+      <a href="#/estoque" data-view="estoque" data-mod="planejamento"><span class="ico">📦</span><span class="lbl">Estoque</span><span class="lbl-s">Estoque</span></a>
       <a href="#/cotacao" data-view="cotacao" data-mod="planejamento"><span class="ico">🏷️</span><span class="lbl">Cotação</span><span class="lbl-s">Cotação</span></a>
       <a href="#/precos" data-view="precos" data-mod="precos"><span class="ico">💲</span><span class="lbl">Preços</span><span class="lbl-s">Preços</span></a>
       <a href="#/maquinas" data-view="maquinas" data-mod="planejamento"><span class="ico">🚜</span><span class="lbl">Máquinas</span><span class="lbl-s">Máquinas</span></a>
@@ -793,7 +799,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-72';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-73';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1198,7 +1204,7 @@ function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
-  empreendimentos:'planejamento', compras:'planejamento', cotacao:'planejamento', precos:'precos',
+  empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':'#/dashboard'); }
@@ -1788,6 +1794,57 @@ function custoClasseHaSeqs(t, seqs){
       m[cl]=(m[cl]||0)+it.dose*precoDe(it.produto); }));
   });
   return m;
+}
+/* ================= CONTROLE DE ESTOQUE (portfólio: entradas × saídas × saldo) ================= */
+// saídas = soma do volume utilizado nas recomendações APROVADAS (por produto)
+function estoqueSaidas(){
+  const m={};
+  (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0); if(r.status!=='aprovada') return;
+    (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+  return m;
+}
+let estoqueQ='';
+V.estoque=function(){
+  const saidas=estoqueSaidas();
+  const nomes=new Set();
+  (DATA.produtos||[]).forEach(p=>{ if(p.produto) nomes.add(String(p.produto).trim()); });
+  Object.keys(saidas).forEach(n=>nomes.add(n));
+  const rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
+    const est=estoqueDe(n), sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
+    return {produto:n, classe:p.classe||'', un:p.un||'', est, sai, saldo:est-sai, ped, preco}; })
+    .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
+  const comMov=rows.filter(r=>r.est||r.sai||r.ped);
+  const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
+  const totSaidas=rows.reduce((a,r)=>a+r.sai,0);
+  const negativos=rows.filter(r=>r.saldo<-0.0001).length;
+  const body=rows.map(r=>{
+    const cls=r.saldo<-0.0001?'neg':(r.sai>0?'ok':'');
+    return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}">
+      <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
+      <td class="num" data-th="Entrada/estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.est||''}" placeholder="0"></td>
+      <td class="num" data-th="Saídas (aplic.)">${r.sai?num(r.sai):'·'}</td>
+      <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
+      <td data-th="Un">${esc(r.un||'')}</td>
+      <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0"></td>
+      <td class="num c-more" data-th="Valor saldo">${r.preco>0?brl0(Math.max(0,r.saldo)*r.preco):'—'}</td></tr>`;
+  }).join('');
+  return `
+  <div class="kpi-grid">
+    <div class="kpi accent"><div class="k-label">Valor em estoque (saldo)</div><div class="k-value">${brl0(valSaldo)}</div><div class="k-sub">${comMov.length} produto(s) com movimento</div></div>
+    <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">soma do utilizado (recom. aprovadas)</div></div>
+    <div class="kpi"><div class="k-label">Produtos</div><div class="k-value">${rows.length}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:'todos com saldo ok'}</div></div>
+  </div>
+  <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
+    <div class="spacer"></div><span class="badge badge-muted">Saldo = Entrada − Saídas (aplicações aprovadas)</span></div>
+  <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">entrada (estoque) · saídas pelas recomendações · saldo</span></div>
+    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Entrada/estoque</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
+      <tbody>${body||'<tr><td colspan="7" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">A <b>entrada/estoque</b> vai para a planilha (coluna ESTOQUE). As <b>saídas</b> vêm das recomendações aprovadas. O <b>saldo</b> = entrada − saídas.</p>`;
+};
+function filterEstoque(){
+  const q=(estoqueQ||'').toLowerCase().trim();
+  document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
+    const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
 }
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
@@ -3246,7 +3303,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -3632,6 +3689,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-cot') filterCotacao(e.target.value);
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
+  if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
 });
 // busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
 function filterPrecos(){
