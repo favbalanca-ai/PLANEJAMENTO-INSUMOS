@@ -799,7 +799,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-74';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-75';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1601,11 +1601,11 @@ V.dashboard = function(){
   ${(()=>{ const aFazer=compras.filter(r=>r.comprar>0).sort((a,b)=>b.valor-a.valor);
     const totAF=aFazer.reduce((a,r)=>a+r.valor,0); const semP=aFazer.filter(r=>r.preco<=0).length;
     return `<div class="panel"><div class="panel-head"><h2>Compras a fazer</h2><span class="sub">demanda − estoque − em pedido — ${aFazer.length} itens · ${brl0(totAF)}${semP?` · ${semP} sem preço`:''}</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">Comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Saldo</th><th class="num">Em pedido</th><th class="num">Comprar</th><th>Un</th><th class="num">Valor</th></tr></thead>
     <tbody>${aFazer.slice(0,30).map(r=>`
       <tr><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
-      <td class="num">${num(r.demanda)}</td><td class="num">${num(r.estoque||0)}</td><td class="num">${num(r.pedido||0)}</td>
-      <td class="num"><b>${num(r.comprar)}</b></td><td>${esc(r.un)}</td><td class="num">${r.preco>0?brl(r.valor):'<span style="color:var(--red)">s/ preço</span>'}</td></tr>`).join('')||'<tr><td colspan="8" class="empty" style="padding:16px">Nada a comprar 🎉</td></tr>'}</tbody></table></div>
+      <td class="num">${num(r.demanda)}</td><td class="num">${num(r.estoque||0)}</td><td class="num"><b class="est-saldo ${r.saldo<-0.0001?'neg':(r.saida>0?'ok':'')}">${num(r.saldo||0)}</b></td><td class="num">${num(r.pedido||0)}</td>
+      <td class="num"><b>${num(r.comprar)}</b></td><td>${esc(r.un)}</td><td class="num">${r.preco>0?brl(r.valor):'<span style="color:var(--red)">s/ preço</span>'}</td></tr>`).join('')||'<tr><td colspan="9" class="empty" style="padding:16px">Nada a comprar 🎉</td></tr>'}</tbody></table></div>
     ${aFazer.length>30?`<p class="mut" style="font-size:12px;padding:6px 16px">Mostrando os 30 maiores de ${aFazer.length}.</p>`:''}</div>`; })()}
   <div class="panel"><div class="panel-head"><h2>Maiores demandas de compra</h2><span class="sub">por empreendimento</span></div>
     <div class="panel-body">${demEmp.map(([n,v])=>`
@@ -1806,7 +1806,7 @@ function estoqueSaidas(){
     (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
   return m;
 }
-let estoqueQ='';
+let estoqueQ='', estoqueClasse='', estoqueSoMov=false;
 V.estoque=function(){
   const saidas=estoqueSaidas();
   const nomes=new Set();
@@ -1814,16 +1814,22 @@ V.estoque=function(){
   Object.keys(saidas).forEach(n=>nomes.add(n));
   const rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
     const est=estoqueDe(n), sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
-    return {produto:n, classe:p.classe||'', un:p.un||'', est, sai, saldo:est-sai, ped, preco}; })
+    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', est, sai, saldo:est-sai, ped, preco}; })
     .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
   const comMov=rows.filter(r=>r.est||r.sai||r.ped);
   const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
   const totSaidas=rows.reduce((a,r)=>a+r.sai,0);
   const negativos=rows.filter(r=>r.saldo<-0.0001).length;
+  // chips de classe (contagem por classe)
+  const clsCount={}; rows.forEach(r=>{ clsCount[r.classe]=(clsCount[r.classe]||0)+1; });
+  const classes=Object.keys(clsCount).sort((a,b)=>a.localeCompare(b,'pt'));
+  const chips=`<button class="chip-f${estoqueClasse===''?' on':''}" data-estf="">Todas <span style="opacity:.55">${rows.length}</span></button>`+
+    classes.map(c=>`<button class="chip-f${estoqueClasse===c?' on':''}" data-estf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('');
   const body=rows.map(r=>{
     const cls=r.saldo<-0.0001?'neg':(r.sai>0?'ok':'');
-    return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}">
-      <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
+    const mov=(r.est||r.sai||r.ped)?1:0;
+    return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}">
+      <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Entrada/estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.est||''}" placeholder="0"></td>
       <td class="num" data-th="Saídas (aplic.)">${r.sai?num(r.sai):'·'}</td>
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
@@ -1838,7 +1844,9 @@ V.estoque=function(){
     <div class="kpi"><div class="k-label">Produtos</div><div class="k-value">${rows.length}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:'todos com saldo ok'}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
+    <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, saída ou em pedido">só com movimento</button>
     <div class="spacer"></div><span class="badge badge-muted">Saldo = Entrada − Saídas (aplicações aprovadas)</span></div>
+  <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">entrada (estoque) · saídas pelas recomendações · saldo</span></div>
     <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Entrada/estoque</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||'<tr><td colspan="7" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
@@ -1847,7 +1855,9 @@ V.estoque=function(){
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
   document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
-    const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
+    const s=tr.getAttribute('data-search')||'', cl=tr.getAttribute('data-classe')||'', mv=tr.getAttribute('data-mov')==='1';
+    const show=(!q||s.includes(q)) && (!estoqueClasse||cl===estoqueClasse) && (!estoqueSoMov||mv);
+    tr.style.display=show?'':'none'; });
 }
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
@@ -1942,12 +1952,13 @@ V.cotacao = function(){
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
     const sub=its.reduce((a,r)=>a+r.valor,0);
     return `<div class="panel"><div class="panel-head"><h2>${esc(forn)}</h2><span class="sub">${its.length} itens · ${brl0(sub)}</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th class="num">Saldo</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
     <tbody>${its.map(r=>`<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
-      <td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td>
+      <td class="num">${num(r.comprar)}</td>
+      <td class="num"><span class="est-saldo ${r.saldo<-0.0001?'neg':(r.saida>0?'ok':'')}">${num(r.saldo||0)}</span></td><td>${esc(r.un)}</td>
       <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
       <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
-    <tfoot class="tfoot"><tr><td colspan="5">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
+    <tfoot class="tfoot"><tr><td colspan="6">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}</div>`;
 };
 
@@ -3526,6 +3537,8 @@ document.addEventListener('click',e=>{
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
   if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
+  const ecf=e.target.closest('#est-clsf .chip-f');
+  if(ecf){ estoqueClasse=ecf.dataset.estf||''; ecf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); ecf.classList.add('on'); filterEstoque(); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
   if(tf){ const v=tf.dataset.talf;
     if(v===''){ comprasTalSel.clear(); } else if(comprasTalSel.has(v)){ comprasTalSel.delete(v); } else { comprasTalSel.add(v); }
@@ -3632,6 +3645,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='relCsv'){ exportCampoCsv(); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
+    else if(a.act==='estToggleMov'){ estoqueSoMov=!estoqueSoMov; act.classList.toggle('on',estoqueSoMov); filterEstoque(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
