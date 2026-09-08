@@ -660,8 +660,8 @@ function gerarPlanilhaLimpa(){
   phdr[0]='EMPRESA'; phdr[1]='CLASSE'; phdr[2]='PRODUTO'; phdr[3]='ATIVO'; phdr[5]='UN';
   phdr[18]='VALOR'; phdr[19]='ESTOQUE'; phdr[20]='EM PEDIDO'; phdr[21]='CONSUMO (recom.)'; phdr[22]='SALDO';
   P.getRange(3, 1, 1, 23).setValues([phdr]);
-  var prows = [];
-  (D.produtos || []).forEach(function(p, i){
+  var prods = produtosMerged(D), prows = [];
+  prods.forEach(function(p, i){
     var L = 4 + i;                              // linha 1-based na planilha
     var row = blank(23);
     row[0]=p.empresa||''; row[1]=p.classe||''; row[2]=p.produto||''; row[3]=p.ativos||''; row[5]=p.un||'';
@@ -724,6 +724,36 @@ function gerarPlanilhaLimpa(){
   return url;
 }
 
+/* ------------------------- PREENCHER PORTIFÓLIO (rodar à mão) -------------------------
+   Preenche a aba PORTIFÓLIO desta planilha com os produtos do planejamento + do módulo
+   Preços (Banco de Preços). Use quando a PORTIFÓLIO estiver vazia (os produtos estavam
+   só no módulo Preços). Preserva estoque/pedido dos produtos já existentes.
+   No editor, selecione "preencherPortifolio" e Executar. */
+function preencherPortifolio(){
+  var D = readData(), prods = produtosMerged(D);
+  var P = ss().getSheetByName('PORTIFÓLIO') || ss().insertSheet('PORTIFÓLIO');
+  if (P.getMaxColumns() < 23) P.insertColumnsAfter(P.getMaxColumns(), 23 - P.getMaxColumns());
+  P.getRange(1, 1).setValue('PORTIFÓLIO — produtos');
+  var phdr = blank(23);
+  phdr[0]='EMPRESA'; phdr[1]='CLASSE'; phdr[2]='PRODUTO'; phdr[3]='ATIVO'; phdr[5]='UN';
+  phdr[18]='VALOR'; phdr[19]='ESTOQUE'; phdr[20]='EM PEDIDO'; phdr[21]='CONSUMO (recom.)'; phdr[22]='SALDO';
+  P.getRange(3, 1, 1, 23).setValues([phdr]);
+  var maxLimpar = Math.max(P.getLastRow() - 3, prods.length, 1);
+  P.getRange(4, 1, maxLimpar, 23).clearContent();
+  var prows = [];
+  prods.forEach(function(p, i){
+    var L = 4 + i, row = blank(23);
+    row[0]=p.empresa||''; row[1]=p.classe||''; row[2]=p.produto||''; row[3]=p.ativos||''; row[5]=p.un||'';
+    row[18]=precoFormula(L); row[19]=p.estoque||0; row[20]=p.pedido||0; row[21]=consumoFormula(L); row[22]='=$T'+L+'-$V'+L;
+    prows.push(row);
+  });
+  if (prows.length) P.getRange(4, 1, prows.length, 23).setValues(prows);
+  P.setFrozenRows(3);
+  var msg = 'PORTIFÓLIO preenchida com ' + prods.length + ' produto(s).';
+  Logger.log(msg); try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
+  return msg;
+}
+
 /* ------------------------- REFORMATAR TALHÕES (rodar à mão) -------------------------
    Reaplica o layout bonito (resumo no topo, cabeçalho azul, colunas e fórmulas de
    custo, subtotais) em TODAS as abas de talhão desta planilha, sem criar outra.
@@ -771,6 +801,22 @@ function corrigeColunaDose(s, r0, r1){
   }
   if (dirty) rng.setValues(vals);
   return changed;
+}
+// lista de produtos combinando o PORTIFÓLIO do planejamento + o portfólio do módulo
+// Preços (Banco de Preços). Assim a aba PORTIFÓLIO não fica vazia quando os produtos
+// estão cadastrados só no módulo Preços.
+function produtosMerged(D){
+  var map = {}, ordem = [];
+  function add(p){ var nome = S(p.produto); if (!nome || map[nome]) return;
+    map[nome] = { empresa:S(p.empresa), classe:S(p.classe), produto:nome, ativos:S(p.ativos), un:S(p.un),
+      estoque:N(p.estoque), pedido:N(p.pedido) }; ordem.push(nome); }
+  (D.produtos || []).forEach(add);
+  var pa = D.precos_app && D.precos_app.safras;
+  if (pa) Object.keys(pa).forEach(function(sf){ var s = pa[sf] || {};
+    (s.refs  || []).forEach(function(r){ add({ produto:r.produto, classe:r.classe }); });
+    (s.itens || []).forEach(function(it){ add({ produto:it.produto, classe:it.classe, empresa:it.empresa }); });
+  });
+  return ordem.map(function(k){ return map[k]; });
 }
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
