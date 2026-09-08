@@ -800,7 +800,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-76';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-77';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1805,6 +1805,19 @@ const COMPRAS_KEY='planejamento_compras';
 let COMPRAS=null, compraDraft=null;
 function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
 function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(COMPRAS)); }catch(e){} }
+// envia a compra para a planilha (aba MOVIMENTAÇÃO ESTOQUE, como ENTRADA)
+function pushEntrada(c){
+  const url=syncUrl(); if(!url||!c||c.pushed) return Promise.resolve(false);
+  return syncPost(url, JSON.stringify({__entrada:{id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens}}))
+    .then(()=>{ c.pushed=true; saveCompras(); return true; }).catch(()=>false);
+}
+function pushEntradasPendentes(){
+  const url=syncUrl(); if(!url){ toast('Configure a Sincronização primeiro'); return; }
+  const pend=(COMPRAS.registros||[]).filter(c=>!c.pushed);
+  if(!pend.length){ toast('Nenhuma compra pendente'); return; }
+  toast('Enviando '+pend.length+' compra(s)…');
+  Promise.all(pend.map(pushEntrada)).then(()=>{ route({keepScroll:true}); toast('Compras enviadas à planilha'); });
+}
 function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
 function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
 // entradas de estoque por produto (soma de todas as compras registradas)
@@ -1831,6 +1844,7 @@ V.entradas=function(){
     return `<div class="recom-card rc-apr">
       <div class="rc-head"><span class="rc-badge rc-apr">📦 Entrada</span>
         ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}
+        ${syncUrl()?(c.pushed?'<span class="pill pill-buy">na planilha</span>':'<span class="pill pill-noprice">pendente</span>'):''}
         <span class="spacer"></span><span class="mut" style="font-size:11px">${esc(fmtData(c.data))}</span>
         <button class="icon-btn del" data-act="cmpDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div>
       <div class="table-wrap"><table class="camp-ins"><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
@@ -1853,7 +1867,8 @@ V.entradas=function(){
       <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
       <button class="btn btn-primary btn-sm" data-act="cmpSave">✅ Registrar entrada</button>
     </div></div>
-  <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span></div>
+  <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
+      <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
     <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
@@ -3710,9 +3725,12 @@ document.addEventListener('click',e=>{
     else if(a.act==='cmpDelItem'){ if(compraDraft){ compraDraft.itens.splice(+a.i,1); if(!compraDraft.itens.length) compraDraft.itens.push({produto:'',un:'',qtd:0,preco:0}); route(); } }
     else if(a.act==='cmpSave'){ const d=compraDraft; if(!d||!(d.itens||[]).some(it=>it.produto&&(+it.qtd>0))){ toast('Adicione ao menos um produto com quantidade'); return; }
       const itens=d.itens.filter(it=>it.produto&&(+it.qtd>0)).map(it=>({produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:+it.qtd||0, preco:+it.preco||0}));
-      COMPRAS.registros.push({ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), fornecedor:d.fornecedor||'', data:d.data||new Date().toISOString().slice(0,10), nf:d.nf||'', obs:d.obs||'', itens, ts:Date.now() });
-      saveCompras(); compraDraft=null; route(); toast('Entrada registrada no estoque'); }
+      const rec={ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), fornecedor:d.fornecedor||'', data:d.data||new Date().toISOString().slice(0,10), nf:d.nf||'', obs:d.obs||'', itens, pushed:false, ts:Date.now() };
+      COMPRAS.registros.push(rec); saveCompras(); compraDraft=null; route();
+      toast(syncUrl()?'Entrada registrada — enviando à planilha…':'Entrada registrada no estoque');
+      pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
+    else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }

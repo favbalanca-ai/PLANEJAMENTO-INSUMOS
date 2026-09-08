@@ -91,12 +91,22 @@ function readData(){
    (casando pelo id) e o Adm aprova para o histórico. */
 var RETORNOS_SHEET = 'RETORNOS APP';
 var MOV_SHEET = 'MOVIMENTAÇÃO ESTOQUE';   // razão de estoque: entradas (módulo futuro) e saídas (recomendações)
-// registra 1 linha no razão de estoque (cria a aba se faltar)
-function logMovimentacao(tipo, produto, un, qtd, origem, obs){
+// registra 1 linha no razão de estoque (cria a aba se faltar). "when" opcional (data do movimento)
+function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
   var s = ss().getSheetByName(MOV_SHEET);
   if (!s){ s = ss().insertSheet(MOV_SHEET);
     s.appendRow(['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']); s.setFrozenRows(1); }
-  s.appendRow([new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+  s.appendRow([when || new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+}
+// ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE
+function writeEntrada(ent){
+  var itens = (ent && ent.itens) || [], n = 0;
+  var when = new Date();
+  if (ent && ent.data && /^\d{4}-\d{2}-\d{2}/.test(String(ent.data))) when = new Date(String(ent.data).slice(0,10) + 'T12:00:00');
+  var origem = 'Compra' + (ent.nf ? ' NF ' + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '');
+  for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
+    logMovimentacao('ENTRADA', it.produto, it.un, it.qtd, origem, S(ent.obs), when); n++; }
+  return { rows:n };
 }
 function retornosSheet(){
   var s = ss().getSheetByName(RETORNOS_SHEET);
@@ -495,6 +505,8 @@ function doPost(e){
       var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows;
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
       var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
+    } else if (payload && payload.__entrada){        // compra do app -> entrada no razão de estoque
+      var en = writeEntrada(payload.__entrada); out.ok = en.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }
