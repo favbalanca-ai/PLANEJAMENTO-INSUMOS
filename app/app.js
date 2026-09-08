@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-75';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-76';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -407,7 +407,7 @@ function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
-  empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
+  empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', entradas:'planejamento', cotacao:'planejamento', precos:'precos',
   maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':'#/dashboard'); }
@@ -630,16 +630,17 @@ function calcDemanda(empSet, talSet){
 function calcCompras(empSet, talSet){
   const dem = calcDemanda(empSet, talSet);
   const saidas = estoqueSaidas();            // já aplicado por produto (recom. aprovadas)
+  const entradas = estoqueEntradas();        // comprado por produto (compras registradas)
   const rows = [];
   for(const p of DATA.produtos){
     const nome=p.produto, d=dem[nome]||0, est=estoqueDe(nome), ped=pedidoDe(nome);
-    const sai=saidas[nome]||0, saldo=est-sai, restante=Math.max(0,d-sai);   // demanda ainda não aplicada
-    if(d<=0 && est<=0 && ped<=0 && sai<=0) continue;
+    const sai=saidas[nome]||0, ent=entradas[nome]||0, saldo=est+ent-sai, restante=Math.max(0,d-sai);
+    if(d<=0 && est<=0 && ped<=0 && sai<=0 && ent<=0) continue;
     if((p.classe||'').toUpperCase().startsWith('MÁQUINA')) continue;
     // a comprar = demanda restante − saldo em estoque − em pedido
     const comprar=Math.max(0, restante - saldo - ped), preco=precoDe(nome), valor=comprar*preco;
     let status = comprar>0 ? (preco>0?'COMPRAR':'SEM_PRECO') : (d>0?'ESTOQUE':'SEM_DEMANDA');
-    rows.push({...p, demanda:d, estoque:est, saida:sai, saldo, pedido:ped, comprar, preco, valor, status});
+    rows.push({...p, demanda:d, estoque:est, entrada:ent, saida:sai, saldo, pedido:ped, comprar, preco, valor, status});
   }
   return rows;
 }
@@ -1001,6 +1002,63 @@ function custoClasseHaSeqs(t, seqs){
   });
   return m;
 }
+/* ================= COMPRAS (entradas de estoque por nota) ================= */
+const COMPRAS_KEY='planejamento_compras';
+let COMPRAS=null, compraDraft=null;
+function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
+function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(COMPRAS)); }catch(e){} }
+function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
+function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
+// entradas de estoque por produto (soma de todas as compras registradas)
+function estoqueEntradas(){
+  const m={};
+  (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
+  return m;
+}
+V.entradas=function(){
+  if(!compraDraft) compraDraft=compraNovoDraft();
+  const d=compraDraft;
+  const draftRows=d.itens.map((it,i)=>`<tr>
+    <td class="c-full"><input list="prodlist" class="txt prod-in" data-cmpi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="produto"></td>
+    <td class="num"><input class="cell" inputmode="decimal" data-cmpi="qtd" data-i="${i}" value="${it.qtd||''}" placeholder="0"></td>
+    <td>${esc(it.un||(PROD[it.produto]&&PROD[it.produto].un)||'')}</td>
+    <td class="num"><input class="cell" inputmode="decimal" data-cmpi="preco" data-i="${i}" value="${it.preco||''}" placeholder="0"></td>
+    <td class="num">${brl0((+it.qtd||0)*(+it.preco||0))}</td>
+    <td><button class="icon-btn del" data-act="cmpDelItem" data-i="${i}" title="Remover">🗑</button></td></tr>`).join('');
+  const total=compraTotal(d);
+  const regs=(COMPRAS.registros||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const totGeral=regs.reduce((a,c)=>a+compraTotal(c),0);
+  const cards=regs.map(c=>{
+    const its=(c.itens||[]).filter(x=>x.produto);
+    return `<div class="recom-card rc-apr">
+      <div class="rc-head"><span class="rc-badge rc-apr">📦 Entrada</span>
+        ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}
+        <span class="spacer"></span><span class="mut" style="font-size:11px">${esc(fmtData(c.data))}</span>
+        <button class="icon-btn del" data-act="cmpDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div>
+      <div class="table-wrap"><table class="camp-ins"><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
+        <tbody>${its.map(x=>`<tr><td class="c-full">${esc(x.produto)}</td><td class="num">${num(x.qtd)}</td><td>${esc(x.un||'')}</td><td class="num">${x.preco>0?brl(x.preco):'—'}</td><td class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</td></tr>`).join('')}</tbody>
+        <tfoot class="tfoot"><tr><td colspan="4">Total</td><td class="num">${brl0(compraTotal(c))}</td></tr></tfoot></table></div>
+      ${c.obs?`<div class="rc-obs mut">${esc(c.obs)}</div>`:''}</div>`;
+  }).join('');
+  return `${prodDatalist()}
+  <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">registra a nota e dá entrada automática no estoque</span></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Fornecedor<input class="txt" data-cmpf="fornecedor" value="${esc(d.fornecedor)}" placeholder="fornecedor"></label>
+      <label>Data<input type="date" data-cmpf="data" value="${esc(d.data)}"></label>
+      <label>Nota (NF)<input class="txt" data-cmpf="nf" value="${esc(d.nf)}" placeholder="nº da nota"></label>
+    </div>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th></th></tr></thead>
+      <tbody>${draftRows}</tbody>
+      <tfoot class="tfoot"><tr><td colspan="4">Total da nota</td><td class="num">${brl0(total)}</td><td></td></tr></tfoot></table></div>
+    <div style="padding:8px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-outline btn-sm" data-act="cmpAddItem">+ produto</button>
+      <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
+      <button class="btn btn-primary btn-sm" data-act="cmpSave">✅ Registrar entrada</button>
+    </div></div>
+  <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span></div>
+    <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
+};
 /* ================= CONTROLE DE ESTOQUE (portfólio: entradas × saídas × saldo) ================= */
 // saídas = soma do volume utilizado nas recomendações APROVADAS (por produto)
 function estoqueSaidas(){
@@ -1011,17 +1069,17 @@ function estoqueSaidas(){
 }
 let estoqueQ='', estoqueClasse='', estoqueSoMov=false;
 V.estoque=function(){
-  const saidas=estoqueSaidas();
+  const saidas=estoqueSaidas(), entradas=estoqueEntradas();
   const nomes=new Set();
   (DATA.produtos||[]).forEach(p=>{ if(p.produto) nomes.add(String(p.produto).trim()); });
-  Object.keys(saidas).forEach(n=>nomes.add(n));
+  Object.keys(saidas).forEach(n=>nomes.add(n)); Object.keys(entradas).forEach(n=>nomes.add(n));
   const rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
-    const est=estoqueDe(n), sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
-    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', est, sai, saldo:est-sai, ped, preco}; })
+    const ini=estoqueDe(n), ent=entradas[n]||0, sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
+    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, ped, preco}; })
     .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
-  const comMov=rows.filter(r=>r.est||r.sai||r.ped);
+  const comMov=rows.filter(r=>r.ini||r.ent||r.sai||r.ped);
   const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
-  const totSaidas=rows.reduce((a,r)=>a+r.sai,0);
+  const totEntradas=rows.reduce((a,r)=>a+r.ent,0), totSaidas=rows.reduce((a,r)=>a+r.sai,0);
   const negativos=rows.filter(r=>r.saldo<-0.0001).length;
   // chips de classe (contagem por classe)
   const clsCount={}; rows.forEach(r=>{ clsCount[r.classe]=(clsCount[r.classe]||0)+1; });
@@ -1029,11 +1087,12 @@ V.estoque=function(){
   const chips=`<button class="chip-f${estoqueClasse===''?' on':''}" data-estf="">Todas <span style="opacity:.55">${rows.length}</span></button>`+
     classes.map(c=>`<button class="chip-f${estoqueClasse===c?' on':''}" data-estf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('');
   const body=rows.map(r=>{
-    const cls=r.saldo<-0.0001?'neg':(r.sai>0?'ok':'');
-    const mov=(r.est||r.sai||r.ped)?1:0;
+    const cls=r.saldo<-0.0001?'neg':(r.saldo>0?'ok':'');
+    const mov=(r.ini||r.ent||r.sai||r.ped)?1:0;
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}">
       <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
-      <td class="num" data-th="Entrada/estoque"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.est||''}" placeholder="0"></td>
+      <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
+      <td class="num" data-th="Entradas">${r.ent?num(r.ent):'·'}</td>
       <td class="num" data-th="Saídas (aplic.)">${r.sai?num(r.sai):'·'}</td>
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
       <td data-th="Un">${esc(r.un||'')}</td>
@@ -1043,17 +1102,17 @@ V.estoque=function(){
   return `
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Valor em estoque (saldo)</div><div class="k-value">${brl0(valSaldo)}</div><div class="k-sub">${comMov.length} produto(s) com movimento</div></div>
-    <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">soma do utilizado (recom. aprovadas)</div></div>
-    <div class="kpi"><div class="k-label">Produtos</div><div class="k-value">${rows.length}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:'todos com saldo ok'}</div></div>
+    <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub"><a class="link" data-go="#/entradas">registrar compra →</a></div></div>
+    <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
-    <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><span class="badge badge-muted">Saldo = Entrada − Saídas (aplicações aprovadas)</span></div>
+    <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
+    <div class="spacer"></div><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
-  <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">entrada (estoque) · saídas pelas recomendações · saldo</span></div>
-    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Entrada/estoque</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
-      <tbody>${body||'<tr><td colspan="7" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">A <b>entrada/estoque</b> vai para a planilha (coluna ESTOQUE). As <b>saídas</b> vêm das recomendações aprovadas. O <b>saldo</b> = entrada − saídas.</p>`;
+  <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
+    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
+      <tbody>${body||'<tr><td colspan="8" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>.</p>`;
 };
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
@@ -2521,7 +2580,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -2849,6 +2908,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
     else if(a.act==='estToggleMov'){ estoqueSoMov=!estoqueSoMov; act.classList.toggle('on',estoqueSoMov); filterEstoque(); }
+    else if(a.act==='cmpAddItem'){ if(!compraDraft) compraDraft=compraNovoDraft(); compraDraft.itens.push({produto:'',un:'',qtd:0,preco:0}); route(); }
+    else if(a.act==='cmpDelItem'){ if(compraDraft){ compraDraft.itens.splice(+a.i,1); if(!compraDraft.itens.length) compraDraft.itens.push({produto:'',un:'',qtd:0,preco:0}); route(); } }
+    else if(a.act==='cmpSave'){ const d=compraDraft; if(!d||!(d.itens||[]).some(it=>it.produto&&(+it.qtd>0))){ toast('Adicione ao menos um produto com quantidade'); return; }
+      const itens=d.itens.filter(it=>it.produto&&(+it.qtd>0)).map(it=>({produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:+it.qtd||0, preco:+it.preco||0}));
+      COMPRAS.registros.push({ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), fornecedor:d.fornecedor||'', data:d.data||new Date().toISOString().slice(0,10), nf:d.nf||'', obs:d.obs||'', itens, ts:Date.now() });
+      saveCompras(); compraDraft=null; route(); toast('Entrada registrada no estoque'); }
+    else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -2911,6 +2977,10 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
+  if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
+  if(e.target.matches('[data-cmpi]')){ const it=compraDraft&&compraDraft.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.cmpi;
+    if(f==='qtd'||f==='preco') it[f]=_mmC(e.target.value); else { it.produto=e.target.value.trim(); if(PROD[it.produto]) it.un=PROD[it.produto].un||it.un; }
+    route(); } return; }
 });
 // busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
 function filterPrecos(){
@@ -3528,7 +3598,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
