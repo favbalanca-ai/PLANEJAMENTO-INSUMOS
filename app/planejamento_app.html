@@ -801,7 +801,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-82';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-83';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4157,6 +4157,9 @@ function applyPulledData(d){
   reconcileOverrides();
   saveOverrides();
   try{ applyRetornos(d.retornos); }catch(e){}   // baixas dos operadores → recomendações
+  // preços do módulo Preços também vêm no puxar principal (planilha = fonte da verdade),
+  // para que a lista de preços sincronize entre aparelhos junto com o resto — não só pela aba Preços.
+  try{ if(PRECOS) precosApplyPulled(d.precos_app); }catch(e){}
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -4415,6 +4418,9 @@ async function publicarPlanejamento(){
   syncBusy=true; setSyncStatus('busy'); toast('Publicando preços da safra '+PRECOS.atual+'…');
   try{
     const r=await syncPost(url, JSON.stringify({__flatPrecos:flat, safra:PRECOS.atual}));
+    // envia TAMBÉM o módulo de Preços (composição) para a planilha, para os outros
+    // aparelhos puxarem a lista de preços junto com o resto (sincroniza entre celulares).
+    try{ await syncPost(url, JSON.stringify({__precos:PRECOS})); lastPrecosPushSig=JSON.stringify(PRECOS); }catch(e){}
     syncBusy=false; setSyncStatus('ok'); markSynced();
     addHist('push', !(r&&r.fail), 'Publicar preços: '+((r&&r.ok)||0)+' produtos');
     toast('Publicado: '+((r&&r.ok)||0)+' preços (safra '+PRECOS.atual+'). O planejamento busca pela fórmula.');
