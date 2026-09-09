@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-83';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-84';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1224,17 +1224,16 @@ V.compras = function(){
   const groups={};
   all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
-  const th=`<thead><tr><th>Produto</th><th class="num">A comprar</th><th class="num">Estoque</th><th class="num">Saldo</th><th class="num">Em pedido</th><th class="num">Preço</th><th class="num">Valor</th><th class="num">Demanda</th><th>Un</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
+  const th=`<thead><tr><th>Produto</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
   const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-dem="${r.demanda}" data-val="${r.demanda*r.preco}" data-buy="${r.valor}" data-un="${esc(r.un||'')}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
     <td class="c-full"><b>${esc(r.produto)}</b></td>
-    <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
-    <td class="num c-more" data-th="Estoque">${num(r.estoque)}</td>
-    <td class="num c-more" data-th="Saldo" title="${r.saida>0?('Estoque '+num(r.estoque)+' − aplicado '+num(r.saida)):'Estoque − aplicado'}"><b class="est-saldo ${r.saldo<-0.0001?'neg':(r.saida>0?'ok':'')}">${num(r.saldo)}</b></td>
+    <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
+    <td class="num c-more" data-th="Estoque" title="${r.saida>0?('Estoque '+num(r.estoque)+' − aplicado '+num(r.saida)+' = saldo '+num(r.saldo)):'saldo '+num(r.saldo)}">${num(r.saldo)}</td>
     <td class="num c-more" data-th="Em pedido">${r.pedido>0?num(r.pedido):'—'}</td>
+    <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
+    <td class="c-more" data-th="Un">${esc(r.un)}</td>
     <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
-    <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
-    <td class="c-more" data-th="Un">${esc(r.un)}</td>
     <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
     <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`;
   const groupsHtml=classes.map(cl=>{
@@ -1272,7 +1271,7 @@ V.compras = function(){
     <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda restante − Saldo − Em pedido). Saldo = Estoque − aplicado (recom. aprovadas). Estoque e Em pedido são editados na aba Estoque.</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido). A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
