@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-85';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-86';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -48,6 +48,7 @@ function applyPrecoEdit(el){
   else if(k==='itEmpresa'){ s.itens[i].empresa=el.value.trim(); }
   else if(k==='itClasse'){ s.itens[i].classe=el.value.trim().toUpperCase(); }
   else if(k==='itProduto'){ s.itens[i].produto=el.value.trim(); }
+  else if(k==='itUn'){ s.itens[i].un=el.value.trim(); }
   // as colunas % são percentuais no campo (2,9 = +2,9%); guardamos o fator (0,029)
   else if(k==='itPct'){ s.itens[i].pct=numv(el.value)/100; }
   else if(k==='itPctPrazo'){ s.itens[i].pctPrazo=(String(el.value).trim()===''?null:numv(el.value)/100); }
@@ -485,6 +486,7 @@ function buildUnitMap(){
   const map={};
   const put=(prod,un)=>{ const nm=String(prod||'').trim(), u=String(un||'').trim();
     if(nm && u && !map[nm]) map[nm]=u; };
+  try{ const s=safraAtual(); (s&&s.itens||[]).forEach(it=>put(it.produto,it.un)); }catch(e){}  // Preços = unidade mestra
   (DATA.produtos||[]).forEach(p=>put(p.produto,p.un));   // portfólio (planilha)
   try{ talhoesAll().forEach(t=>{                          // operações de todos os talhões
     ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P';
@@ -515,6 +517,8 @@ function mergePrecosProdutos(){
     });
     // preenche a unidade que falta em qualquer produto (inclui portfólio e sintéticos)
     for(const nm in PROD){ if(PROD[nm] && !String(PROD[nm].un||'').trim() && uMap[nm]) PROD[nm].un=uMap[nm]; }
+    // a unidade definida no módulo Preços é a MESTRA: prevalece no produto (acompanha em todos os módulos)
+    s.itens.forEach(it=>{ const nm=String(it.produto||'').trim(), u=String(it.un||'').trim(); if(nm && u && PROD[nm]) PROD[nm].un=u; });
     // preenche o fornecedor que falta em qualquer produto
     for(const nm in PROD){ if(PROD[nm] && !String(PROD[nm].empresa||'').trim() && fMap[nm]) PROD[nm].empresa=fMap[nm]; }
   }catch(e){}
@@ -1386,6 +1390,7 @@ V.precos = function(){
       <input class="pr-prodname" data-pr="itProduto" data-i="${i}" value="${esc(it.produto||'')}" placeholder="produto">
       <input class="pr-emp" data-pr="itEmpresa" data-i="${i}" value="${esc(it.empresa||'')}" placeholder="empresa">
       <input class="pr-cls" list="pr-classes" data-pr="itClasse" data-i="${i}" value="${esc(it.classe||'')}" placeholder="classe">
+      <input class="pr-un" data-pr="itUn" data-i="${i}" value="${esc(it.un||'')}" placeholder="un" title="unidade (L, kg, sc, un…) — acompanha o insumo nos outros módulos e na planilha">
       ${finalCell}
       <input class="pr-price cell${it.precoVista!=null&&it.precoVista!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoVista" data-i="${i}" value="${it.precoVista!=null?it.precoVista:''}" placeholder="${compV>0?fmtn(compV):'à vista'}" title="Preço à vista">
       <input class="pr-price cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'a prazo'}" title="Preço a prazo">
@@ -3640,7 +3645,7 @@ async function publicarPlanejamento(){
   const url=syncUrl(); if(!url){ toast('Configure a URL de sincronização primeiro'); return; }
   if(syncBusy){ toast('Sincronização ocupada — tente de novo'); return; }
   const s=safraAtual();
-  const flat=s.itens.map(it=>({p:it.produto, v:+precoFinal(it,"vista").toFixed(2), z:+precoFinal(it,"prazo").toFixed(2)}))
+  const flat=s.itens.map(it=>({p:it.produto, u:it.un||'', v:+precoFinal(it,"vista").toFixed(2), z:+precoFinal(it,"prazo").toFixed(2)}))
                     .filter(x=>x.p && (x.v>0||x.z>0));
   if(!flat.length){ toast('Nenhum preço composto para publicar — defina as referências das classes'); return; }
   syncBusy=true; setSyncStatus('busy'); toast('Publicando preços da safra '+PRECOS.atual+'…');
