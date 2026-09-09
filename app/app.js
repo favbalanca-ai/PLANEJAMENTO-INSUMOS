@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-78';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-79';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -478,15 +478,33 @@ const precoDe   = p => (PROD[p] ? PROD[p].preco : 0);   // preço SEMPRE da plan
 // Torna os produtos do módulo Preços "válidos" no planejamento: os que ainda não
 // existem no cadastro do planejamento entram como produto sintético (com o preço da
 // lista de preços), para poderem ser escolhidos nas operações e aparecerem na demanda.
+// mapa produto -> unidade, deduzido dos itens das operações dos talhões (a UN da planilha)
+// e do portfólio. O módulo Preços não guarda unidade, então puxamos daqui para que os
+// insumos apareçam com a unidade certa em Demanda, Estoque, Cotação, etc.
+function buildUnitMap(){
+  const map={};
+  const put=(prod,un)=>{ const nm=String(prod||'').trim(), u=String(un||'').trim();
+    if(nm && u && !map[nm]) map[nm]=u; };
+  (DATA.produtos||[]).forEach(p=>put(p.produto,p.un));   // portfólio (planilha)
+  try{ talhoesAll().forEach(t=>{                          // operações de todos os talhões
+    ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P';
+      opsOf(t.id,seq).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>put(it.produto,it.un)));
+    });
+  }); }catch(e){}
+  return map;
+}
 function mergePrecosProdutos(){
   try{
     if(!DATA||!DATA.produtos||typeof safraAtual!=='function') return;
     const s=safraAtual(); if(!s||!s.itens) return;
+    const uMap=buildUnitMap();
     s.itens.forEach(it=>{
       const nm=String(it.produto||'').trim(); if(!nm||PROD[nm]) return;
-      const p={produto:nm, classe:(it.classe||'').toUpperCase(), un:'', preco:+precoFinal(it,'vista')||0, estoque:0, pedido:0, _precos:true};
+      const p={produto:nm, classe:(it.classe||'').toUpperCase(), un:uMap[nm]||'', preco:+precoFinal(it,'vista')||0, estoque:0, pedido:0, _precos:true};
       DATA.produtos.push(p); PROD[nm]=p;
     });
+    // preenche a unidade que falta em qualquer produto (inclui portfólio e sintéticos)
+    for(const nm in PROD){ if(PROD[nm] && !String(PROD[nm].un||'').trim() && uMap[nm]) PROD[nm].un=uMap[nm]; }
   }catch(e){}
 }
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
