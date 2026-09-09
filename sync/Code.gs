@@ -81,7 +81,8 @@ function readData(){
   }
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
-    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos() };
+    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
+    movimentacao:readMovimentacao() };
 }
 
 /* --------- RETORNOS DE APLICAÇÃO (baixa do operador pela página retorno.html) ---------
@@ -98,14 +99,53 @@ function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
     s.appendRow(['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']); s.setFrozenRows(1); }
   s.appendRow([when || new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
 }
-// ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE
+// soma ENTRADA e SAÍDA por produto no razão (fonte COMPARTILHADA entre aparelhos: todo
+// aparelho puxa isto e vê o mesmo saldo, não importa quem registrou a compra/aprovou a recom).
+function readMovimentacao(){
+  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {};
+  if (!s) return { entradas:ent, saidas:sai };
+  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai };
+  var v = s.getRange(2, 1, last - 1, 5).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD
+  for (var i = 0; i < v.length; i++){
+    var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]);
+    if (!prod || !qtd) continue;
+    if (tipo.indexOf('ENTRADA') === 0) ent[prod] = (ent[prod] || 0) + qtd;
+    else if (tipo.indexOf('SA') === 0) sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
+  }
+  return { entradas:ent, saidas:sai };
+}
+// remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
+function movDeleteBySource(id){
+  var s = ss().getSheetByName(MOV_SHEET); if (!s) return;
+  var last = s.getLastRow(); if (last < 2) return;
+  var tag = '[#' + S(id) + ']';
+  var org = s.getRange(2, 6, last - 1, 1).getValues();   // coluna ORIGEM (6)
+  for (var i = org.length - 1; i >= 0; i--){ if (S(org[i][0]).indexOf(tag) >= 0) s.deleteRow(i + 2); }
+}
+// ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE.
+// Idempotente pelo id da compra (etiqueta [#id] no ORIGEM): reenviar a mesma compra não duplica.
 function writeEntrada(ent){
   var itens = (ent && ent.itens) || [], n = 0;
   var when = new Date();
   if (ent && ent.data && /^\d{4}-\d{2}-\d{2}/.test(String(ent.data))) when = new Date(String(ent.data).slice(0,10) + 'T12:00:00');
-  var origem = 'Compra' + (ent.nf ? ' NF ' + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '');
+  if (ent && ent.id) movDeleteBySource(ent.id);
+  var origem = 'Compra' + (ent.nf ? ' NF ' + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
     logMovimentacao('ENTRADA', it.produto, it.un, it.qtd, origem, S(ent.obs), when); n++; }
+  return { rows:n };
+}
+// SAÍDA de estoque por recomendação APROVADA (o app envia na aprovação). Idempotente pelo id:
+// reprovar/reabrir envia itens vazio e limpa as linhas dessa recom, sem afetar as outras.
+function writeSaida(sd){
+  var itens = (sd && sd.itens) || [], n = 0;
+  if (!sd || !sd.id) return { rows:0 };
+  movDeleteBySource(sd.id);                            // limpa saídas anteriores dessa recom
+  var when = new Date();
+  if (sd.data && /^\d{4}-\d{2}-\d{2}/.test(String(sd.data))) when = new Date(String(sd.data).slice(0,10) + 'T12:00:00');
+  var origem = 'Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : '') + ' [#' + S(sd.id) + ']';
+  for (var i = 0; i < itens.length; i++){ var it = itens[i];
+    if (!S(it.produto) || !(N(it.real) > 0)) continue;
+    logMovimentacao('SAÍDA', it.produto, it.un, it.real, origem, S(sd.operador), when); n++; }
   return { rows:n };
 }
 function retornosSheet(){
@@ -129,15 +169,15 @@ function readRetornos(){
 }
 function writeRetorno(ret){
   var s = retornosSheet(), when = new Date(), n = 0, itens = (ret && ret.itens) || [];
-  var origem = 'Recom ' + S(ret.id) + (ret.talhao ? ' · ' + S(ret.talhao) : '');
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
     s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), S(it.produto), S(it.un), N(it.plan), N(it.real), S(ret.obs)]);
-    // saída de estoque pela recomendação (só produtos com volume utilizado)
-    if (S(it.produto) && N(it.real) > 0) logMovimentacao('SAÍDA', it.produto, it.un, it.real, origem, S(ret.operador));
     n++;
   }
   if (!n){ s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), '', '', 0, 0, S(ret.obs)]); }
+  // A SAÍDA de estoque NÃO é lançada aqui: o retorno do operador é só a informação do volume.
+  // A baixa no estoque é lançada quando o Adm APROVA a recomendação (writeSaida), ponto único
+  // de commit — assim não conta duas vezes e sincroniza entre aparelhos.
   return { rows:n };
 }
 
@@ -513,6 +553,8 @@ function doPost(e){
       var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
     } else if (payload && payload.__entrada){        // compra do app -> entrada no razão de estoque
       var en = writeEntrada(payload.__entrada); out.ok = en.rows;
+    } else if (payload && payload.__saida){          // recomendação aprovada -> saída no razão (sincroniza entre aparelhos)
+      var sr = writeSaida(payload.__saida); out.ok = sr.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }

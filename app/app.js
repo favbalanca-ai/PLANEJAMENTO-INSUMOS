@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-80';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-81';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1050,12 +1050,45 @@ function pushEntradasPendentes(){
   toast('Enviando '+pend.length+' compra(s)…');
   Promise.all(pend.map(pushEntrada)).then(()=>{ route({keepScroll:true}); toast('Compras enviadas à planilha'); });
 }
+// envia a SAÍDA de uma recomendação APROVADA para a planilha (razão de estoque, idempotente pelo id).
+// Assim a baixa aparece no estoque de TODOS os aparelhos, não só onde foi aprovada.
+function pushSaida(r){
+  const url=syncUrl(); if(!url||!r) return Promise.resolve(false);
+  const rn=recomNorm(r);
+  const itens=(rn.itens||[]).filter(it=>it.produto&&it.real!=null&&+it.real>0).map(it=>({produto:it.produto, un:it.un||'', real:+it.real||0}));
+  const payload={id:r.id, talhao:r.talhao||'', data:r.data||'', operador:(r.aprov&&r.aprov.por)||r.resp||'', itens};
+  return syncPost(url, JSON.stringify({__saida:payload}))
+    .then(()=>{ r.saidaPushed=true; saveRecom(); return true; }).catch(()=>false);
+}
+// limpa a SAÍDA de uma recomendação na planilha (ao reprovar/reabrir/excluir uma que já subiu)
+function clearSaida(r){
+  if(!r) return Promise.resolve(false);
+  const wasPushed=!!r.saidaPushed; r.saidaPushed=false; saveRecom();
+  const url=syncUrl(); if(!url||!wasPushed) return Promise.resolve(false);
+  return syncPost(url, JSON.stringify({__saida:{id:r.id, itens:[]}})).then(()=>true).catch(()=>false);
+}
+// reenvia as baixas aprovadas que ainda não subiram (ex.: aprovadas offline)
+function pushSaidasPendentes(){
+  const url=syncUrl(); if(!url) return Promise.resolve();
+  const pend=(RECOM.registros||[]).filter(r=>recomNorm(r).status==='aprovada' && !r.saidaPushed);
+  if(!pend.length) return Promise.resolve();
+  return Promise.all(pend.map(pushSaida));
+}
 function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
 function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
-// entradas de estoque por produto (soma de todas as compras registradas)
+// entradas de estoque por produto. Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE),
+// para que todos os aparelhos vejam as mesmas compras. Soma as compras deste aparelho ainda
+// NÃO enviadas (pendentes) para não sumirem do saldo antes de subir.
 function estoqueEntradas(){
   const m={};
-  (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
+  const mov=(DATA&&DATA.movimentacao)||null;
+  if(mov&&mov.entradas){
+    for(const k in mov.entradas) m[k]=(m[k]||0)+(+mov.entradas[k]||0);        // planilha (todos os aparelhos)
+    (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ if(c.pushed) return;         // só as pendentes deste aparelho
+      (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
+  } else {                                                                     // sem sincronização: só o local
+    (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
+  }
   return m;
 }
 V.entradas=function(){
@@ -1105,11 +1138,20 @@ V.entradas=function(){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
 /* ================= CONTROLE DE ESTOQUE (portfólio: entradas × saídas × saldo) ================= */
-// saídas = soma do volume utilizado nas recomendações APROVADAS (por produto)
+// saídas = soma do volume utilizado nas recomendações APROVADAS (por produto).
+// Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE). Soma as aprovações deste aparelho
+// ainda NÃO enviadas (r.saidaPushed !== true), para não sumirem do saldo antes de subir.
 function estoqueSaidas(){
   const m={};
-  (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0); if(r.status!=='aprovada') return;
-    (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+  const mov=(DATA&&DATA.movimentacao)||null;
+  if(mov&&mov.saidas){
+    for(const k in mov.saidas) m[k]=(m[k]||0)+(+mov.saidas[k]||0);            // planilha (todos os aparelhos)
+    (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.saidaPushed) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
+      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+  } else {                                                                     // sem sincronização: só o local
+    (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0); if(r.status!=='aprovada') return;
+      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+  }
   return m;
 }
 let estoqueQ='', estoqueClasse='', estoqueSoMov=false;
@@ -1157,7 +1199,7 @@ V.estoque=function(){
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
     <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||'<tr><td colspan="8" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>.</p>`;
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.</p>`;
 };
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
@@ -2944,10 +2986,12 @@ document.addEventListener('click',e=>{
       r.retorno={quem:(r.retorno&&r.retorno.quem)||'', obs:(r.retorno&&r.retorno.obs)||'', ts:Date.now()};
       (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
       saveRecom(); route(); toast('Registre o volume utilizado e aprove'); } }
-    else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; saveRecom(); route(); toast('Aplicação aprovada — no histórico do talhão'); } }
-    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
-    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; saveRecom(); route(); toast('Reaberta para edição'); } }
-    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
+    else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; r.saidaPushed=false; saveRecom(); route();
+      toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
+      pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); }); } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); saveRecom(); route(); toast('Reaberta para edição'); } }
+    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
@@ -3419,6 +3463,8 @@ async function syncPost(url, body){
 // ENVIAR — app -> planilha. opts.auto = disparado por edição (silencioso; deduplica)
 async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
+  // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
+  try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushSaidasPendentes(); }catch(e){}
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
