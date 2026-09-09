@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-81';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-82';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3688,6 +3688,15 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 
 $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringify(OV,null,2),'application/json'); toast('Edições exportadas'); };
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
+// Forçar atualização: limpa o cache do PWA, remove o service worker e recarrega da rede.
+// Resolve o caso "o app do celular ficou preso numa versão antiga". NÃO apaga seus dados/edições.
+{ const bu=$('#btn-update'); if(bu) bu.onclick=async ()=>{
+  toast('Atualizando… o app vai recarregar');
+  try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } }catch(e){}
+  try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
+  const u=new URL(location.href); u.searchParams.set('v', Date.now());   // fura qualquer cache de CDN
+  location.replace(u.toString());
+}; }
 
 /* ================= INIT ================= */
 function boot(d){
