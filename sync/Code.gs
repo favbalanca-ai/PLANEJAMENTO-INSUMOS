@@ -199,10 +199,16 @@ function writePrecosSheet(precos){
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
 }
-// Aba plana "PREÇOS" no Banco: PRODUTO | À VISTA | A PRAZO | SAFRA.
-// É a lista que o PORTIFÓLIO do planejamento busca por VLOOKUP+IMPORTRANGE.
+// Aba plana "PREÇOS" na PRÓPRIA planilha do planejamento: PRODUTO | À VISTA | A PRAZO | SAFRA.
+// É a lista que o PORTIFÓLIO busca por VLOOKUP LOCAL (sem IMPORTRANGE — mais robusto).
+// Grava também no Banco (histórico permanente), mas o VLOOKUP do PORTIFÓLIO usa a local.
 function writeFlatPrecos(list, safra){
-  var b = precosSS(), s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
+  writeFlatPrecosEm(ss(), list, safra);                       // local (planejamento) — é a que o PORTIFÓLIO usa
+  if (PRECOS_DB_ID){ try { writeFlatPrecosEm(precosSS(), list, safra); } catch(e){} }   // cópia no Banco (histórico)
+  return { rows: (list||[]).length };
+}
+function writeFlatPrecosEm(b, list, safra){
+  var s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
   s.clearContents();
   var rows = [['PRODUTO', 'À VISTA', 'A PRAZO', 'SAFRA']];
   (list || []).forEach(function(it){
@@ -643,9 +649,9 @@ function enxugarVazios(){
       pessoa) > copie a URL /exec.
    4) No app, tela Sincronizar, troque a URL. Pronto.
 
-   Preço AUTOMÁTICO: a coluna VALOR do PORTIFÓLIO puxa o preço do "Banco de Preços"
-   por fórmula (VLOOKUP + IMPORTRANGE). Na 1ª vez o Google mostra "#REF! — Permitir
-   acesso" numa célula: clique em Permitir uma vez e os preços aparecem.
+   Preço AUTOMÁTICO: a coluna VALOR do PORTIFÓLIO puxa o preço da aba local "PREÇOS"
+   por fórmula (VLOOKUP local, sem IMPORTRANGE). A aba PREÇOS é preenchida quando o
+   app publica os preços (tela Preços → "Publicar preços").
 
    Controle de estoque (base pronta):
    - PORTIFÓLIO ganha ESTOQUE (entradas/manual), CONSUMO (soma das saídas das
@@ -662,7 +668,7 @@ function gerarPlanilhaLimpa(){
   var MV = nb.insertSheet(MOV_SHEET);
   MV.getRange(1, 1, 1, 7).setValues([['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']]);
   MV.setFrozenRows(1);
-  garantirPrecosBancoIn(nb);   // aba auxiliar do Banco de Preços (autorização do IMPORTRANGE)
+  garantirPrecosBancoIn(nb);   // aba local "PREÇOS" (preenchida pelo app; VLOOKUP local)
 
   // ---- PORTIFÓLIO (cabeçalho na linha 3; dados a partir da 4) ----
   // S=VALOR (preço automático, do Banco de Preços) · T=ESTOQUE (entradas/manual) ·
@@ -744,7 +750,7 @@ function gerarPlanilhaLimpa(){
    No editor, selecione "preencherPortifolio" e Executar. */
 function preencherPortifolio(){
   var D = readData(), prods = produtosMerged(D);
-  garantirPrecosBanco();   // aba auxiliar do Banco (autorização do IMPORTRANGE)
+  garantirPrecosBanco();   // aba local "PREÇOS" (preenchida pelo app; VLOOKUP local)
   var P = ss().getSheetByName('PORTIFÓLIO') || ss().insertSheet('PORTIFÓLIO');
   if (P.getMaxColumns() < 23) P.insertColumnsAfter(P.getMaxColumns(), 23 - P.getMaxColumns());
   P.getRange(1, 1).setValue('PORTIFÓLIO — produtos');
@@ -834,30 +840,24 @@ function produtosMerged(D){
 }
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
-// fórmula do preço automático (busca o produto no Banco de Preços; 0 se não achar)
-var PRECOS_BANCO_SHEET = 'PREÇOS BANCO';   // aba auxiliar com 1 IMPORTRANGE do Banco (mostra "Permitir acesso")
-// preço: VLOOKUP LOCAL na aba auxiliar (não usa IMPORTRANGE dentro de IFERROR,
-// senão o Google esconde o aviso de autorização e o preço volta 0 calado)
+// preço: VLOOKUP LOCAL na aba "PREÇOS" da própria planilha (sem IMPORTRANGE — robusto).
+// A aba PREÇOS é preenchida quando o app publica os preços (Preços → Publicar preços).
 function precoFormula(L){
-  var faixa = PRECOS_DB_ID ? "'" + PRECOS_BANCO_SHEET + "'!$A:$B" : "'PREÇOS'!$A:$B";
-  return '=IFERROR(VLOOKUP($C' + L + ',' + faixa + ',2,FALSE),0)';
+  return "=IFERROR(VLOOKUP($C" + L + ",'PREÇOS'!$A:$B,2,FALSE),0)";
 }
-// cria/atualiza a aba auxiliar que traz o Banco de Preços por 1 IMPORTRANGE puro.
-// O IMPORTRANGE puro mostra o botão "Permitir acesso" (autorização única).
+// garante uma aba "PREÇOS" (local) com cabeçalho, para o VLOOKUP não quebrar antes de publicar
 function garantirPrecosBancoIn(book){
-  if (!book || !PRECOS_DB_ID) return;   // sem Banco separado: usa a aba PREÇOS local
-  var s = book.getSheetByName(PRECOS_BANCO_SHEET) || book.insertSheet(PRECOS_BANCO_SHEET);
-  s.getRange(1, 1).setFormula('=IMPORTRANGE("' + PRECOS_DB_ID + '","PREÇOS!A:B")');
-  s.getRange(1, 4).setValue('◀ Se aparecer "#REF! — Permitir acesso" na célula A1, clique em Permitir (uma vez). Esta aba traz os preços do Banco.');
+  if (!book) return;
+  var s = book.getSheetByName('PREÇOS');
+  if (!s){ s = book.insertSheet('PREÇOS'); s.getRange(1,1,1,4).setValues([['PRODUTO','À VISTA','A PRAZO','SAFRA']]); s.setFrozenRows(1); }
 }
-// versão para a planilha em uso
 function garantirPrecosBanco(){ garantirPrecosBancoIn(ss()); }
 
 /* ------------------------- RELIGAR PREÇOS (rodar à mão) -------------------------
-   Conserta o "não puxa preços": cria a aba auxiliar do Banco (IMPORTRANGE puro) e
-   reescreve as fórmulas da coluna VALOR do PORTIFÓLIO para buscar nessa aba.
-   Depois, abra a aba "PREÇOS BANCO" e clique em "Permitir acesso" na célula A1
-   (autorização única do IMPORTRANGE). No editor, selecione "ligarPrecos" e Executar. */
+   Conserta o "não puxa preços": garante a aba local PREÇOS e reescreve as fórmulas
+   da coluna VALOR do PORTIFÓLIO para buscar nessa aba (VLOOKUP local, sem IMPORTRANGE).
+   Depois, no app: Preços → "Publicar preços" preenche a aba PREÇOS e o VALOR aparece.
+   No editor, selecione "ligarPrecos" e Executar. */
 function ligarPrecos(){
   garantirPrecosBanco();
   var P = ss().getSheetByName('PORTIFÓLIO');
@@ -867,7 +867,7 @@ function ligarPrecos(){
     for (var i = 0; i < nn; i++){ var L = 4 + i; f.push([ S(cvals[i][0]) ? precoFormula(L) : '' ]); if (S(cvals[i][0])) n++; }
     P.getRange(4, 19, nn, 1).setFormulas(f);   // col S = VALOR
   }
-  var msg = 'Preços religados em ' + n + ' produto(s). Abra a aba "PREÇOS BANCO" e clique em "Permitir acesso" na A1.';
+  var msg = 'VALOR religado em ' + n + ' produto(s) (busca local na aba PREÇOS). Agora, no app: Preços → Publicar preços.';
   Logger.log(msg); try { ss().toast(msg, 'Pronto', 15); } catch (e) {}
   return msg;
 }
