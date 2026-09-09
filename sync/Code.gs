@@ -198,7 +198,8 @@ function precosSheet(){ var b = precosSS(), s = b.getSheetByName(PRECOS_SHEET); 
 function readPrecosSheet(){
   var s = precosSS().getSheetByName(PRECOS_SHEET); if (!s) return { safras:{} };
   var last = s.getLastRow(); if (last < 2) return { safras:{} };
-  var v = s.getRange(2, 1, last - 1, 9).getValues(), safras = {};
+  var ncol = Math.min(10, s.getLastColumn());                         // 10ª coluna = UN (retrocompatível: 9 antes)
+  var v = s.getRange(2, 1, last - 1, ncol).getValues(), safras = {};
   for (var i = 0; i < v.length; i++){
     var r = v[i], safra = S(r[0]), tipo = S(r[1]).toUpperCase();
     if (!safra) continue;
@@ -212,7 +213,7 @@ function readPrecosSheet(){
       var dz = (r[6] === '' || r[6] == null) ? null : N(r[6]);         // preço a prazo direto
       var pv = (r[7] === '' || r[7] == null) ? null : N(r[7]) / 100;   // % -> fator
       var pp = (r[8] === '' || r[8] == null) ? null : N(r[8]) / 100;
-      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), precoVista:dv, precoPrazo:dz, pct:pv, pctPrazo:pp });
+      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), un:S(r[9]||''), precoVista:dv, precoPrazo:dz, pct:pv, pctPrazo:pp });
     }
   }
   return { safras:safras };
@@ -220,22 +221,22 @@ function readPrecosSheet(){
 function writePrecosSheet(precos){
   var s = precosSheet();
   s.clearContents();
-  var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO']];
+  var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO','UN']];
   var safras = (precos && precos.safras) || {};
   Object.keys(safras).forEach(function(nm){
     var sf = safras[nm] || {};
     (sf.refs || []).forEach(function(r){
       rows.push([nm, 'REF', '', S(r.classe), S(r.produto),
-        r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '']);
+        r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '', '']);
     });
     (sf.itens || []).forEach(function(it){
       rows.push([nm, 'ITEM', S(it.empresa), S(it.classe), S(it.produto),
         (it.precoVista == null || it.precoVista === '') ? '' : N(it.precoVista),
         (it.precoPrazo == null || it.precoPrazo === '') ? '' : N(it.precoPrazo),
-        it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100)]);
+        it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100), S(it.un || '')]);
     });
   });
-  s.getRange(1, 1, rows.length, 9).setValues(rows);
+  s.getRange(1, 1, rows.length, 10).setValues(rows);
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
 }
@@ -245,18 +246,35 @@ function writePrecosSheet(precos){
 function writeFlatPrecos(list, safra){
   writeFlatPrecosEm(ss(), list, safra);                       // local (planejamento) — é a que o PORTIFÓLIO usa
   if (PRECOS_DB_ID){ try { writeFlatPrecosEm(precosSS(), list, safra); } catch(e){} }   // cópia no Banco (histórico)
+  try { escreveUnPortifolio(list); } catch(e){}               // a unidade do módulo Preços acompanha na planilha (PORTIFÓLIO UN)
   return { rows: (list||[]).length };
 }
 function writeFlatPrecosEm(b, list, safra){
   var s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
   s.clearContents();
-  var rows = [['PRODUTO', 'À VISTA', 'A PRAZO', 'SAFRA']];
+  // A..D usados pelo VLOOKUP do PORTIFÓLIO (A:B); UN vai na coluna E (não quebra a fórmula).
+  var rows = [['PRODUTO', 'À VISTA', 'A PRAZO', 'SAFRA', 'UN']];
   (list || []).forEach(function(it){
-    rows.push([S(it.p), (it.v == null || it.v === '') ? '' : N(it.v), (it.z == null || it.z === '') ? '' : N(it.z), S(safra)]);
+    rows.push([S(it.p), (it.v == null || it.v === '') ? '' : N(it.v), (it.z == null || it.z === '') ? '' : N(it.z), S(safra), S(it.u || '')]);
   });
-  s.getRange(1, 1, rows.length, 4).setValues(rows);
+  s.getRange(1, 1, rows.length, 5).setValues(rows);
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
+}
+// leva a unidade publicada (módulo Preços) para a coluna UN (F) do PORTIFÓLIO, casando pelo produto.
+// Só grava quando a unidade vem preenchida — não apaga o que já existe.
+function escreveUnPortifolio(list){
+  var P = ss().getSheetByName('PORTIFÓLIO'); if (!P) return;
+  var last = P.getLastRow(); if (last < 4) return;
+  var n = last - 3;
+  var byName = {};
+  (list || []).forEach(function(it){ var k = S(it.p).trim().toUpperCase(); if (k && S(it.u)) byName[k] = S(it.u); });
+  var prod = P.getRange(4, 3, n, 1).getValues();   // C = produto
+  var un = P.getRange(4, 6, n, 1).getValues();     // F = UN
+  var dirty = false;
+  for (var i = 0; i < n; i++){ var k = S(prod[i][0]).trim().toUpperCase();
+    if (k && byName[k] && S(un[i][0]) !== byName[k]){ un[i][0] = byName[k]; dirty = true; } }
+  if (dirty) P.getRange(4, 6, n, 1).setValues(un);
 }
 
 // mapa das colunas da tabela do talhão, detectado pelo cabeçalho (linha 9), 0-based.

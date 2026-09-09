@@ -638,6 +638,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pr-prodname{flex:1 1 190px;font-weight:600;color:var(--ink);min-width:0}
 .pr-emp{flex:1 1 120px;color:var(--muted);font-size:12px;min-width:0}
 .pr-cls{flex:0 1 130px;color:var(--muted);font-size:12px;min-width:0}
+.pr-un{width:58px;flex:0 0 auto;text-align:center;color:var(--muted);font-size:12px}
 .pr-price{width:98px;flex:0 0 auto;text-align:right}
 .pr-item .icon-btn{flex:0 0 auto;width:36px;height:36px;font-size:16px}
 /* preço final calculado + variação e alerta de referência */
@@ -656,6 +657,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .pr-item input{font-size:16px;min-height:40px}   /* 16px evita o zoom do iOS ao focar */
   .pr-prodname{flex:1 1 100%}
   .pr-emp,.pr-cls{flex:1 1 calc(50% - 4px)}
+  .pr-un{flex:0 0 70px;width:auto}
   .pr-price{flex:1 1 calc(50% - 24px);width:auto;text-align:left}
 }
 
