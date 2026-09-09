@@ -662,6 +662,7 @@ function gerarPlanilhaLimpa(){
   var MV = nb.insertSheet(MOV_SHEET);
   MV.getRange(1, 1, 1, 7).setValues([['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']]);
   MV.setFrozenRows(1);
+  garantirPrecosBancoIn(nb);   // aba auxiliar do Banco de Preços (autorização do IMPORTRANGE)
 
   // ---- PORTIFÓLIO (cabeçalho na linha 3; dados a partir da 4) ----
   // S=VALOR (preço automático, do Banco de Preços) · T=ESTOQUE (entradas/manual) ·
@@ -743,6 +744,7 @@ function gerarPlanilhaLimpa(){
    No editor, selecione "preencherPortifolio" e Executar. */
 function preencherPortifolio(){
   var D = readData(), prods = produtosMerged(D);
+  garantirPrecosBanco();   // aba auxiliar do Banco (autorização do IMPORTRANGE)
   var P = ss().getSheetByName('PORTIFÓLIO') || ss().insertSheet('PORTIFÓLIO');
   if (P.getMaxColumns() < 23) P.insertColumnsAfter(P.getMaxColumns(), 23 - P.getMaxColumns());
   P.getRange(1, 1).setValue('PORTIFÓLIO — produtos');
@@ -833,11 +835,41 @@ function produtosMerged(D){
 // array de n posições em branco
 function blank(n){ var a = []; for (var i = 0; i < n; i++) a.push(''); return a; }
 // fórmula do preço automático (busca o produto no Banco de Preços; 0 se não achar)
+var PRECOS_BANCO_SHEET = 'PREÇOS BANCO';   // aba auxiliar com 1 IMPORTRANGE do Banco (mostra "Permitir acesso")
+// preço: VLOOKUP LOCAL na aba auxiliar (não usa IMPORTRANGE dentro de IFERROR,
+// senão o Google esconde o aviso de autorização e o preço volta 0 calado)
 function precoFormula(L){
-  var faixa = PRECOS_DB_ID
-    ? 'IMPORTRANGE("' + PRECOS_DB_ID + '","PREÇOS!$A:$B")'
-    : "'PREÇOS'!$A:$B";
+  var faixa = PRECOS_DB_ID ? "'" + PRECOS_BANCO_SHEET + "'!$A:$B" : "'PREÇOS'!$A:$B";
   return '=IFERROR(VLOOKUP($C' + L + ',' + faixa + ',2,FALSE),0)';
+}
+// cria/atualiza a aba auxiliar que traz o Banco de Preços por 1 IMPORTRANGE puro.
+// O IMPORTRANGE puro mostra o botão "Permitir acesso" (autorização única).
+function garantirPrecosBancoIn(book){
+  if (!book || !PRECOS_DB_ID) return;   // sem Banco separado: usa a aba PREÇOS local
+  var s = book.getSheetByName(PRECOS_BANCO_SHEET) || book.insertSheet(PRECOS_BANCO_SHEET);
+  s.getRange(1, 1).setFormula('=IMPORTRANGE("' + PRECOS_DB_ID + '","PREÇOS!A:B")');
+  s.getRange(1, 4).setValue('◀ Se aparecer "#REF! — Permitir acesso" na célula A1, clique em Permitir (uma vez). Esta aba traz os preços do Banco.');
+}
+// versão para a planilha em uso
+function garantirPrecosBanco(){ garantirPrecosBancoIn(ss()); }
+
+/* ------------------------- RELIGAR PREÇOS (rodar à mão) -------------------------
+   Conserta o "não puxa preços": cria a aba auxiliar do Banco (IMPORTRANGE puro) e
+   reescreve as fórmulas da coluna VALOR do PORTIFÓLIO para buscar nessa aba.
+   Depois, abra a aba "PREÇOS BANCO" e clique em "Permitir acesso" na célula A1
+   (autorização única do IMPORTRANGE). No editor, selecione "ligarPrecos" e Executar. */
+function ligarPrecos(){
+  garantirPrecosBanco();
+  var P = ss().getSheetByName('PORTIFÓLIO');
+  if (!P){ Logger.log('Sem aba PORTIFÓLIO'); return 'Sem PORTIFÓLIO'; }
+  var last = P.getLastRow(), n = 0;
+  if (last >= 4){ var nn = last - 3, cvals = P.getRange(4, 3, nn, 1).getValues(), f = [];
+    for (var i = 0; i < nn; i++){ var L = 4 + i; f.push([ S(cvals[i][0]) ? precoFormula(L) : '' ]); if (S(cvals[i][0])) n++; }
+    P.getRange(4, 19, nn, 1).setFormulas(f);   // col S = VALOR
+  }
+  var msg = 'Preços religados em ' + n + ' produto(s). Abra a aba "PREÇOS BANCO" e clique em "Permitir acesso" na A1.';
+  Logger.log(msg); try { ss().toast(msg, 'Pronto', 15); } catch (e) {}
+  return msg;
 }
 // fórmula do consumo (soma as SAÍDAS do razão de estoque para o produto da linha)
 function consumoFormula(L){
