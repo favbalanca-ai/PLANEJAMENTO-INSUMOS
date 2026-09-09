@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-84';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-85';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -801,6 +801,33 @@ V.dashboard = function(){
     const sa=Object.values(a.cc).reduce((x,y)=>x+y,0), sb=Object.values(b.cc).reduce((x,y)=>x+y,0); return sb-sa; });
   const ccTot={}; tCC.forEach(o=>{ for(const k in o.cc) ccTot[k]=(ccTot[k]||0)+o.cc[k]; });
   const ccCols=Object.entries(ccTot).sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[0]);
+  // área por empreendimento (pizza) — soma a área de cada talhão no seu empreendimento;
+  // se o talhão tem safrinha (2ª safra), a área também conta para o empreendimento da safrinha.
+  const areaEmp={};
+  taisSeq.forEach(o=>{ const a=areaDe(o.t); o.seqs.forEach(seq=>{ const e=(seq==='safrinha'?empSafDe(o.t):empDe(o.t))||'—'; if(e&&e!=='—') areaEmp[e]=(areaEmp[e]||0)+a; }); });
+  const areaEmpArr=Object.entries(areaEmp).sort((a,b)=>b[1]-a[1]);
+  const areaEmpTot=areaEmpArr.reduce((s,x)=>s+x[1],0);
+  const PIE=['#2f7d6e','#e0a458','#c0645a','#5a7fb0','#8a6fb0','#6fa06f','#b0894f','#3f9aa8','#a05a86','#7a8b3f','#c07d3f','#4f6f9a'];
+  let _acc=0;
+  const pieStops=areaEmpArr.map((x,i)=>{ const f=areaEmpTot>0?x[1]/areaEmpTot*100:0; const s=`${PIE[i%PIE.length]} ${_acc}% ${_acc+f}%`; _acc+=f; return s; }).join(',');
+  const pieBlock = (areaEmpArr.length && areaEmpTot>0) ? `
+  <div class="panel"><div class="panel-head"><h2>Área por empreendimento</h2><span class="sub">${areaEmpArr.length} empreendimento(s) · ${num(areaEmpTot)} ha${(areaEmpTot>areaTotal+0.5)?' (1ª + 2ª safra)':''}</span></div>
+    <div class="panel-body" style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;justify-content:center">
+      <div style="position:relative;width:190px;height:190px;flex:0 0 auto">
+        <div style="width:100%;height:100%;border-radius:50%;background:conic-gradient(${pieStops});-webkit-mask:radial-gradient(circle at center, transparent 54%, #000 55%);mask:radial-gradient(circle at center, transparent 54%, #000 55%)"></div>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none">
+          <div style="font-size:22px;font-weight:700;line-height:1">${num(areaEmpTot)}</div>
+          <div class="mut" style="font-size:10px;letter-spacing:.04em">ha</div>
+        </div>
+      </div>
+      <div style="flex:1 1 240px;min-width:210px">
+        ${areaEmpArr.map((x,i)=>`<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line,rgba(128,128,128,.15))">
+          <span style="width:12px;height:12px;border-radius:3px;background:${PIE[i%PIE.length]};flex:0 0 auto"></span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x[0])}">${esc(x[0])}</span>
+          <b style="white-space:nowrap">${num(x[1])} ha</b>
+          <span class="mut" style="min-width:46px;text-align:right">${(x[1]/areaEmpTot*100).toFixed(1)}%</span></div>`).join('')}
+      </div>
+    </div></div>` : '';
 
   return `
   <div class="classe-filter" id="painel-empf" style="margin-bottom:14px">
@@ -813,6 +840,7 @@ V.dashboard = function(){
     <div class="kpi"><div class="k-label">Custo de insumos (plano)</div><div class="k-value">${brl0(custoTotal)}</div><div class="k-sub">${areaTotal>0?brl(custoTotal/areaTotal):'—'} / ha</div></div>
     <div class="kpi"><div class="k-label">Itens sem preço</div><div class="k-value" style="color:${semPreco?'var(--red)':'var(--green)'}">${semPreco}</div><div class="k-sub">a cadastrar preço</div></div>
   </div>
+  ${pieBlock}
   <div class="grid-2">
     <div class="panel"><div class="panel-head"><h2>Custo por cultura</h2><span class="sub">insumos, plano</span></div>
       <div class="panel-body">${culturas.map(([n,v])=>`
