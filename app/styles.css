@@ -407,6 +407,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area section{page-break-inside:auto}
   #print-area section.pb{page-break-before:always}
   #print-area .foot{font-size:11px;color:#333;margin:6px 0 4px}
+  #print-area tr.grp td{background:#f2f2f2;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
+  #print-area tfoot th{background:#e0e0e0}
   @page{margin:14mm}
 }
 
