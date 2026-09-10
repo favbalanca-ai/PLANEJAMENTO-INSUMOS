@@ -805,7 +805,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-87';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-88';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2106,7 +2106,7 @@ V.compras = function(){
     <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <button class="btn btn-outline btn-sm" id="btn-dem-emp-pdf" title="Relatório de demanda de insumos por empreendimento (PDF)">🖨 Relatório por empreendimento</button>
+    <button class="btn btn-outline btn-sm" id="btn-dem-emp-pdf" title="Relatório de demanda de insumos dos empreendimentos selecionados em 'Fracionar por empreendimento' (PDF)">🖨 Relatório dos selecionados</button>
     <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido). A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
@@ -4054,10 +4054,11 @@ function exportCotacaoPDF(){
 // agrupados por classe, com preço, valor e total por empreendimento. Respeita o filtro da tela.
 function exportDemandaEmpPDF(){
   const sel=comprasEmpSel;
-  const emps=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&(!sel.size||sel.has(e))))].sort((a,b)=>a.localeCompare(b,'pt'));
-  if(!emps.length){ toast('Sem empreendimentos com demanda'); return; }
+  if(!sel.size){ toast('Selecione os empreendimentos em "Fracionar por empreendimento" para gerar o relatório'); return; }
+  const emps=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&sel.has(e)))].sort((a,b)=>a.localeCompare(b,'pt'));
+  if(!emps.length){ toast('Sem empreendimentos com demanda para a seleção'); return; }
   let html=`<div class="pdf-head"><h1>Demanda de insumos por empreendimento — Safra 2026/2027</h1>
-    <div class="meta">${emps.length} empreendimento(s) · gerado pelo app Planejamento</div></div>`;
+    <div class="meta">${emps.length} empreendimento(s) selecionado(s) · gerado pelo app Planejamento</div></div>`;
   let grand=0, blocos=0;
   emps.forEach(e=>{
     const dem=calcDemanda(new Set([e]));
