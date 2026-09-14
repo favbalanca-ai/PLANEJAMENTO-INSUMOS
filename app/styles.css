@@ -58,6 +58,7 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .entry-card.ec-plan:hover{border-color:var(--teal)}
 .entry-card.ec-campo:hover{border-color:var(--green)}
 .entry-card.ec-precos:hover{border-color:#c98a1e}
+.entry-card.ec-admin:hover{border-color:#6a5acd}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
