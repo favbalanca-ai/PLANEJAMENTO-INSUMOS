@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-90';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-91';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1375,16 +1375,16 @@ V.cotacao = function(){
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
     const sub=its.reduce((a,r)=>a+r.valor,0);
     return `<div class="panel"><div class="panel-head"><h2>${esc(forn)}</h2><span class="sub">${its.length} itens · ${brl0(sub)}</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Dose/ha</th><th class="num">Qtd</th><th class="num">Saldo</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Custo/ha</th><th class="num">Valor ref.</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Dose/ha</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Custo/ha</th><th class="num">Valor ref.</th></tr></thead>
     <tbody>${its.map(r=>{ const dha=doseHaDe(r), cha=dha*(r.preco||0);
       return `<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
       <td class="num">${dha>0?num(dha):'—'}</td>
       <td class="num">${num(r.comprar)}</td>
-      <td class="num"><span class="est-saldo ${r.saldo<-0.0001?'neg':(r.saida>0?'ok':'')}">${num(r.saldo||0)}</span></td><td>${esc(r.un)}</td>
+      <td>${esc(r.un)}</td>
       <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
       <td class="num">${cha>0?brl(cha):'—'}</td>
       <td class="num">${brl(r.valor)}</td></tr>`; }).join('')}</tbody>
-    <tfoot class="tfoot"><tr><td colspan="8">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
+    <tfoot class="tfoot"><tr><td colspan="7">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}</div>`;
 };
 
