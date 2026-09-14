@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-91';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-92';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -405,14 +405,15 @@ function prListaApply(){
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
 function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
 function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
-const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' (qual módulo está ativo)
+const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' | 'admin' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
-  empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', entradas:'planejamento', cotacao:'planejamento', precos:'precos',
+  empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
+  entradas:'admin', fluxocaixa:'admin',
   maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
-function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos')?m:'planejamento'; }
-function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':'#/dashboard'); }
-const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'} };
+function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin')?m:'planejamento'; }
+function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':'#/dashboard')); }
+const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'} };
 function applyModule(){
   const m=currentModule();
   document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
@@ -1257,6 +1258,69 @@ function filterEstoque(){
     const show=(!q||s.includes(q)) && (!estoqueClasse||cl===estoqueClasse) && (!estoqueSoMov||mv);
     tr.style.display=show?'':'none'; });
 }
+
+/* ================= FLUXO DE CAIXA (módulo Administrativo) ================= */
+const FLUXO_KEY='planejamento_fluxo';
+let FLUXO=null, fluxoDraft=null, fluxoMes='';
+const FLUXO_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Venda de grãos','Adiantamento','Outros'];
+function loadFluxo(){ try{ const d=JSON.parse(localStorage.getItem(FLUXO_KEY)); if(d&&Array.isArray(d.lancamentos)) return d; }catch(e){} return {lancamentos:[]}; }
+function saveFluxo(){ try{ localStorage.setItem(FLUXO_KEY, JSON.stringify(FLUXO)); }catch(e){} }
+function fluxoNovoDraft(){ return {data:new Date().toISOString().slice(0,10), tipo:'saida', categoria:'', descricao:'', valor:0}; }
+function fluxoMesLabel(ym){ if(!ym) return ''; const [a,m]=ym.split('-'); return `${_MESN[(+m||1)-1]||m}/${a}`; }
+V.fluxocaixa=function(){
+  if(!fluxoDraft) fluxoDraft=fluxoNovoDraft();
+  const d=fluxoDraft;
+  const all=(FLUXO.lancamentos||[]).slice().sort((a,b)=>String(a.data).localeCompare(String(b.data))||(a.ts||0)-(b.ts||0));
+  // saldo acumulado (sobre todos, em ordem cronológica)
+  let run=0; const withRun=all.map(l=>{ run+=(l.tipo==='entrada'?1:-1)*(+l.valor||0); return {...l, saldoAcum:run}; });
+  // meses disponíveis (para o filtro)
+  const meses=[...new Set(all.map(l=>String(l.data||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const view=withRun.filter(l=>!fluxoMes||String(l.data||'').slice(0,7)===fluxoMes);
+  // totais (geral e do filtro)
+  const totEnt=all.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+(+l.valor||0),0);
+  const totSai=all.filter(l=>l.tipo==='saida').reduce((s,l)=>s+(+l.valor||0),0);
+  const saldoGeral=totEnt-totSai;
+  const fEnt=view.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+(+l.valor||0),0);
+  const fSai=view.filter(l=>l.tipo==='saida').reduce((s,l)=>s+(+l.valor||0),0);
+  const chips=`<button class="chip-f${fluxoMes===''?' on':''}" data-flxmes="">Todos</button>`+
+    meses.map(ym=>`<button class="chip-f${fluxoMes===ym?' on':''}" data-flxmes="${esc(ym)}">${esc(fluxoMesLabel(ym))}</button>`).join('');
+  const rowsHtml=view.slice().reverse().map(l=>`<tr data-search="${esc(((l.categoria||'')+' '+(l.descricao||'')).toLowerCase())}">
+      <td data-th="Data">${esc(fmtDataBR(l.data))}</td>
+      <td data-th="Tipo">${l.tipo==='entrada'?'<span class="pill pill-buy">entrada</span>':'<span class="pill pill-noprice">saída</span>'}</td>
+      <td data-th="Categoria">${esc(l.categoria||'—')}</td>
+      <td class="c-more" data-th="Descrição">${esc(l.descricao||'')}</td>
+      <td class="num" data-th="Entrada">${l.tipo==='entrada'?brl(+l.valor||0):'·'}</td>
+      <td class="num" data-th="Saída">${l.tipo==='saida'?brl(+l.valor||0):'·'}</td>
+      <td class="num" data-th="Saldo"><b class="est-saldo ${l.saldoAcum<-0.0001?'neg':'ok'}">${brl(l.saldoAcum)}</b></td>
+      <td><button class="icon-btn del" data-act="fluxoDel" data-id="${esc(l.id)}" title="Excluir">🗑</button></td></tr>`).join('');
+  return `
+  <div class="kpi-grid">
+    <div class="kpi"><div class="k-label">Entradas${fluxoMes?' (mês)':''}</div><div class="k-value" style="color:var(--green)">${brl0(fluxoMes?fEnt:totEnt)}</div></div>
+    <div class="kpi"><div class="k-label">Saídas${fluxoMes?' (mês)':''}</div><div class="k-value" style="color:var(--red)">${brl0(fluxoMes?fSai:totSai)}</div></div>
+    <div class="kpi accent"><div class="k-label">Saldo${fluxoMes?' do mês':' acumulado'}</div><div class="k-value">${brl0(fluxoMes?(fEnt-fSai):saldoGeral)}</div><div class="k-sub">${fluxoMes?`geral ${brl0(saldoGeral)}`:`${all.length} lançamento(s)`}</div></div>
+  </div>
+  <div class="panel"><div class="panel-head"><h2>Novo lançamento</h2><span class="sub">registre uma entrada ou saída de caixa</span></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Data<input type="date" data-flxf="data" value="${esc(d.data)}"></label>
+      <label>Tipo<select class="txt" data-flxf="tipo"><option value="saida"${d.tipo==='saida'?' selected':''}>Saída (despesa)</option><option value="entrada"${d.tipo==='entrada'?' selected':''}>Entrada (receita)</option></select></label>
+      <label>Categoria<input class="txt" list="flx-cats" data-flxf="categoria" value="${esc(d.categoria)}" placeholder="categoria"></label>
+      <label>Descrição<input class="txt" data-flxf="descricao" value="${esc(d.descricao)}" placeholder="descrição (opcional)"></label>
+      <label>Valor (R$)<input class="cell" inputmode="decimal" data-flxf="valor" value="${d.valor||''}" placeholder="0,00"></label>
+    </div>
+    <datalist id="flx-cats">${FLUXO_CATS.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+    <div style="padding:8px 14px 14px"><button class="btn btn-primary btn-sm" data-act="fluxoAdd">➕ Adicionar lançamento</button></div></div>
+  ${meses.length?`<div class="classe-filter" id="flx-mesf" style="margin:2px 0 10px">${chips}</div>`:''}
+  <div class="toolbar"><div class="search"><input id="q-flx" placeholder="Buscar categoria ou descrição…" autocomplete="off"></div>
+    <div class="spacer"></div><span class="badge badge-muted">${view.length} lançamento(s)${fluxoMes?` em ${esc(fluxoMesLabel(fluxoMes))}`:''}</span></div>
+  <div class="panel"><div class="panel-head"><h2>Lançamentos</h2><span class="sub">mais recentes primeiro · saldo acumulado na ordem das datas</span></div>
+    <div class="table-wrap"><table id="flx-tbl"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="c-more">Descrição</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Saldo</th><th></th></tr></thead>
+      <tbody>${rowsHtml||'<tr><td colspan="8" class="mut" style="padding:14px">Nenhum lançamento. Adicione o primeiro acima.</td></tr>'}</tbody></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Fluxo de caixa manual (salvo neste aparelho). Em breve: vínculo automático com Compras e recebíveis, e sincronização na planilha.</p>`;
+};
+function filterFluxo(){
+  const q=(($('#q-flx')&&$('#q-flx').value)||'').toLowerCase().trim();
+  document.querySelectorAll('#flx-tbl tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
+}
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
   const sel=comprasEmpSel, tsel=comprasTalSel;
@@ -1835,11 +1899,13 @@ V.inicio = function(){
     <h1 class="entry-h">Como você vai usar agora?</h1>
     <div class="entry-cards">
       ${card('planejamento','📋','Planejamento','Monte e ajuste o plano da safra.',
-        ['Painel','Talhões','Empreendimentos','Demanda de Compras','Cotação','Máquinas','DRE'],'ec-plan')}
+        ['Painel','Talhões','Empreendimentos','Demanda de Compras','Estoque','Cotação','Máquinas','DRE'],'ec-plan')}
       ${card('campo','🧑‍🌾','Campo','Execute e registre as operações na lavoura.',
         ['Operação de Campo','Monitoramento (GPS)','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
       ${card('precos','💲','Preços','Componha e mantenha os preços dos insumos.',
         ['Portfólio do ano','Preços de referência','Composição à vista e a prazo','Histórico por safra'],'ec-precos')}
+      ${card('admin','🗂️','Administrativo','Controle financeiro e de compras.',
+        ['Compras (entradas de estoque)','Fluxo de Caixa'],'ec-admin')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
   </div>`;
@@ -2745,7 +2811,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -2964,6 +3030,8 @@ document.addEventListener('click',e=>{
   if(cff){ const v=cff.dataset.fornf; if(v===''){ cotaFornSel.clear(); } else if(cotaFornSel.has(v)){ cotaFornSel.delete(v); } else { cotaFornSel.add(v); } route(); return; }
   const ccf=e.target.closest('#cot-clsf .chip-f');    // Cotação: filtro por classe
   if(ccf){ const v=ccf.dataset.cotclsf; if(v===''){ cotaClasseSel.clear(); } else if(cotaClasseSel.has(v)){ cotaClasseSel.delete(v); } else { cotaClasseSel.add(v); } route(); return; }
+  const fmf=e.target.closest('#flx-mesf .chip-f');    // Fluxo de Caixa: filtro por mês
+  if(fmf){ fluxoMes=fmf.dataset.flxmes||''; route(); return; }
   const tlf=e.target.closest('#tl-filter .chip-f');
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
@@ -3089,6 +3157,10 @@ document.addEventListener('click',e=>{
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
+    else if(a.act==='fluxoAdd'){ const d=fluxoDraft; if(!d||!(+d.valor>0)){ toast('Informe um valor maior que zero'); return; }
+      FLUXO.lancamentos.push({ id:'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), data:d.data||new Date().toISOString().slice(0,10), tipo:(d.tipo==='entrada'?'entrada':'saida'), categoria:(d.categoria||'').trim(), descricao:(d.descricao||'').trim(), valor:+d.valor||0, ts:Date.now() });
+      saveFluxo(); fluxoDraft=fluxoNovoDraft(); route(); toast('Lançamento adicionado'); }
+    else if(a.act==='fluxoDel'){ if(ask('Excluir este lançamento?')){ FLUXO.lancamentos=FLUXO.lancamentos.filter(l=>l.id!==a.id); saveFluxo(); route(); toast('Lançamento excluído'); } }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -3152,6 +3224,8 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
+  if(e.target.id==='q-flx'){ filterFluxo(); return; }
+  if(e.target.matches('[data-flxf]')){ if(fluxoDraft){ const f=e.target.dataset.flxf; fluxoDraft[f]= (f==='valor')?_mmC(e.target.value):e.target.value; } return; }
   if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
   if(e.target.matches('[data-cmpi]')){ const it=compraDraft&&compraDraft.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.cmpi;
     if(f==='qtd'||f==='preco') it[f]=_mmC(e.target.value); else { it.produto=e.target.value.trim(); if(PROD[it.produto]) it.un=PROD[it.produto].un||it.un; }
@@ -3827,7 +3901,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
