@@ -805,7 +805,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-89';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-90';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1462,6 +1462,21 @@ function calcDemanda(empSet, talSet){
     });
   }
   return dem;
+}
+// área (ha) em que cada produto é aplicado, no escopo do filtro — para a dose/ha média
+// (dose/ha = demanda ÷ área de uso). Cada ocorrência do produto numa operação soma a área do talhão,
+// batendo com o jeito que a demanda é somada (Σ dose × área).
+function areaUsoProduto(empSet, talSet){
+  const areaOcc={};
+  for(const t of talhoesAll()){
+    if(talSet && talSet.size && !talSet.has(t.id)) continue;
+    const area=areaDe(t);
+    eachOp(t,(seq,tag,oi,op,tagoi)=>{
+      if(empSet && empSet.size){ const cult=(seq==='safrinha'?empSafDe(t):empDe(t))||'—'; if(!empSet.has(cult)) return; }
+      effItems(t.id,tagoi,op.itens).forEach(it=>{ if(!it.produto) return; areaOcc[it.produto]=(areaOcc[it.produto]||0)+area; });
+    });
+  }
+  return areaOcc;
 }
 // lista de compras a partir da demanda (considerando o SALDO de estoque)
 function calcCompras(empSet, talSet){
@@ -2128,6 +2143,8 @@ V.cotacao = function(){
   const fornList=Object.keys(fornCount).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b,'pt'));
   const classList=Object.keys(clsCount).sort((a,b)=>a.localeCompare(b,'pt'));
   const rows=cotaFiltraForClasse(base);                              // + filtros fornecedor/classe
+  const areaOcc=areaUsoProduto(sel.size?sel:null);                   // área de uso p/ dose/ha
+  const doseHaDe=r=>{ const a=areaOcc[r.produto]||0; return a>0 ? (r.demanda||0)/a : 0; };
   const groups={};
   rows.forEach(r=>{const k=r.empresa||'(sem fornecedor)';(groups[k]=groups[k]||[]).push(r);});
   const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
@@ -2161,13 +2178,16 @@ V.cotacao = function(){
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
     const sub=its.reduce((a,r)=>a+r.valor,0);
     return `<div class="panel"><div class="panel-head"><h2>${esc(forn)}</h2><span class="sub">${its.length} itens · ${brl0(sub)}</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Qtd</th><th class="num">Saldo</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Valor ref.</th></tr></thead>
-    <tbody>${its.map(r=>`<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th>Classe</th><th class="num">Dose/ha</th><th class="num">Qtd</th><th class="num">Saldo</th><th>Un</th><th class="num">Preço ref.</th><th class="num">Custo/ha</th><th class="num">Valor ref.</th></tr></thead>
+    <tbody>${its.map(r=>{ const dha=doseHaDe(r), cha=dha*(r.preco||0);
+      return `<tr data-search="${esc((r.produto+' '+r.classe+' '+forn).toLowerCase())}"><td><b>${esc(r.produto)}</b></td><td><span class="classe-tag">${esc(r.classe)}</span></td>
+      <td class="num">${dha>0?num(dha):'—'}</td>
       <td class="num">${num(r.comprar)}</td>
       <td class="num"><span class="est-saldo ${r.saldo<-0.0001?'neg':(r.saida>0?'ok':'')}">${num(r.saldo||0)}</span></td><td>${esc(r.un)}</td>
       <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
-      <td class="num">${brl(r.valor)}</td></tr>`).join('')}</tbody>
-    <tfoot class="tfoot"><tr><td colspan="6">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
+      <td class="num">${cha>0?brl(cha):'—'}</td>
+      <td class="num">${brl(r.valor)}</td></tr>`; }).join('')}</tbody>
+    <tfoot class="tfoot"><tr><td colspan="8">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;
   }).join('')}</div>`;
 };
 
@@ -4047,9 +4067,11 @@ function download(name,content,type){
 function exportCotacaoCSV(){
   const rows=cotaFiltraForClasse(calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0))
     .sort((a,b)=>(a.empresa||'').localeCompare(b.empresa||'')||b.valor-a.valor);
-  let csv='FORNECEDOR;PRODUTO;CLASSE;QTD;UN;PRECO_REF;VALOR_REF\n';
-  rows.forEach(r=>{csv+=[r.empresa||'(sem fornecedor)',r.produto,r.classe,num(r.comprar),r.un,
-    nf2.format(r.preco),nf2.format(r.valor)].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(';')+'\n';});
+  const areaOcc=areaUsoProduto(cotaEmpSel.size?cotaEmpSel:null);
+  let csv='FORNECEDOR;PRODUTO;CLASSE;DOSE_HA;QTD;UN;PRECO_REF;CUSTO_HA;VALOR_REF\n';
+  rows.forEach(r=>{ const a=areaOcc[r.produto]||0, dha=a>0?(r.demanda||0)/a:0, cha=dha*(r.preco||0);
+    csv+=[r.empresa||'(sem fornecedor)',r.produto,r.classe,nf2.format(dha),num(r.comprar),r.un,
+    nf2.format(r.preco),nf2.format(cha),nf2.format(r.valor)].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(';')+'\n';});
   download('cotacao_safra_2627.csv','﻿'+csv,'text/csv;charset=utf-8');
   toast('CSV de cotação exportado');
 }
