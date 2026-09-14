@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-92';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-93';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -410,10 +410,11 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin',
+  tarefas:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
-function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin')?m:'planejamento'; }
-function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':'#/dashboard')); }
-const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'} };
+function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
+function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
+const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
 function applyModule(){
   const m=currentModule();
   document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
@@ -1321,6 +1322,154 @@ function filterFluxo(){
   const q=(($('#q-flx')&&$('#q-flx').value)||'').toLowerCase().trim();
   document.querySelectorAll('#flx-tbl tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
 }
+
+/* ================= TAREFAS / EQUIPE (módulo Tarefas: Quadro + Gantt) ================= */
+const EQUIPE_KEY='planejamento_equipe';     // {funcionarios:[{id,nome,funcao}]}
+const TAREFAS_KEY='planejamento_tarefas';   // {tarefas:[{id,titulo,talhaoId,funcionarioId,inicio,dias,status,obs,ts}]}
+let EQUIPE=null, TAREFAS=null, tarefaDraft=null, ganttGrupo='func';
+const TAR_ST={ afazer:{lbl:'A fazer',cls:'kb-afazer'}, andamento:{lbl:'Em andamento',cls:'kb-and'}, concluida:{lbl:'Concluída',cls:'kb-ok'} };
+const TAR_ORDER=['afazer','andamento','concluida'];
+const EQ_CORES=['#2f7d6e','#c0645a','#5a7fb0','#e0a458','#8a6fb0','#6fa06f','#b0894f','#3f9aa8','#a05a86','#7a8b3f','#c07d3f','#4f6f9a'];
+function loadEquipe(){ try{ const d=JSON.parse(localStorage.getItem(EQUIPE_KEY)); if(d&&Array.isArray(d.funcionarios)) return d; }catch(e){} return {funcionarios:[]}; }
+function saveEquipe(){ try{ localStorage.setItem(EQUIPE_KEY, JSON.stringify(EQUIPE)); }catch(e){} }
+function loadTarefas(){ try{ const d=JSON.parse(localStorage.getItem(TAREFAS_KEY)); if(d&&Array.isArray(d.tarefas)) return d; }catch(e){} return {tarefas:[]}; }
+function saveTarefas(){ try{ localStorage.setItem(TAREFAS_KEY, JSON.stringify(TAREFAS)); }catch(e){} }
+function funcById(id){ return (EQUIPE.funcionarios||[]).find(f=>f.id===id)||null; }
+function funcNome(id){ const f=funcById(id); return f?f.nome:'Sem responsável'; }
+function funcCor(id){ const fs=(EQUIPE.funcionarios||[]); const i=fs.findIndex(f=>f.id===id); return i>=0?EQ_CORES[i%EQ_CORES.length]:'#9aa0a6'; }
+function tarefaNovoDraft(){ return {titulo:'', talhaoId:'', funcionarioId:'', inicio:new Date().toISOString().slice(0,10), dias:1, status:'afazer', obs:''}; }
+function _pYMD(s){ const p=String(s||'').slice(0,10).split('-'); return p.length===3?new Date(+p[0],+p[1]-1,+p[2]):null; }
+function _addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function _diffDays(a,b){ return Math.round((b-a)/86400000); }
+function tarefaFim(t){ const s=_pYMD(t.inicio); if(!s) return null; return _addDays(s, Math.max(1,+t.dias||1)-1); }
+function talhaoLabel(id){ const t=findTalhao(id); return t?(t.id+(t.nome?' · '+t.nome:'')):''; }
+
+// ---- formulário compartilhado (nova/editar tarefa) ----
+function tarefaFormHtml(){
+  const d=tarefaDraft||(tarefaDraft=tarefaNovoDraft());
+  const talhoes=talhoesAll();
+  const fs=EQUIPE.funcionarios||[];
+  const editando=!!d.id;
+  return `<div class="panel"><div class="panel-head"><h2>${editando?'Editar tarefa':'Nova tarefa'}</h2><span class="sub">quem faz o quê, quando e por quantos dias</span></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Tarefa / Operação<input class="txt" data-tarf="titulo" value="${esc(d.titulo)}" placeholder="ex.: Plantio, Pulverização 1…"></label>
+      <label>Talhão / Área<select class="txt" data-tarf="talhaoId"><option value="">—</option>${talhoes.map(t=>`<option value="${esc(t.id)}"${d.talhaoId===t.id?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''}</option>`).join('')}</select></label>
+      <label>Responsável<select class="txt" data-tarf="funcionarioId"><option value="">— sem responsável —</option>${fs.map(f=>`<option value="${esc(f.id)}"${d.funcionarioId===f.id?' selected':''}>${esc(f.nome)}</option>`).join('')}</select></label>
+      <label>Início<input type="date" data-tarf="inicio" value="${esc(d.inicio)}"></label>
+      <label>Dias<input class="cell" inputmode="numeric" data-tarf="dias" value="${d.dias||''}" placeholder="1"></label>
+      <label>Status<select class="txt" data-tarf="status">${TAR_ORDER.map(s=>`<option value="${s}"${d.status===s?' selected':''}>${TAR_ST[s].lbl}</option>`).join('')}</select></label>
+    </div>
+    <div style="padding:0 14px 12px"><input class="txt" data-tarf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="width:100%"></div>
+    <div style="padding:0 14px 14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" data-act="tarSalvar">${editando?'💾 Salvar':'➕ Adicionar tarefa'}</button>
+      ${editando?'<button class="btn btn-ghost btn-sm" data-act="tarCancelar">Cancelar</button>':''}
+      ${fs.length?'':'<span class="mut" style="align-self:center;font-size:12px">Dica: cadastre a equipe na aba <b>Equipe</b> para atribuir responsáveis.</span>'}
+    </div></div>`;
+}
+function tarefaCard(t){
+  const cor=funcCor(t.funcionarioId), fim=tarefaFim(t), ini=_pYMD(t.inicio);
+  const periodo = ini ? (fmtDataBR(t.inicio)+(fim&&(+t.dias>1)?' – '+fmtDataBR(fim.toISOString().slice(0,10)):'')) : '';
+  const si=TAR_ORDER.indexOf(t.status);
+  return `<div class="kb-card" draggable="true" data-id="${esc(t.id)}" data-search="${esc(((t.titulo||'')+' '+funcNome(t.funcionarioId)+' '+talhaoLabel(t.talhaoId)).toLowerCase())}">
+    <div class="kb-title"><b>${esc(t.titulo||'(sem título)')}</b></div>
+    ${t.talhaoId?`<div class="kb-meta">🗺️ ${esc(talhaoLabel(t.talhaoId))}</div>`:''}
+    <div class="kb-meta"><span class="kb-dot" style="background:${cor}"></span>${esc(funcNome(t.funcionarioId))}</div>
+    ${periodo?`<div class="kb-meta">📅 ${esc(periodo)} <span class="mut">· ${Math.max(1,+t.dias||1)}d</span></div>`:''}
+    ${t.obs?`<div class="kb-meta mut">${esc(t.obs)}</div>`:''}
+    <div class="kb-actions">
+      <button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="-1" title="Voltar status" ${si<=0?'disabled':''}>‹</button>
+      <button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="1" title="Avançar status" ${si>=TAR_ORDER.length-1?'disabled':''}>›</button>
+      <span class="spacer"></span>
+      <button class="icon-btn" data-act="tarEdit" data-id="${esc(t.id)}" title="Editar">✏️</button>
+      <button class="icon-btn del" data-act="tarDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>
+    </div></div>`;
+}
+V.tarefas=function(){
+  const ts=(TAREFAS.tarefas||[]);
+  const cols=TAR_ORDER.map(st=>{
+    const its=ts.filter(t=>t.status===st).sort((a,b)=>String(a.inicio||'').localeCompare(String(b.inicio||'')));
+    return `<div class="kanban-col ${TAR_ST[st].cls}" data-status="${st}">
+      <div class="kb-col-head">${TAR_ST[st].lbl} <span class="kb-count">${its.length}</span></div>
+      <div class="kb-list" data-status="${st}">${its.map(tarefaCard).join('')||'<div class="kb-empty">arraste tarefas para cá</div>'}</div>
+    </div>`;
+  }).join('');
+  return `${tarefaFormHtml()}
+  <div class="toolbar"><div class="search"><input id="q-tar" placeholder="Buscar tarefa, responsável ou talhão…" autocomplete="off"></div>
+    <div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Ver cronograma</a></div>
+  <div class="kanban">${cols}</div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Arraste os cartões entre as colunas (ou use ‹ ›). Salvo neste aparelho.</p>`;
+};
+function filterTarefas(){
+  const q=(($('#q-tar')&&$('#q-tar').value)||'').toLowerCase().trim();
+  document.querySelectorAll('.kb-card').forEach(c=>{ const s=c.getAttribute('data-search')||''; c.style.display=(!q||s.includes(q))?'':'none'; });
+}
+// ---- Cronograma (Gantt) ----
+V.cronograma=function(){
+  const ts=(TAREFAS.tarefas||[]).filter(t=>_pYMD(t.inicio));
+  if(!ts.length) return `${tarefaFormHtml()}<div class="empty">Sem tarefas com data. Adicione uma tarefa (com início e dias) para ver o cronograma.</div>`;
+  let minS=_pYMD(ts[0].inicio), maxE=tarefaFim(ts[0]);
+  ts.forEach(t=>{ const s=_pYMD(t.inicio), e=tarefaFim(t); if(s<minS) minS=s; if(e>maxE) maxE=e; });
+  // margem de 1 dia dos dois lados
+  minS=_addDays(minS,-1); maxE=_addDays(maxE,1);
+  const D=_diffDays(minS,maxE)+1, dayW=32, labelW=170;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  // cabeçalho de dias
+  let head='';
+  for(let i=0;i<D;i++){ const d=_addDays(minS,i); const dow=d.getDay(); const wk=(dow===0||dow===6);
+    const isHoje=_diffDays(hoje,d)===0; const mes1=d.getDate()===1;
+    head+=`<div class="g-day${wk?' g-wk':''}${isHoje?' g-hoje':''}" style="width:${dayW}px">${mes1?`<b>${_MESN[d.getMonth()]}</b>`:''}<span>${d.getDate()}</span></div>`; }
+  // agrupamento
+  const grupos={};
+  if(ganttGrupo==='func'){ ts.forEach(t=>{ const k=t.funcionarioId||''; (grupos[k]=grupos[k]||[]).push(t); }); }
+  else { grupos['']=ts.slice(); }
+  const gkeys=Object.keys(grupos).sort((a,b)=>funcNome(a).localeCompare(funcNome(b),'pt'));
+  let rows='';
+  gkeys.forEach(gk=>{
+    if(ganttGrupo==='func'){ rows+=`<div class="g-group"><span class="kb-dot" style="background:${funcCor(gk)}"></span>${esc(funcNome(gk))}</div>`; }
+    grupos[gk].slice().sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio))).forEach(t=>{
+      const s=_pYMD(t.inicio), off=_diffDays(minS,s), dias=Math.max(1,+t.dias||1), cor=funcCor(t.funcionarioId);
+      const done=t.status==='concluida';
+      rows+=`<div class="g-row">
+        <div class="g-lbl" style="width:${labelW}px" title="${esc(t.titulo||'')}">${esc(t.titulo||'(sem título)')}${t.talhaoId?`<small>${esc(t.talhaoId)}</small>`:''}</div>
+        <div class="g-track" style="width:${D*dayW}px">
+          <div class="g-bar${done?' g-done':''}" style="left:${off*dayW}px;width:${dias*dayW-4}px;background:${cor}" title="${esc(funcNome(t.funcionarioId))} · ${fmtDataBR(t.inicio)} · ${dias}d">${esc(t.titulo||'')}</div>
+        </div></div>`;
+    });
+  });
+  return `
+  <div class="toolbar"><div class="search"><input id="q-tar" placeholder="Buscar tarefa…" autocomplete="off" disabled style="opacity:.5"></div>
+    <button class="chip-f${ganttGrupo==='func'?' on':''}" data-act="ganttGrp" data-g="func">Por responsável</button>
+    <button class="chip-f${ganttGrupo==='none'?' on':''}" data-act="ganttGrp" data-g="none">Lista única</button>
+    <div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/tarefas">🗂️ Ver quadro</a></div>
+  <div class="panel"><div class="panel-head"><h2>Cronograma</h2><span class="sub">${ts.length} tarefa(s) · ${fmtDataBR(minS.toISOString().slice(0,10))} a ${fmtDataBR(maxE.toISOString().slice(0,10))}</span></div>
+    <div class="gantt-wrap">
+      <div class="gantt-inner" style="min-width:${labelW+D*dayW}px">
+        <div class="g-head"><div class="g-lbl-h" style="width:${labelW}px">Tarefa</div><div class="g-days" style="width:${D*dayW}px">${head}</div></div>
+        ${rows}
+      </div>
+    </div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Cada barra = período da tarefa (início + dias). Cor = responsável. Barra riscada = concluída.</p>`;
+};
+// ---- Equipe (funcionários) ----
+let equipeDraft={nome:'',funcao:''};
+V.equipe=function(){
+  const fs=EQUIPE.funcionarios||[];
+  const ts=(TAREFAS.tarefas||[]);
+  const rows=fs.map(f=>{ const n=ts.filter(t=>t.funcionarioId===f.id).length, ativas=ts.filter(t=>t.funcionarioId===f.id&&t.status!=='concluida').length;
+    return `<tr><td><span class="kb-dot" style="background:${funcCor(f.id)}"></span> <b>${esc(f.nome)}</b></td>
+      <td>${esc(f.funcao||'—')}</td><td class="num">${ativas}</td><td class="num">${n}</td>
+      <td><button class="icon-btn del" data-act="funcDel" data-id="${esc(f.id)}" title="Remover">🗑</button></td></tr>`; }).join('');
+  return `
+  <div class="panel"><div class="panel-head"><h2>Novo integrante</h2><span class="sub">operadores / funcionários da equipe</span></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Nome<input class="txt" data-eqf="nome" value="${esc(equipeDraft.nome)}" placeholder="nome do funcionário"></label>
+      <label>Função<input class="txt" data-eqf="funcao" value="${esc(equipeDraft.funcao)}" placeholder="ex.: tratorista, aplicador…"></label>
+    </div>
+    <div style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="funcAdd">➕ Adicionar</button></div></div>
+  <div class="panel"><div class="panel-head"><h2>Equipe</h2><span class="sub">${fs.length} integrante(s)</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="5" class="mut" style="padding:14px">Nenhum integrante. Adicione o primeiro acima.</td></tr>'}</tbody></table></div></div>`;
+};
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
   const sel=comprasEmpSel, tsel=comprasTalSel;
@@ -1906,6 +2055,8 @@ V.inicio = function(){
         ['Portfólio do ano','Preços de referência','Composição à vista e a prazo','Histórico por safra'],'ec-precos')}
       ${card('admin','🗂️','Administrativo','Controle financeiro e de compras.',
         ['Compras (entradas de estoque)','Fluxo de Caixa'],'ec-admin')}
+      ${card('tarefas','👷','Tarefas','Organize a equipe e as tarefas da safra.',
+        ['Quadro (estilo Trello)','Cronograma (Gantt)','Equipe / operadores'],'ec-tarefas')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
   </div>`;
@@ -2811,7 +2962,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -3161,6 +3312,20 @@ document.addEventListener('click',e=>{
       FLUXO.lancamentos.push({ id:'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), data:d.data||new Date().toISOString().slice(0,10), tipo:(d.tipo==='entrada'?'entrada':'saida'), categoria:(d.categoria||'').trim(), descricao:(d.descricao||'').trim(), valor:+d.valor||0, ts:Date.now() });
       saveFluxo(); fluxoDraft=fluxoNovoDraft(); route(); toast('Lançamento adicionado'); }
     else if(a.act==='fluxoDel'){ if(ask('Excluir este lançamento?')){ FLUXO.lancamentos=FLUXO.lancamentos.filter(l=>l.id!==a.id); saveFluxo(); route(); toast('Lançamento excluído'); } }
+    else if(a.act==='tarSalvar'){ const d=tarefaDraft; if(!d||!(d.titulo||'').trim()){ toast('Informe a tarefa/operação'); return; }
+      const rec={ titulo:(d.titulo||'').trim(), talhaoId:d.talhaoId||'', funcionarioId:d.funcionarioId||'', inicio:d.inicio||new Date().toISOString().slice(0,10), dias:Math.max(1,+d.dias||1), status:(TAR_ORDER.indexOf(d.status)>=0?d.status:'afazer'), obs:(d.obs||'').trim() };
+      if(d.id){ const t=TAREFAS.tarefas.find(x=>x.id===d.id); if(t) Object.assign(t,rec); }
+      else { rec.id='t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); rec.ts=Date.now(); TAREFAS.tarefas.push(rec); }
+      saveTarefas(); tarefaDraft=tarefaNovoDraft(); route(); toast(d.id?'Tarefa salva':'Tarefa adicionada'); }
+    else if(a.act==='tarCancelar'){ tarefaDraft=tarefaNovoDraft(); route(); }
+    else if(a.act==='tarEdit'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ tarefaDraft={...t}; route({toTop:true}); } }
+    else if(a.act==='tarDel'){ if(ask('Excluir esta tarefa?')){ TAREFAS.tarefas=TAREFAS.tarefas.filter(x=>x.id!==a.id); saveTarefas(); route(); toast('Tarefa excluída'); } }
+    else if(a.act==='tarMove'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ const i=TAR_ORDER.indexOf(t.status)+(+a.dir||0); if(i>=0&&i<TAR_ORDER.length){ t.status=TAR_ORDER[i]; saveTarefas(); route({keepScroll:true}); } } }
+    else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
+    else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
+      EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
+      saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
+    else if(a.act==='funcDel'){ if(ask('Remover este integrante? As tarefas dele ficam sem responsável.')){ EQUIPE.funcionarios=EQUIPE.funcionarios.filter(f=>f.id!==a.id); (TAREFAS.tarefas||[]).forEach(t=>{ if(t.funcionarioId===a.id) t.funcionarioId=''; }); saveEquipe(); saveTarefas(); route(); toast('Integrante removido'); } }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -3226,6 +3391,9 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
   if(e.target.id==='q-flx'){ filterFluxo(); return; }
   if(e.target.matches('[data-flxf]')){ if(fluxoDraft){ const f=e.target.dataset.flxf; fluxoDraft[f]= (f==='valor')?_mmC(e.target.value):e.target.value; } return; }
+  if(e.target.id==='q-tar'){ filterTarefas(); return; }
+  if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
+  if(e.target.matches('[data-eqf]')){ equipeDraft[e.target.dataset.eqf]=e.target.value; return; }
   if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
   if(e.target.matches('[data-cmpi]')){ const it=compraDraft&&compraDraft.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.cmpi;
     if(f==='qtd'||f==='preco') it[f]=_mmC(e.target.value); else { it.produto=e.target.value.trim(); if(PROD[it.produto]) it.un=PROD[it.produto].un||it.un; }
@@ -3295,6 +3463,14 @@ function filterCompras(q){
     else volw.hidden=true;
   }
 }
+// arrastar cartões do Quadro (kanban) entre as colunas
+let _dragTarId=null;
+document.addEventListener('dragstart',e=>{ const c=e.target.closest&&e.target.closest('.kb-card'); if(!c) return; _dragTarId=c.dataset.id; try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',_dragTarId); }catch(err){} c.classList.add('kb-dragging'); });
+document.addEventListener('dragend',e=>{ const c=e.target.closest&&e.target.closest('.kb-card'); if(c) c.classList.remove('kb-dragging'); document.querySelectorAll('.kb-list.kb-over').forEach(l=>l.classList.remove('kb-over')); });
+document.addEventListener('dragover',e=>{ const l=e.target.closest&&e.target.closest('.kb-list'); if(!l) return; e.preventDefault(); try{ e.dataTransfer.dropEffect='move'; }catch(err){} document.querySelectorAll('.kb-list.kb-over').forEach(x=>{ if(x!==l) x.classList.remove('kb-over'); }); l.classList.add('kb-over'); });
+document.addEventListener('drop',e=>{ const l=e.target.closest&&e.target.closest('.kb-list'); if(!l) return; e.preventDefault(); l.classList.remove('kb-over');
+  const st=l.dataset.status, id=_dragTarId||((e.dataTransfer&&e.dataTransfer.getData('text/plain'))||''); _dragTarId=null;
+  const t=TAREFAS&&TAREFAS.tarefas.find(x=>x.id===id); if(t && st && t.status!==st && TAR_ORDER.indexOf(st)>=0){ t.status=st; saveTarefas(); route({keepScroll:true}); } });
 // celular: tocar no cartão mostra/esconde os detalhes (ignora campos editáveis)
 document.addEventListener('click',e=>{
   if(!window.matchMedia('(max-width:640px)').matches) return;
@@ -3901,7 +4077,7 @@ $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e vo
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
