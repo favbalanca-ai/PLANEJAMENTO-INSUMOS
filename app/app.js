@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-93';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-94';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1343,6 +1343,35 @@ function _addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x;
 function _diffDays(a,b){ return Math.round((b-a)/86400000); }
 function tarefaFim(t){ const s=_pYMD(t.inicio); if(!s) return null; return _addDays(s, Math.max(1,+t.dias||1)-1); }
 function talhaoLabel(id){ const t=findTalhao(id); return t?(t.id+(t.nome?' · '+t.nome:'')):''; }
+// puxa as operações (com insumos) de todos os talhões e cria uma tarefa para cada uma que
+// ainda não virou tarefa (casa pela origem talhão|operação). Data sugerida = plantio + DAP.
+function importarOperacoes(){
+  const existing=new Set((TAREFAS.tarefas||[]).map(t=>t.opKey).filter(Boolean));
+  let add=0;
+  talhoesAll().forEach(t=>{
+    const pl=planoDe(t.id)||{};
+    ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P';
+      (opsOf(t.id,seq)||[]).forEach((op,oi)=>{
+        const tagoi=`${tag}${oi}`;
+        const items=effItems(t.id,tagoi,op.itens); if(!items.length) return;   // só operações com insumos
+        const opKey=t.id+'|'+tagoi;
+        if(existing.has(opKey)) return;                                        // já importada
+        const dap=+(op.dap||0)||0;
+        const plantio=(seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
+        let inicio=new Date().toISOString().slice(0,10);
+        if(/^\d{4}-\d{2}-\d{2}/.test(plantio)){ const d=new Date(plantio.slice(0,10)+'T12:00:00'); if(dap) d.setDate(d.getDate()+dap); inicio=d.toISOString().slice(0,10); }
+        const cult=(seq==='safrinha'?empSafDe(t):empDe(t))||'';
+        TAREFAS.tarefas.push({ id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
+          titulo:op.nome||('Operação '+(oi+1)), talhaoId:t.id, funcionarioId:'', inicio, dias:1, status:'afazer',
+          obs:[cult&&cult!=='—'?cult:'', seq==='safrinha'?'2ª safra':'', dap?dap+' DAP':''].filter(Boolean).join(' · '),
+          opKey, ts:Date.now() });
+        existing.add(opKey); add++;
+      });
+    });
+  });
+  if(add) saveTarefas();
+  return add;
+}
 
 // ---- formulário compartilhado (nova/editar tarefa) ----
 function tarefaFormHtml(){
@@ -1395,6 +1424,7 @@ V.tarefas=function(){
   }).join('');
   return `${tarefaFormHtml()}
   <div class="toolbar"><div class="search"><input id="q-tar" placeholder="Buscar tarefa, responsável ou talhão…" autocomplete="off"></div>
+    <button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria uma tarefa para cada operação (com insumos) dos talhões — data sugerida por plantio + DAP">⬇ Importar operações</button>
     <div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Ver cronograma</a></div>
   <div class="kanban">${cols}</div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Arraste os cartões entre as colunas (ou use ‹ ›). Salvo neste aparelho.</p>`;
@@ -3322,6 +3352,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='tarDel'){ if(ask('Excluir esta tarefa?')){ TAREFAS.tarefas=TAREFAS.tarefas.filter(x=>x.id!==a.id); saveTarefas(); route(); toast('Tarefa excluída'); } }
     else if(a.act==='tarMove'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ const i=TAR_ORDER.indexOf(t.status)+(+a.dir||0); if(i>=0&&i<TAR_ORDER.length){ t.status=TAR_ORDER[i]; saveTarefas(); route({keepScroll:true}); } } }
     else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
+    else if(a.act==='tarImport'){ const n=importarOperacoes(); route(); toast(n?`${n} operação(ões) importada(s) como tarefa`:'Nenhuma operação nova para importar'); }
     else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
       EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
       saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
