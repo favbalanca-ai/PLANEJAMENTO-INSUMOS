@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-88';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-89';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1040,6 +1040,8 @@ V.talhao = function(id){
 };
 
 const cotaEmpSel = new Set();      // filtro da Cotação (vazio = todos) — sessão
+const cotaFornSel = new Set();     // filtro por fornecedor da Cotação (vazio = todos) — sessão
+const cotaClasseSel = new Set();   // filtro por classe da Cotação (vazio = todas) — sessão
 const comprasEmpSel = new Set();   // filtro de empreendimento da Demanda de Compras — sessão
 const painelEmpSel = new Set();    // filtro de empreendimento do Painel — sessão
 let precoQ = '';                   // busca do Portfólio (Preços) — sessão
@@ -1309,14 +1311,25 @@ V.compras = function(){
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
 
+// aplica os filtros de fornecedor e classe da Cotação a uma lista de linhas
+function cotaFiltraForClasse(rows){
+  return rows.filter(r=>(!cotaFornSel.size||cotaFornSel.has(r.empresa||'(sem fornecedor)')) && (!cotaClasseSel.size||cotaClasseSel.has(r.classe||'—')));
+}
 V.cotacao = function(){
   const sel=cotaEmpSel;
   const emps=empList().filter(e=>e&&e!=='—');
-  const rows=calcCompras(sel.size?sel:null).filter(r=>r.comprar>0);
+  const base=calcCompras(sel.size?sel:null).filter(r=>r.comprar>0);   // filtrado por empreendimento
+  // opções de fornecedor e classe (com contagem) a partir do que sobrou
+  const fornCount={}, clsCount={};
+  base.forEach(r=>{ const f=r.empresa||'(sem fornecedor)', c=r.classe||'—'; fornCount[f]=(fornCount[f]||0)+1; clsCount[c]=(clsCount[c]||0)+1; });
+  const fornList=Object.keys(fornCount).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b,'pt'));
+  const classList=Object.keys(clsCount).sort((a,b)=>a.localeCompare(b,'pt'));
+  const rows=cotaFiltraForClasse(base);                              // + filtros fornecedor/classe
   const groups={};
   rows.forEach(r=>{const k=r.empresa||'(sem fornecedor)';(groups[k]=groups[k]||[]).push(r);});
   const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
   const totalGeral=rows.reduce((a,r)=>a+r.valor,0);
+  const filtroTxt=[cotaFornSel.size?`${cotaFornSel.size} fornecedor(es)`:'', cotaClasseSel.size?`${cotaClasseSel.size} classe(s)`:''].filter(Boolean).join(' · ');
   return `
   <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Fracionar por empreendimento</h2>
       <span class="sub">${sel.size?`${sel.size} cultura(s) selecionada(s)`:'todas as culturas'}</span></div>
@@ -1324,10 +1337,22 @@ V.cotacao = function(){
       <button class="chip-f ${sel.size===0?'on':''}" data-empf="">Todos</button>
       ${emps.map(e=>`<button class="chip-f ${sel.has(e)?'on':''}" data-empf="${esc(e)}">${esc(e)}</button>`).join('')}
     </div></div>
+  <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Filtrar por fornecedor</h2>
+      <span class="sub">${cotaFornSel.size?`${cotaFornSel.size} selecionado(s)`:'todos'}</span></div>
+    <div class="classe-filter" id="cot-fornf" style="margin:12px 14px">
+      <button class="chip-f ${cotaFornSel.size===0?'on':''}" data-fornf="">Todos</button>
+      ${fornList.map(f=>`<button class="chip-f ${cotaFornSel.has(f)?'on':''}" data-fornf="${esc(f)}">${esc(f)} <span style="opacity:.55">${fornCount[f]}</span></button>`).join('')}
+    </div></div>
+  <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Filtrar por classe</h2>
+      <span class="sub">${cotaClasseSel.size?`${cotaClasseSel.size} selecionada(s)`:'todas'}</span></div>
+    <div class="classe-filter" id="cot-clsf" style="margin:12px 14px">
+      <button class="chip-f ${cotaClasseSel.size===0?'on':''}" data-cotclsf="">Todas</button>
+      ${classList.map(c=>`<button class="chip-f ${cotaClasseSel.has(c)?'on':''}" data-cotclsf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('')}
+    </div></div>
   <div class="toolbar"><div class="search"><input id="q-cot" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <span class="badge badge-muted">${order.length} fornecedores · ${brl0(totalGeral)}${sel.size?' · só culturas selecionadas':''} — edite o <b>Preço ref.</b> aqui</span>
+    <span class="badge badge-muted">${order.length} fornecedor(es) · ${brl0(totalGeral)}${filtroTxt?` · filtro: ${filtroTxt}`:''} — edite o <b>Preço ref.</b> aqui</span>
     <div class="spacer"></div>
-    <button class="btn btn-outline btn-sm" id="btn-cot-pdf">🖨 PDF por fornecedor</button>
+    <button class="btn btn-outline btn-sm" id="btn-cot-pdf">🖨 PDF (filtro)</button>
     <button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ CSV</button></div>
   <div id="cot-groups">${order.map(forn=>{
     const its=groups[forn].sort((a,b)=>b.valor-a.valor);
@@ -2915,6 +2940,10 @@ document.addEventListener('click',e=>{
   if(ef){ const v=ef.dataset.empf, setSel=ef.closest('#painel-empf')?painelEmpSel:(ef.closest('#compras-empf')?comprasEmpSel:cotaEmpSel);
     if(v===''){ setSel.clear(); } else if(setSel.has(v)){ setSel.delete(v); } else { setSel.add(v); }
     route(); return; }
+  const cff=e.target.closest('#cot-fornf .chip-f');   // Cotação: filtro por fornecedor
+  if(cff){ const v=cff.dataset.fornf; if(v===''){ cotaFornSel.clear(); } else if(cotaFornSel.has(v)){ cotaFornSel.delete(v); } else { cotaFornSel.add(v); } route(); return; }
+  const ccf=e.target.closest('#cot-clsf .chip-f');    // Cotação: filtro por classe
+  if(ccf){ const v=ccf.dataset.cotclsf; if(v===''){ cotaClasseSel.clear(); } else if(cotaClasseSel.has(v)){ cotaClasseSel.delete(v); } else { cotaClasseSel.add(v); } route(); return; }
   const tlf=e.target.closest('#tl-filter .chip-f');
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
@@ -3213,7 +3242,7 @@ function download(name,content,type){
   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function exportCotacaoCSV(){
-  const rows=calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0)
+  const rows=cotaFiltraForClasse(calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0))
     .sort((a,b)=>(a.empresa||'').localeCompare(b.empresa||'')||b.valor-a.valor);
   let csv='FORNECEDOR;PRODUTO;CLASSE;QTD;UN;PRECO_REF;VALOR_REF\n';
   rows.forEach(r=>{csv+=[r.empresa||'(sem fornecedor)',r.produto,r.classe,num(r.comprar),r.un,
@@ -3230,12 +3259,13 @@ function printDoc(html){
 }
 // COTAÇÃO: um bloco por fornecedor (quebra de página), lista de insumo + volume
 function exportCotacaoPDF(){
-  const rows=calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0);
-  if(!rows.length){ toast('Nada a cotar (sem itens a comprar)'); return; }
+  const rows=cotaFiltraForClasse(calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0));
+  if(!rows.length){ toast('Nada a cotar para o filtro atual'); return; }
   const groups={}; rows.forEach(r=>{const k=r.empresa||'(sem fornecedor)';(groups[k]=groups[k]||[]).push(r);});
   const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
+  const filtroTxt=[cotaFornSel.size?[...cotaFornSel].join(', '):'', cotaClasseSel.size?[...cotaClasseSel].map(c=>c==='—'?'(sem classe)':c).join(', '):''].filter(Boolean).join(' · ');
   let html=`<div class="pdf-head"><h1>Cotação de insumos — Safra 2026/2027</h1>
-    <div class="meta">${order.length} fornecedor(es) · gerado pelo app Planejamento</div></div>`;
+    <div class="meta">${order.length} fornecedor(es) · gerado pelo app Planejamento${filtroTxt?` · filtro: ${esc(filtroTxt)}`:''}</div></div>`;
   order.forEach((forn,i)=>{
     const its=groups[forn].slice().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'')||a.produto.localeCompare(b.produto));
     html+=`<section class="${i>0?'pb':''}"><h2>${esc(forn)}</h2>
