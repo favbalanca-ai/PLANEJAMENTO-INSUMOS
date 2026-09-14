@@ -82,7 +82,36 @@ function readData(){
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
-    movimentacao:readMovimentacao() };
+    movimentacao:readMovimentacao(), tarefas_app:readTarefasApp() };
+}
+// ---- Módulo Tarefas: equipe + tarefas (sincroniza entre aparelhos) ----
+var EQUIPE_SHEET = 'EQUIPE APP', TAREFAS_SHEET_APP = 'TAREFAS APP';
+function _fmtISO(v){ if (v instanceof Date){ return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd'); } return S(v).slice(0,10); }
+function readTarefasApp(){
+  var b = ss(), out = { funcionarios:[], tarefas:[] };
+  var se = b.getSheetByName(EQUIPE_SHEET);
+  if (se){ var l1 = se.getLastRow(); if (l1 >= 2){ var v1 = se.getRange(2,1,l1-1,3).getValues();
+    for (var i=0;i<v1.length;i++){ var r=v1[i]; if(!S(r[0])) continue; out.funcionarios.push({ id:S(r[0]), nome:S(r[1]), funcao:S(r[2]) }); } } }
+  var st = b.getSheetByName(TAREFAS_SHEET_APP);
+  if (st){ var l2 = st.getLastRow(); if (l2 >= 2){ var v2 = st.getRange(2,1,l2-1,9).getValues();
+    for (var j=0;j<v2.length;j++){ var t=v2[j]; if(!S(t[0])) continue;
+      out.tarefas.push({ id:S(t[0]), titulo:S(t[1]), talhaoId:S(t[2]), funcionarioId:S(t[3]), inicio:_fmtISO(t[4]), dias:N(t[5])||1, status:S(t[6])||'afazer', obs:S(t[7]), opKey:S(t[8]) }); } } }
+  return out;
+}
+function writeTarefasApp(obj){
+  obj = obj || {}; var eq = obj.funcionarios || [], tf = obj.tarefas || [], b = ss();
+  var se = b.getSheetByName(EQUIPE_SHEET) || b.insertSheet(EQUIPE_SHEET);
+  se.clearContents();
+  var er = [['ID','NOME','FUNCAO']];
+  eq.forEach(function(f){ er.push([S(f.id), S(f.nome), S(f.funcao)]); });
+  se.getRange(1,1,er.length,3).setValues(er); try { se.setFrozenRows(1); } catch(e){}
+  var st = b.getSheetByName(TAREFAS_SHEET_APP) || b.insertSheet(TAREFAS_SHEET_APP);
+  st.clearContents();
+  var tr = [['ID','TITULO','TALHAO','RESPONSAVEL_ID','INICIO','DIAS','STATUS','OBS','OPKEY']];
+  tf.forEach(function(t){ tr.push([S(t.id), S(t.titulo), S(t.talhaoId), S(t.funcionarioId), S(t.inicio), N(t.dias)||1, S(t.status), S(t.obs), S(t.opKey)]); });
+  if (tf.length) st.getRange(2,5,tf.length,1).setNumberFormat('@');   // coluna INICIO como texto (não vira data)
+  st.getRange(1,1,tr.length,9).setValues(tr); try { st.setFrozenRows(1); } catch(e){}
+  return { rows: eq.length + tf.length };
 }
 
 /* --------- RETORNOS DE APLICAÇÃO (baixa do operador pela página retorno.html) ---------
@@ -573,6 +602,8 @@ function doPost(e){
       var en = writeEntrada(payload.__entrada); out.ok = en.rows;
     } else if (payload && payload.__saida){          // recomendação aprovada -> saída no razão (sincroniza entre aparelhos)
       var sr = writeSaida(payload.__saida); out.ok = sr.rows;
+    } else if (payload && payload.__tarefas){        // módulo Tarefas: equipe + tarefas (regrava as abas)
+      var tk = writeTarefasApp(payload.__tarefas); out.ok = tk.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }

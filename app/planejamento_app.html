@@ -845,7 +845,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-94';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-95';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2174,9 +2174,35 @@ const TAR_ST={ afazer:{lbl:'A fazer',cls:'kb-afazer'}, andamento:{lbl:'Em andame
 const TAR_ORDER=['afazer','andamento','concluida'];
 const EQ_CORES=['#2f7d6e','#c0645a','#5a7fb0','#e0a458','#8a6fb0','#6fa06f','#b0894f','#3f9aa8','#a05a86','#7a8b3f','#c07d3f','#4f6f9a'];
 function loadEquipe(){ try{ const d=JSON.parse(localStorage.getItem(EQUIPE_KEY)); if(d&&Array.isArray(d.funcionarios)) return d; }catch(e){} return {funcionarios:[]}; }
-function saveEquipe(){ try{ localStorage.setItem(EQUIPE_KEY, JSON.stringify(EQUIPE)); }catch(e){} }
+function _persistEquipe(){ try{ localStorage.setItem(EQUIPE_KEY, JSON.stringify(EQUIPE)); }catch(e){} }
+function saveEquipe(){ _persistEquipe(); scheduleTarefasPush(); }
 function loadTarefas(){ try{ const d=JSON.parse(localStorage.getItem(TAREFAS_KEY)); if(d&&Array.isArray(d.tarefas)) return d; }catch(e){} return {tarefas:[]}; }
-function saveTarefas(){ try{ localStorage.setItem(TAREFAS_KEY, JSON.stringify(TAREFAS)); }catch(e){} }
+function _persistTarefas(){ try{ localStorage.setItem(TAREFAS_KEY, JSON.stringify(TAREFAS)); }catch(e){} }
+function saveTarefas(){ _persistTarefas(); scheduleTarefasPush(); }
+// ---- sincronização (planilha = fonte compartilhada; puxar substitui, enviar grava tudo) ----
+let tarefasPushTimer=null, lastTarefasPushSig='';
+function tarefasSig(){ return JSON.stringify({f:(EQUIPE&&EQUIPE.funcionarios)||[], t:(TAREFAS&&TAREFAS.tarefas)||[]}); }
+function scheduleTarefasPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(tarefasPushTimer);
+  tarefasPushTimer=setTimeout(()=>{ if(tarefasSig()===lastTarefasPushSig) return; tarefasPush({auto:true}); }, 1500); }
+async function tarefasPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL de sincronização primeiro'); return; }
+  if(syncBusy){ if(opts.auto) scheduleTarefasPush(); else toast('Sincronização ocupada — tente de novo'); return; }
+  const sig=tarefasSig(); if(opts.auto && sig===lastTarefasPushSig) return;
+  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando tarefas e equipe…');
+  try{ const r=await syncPost(url, JSON.stringify({__tarefas:{funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas}}));
+    lastTarefasPushSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced();
+    addHist('push', !(r&&r.fail), 'Tarefas: '+((r&&r.ok)||0)+' registros');
+    if(!opts.auto) toast('Tarefas e equipe enviadas à planilha'); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto){ toast('Falha ao enviar tarefas'); addHist('push',false,'Tarefas: '+(e&&e.message||'')); } }
+}
+function tarefasApplyPulled(pa){
+  if(!pa || !EQUIPE || !TAREFAS) return false;
+  const f=pa.funcionarios||[], t=pa.tarefas||[];
+  if(!f.length && !t.length) return false;                 // planilha ainda vazia: não apaga o local
+  const sig=JSON.stringify({f,t});
+  if(sig===tarefasSig()){ lastTarefasPushSig=tarefasSig(); return false; }
+  EQUIPE.funcionarios=f; TAREFAS.tarefas=t; _persistEquipe(); _persistTarefas();
+  lastTarefasPushSig=tarefasSig(); return true;
+}
 function funcById(id){ return (EQUIPE.funcionarios||[]).find(f=>f.id===id)||null; }
 function funcNome(id){ const f=funcById(id); return f?f.nome:'Sem responsável'; }
 function funcCor(id){ const fs=(EQUIPE.funcionarios||[]); const i=fs.findIndex(f=>f.id===id); return i>=0?EQ_CORES[i%EQ_CORES.length]:'#9aa0a6'; }
@@ -4605,6 +4631,7 @@ function applyPulledData(d){
   // preços do módulo Preços também vêm no puxar principal (planilha = fonte da verdade),
   // para que a lista de preços sincronize entre aparelhos junto com o resto — não só pela aba Preços.
   try{ if(PRECOS) precosApplyPulled(d.precos_app); }catch(e){}
+  try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -4712,6 +4739,7 @@ async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
   try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushSaidasPendentes(); }catch(e){}
+  try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
