@@ -856,7 +856,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-98';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-99';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3492,7 +3492,7 @@ function recomWhats(id){
 // baixa dos operadores (aba RETORNOS APP) → preenche o "Utilizado" e move p/ "retorno recebido"
 function applyRetornos(retornos){
   if(!Array.isArray(retornos)||!retornos.length||!RECOM) return false;
-  let changed=false; const byId={};
+  let changed=false, ovChanged=false; const byId={}, concluidas=[];
   retornos.forEach(row=>{ if(row&&row.id) (byId[row.id]=byId[row.id]||[]).push(row); });
   Object.keys(byId).forEach(id=>{
     const r=recomById(id); if(!r) return; recomNorm(r);
@@ -3502,9 +3502,22 @@ function applyRetornos(retornos){
       if(row) it.real=+row.real||0; });
     const last=rows.reduce((a,b)=>((b.ts||0)>(a.ts||0)?b:a), rows[0]);
     r.retorno={quem:last.operador||'', obs:last.obs||'', ts:last.ts||Date.now()};
-    r.status='retorno'; changed=true;
+    if(r.opKey){
+      // operador FINALIZOU pela página do WhatsApp -> conclui a operação, dá baixa e vai pro histórico
+      r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()};
+      const rl=realEnsure(r.opKey), baixa={};
+      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null && +it.real>0) baixa[it.produto]=(baixa[it.produto]||0)+(+it.real||0); });
+      rl.baixa=baixa; rl.status='concluido';
+      if(!rl.data) rl.data=r.data||(last.ts?new Date(last.ts).toISOString().slice(0,10):new Date().toISOString().slice(0,10));
+      rl.app=rl.app||{}; if(!rl.app.operador && last.operador) rl.app.operador=last.operador;
+      rl.saidaPushed=false; rl._u=Date.now(); ovChanged=true; concluidas.push(r.opKey);
+    } else {
+      r.status='retorno';
+    }
+    changed=true;
   });
   if(changed) saveRecom();
+  if(ovChanged){ saveOverrides(); concluidas.forEach(k=>{ try{ pushOpSaida(k); }catch(e){} }); scheduleRealizadoPush(); }
   return changed;
 }
 // cartão de uma recomendação, com aparência/ações conforme o estado
