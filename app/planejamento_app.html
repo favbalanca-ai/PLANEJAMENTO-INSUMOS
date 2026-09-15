@@ -116,6 +116,9 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .kb-alert.hoje{background:var(--amber-soft);color:var(--amber)}
 .tar-alert-bar{background:#fdecec;color:#c0392b;border:1px solid #f2c2c2;border-radius:10px;padding:9px 14px;margin:0 0 12px;font-size:13px}
 .tar-alert-bar.hoje{background:var(--amber-soft);color:var(--amber);border-color:#f0d99a}
+/* Operação de Campo: barra de ações da execução */
+.camp-actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+.camp-done-tag{font-size:13px;font-weight:700;color:var(--green)}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
@@ -853,7 +856,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-96';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-97';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1972,9 +1975,12 @@ function clearSaida(r){
 // reenvia as baixas aprovadas que ainda não subiram (ex.: aprovadas offline)
 function pushSaidasPendentes(){
   const url=syncUrl(); if(!url) return Promise.resolve();
-  const pend=(RECOM.registros||[]).filter(r=>recomNorm(r).status==='aprovada' && !r.saidaPushed);
-  if(!pend.length) return Promise.resolve();
-  return Promise.all(pend.map(pushSaida));
+  const tasks=[];
+  // recoms avulsas aprovadas (sem operação de campo)
+  (RECOM.registros||[]).filter(r=>!r.opKey && recomNorm(r).status==='aprovada' && !r.saidaPushed).forEach(r=>tasks.push(pushSaida(r)));
+  // baixas de operações de campo concluídas ainda não enviadas
+  const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(pushOpSaida(k)); }
+  return tasks.length?Promise.all(tasks):Promise.resolve();
 }
 function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
 function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
@@ -2044,15 +2050,20 @@ V.entradas=function(){
 // Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE). Soma as aprovações deste aparelho
 // ainda NÃO enviadas (r.saidaPushed !== true), para não sumirem do saldo antes de subir.
 function estoqueSaidas(){
-  const m={};
+  const m={}; const add=(p,v)=>{ if(p) m[p]=(m[p]||0)+(+v||0); };
   const mov=(DATA&&DATA.movimentacao)||null;
+  // baixas das operações de campo concluídas (id op:) — pendentes de envio (as enviadas já vêm da planilha)
+  const opBaixas=(onlyPending)=>{ const R=OV.realizado||{}; for(const k in R){ const r=R[k];
+    if(!r||r.status!=='concluido'||!r.baixa) continue; if(onlyPending&&r.saidaPushed) continue; for(const pr in r.baixa) add(pr, r.baixa[pr]); } };
   if(mov&&mov.saidas){
-    for(const k in mov.saidas) m[k]=(m[k]||0)+(+mov.saidas[k]||0);            // planilha (todos os aparelhos)
-    (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.saidaPushed) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
-      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+    for(const k in mov.saidas) add(k, mov.saidas[k]);                         // planilha (todos os aparelhos)
+    (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.saidaPushed||r0.opKey) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
+      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) add(it.produto, it.real); }); });   // recoms avulsas pendentes
+    opBaixas(true);
   } else {                                                                     // sem sincronização: só o local
-    (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0); if(r.status!=='aprovada') return;
-      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) m[it.produto]=(m[it.produto]||0)+(+it.real||0); }); });
+    (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.opKey) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
+      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null) add(it.produto, it.real); }); });
+    opBaixas(false);
   }
   return m;
 }
@@ -3766,6 +3777,53 @@ V.mapa=function(){
   </div>`;
 };
 
+/* --- Execução da operação: baixa de estoque por operação (id estável = op:<talhão|op>) --- */
+function opBaixaId(key){ return 'op:'+key; }
+function opSaidaPayload(key){
+  const r=(OV.realizado&&OV.realizado[key])||{}, b=r.baixa||{}, talId=key.split('|')[0];
+  const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0}));
+  return { id:opBaixaId(key), talhao:talId, data:r.data||'', operador:(r.app&&r.app.operador)||'', itens };
+}
+function pushOpSaida(key){
+  const url=syncUrl(), r=OV.realizado&&OV.realizado[key]; if(!r) return Promise.resolve(false);
+  if(!url) return Promise.resolve(false);
+  return syncPost(url, JSON.stringify({__saida:opSaidaPayload(key)})).then(()=>{ r.saidaPushed=true; saveOverrides(); return true; }).catch(()=>false);
+}
+function clearOpSaida(key){
+  const r=OV.realizado&&OV.realizado[key]; const url=syncUrl(), was=r&&r.saidaPushed;
+  if(r){ r.saidaPushed=false; saveOverrides(); }
+  if(url&&was) syncPost(url, JSON.stringify({__saida:{id:opBaixaId(key), itens:[]}})).catch(()=>{});
+}
+// modal: operador informa o VOLUME real usado por insumo -> conclui, dá baixa e vai pro histórico
+function finalizarOpModal(key){
+  const i=key.indexOf('|'); if(i<0) return; const talId=key.slice(0,i), t=findTalhao(talId); if(!t){ toast('Talhão não encontrado'); return; }
+  const o=opsDoTalhao(t).find(x=>x.key===key); if(!o){ toast('Operação não encontrada'); return; }
+  const area=areaDe(t), r=realEnsure(key), agg={};
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const doseHa=(r.doses&&(iid in r.doses)&&r.doses[iid]!=='')?+r.doses[iid]:(+it.dose||0);
+    if(!agg[it.produto]) agg[it.produto]={un:it.un||'',vol:0}; agg[it.produto].vol+=doseHa*area; });
+  (r.extras||[]).forEach(ex=>{ if(!ex.produto) return; if(!agg[ex.produto]) agg[ex.produto]={un:(PROD[ex.produto]&&PROD[ex.produto].un)||'',vol:0}; agg[ex.produto].vol+=(+ex.dose||0)*area; });
+  const rows=Object.keys(agg).map(p=>{ const def=(r.baixa&&r.baixa[p]!=null)?r.baixa[p]:+agg[p].vol.toFixed(2);
+    return `<tr><td><b>${esc(p)}</b></td><td class="num"><input class="cell" inputmode="decimal" data-finprod="${esc(p)}" value="${def||''}" placeholder="0"><small> ${esc(agg[p].un)}</small></td></tr>`; }).join('')
+    || '<tr><td colspan="2" class="mut" style="padding:8px 10px">Sem insumos nesta operação — pode concluir mesmo assim.</td></tr>';
+  const old=document.getElementById('fin-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='fin-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box">
+    <div class="modal-head"><h3>Finalizar — ${esc(o.op.nome)} · ${esc(talId)}</h3><button class="icon-btn" data-act="finClose" title="Fechar">✕</button></div>
+    <div style="overflow:auto;max-height:60vh">
+      <p class="mut" style="font-size:12px;margin:0 0 8px">Informe o <b>volume total usado</b> de cada insumo. Ao confirmar, dá <b>baixa no estoque</b> e entra no <b>histórico do talhão</b>.</p>
+      <div class="app-grid" style="margin-bottom:8px">
+        <label>Operador<input class="txt" data-finmeta="operador" value="${esc((r.app&&r.app.operador)||'')}" placeholder="quem executou"></label>
+        <label>Data<input type="date" data-finmeta="data" value="${esc(r.data||new Date().toISOString().slice(0,10))}"></label>
+      </div>
+      <table class="camp-ins"><thead><tr><th>Insumo</th><th class="num">Volume usado</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>
+    <div class="modal-foot"><span class="spacer"></span>
+      <button class="btn btn-ghost btn-sm" data-act="finClose">Cancelar</button>
+      <button class="btn btn-primary btn-sm" data-act="finConfirm" data-key="${esc(key)}">✅ Concluir e dar baixa</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+}
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
@@ -3803,6 +3861,13 @@ V.campo = function(arg){
         <span class="camp-badge ${st.cls}">${st.lbl}</span>
       </div>
       <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}</div>
+      <div class="camp-actbar">
+        ${r.status==='pendente'?`<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar ao operador (WhatsApp)</button>`:''}
+        ${r.status==='andamento'?`<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar — informar volume usado</button>
+           <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`:''}
+        ${r.status==='concluido'?`<span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span>
+           <button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button>`:''}
+      </div>
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
       <div class="table-wrap"><table class="camp-ins">
         <thead><tr><th>Insumo</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead>
@@ -4186,7 +4251,22 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
-    else if(a.act==='realStatus'){ const r=realEnsure(a.key); r.status=a.val; realClean(a.key); saveOverrides(); route(); }
+    else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
+      const r=realEnsure(a.key); const was=r.status; r.status=a.val;
+      if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }
+      realClean(a.key); saveOverrides(); route(); }
+    else if(a.act==='opFinalizar'){ finalizarOpModal(a.key); return; }
+    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; saveOverrides(); route(); toast('Operação reaberta'); return; }
+    else if(a.act==='finClose'){ const ov=document.getElementById('fin-ov'); if(ov) ov.remove(); return; }
+    else if(a.act==='finConfirm'){ const key=a.key, r=realEnsure(key), baixa={};
+      document.querySelectorAll('#fin-ov [data-finprod]').forEach(inp=>{ const p=inp.dataset.finprod, v=_mmC(inp.value); if(p && v>0) baixa[p]=(baixa[p]||0)+v; });
+      const opEl=document.querySelector('#fin-ov [data-finmeta="operador"]'), dtEl=document.querySelector('#fin-ov [data-finmeta="data"]');
+      r.app=r.app||{}; if(opEl) r.app.operador=opEl.value.trim();
+      r.data=(dtEl&&dtEl.value)||r.data||new Date().toISOString().slice(0,10);
+      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; saveOverrides();
+      const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
+      route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
+      pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
     else if(a.act==='pickmod'){ const m=a.mod; localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); }
@@ -4221,10 +4301,20 @@ document.addEventListener('click',e=>{
       (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
       saveRecom(); route(); toast('Registre o volume utilizado e aprove'); } }
     else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; r.saidaPushed=false; saveRecom(); route();
-      toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
-      pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); }); } }
-    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
-    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); saveRecom(); route(); toast('Reaberta para edição'); } }
+      if(r.opKey){   // recomendação de uma operação de campo: a baixa é da operação (id op:), sem contar em dobro
+        const rl=realEnsure(r.opKey), baixa={};
+        (recomNorm(r).itens||[]).forEach(it=>{ if(it.produto&&it.real!=null&&+it.real>0) baixa[it.produto]=(baixa[it.produto]||0)+(+it.real||0); });
+        rl.baixa=baixa; rl.status='concluido'; if(!rl.data) rl.data=r.data||new Date().toISOString().slice(0,10);
+        rl.app=rl.app||{}; if(!rl.app.operador && r.retorno && r.retorno.quem) rl.app.operador=r.retorno.quem;
+        rl.saidaPushed=false; saveOverrides();
+        toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
+        pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
+      } else {
+        toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
+        pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
+      } } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; saveOverrides(); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; saveOverrides(); } saveRecom(); route(); toast('Reaberta para edição'); } }
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
@@ -4306,7 +4396,8 @@ document.addEventListener('click',e=>{
     }
     else if(a.act==='waApp'){ const r=recomFromCampoOp(a.key);
       if(!r){ toast('Nada para enviar'); return; }
-      recomWhats(r.id); route(); toast('Recomendação criada — enviando pela página do operador'); }
+      const rl=realEnsure(a.key); if(rl.status==='pendente'){ rl.status='andamento'; saveOverrides(); }  // enviou -> em andamento
+      recomWhats(r.id); route(); toast('Enviado ao operador — operação em andamento'); }
     return;
   }
   if(e.target.id==='btn-cot-csv') exportCotacaoCSV();
