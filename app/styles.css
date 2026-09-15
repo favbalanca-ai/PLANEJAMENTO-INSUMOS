@@ -93,6 +93,14 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .g-track{flex:0 0 auto;position:relative;height:30px}
 .g-bar{position:absolute;top:4px;height:22px;border-radius:5px;color:#fff;font-size:10px;line-height:22px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .g-bar.g-done{opacity:.6;text-decoration:line-through}
+.g-bar.g-atraso{outline:2px solid #c0392b;outline-offset:-2px}
+/* alertas de atraso nas tarefas */
+.kb-card.kb-atraso{border-left-color:#c0392b}
+.kb-alert{font-size:11px;font-weight:700;border-radius:6px;padding:2px 7px;margin:3px 0;display:inline-block}
+.kb-alert.atraso{background:#fdecec;color:#c0392b}
+.kb-alert.hoje{background:var(--amber-soft);color:var(--amber)}
+.tar-alert-bar{background:#fdecec;color:#c0392b;border:1px solid #f2c2c2;border-radius:10px;padding:9px 14px;margin:0 0 12px;font-size:13px}
+.tar-alert-bar.hoje{background:var(--amber-soft);color:var(--amber);border-color:#f0d99a}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
