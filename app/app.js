@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-95';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-96';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1421,19 +1421,41 @@ function tarefaFormHtml(){
       ${fs.length?'':'<span class="mut" style="align-self:center;font-size:12px">Dica: cadastre a equipe na aba <b>Equipe</b> para atribuir responsáveis.</span>'}
     </div></div>`;
 }
+function _today0(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+// status EFETIVO da tarefa: se ligada a uma operação do Campo (opKey), espelha o "realizado"
+// (pendente→a fazer · em andamento→em andamento · concluída→concluída). Senão, usa o status manual.
+function tarefaStatusEff(t){
+  if(t && t.opKey && OV && OV.realizado && OV.realizado[t.opKey]){
+    const st=OV.realizado[t.opKey].status;
+    if(st==='concluido') return 'concluida'; if(st==='andamento') return 'andamento'; return 'afazer';
+  }
+  return (t&&t.status)||'afazer';
+}
+// dias em atraso: fim (início + dias − 1) já passou e a tarefa não está concluída. 0 = no prazo.
+function tarefaAtraso(t){
+  if(tarefaStatusEff(t)==='concluida') return 0;
+  const fim=tarefaFim(t); if(!fim) return 0; fim.setHours(0,0,0,0);
+  const dd=_diffDays(fim,_today0()); return dd>0?dd:0;
+}
+function tarefaVenceHoje(t){ if(tarefaStatusEff(t)==='concluida') return false; const fim=tarefaFim(t); if(!fim) return false; fim.setHours(0,0,0,0); return _diffDays(fim,_today0())===0; }
 function tarefaCard(t){
   const cor=funcCor(t.funcionarioId), fim=tarefaFim(t), ini=_pYMD(t.inicio);
   const periodo = ini ? (fmtDataBR(t.inicio)+(fim&&(+t.dias>1)?' – '+fmtDataBR(fim.toISOString().slice(0,10)):'')) : '';
-  const si=TAR_ORDER.indexOf(t.status);
-  return `<div class="kb-card" draggable="true" data-id="${esc(t.id)}" data-search="${esc(((t.titulo||'')+' '+funcNome(t.funcionarioId)+' '+talhaoLabel(t.talhaoId)).toLowerCase())}">
+  const stEff=tarefaStatusEff(t), si=TAR_ORDER.indexOf(stEff), linked=!!t.opKey, atraso=tarefaAtraso(t), hoje=tarefaVenceHoje(t);
+  const alerta = atraso>0 ? `<div class="kb-alert atraso">⚠ Atrasada ${atraso} dia${atraso>1?'s':''}</div>` : (hoje?`<div class="kb-alert hoje">⏰ Vence hoje</div>`:'');
+  return `<div class="kb-card${atraso>0?' kb-atraso':''}"${linked?'':' draggable="true"'} data-id="${esc(t.id)}" data-search="${esc(((t.titulo||'')+' '+funcNome(t.funcionarioId)+' '+talhaoLabel(t.talhaoId)).toLowerCase())}">
     <div class="kb-title"><b>${esc(t.titulo||'(sem título)')}</b></div>
+    ${alerta}
     ${t.talhaoId?`<div class="kb-meta">🗺️ ${esc(talhaoLabel(t.talhaoId))}</div>`:''}
     <div class="kb-meta"><span class="kb-dot" style="background:${cor}"></span>${esc(funcNome(t.funcionarioId))}</div>
     ${periodo?`<div class="kb-meta">📅 ${esc(periodo)} <span class="mut">· ${Math.max(1,+t.dias||1)}d</span></div>`:''}
     ${t.obs?`<div class="kb-meta mut">${esc(t.obs)}</div>`:''}
+    ${linked?`<div class="kb-meta" style="color:var(--teal)">🔗 vem da Operação de Campo</div>`:''}
     <div class="kb-actions">
-      <button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="-1" title="Voltar status" ${si<=0?'disabled':''}>‹</button>
-      <button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="1" title="Avançar status" ${si>=TAR_ORDER.length-1?'disabled':''}>›</button>
+      ${linked
+        ? `<button class="btn btn-outline btn-sm" data-go="#/campo" title="Abrir a operação no módulo Campo (enviar WhatsApp / finalizar)">▶ Abrir no Campo</button>`
+        : `<button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="-1" title="Voltar status" ${si<=0?'disabled':''}>‹</button>
+           <button class="icon-btn" data-act="tarMove" data-id="${esc(t.id)}" data-dir="1" title="Avançar status" ${si>=TAR_ORDER.length-1?'disabled':''}>›</button>`}
       <span class="spacer"></span>
       <button class="icon-btn" data-act="tarEdit" data-id="${esc(t.id)}" title="Editar">✏️</button>
       <button class="icon-btn del" data-act="tarDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>
@@ -1441,19 +1463,23 @@ function tarefaCard(t){
 }
 V.tarefas=function(){
   const ts=(TAREFAS.tarefas||[]);
+  const atrasadas=ts.filter(t=>tarefaAtraso(t)>0), venceHoje=ts.filter(t=>tarefaVenceHoje(t));
   const cols=TAR_ORDER.map(st=>{
-    const its=ts.filter(t=>t.status===st).sort((a,b)=>String(a.inicio||'').localeCompare(String(b.inicio||'')));
+    const its=ts.filter(t=>tarefaStatusEff(t)===st).sort((a,b)=>(tarefaAtraso(b)-tarefaAtraso(a))||String(a.inicio||'').localeCompare(String(b.inicio||'')));
     return `<div class="kanban-col ${TAR_ST[st].cls}" data-status="${st}">
       <div class="kb-col-head">${TAR_ST[st].lbl} <span class="kb-count">${its.length}</span></div>
-      <div class="kb-list" data-status="${st}">${its.map(tarefaCard).join('')||'<div class="kb-empty">arraste tarefas para cá</div>'}</div>
+      <div class="kb-list" data-status="${st}">${its.map(tarefaCard).join('')||'<div class="kb-empty">sem tarefas</div>'}</div>
     </div>`;
   }).join('');
+  const aviso = atrasadas.length ? `<div class="tar-alert-bar">⚠ <b>${atrasadas.length}</b> tarefa(s) atrasada(s)${venceHoje.length?` · ${venceHoje.length} vence(m) hoje`:''}</div>`
+              : (venceHoje.length?`<div class="tar-alert-bar hoje">⏰ <b>${venceHoje.length}</b> tarefa(s) vence(m) hoje</div>`:'');
   return `${tarefaFormHtml()}
+  ${aviso}
   <div class="toolbar"><div class="search"><input id="q-tar" placeholder="Buscar tarefa, responsável ou talhão…" autocomplete="off"></div>
     <button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria uma tarefa para cada operação (com insumos) dos talhões — data sugerida por plantio + DAP">⬇ Importar operações</button>
     <div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Ver cronograma</a></div>
   <div class="kanban">${cols}</div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Arraste os cartões entre as colunas (ou use ‹ ›). Salvo neste aparelho.</p>`;
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Cartões 🔗 vêm da Operação de Campo (status automático: enviar no WhatsApp → em andamento; finalizar → conclui, dá baixa no estoque e vai pro histórico). Os demais você arrasta entre as colunas. Salvo neste aparelho.</p>`;
 };
 function filterTarefas(){
   const q=(($('#q-tar')&&$('#q-tar').value)||'').toLowerCase().trim();
@@ -1484,11 +1510,11 @@ V.cronograma=function(){
     if(ganttGrupo==='func'){ rows+=`<div class="g-group"><span class="kb-dot" style="background:${funcCor(gk)}"></span>${esc(funcNome(gk))}</div>`; }
     grupos[gk].slice().sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio))).forEach(t=>{
       const s=_pYMD(t.inicio), off=_diffDays(minS,s), dias=Math.max(1,+t.dias||1), cor=funcCor(t.funcionarioId);
-      const done=t.status==='concluida';
+      const done=tarefaStatusEff(t)==='concluida', atraso=tarefaAtraso(t);
       rows+=`<div class="g-row">
-        <div class="g-lbl" style="width:${labelW}px" title="${esc(t.titulo||'')}">${esc(t.titulo||'(sem título)')}${t.talhaoId?`<small>${esc(t.talhaoId)}</small>`:''}</div>
+        <div class="g-lbl" style="width:${labelW}px" title="${esc(t.titulo||'')}">${atraso>0?'⚠ ':''}${esc(t.titulo||'(sem título)')}${t.talhaoId?`<small>${esc(t.talhaoId)}</small>`:''}</div>
         <div class="g-track" style="width:${D*dayW}px">
-          <div class="g-bar${done?' g-done':''}" style="left:${off*dayW}px;width:${dias*dayW-4}px;background:${cor}" title="${esc(funcNome(t.funcionarioId))} · ${fmtDataBR(t.inicio)} · ${dias}d">${esc(t.titulo||'')}</div>
+          <div class="g-bar${done?' g-done':''}${atraso>0?' g-atraso':''}" style="left:${off*dayW}px;width:${dias*dayW-4}px;background:${cor}" title="${esc(funcNome(t.funcionarioId))} · ${fmtDataBR(t.inicio)} · ${dias}d${atraso>0?' · ATRASADA '+atraso+'d':''}">${esc(t.titulo||'')}</div>
         </div></div>`;
     });
   });
