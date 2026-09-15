@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-97';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-98';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1367,6 +1367,30 @@ function tarefasApplyPulled(pa){
   if(sig===tarefasSig()){ lastTarefasPushSig=tarefasSig(); return false; }
   EQUIPE.funcionarios=f; TAREFAS.tarefas=t; _persistEquipe(); _persistTarefas();
   lastTarefasPushSig=tarefasSig(); return true;
+}
+// ---- sincronização do STATUS das operações (OV.realizado) — merge por chave (mais recente vence) ----
+let realizadoPushTimer=null, lastRealizadoSig='';
+function realizadoSig(){ return JSON.stringify((OV&&OV.realizado)||{}); }
+function stampReal(key){ const r=OV&&OV.realizado&&OV.realizado[key]; if(r) r._u=Date.now(); saveOverrides(); scheduleRealizadoPush(); }
+function scheduleRealizadoPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(realizadoPushTimer);
+  realizadoPushTimer=setTimeout(()=>{ if(realizadoSig()===lastRealizadoSig) return; realizadoPush({auto:true}); }, 1800); }
+async function realizadoPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
+  if(syncBusy){ if(opts.auto) scheduleRealizadoPush(); return; }
+  const sig=realizadoSig(); if(opts.auto && sig===lastRealizadoSig) return;
+  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando status das operações…');
+  try{ const r=await syncPost(url, JSON.stringify({__realizado:(OV.realizado||{})}));
+    lastRealizadoSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Operações: '+((r&&r.ok)||0));
+    if(!opts.auto) toast('Status das operações enviado'); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar status'); }
+}
+function realizadoApplyPulled(map){
+  if(!map || typeof map!=='object' || !OV) return false;
+  OV.realizado=OV.realizado||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=OV.realizado[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>=lu){ OV.realizado[k]=inc; changed=true; } }
+  if(changed){ saveOverrides(); lastRealizadoSig=realizadoSig(); }
+  return changed;
 }
 function funcById(id){ return (EQUIPE.funcionarios||[]).find(f=>f.id===id)||null; }
 function funcNome(id){ const f=funcById(id); return f?f.nome:'Sem responsável'; }
@@ -3183,7 +3207,7 @@ function applyEdit(el){
   if(kind==='realData'||kind==='realObs'){   // modo Campo: data / observação (string) — local
     const r=realEnsure(el.dataset.key);
     if(kind==='realData') r.data=el.value; else r.obs=el.value;
-    realClean(el.dataset.key); saveOverrides();
+    realClean(el.dataset.key); stampReal(el.dataset.key);
     if(kind==='realData') route();   // obs não re-renderiza (mantém o cursor)
     return;
   }
@@ -3191,13 +3215,13 @@ function applyEdit(el){
     const v=el.value.trim();
     if(v && !PROD[v]){ toast('Produto não encontrado na lista'); return; }
     const r=realEnsure(el.dataset.key); (r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={})).produto=v;
-    realClean(el.dataset.key); saveOverrides(); return;
+    realClean(el.dataset.key); stampReal(el.dataset.key); return;
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
     if(f==='vazao'||f==='tanque'){ const val=el.value.trim().replace(',','.'); r.app[f]=val===''?null:parseFloat(val); }
     else { r.app[f]=el.value; }
-    realClean(el.dataset.key); saveOverrides();
+    realClean(el.dataset.key); stampReal(el.dataset.key);
     // atualiza só o quadro de cálculo (sem re-render, para não rolar a tela)
     const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]');
     if(box) box.innerHTML=campoAppOut(fk.talId, fk.tagoi, fk.op?fk.op.itens:[], (OV.realizado[el.dataset.key]||r));
@@ -3208,7 +3232,7 @@ function applyEdit(el){
     const r=realEnsure(el.dataset.key);
     if(kind==='realDose'){ if(q==null) delete r.doses[el.dataset.iid]; else r.doses[el.dataset.iid]=q; }
     else { const ex=r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={}); ex.dose=(q==null?null:q); }
-    realClean(el.dataset.key); saveOverrides();
+    realClean(el.dataset.key); stampReal(el.dataset.key);
     el.classList.toggle('edited', q!=null);   // sem re-render: não rola a tela ao preencher várias doses
     return;
   }
@@ -3400,16 +3424,16 @@ document.addEventListener('click',e=>{
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
       const r=realEnsure(a.key); const was=r.status; r.status=a.val;
       if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }
-      realClean(a.key); saveOverrides(); route(); }
+      realClean(a.key); stampReal(a.key); route(); }
     else if(a.act==='opFinalizar'){ finalizarOpModal(a.key); return; }
-    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; saveOverrides(); route(); toast('Operação reaberta'); return; }
+    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; stampReal(a.key); route(); toast('Operação reaberta'); return; }
     else if(a.act==='finClose'){ const ov=document.getElementById('fin-ov'); if(ov) ov.remove(); return; }
     else if(a.act==='finConfirm'){ const key=a.key, r=realEnsure(key), baixa={};
       document.querySelectorAll('#fin-ov [data-finprod]').forEach(inp=>{ const p=inp.dataset.finprod, v=_mmC(inp.value); if(p && v>0) baixa[p]=(baixa[p]||0)+v; });
       const opEl=document.querySelector('#fin-ov [data-finmeta="operador"]'), dtEl=document.querySelector('#fin-ov [data-finmeta="data"]');
       r.app=r.app||{}; if(opEl) r.app.operador=opEl.value.trim();
       r.data=(dtEl&&dtEl.value)||r.data||new Date().toISOString().slice(0,10);
-      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; saveOverrides();
+      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; stampReal(key);
       const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
       route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
@@ -3452,15 +3476,15 @@ document.addEventListener('click',e=>{
         (recomNorm(r).itens||[]).forEach(it=>{ if(it.produto&&it.real!=null&&+it.real>0) baixa[it.produto]=(baixa[it.produto]||0)+(+it.real||0); });
         rl.baixa=baixa; rl.status='concluido'; if(!rl.data) rl.data=r.data||new Date().toISOString().slice(0,10);
         rl.app=rl.app||{}; if(!rl.app.operador && r.retorno && r.retorno.quem) rl.app.operador=r.retorno.quem;
-        rl.saidaPushed=false; saveOverrides();
+        rl.saidaPushed=false; stampReal(r.opKey);
         toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
         pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
       } else {
         toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
         pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
       } } }
-    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; saveOverrides(); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
-    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; saveOverrides(); } saveRecom(); route(); toast('Reaberta para edição'); } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
@@ -3542,7 +3566,7 @@ document.addEventListener('click',e=>{
     }
     else if(a.act==='waApp'){ const r=recomFromCampoOp(a.key);
       if(!r){ toast('Nada para enviar'); return; }
-      const rl=realEnsure(a.key); if(rl.status==='pendente'){ rl.status='andamento'; saveOverrides(); }  // enviou -> em andamento
+      const rl=realEnsure(a.key); if(rl.status==='pendente'){ rl.status='andamento'; stampReal(a.key); }  // enviou -> em andamento
       recomWhats(r.id); route(); toast('Enviado ao operador — operação em andamento'); }
     return;
   }
@@ -3903,6 +3927,7 @@ function applyPulledData(d){
   // para que a lista de preços sincronize entre aparelhos junto com o resto — não só pela aba Preços.
   try{ if(PRECOS) precosApplyPulled(d.precos_app); }catch(e){}
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
+  try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -4011,6 +4036,7 @@ async function syncPush(opts){
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
   try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushSaidasPendentes(); }catch(e){}
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
+  try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
