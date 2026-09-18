@@ -82,7 +82,8 @@ function readData(){
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
-    movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp() };
+    movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
+    result_app:readMapApp('RESULTADO APP') };
 }
 // ---- Execução das operações de campo (OV.realizado): sincroniza status entre aparelhos ----
 var REALIZADO_SHEET_APP = 'REALIZADO APP';
@@ -96,6 +97,24 @@ function readRealizadoApp(){
 function writeRealizadoApp(map){
   map = map || {}; var b = ss(), s = b.getSheetByName(REALIZADO_SHEET_APP) || b.insertSheet(REALIZADO_SHEET_APP);
   var cur = readRealizadoApp();                       // merge por chave: mantém o mais recente (_u)
+  for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;
+    var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
+  var rows = [['KEY','JSON','ATUALIZADO']];
+  for (var kk in cur){ rows.push([kk, JSON.stringify(cur[kk]), (cur[kk] && cur[kk]._u)||'']); }
+  s.clearContents(); s.getRange(1,1,rows.length,3).setValues(rows); try { s.setFrozenRows(1); } catch(e){}
+  return { rows: rows.length-1 };
+}
+// mapa genérico chave->JSON (merge por chave pelo _u) numa aba KEY|JSON|ATUALIZADO — usado por Resultados
+function readMapApp(name){
+  var b = ss(), s = b.getSheetByName(name), out = {};
+  if (!s) return out; var last = s.getLastRow(); if (last < 2) return out;
+  var v = s.getRange(2,1,last-1,2).getValues();
+  for (var i=0;i<v.length;i++){ var k=S(v[i][0]); if(!k) continue; try { out[k]=JSON.parse(v[i][1]); } catch(e){} }
+  return out;
+}
+function writeMapApp(name, map){
+  map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
+  var cur = readMapApp(name);
   for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO']];
@@ -630,6 +649,8 @@ function doPost(e){
       var tk = writeTarefasApp(payload.__tarefas); out.ok = tk.rows;
     } else if (payload && payload.__realizado){      // status/execução das operações de campo (merge por chave)
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
+    } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
+      var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
     } else {
       applyEditsBatch(payload, out);           // grava em lote (rápido)
     }
