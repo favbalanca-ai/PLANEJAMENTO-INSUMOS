@@ -856,7 +856,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-100';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-101';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3463,8 +3463,9 @@ function recomBase(){ try{ return location.origin + location.pathname.replace(/[
 // link da página "retorno.html" com a recomendação embutida (o operador dosa e dá baixa)
 function recomLink(r){
   const t=findTalhao(r.talhao);
+  let tanque=0; if(r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
-    a:+r.area||0, v:_mmC(r.calda), al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
+    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
   return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
