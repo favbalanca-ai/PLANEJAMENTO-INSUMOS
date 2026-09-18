@@ -177,7 +177,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   var AREA=+REC.a||0, VAZAO=+REC.v||0;
   var LIQ=ITENS.filter(function(i){return i.liquido;}), SOL=ITENS.filter(function(i){return !i.liquido;});
 
-  var lastTank=2000; try{ var t0=localStorage.getItem('retorno_tanque'); if(t0) lastTank=num(t0); }catch(e){}
+  var TANK=+REC.tk||0;   // volume do tanque definido pelo escritório (o operador NÃO edita)
 
   // ---- monta a página ----
   var chips=[];
@@ -189,10 +189,10 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
 
   var recipeSec = VAZAO>0 && LIQ.length ? (
     '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Como dosar no tanque</span>'+
-      '<span class="sec-s">ajuste o tanque<br>e veja a dose</span></div>'+
+      '<span class="sec-s">dose por tanque<br>(tanque do escritório)</span></div>'+
     '<div class="card">'+
       '<div class="cfg">'+
-        '<div class="c"><div class="c-lbl">Seu tanque</div><input id="tanque" type="text" inputmode="numeric" value="'+nf0.format(lastTank)+'"><span class="u">litros</span></div>'+
+        '<div class="c ro"><div class="c-lbl">Tanque</div><div class="val">'+(TANK>0?nf0.format(TANK):'—')+'<span class="u"> litros</span></div></div>'+
         '<div class="c ro"><div class="c-lbl">Calda (vazão)</div><div class="val">'+nf.format(VAZAO)+'<span class="u"> L/ha</span></div></div>'+
         '<div class="c ro"><div class="c-lbl">Área</div><div class="val">'+nf.format(AREA)+'<span class="u"> ha</span></div></div>'+
       '</div>'+
@@ -244,15 +244,15 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
       (chips.length?'<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>':'')+
     '</div>'+ recipeSec + baixaSec;
 
-  // ---- receita do tanque (recalcula quando muda o tanque) ----
+  // ---- receita do tanque (tanque FIXO, definido pelo escritório) ----
   function renderRecipe(){
-    var el=document.getElementById('tanque'); if(!el) return;
-    var tanque=num(el.value), caldaTotal=AREA*VAZAO;
+    if(!document.getElementById('recipeRows')) return;
+    var tanque=TANK, caldaTotal=AREA*VAZAO;
     var haTanque=(tanque>0&&VAZAO>0)?tanque/VAZAO:0;
     var nTanques=(tanque>0)?Math.ceil(caldaTotal/tanque):0;
     document.getElementById('tTanks').textContent=nTanques||'—';
     document.getElementById('tCalda').textContent=nf0.format(caldaTotal);
-    document.getElementById('cfgHint').innerHTML= haTanque? 'Cada tanque cobre <b style="color:var(--ink)">'+nf.format(haTanque)+' ha</b>.':'Informe o volume do seu tanque.';
+    document.getElementById('cfgHint').innerHTML= haTanque? 'Cada tanque cobre <b style="color:var(--ink)">'+nf.format(haTanque)+' ha</b>.':'Tanque não definido pelo escritório — veja o total por produto abaixo.';
     document.getElementById('recipeRows').innerHTML=LIQ.map(function(it){
       var porTanque=it.dose*haTanque, total=it.dose*AREA;
       return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div><div class="r-cls">'+nf.format(it.dose)+' '+esc(it.un)+'/ha</div></div>'+
@@ -263,9 +263,8 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     if(tanque>0){ var cheios=Math.floor(caldaTotal/tanque), resto=caldaTotal-cheios*tanque;
       note.innerHTML='🛈 São <b>'+cheios+' tanque(s) cheios</b>'+(resto>1?' + 1 parcial (~'+nf0.format(resto)+' L)':'')+'. Meça a dose "por tanque" de cada produto em cada carga.'; }
     else note.innerHTML='';
-    try{ localStorage.setItem('retorno_tanque', String(tanque)); }catch(e){}
   }
-  var tk=document.getElementById('tanque'); if(tk){ tk.addEventListener('input',renderRecipe); renderRecipe(); }
+  renderRecipe();
 
   // ---- baixa (volume usado por produto) ----
   document.getElementById('baixaList').innerHTML=ITENS.map(function(it,i){

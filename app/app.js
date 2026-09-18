@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-100';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-102';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2585,8 +2585,9 @@ function recomFromCampoOp(opKey){
   const talId=opKey.slice(0,i), t=findTalhao(talId); if(!t) return null;
   let r=RECOM.registros.filter(x=>x.opKey===opKey && x.status!=='aprovada').sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
   if(!r){ r=recomCreate(talId, opKey); if(!r) return null; }
-  const rl=realOf(opKey);                                   // traz a vazão da Operação de Campo como calda (receita do tanque)
+  const rl=realOf(opKey);                                   // traz vazão e tanque da Operação de Campo p/ a recomendação
   if(rl && rl.app && rl.app.vazao!=null && rl.app.vazao!=='' && !r.calda) r.calda=String(rl.app.vazao);
+  if(rl && rl.app && rl.app.tanque!=null && rl.app.tanque!=='' && !r.tanque) r.tanque=String(rl.app.tanque);
   if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
   saveRecom(); return r;
 }
@@ -2609,8 +2610,10 @@ function recomBase(){ try{ return location.origin + location.pathname.replace(/[
 // link da página "retorno.html" com a recomendação embutida (o operador dosa e dá baixa)
 function recomLink(r){
   const t=findTalhao(r.talhao);
+  let tanque=_mmC(r.tanque)||0;   // tanque definido na própria recomendação (junto com a vazão/calda)
+  if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
-    a:+r.area||0, v:_mmC(r.calda), al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
+    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
   return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
@@ -2630,6 +2633,7 @@ function recomWhats(id){
     return `• ${it.produto} — ${num(it.dose)} ${it.un||''}/ha${tot}`;
   }).join('\n')+'\n'; }
   if(r.calda) x+=`\nVolume de calda: ${r.calda} L/ha\n`;
+  if(_mmC(r.tanque)>0) x+=`Tanque: ${num(_mmC(r.tanque))} L\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
   if(r.cond) x+=`Condições: ${r.cond}\n`;
   x+=`\n👉 *Abrir para dosar no tanque e dar baixa:*\n${recomLink(r)}\n`;
@@ -2701,6 +2705,7 @@ function recomCard(r,t){
       <label>Alvo<input class="txt" list="monit-alvos" data-id="${esc(r.id)}" data-recf="alvo" value="${esc(r.alvo||'')}" placeholder="ex.: Ferrugem"></label>
       <label>Janela<input class="txt" data-id="${esc(r.id)}" data-recf="janela" value="${esc(r.janela||'')}" placeholder="ex.: até 3 dias"></label>
       <label>Calda (L/ha)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="calda" value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
+      <label>Tanque (L)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="tanque" value="${esc(r.tanque||'')}" placeholder="ex.: 3000"></label>
       <label>Adjuvante<input class="txt" data-id="${esc(r.id)}" data-recf="adjuvante" value="${esc(r.adjuvante||'')}"></label>
       <label>Condições<input class="txt" data-id="${esc(r.id)}" data-recf="cond" value="${esc(r.cond||'')}"></label>
       <label>Responsável<input class="txt" data-id="${esc(r.id)}" data-recf="resp" value="${esc(r.resp||'')}"></label>
