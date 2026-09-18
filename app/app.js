@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-103';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-104';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -411,7 +411,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin',
   tarefas:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
@@ -454,6 +454,7 @@ function loadOverrides(){
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
   OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
+  OV.result        = OV.result        || {}; // "TL|seq" -> {prodHa, preco} colhido/vendido (Resultados — DRE realizada)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -745,6 +746,17 @@ function custoOpSeqHa(t,seq){
   const tag=seq==='safrinha'?'S':'P'; let s=0;
   opsOf(t.id,seq).forEach((op,oi)=>{ s+=custoOpHa(t.id,tag,oi,op); });
   return s;
+}
+// custo de insumos REALIZADO (R$) de uma safra do talhão: operações concluídas usam a baixa
+// (volume real × preço); as não concluídas ainda contam pelo planejado (para o número fazer sentido no meio da safra)
+function custoInsumoRealSeq(t,seq){
+  const tag=seq==='safrinha'?'S':'P', area=areaDe(t); let real=0;
+  opsOf(t.id,seq).forEach((op,oi)=>{ const tagoi=`${tag}${oi}`, key=t.id+'|'+tagoi, r=OV.realizado&&OV.realizado[key];
+    const planOp=effItems(t.id,tagoi,op.itens).reduce((s,it)=>s+(+it.dose||0)*area*precoDe(it.produto),0);
+    if(r && r.status==='concluido' && r.baixa){ let ro=0; for(const pr in r.baixa) ro+=(+r.baixa[pr]||0)*precoDe(pr); real+=ro; }
+    else real+=planOp;
+  });
+  return real;
 }
 // cada talhão vira 1 ou 2 "cultivos" (safra principal + safrinha)
 function cultivos(){
@@ -1905,6 +1917,63 @@ V.maquinas = function(){
   <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão.</p>`;
 };
 
+V.resultados = function(){
+  const cfg=OV.dreCfg||{};
+  const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0;
+  const cvs=cultivos();
+  if(!cvs.length) return `<div class="empty">Sem talhões para analisar.</div>`;
+  const rows=cvs.map(cv=>{
+    const t=cv.t, area=cv.area, emp=cv.emp, key=`${t.id}|${cv.seq}`;
+    const unit=(OV.dreUnit&&OV.dreUnit[emp])||'sc';
+    const prodHaOrc=(cv.seq==='safrinha'?prodSafDe(t):prodvDe(t))||0;
+    const res=OV.result[key]||{};
+    const prodHaReal=(res.prodHa!=null&&res.prodHa!=='')?+res.prodHa:prodHaOrc;
+    const precoOrc=precoCultura(emp), precoReal=(res.preco!=null&&res.preco!=='')?+res.preco:precoOrc;
+    const receitaOrc=prodHaOrc*area*precoOrc, receitaReal=prodHaReal*area*precoReal;
+    const insOrc=cv.ins, insReal=custoInsumoRealSeq(t,cv.seq);
+    const maq=cv.maqHa*area, arr=((emp in OV.arrend)?+OV.arrend[emp]:0)*area, estr=estruturaHa*area;
+    const impOrc=receitaOrc*impostoPct/100, impReal=receitaReal*impostoPct/100;
+    const finOrc=receitaOrc*financeiroPct/100, finReal=receitaReal*financeiroPct/100;
+    const margOrc=receitaOrc-impOrc-insOrc-maq-arr-estr-finOrc;
+    const margReal=receitaReal-impReal-insReal-maq-arr-estr-finReal;
+    const temReal=(res.prodHa!=null&&res.prodHa!=='');
+    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,receitaOrc,receitaReal,insOrc,insReal,maq,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
+  });
+  const T=f=>rows.reduce((s,r)=>s+f(r),0);
+  const tArea=T(r=>r.area), tRecR=T(r=>r.receitaReal), tRecO=T(r=>r.receitaOrc);
+  const tInsR=T(r=>r.insReal), tMargR=T(r=>r.margReal), tMargO=T(r=>r.margOrc);
+  const tCustoR=T(r=>r.insReal+r.maq+r.arr+r.estr+r.receitaReal*(impostoPct+financeiroPct)/100);
+  const sgn=v=>`<b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b>`;
+  const nColhidos=rows.filter(r=>r.temReal).length;
+  const body=rows.map(r=>`<tr data-search="${esc((r.t.id+' '+r.emp).toLowerCase())}">
+      <td class="c-full"><b>${esc(r.t.id)}</b>${r.t.nome?` <span class="mut">${esc(r.t.nome)}</span>`:''}<br><span class="mut" style="font-size:11px">${esc(r.emp)}${r.cv.seq==='safrinha'?' · 2ª':''}</span></td>
+      <td class="num" data-th="Área">${num(r.area)}</td>
+      <td class="num" data-th="Colhido/ha"><input class="cell ${r.temReal?'edited':''}" inputmode="decimal" data-edit="resProd" data-key="${esc(r.key)}" value="${r.temReal?esc(String(OV.result[r.key].prodHa)):''}" placeholder="${num(r.prodHaReal)}"><small> ${esc(r.unit)}</small></td>
+      <td class="num c-more" data-th="Preço"><input class="cell ${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'edited':''}" inputmode="decimal" data-edit="resPreco" data-key="${esc(r.key)}" value="${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?esc(String(OV.result[r.key].preco)):''}" placeholder="${nf2.format(r.precoReal)}"></td>
+      <td class="num c-more" data-th="Receita">${brl0(r.receitaReal)}</td>
+      <td class="num c-more" data-th="Insumos (real)" title="Orçado: ${brl0(r.insOrc)}">${brl0(r.insReal)}</td>
+      <td class="num c-more" data-th="Margem orçada">${sgn(r.margOrc)}</td>
+      <td class="num" data-th="Margem real">${sgn(r.margReal)}</td>
+      <td class="num c-more" data-th="Desvio"><b style="color:${r.desvio>=0?'var(--green)':'var(--red)'}">${r.desvio>=0?'+':''}${brl0(r.desvio)}</b></td></tr>`).join('');
+  return `
+  <div class="kpi-grid">
+    <div class="kpi accent"><div class="k-label">Margem realizada</div><div class="k-value" style="color:${tMargR>=0?'var(--green)':'var(--red)'}">${brl0(tMargR)}</div><div class="k-sub">orçada ${brl0(tMargO)} · desvio ${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</div></div>
+    <div class="kpi"><div class="k-label">Receita realizada</div><div class="k-value">${brl0(tRecR)}</div><div class="k-sub">orçada ${brl0(tRecO)}</div></div>
+    <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${brl0(tCustoR)}</div><div class="k-sub">insumos ${brl0(tInsR)}</div></div>
+    <div class="kpi"><div class="k-label">Margem / receita</div><div class="k-value">${tRecR>0?nf1.format(tMargR/tRecR*100)+'%':'—'}</div><div class="k-sub">${nColhidos}/${rows.length} talhões colhidos</div></div>
+  </div>
+  <div class="toolbar"><div class="search"><input id="q-res" placeholder="Buscar talhão ou cultura…" autocomplete="off"></div>
+    <div class="spacer"></div><span class="badge badge-muted">Informe <b>Colhido/ha</b> e <b>Preço</b> de cada talhão. Impostos, estrutura, financeiro e máquina usam as premissas da <a class="link" data-go="#/dre">DRE</a>.</span></div>
+  <div class="panel"><div class="panel-head"><h2>Resultado por talhão — Planejado × Realizado</h2><span class="sub">receita − custos = margem</span></div>
+    <div class="table-wrap"><table id="res-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Colhido/ha</th><th class="num c-more">Preço</th><th class="num c-more">Receita</th><th class="num c-more">Insumos</th><th class="num c-more">Margem orç.</th><th class="num">Margem real</th><th class="num c-more">Desvio</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tArea)}</td><td></td><td class="c-more"></td><td class="num c-more">${brl0(tRecR)}</td><td class="num c-more">${brl0(tInsR)}</td><td class="num c-more">${sgn(tMargO)}</td><td class="num">${sgn(tMargR)}</td><td class="num c-more"><b style="color:${tMargR-tMargO>=0?'var(--green)':'var(--red)'}">${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</b></td></tr></tfoot></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Margem = Receita − impostos − insumos − máquina − arrendamento − estrutura − financeiro. Insumos <b>realizados</b> vêm das operações concluídas (baixa por volume real); as não concluídas contam pelo planejado. Enquanto não informar o colhido, usa a produtividade orçada.</p>`;
+};
+function filterResultados(){
+  const q=(($('#q-res')&&$('#q-res').value)||'').toLowerCase().trim();
+  document.querySelectorAll('#res-tbl tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
+}
 V.dre = function(){
   // premissas gerenciais globais (rateadas por cultura)
   const cfg=OV.dreCfg||{};
@@ -2175,7 +2244,7 @@ V.inicio = function(){
     <h1 class="entry-h">Como você vai usar agora?</h1>
     <div class="entry-cards">
       ${card('planejamento','📋','Planejamento','Monte e ajuste o plano da safra.',
-        ['Painel','Talhões','Empreendimentos','Demanda de Compras','Estoque','Cotação','Máquinas','DRE'],'ec-plan')}
+        ['Painel','Talhões','Empreendimentos','Demanda de Compras','Estoque','Cotação','Máquinas','DRE','Resultados'],'ec-plan')}
       ${card('campo','🧑‍🌾','Campo','Execute e registre as operações na lavoura.',
         ['Operação de Campo','Monitoramento (GPS)','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
       ${card('precos','💲','Preços','Componha e mantenha os preços dos insumos.',
@@ -3163,7 +3232,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -3211,6 +3280,13 @@ function applyEdit(el){
     const k=`${el.dataset.id}|${el.dataset.op}`, v=el.value.trim();
     if(v==='') delete OV.opDae[k]; else OV.opDae[k]=parseInt(v,10)||0;
     saveOverrides(); route(); return;
+  }
+  if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra) — local
+    const k=el.dataset.key, v=el.value.trim(), f=(kind==='resProd')?'prodHa':'preco';
+    OV.result[k]=OV.result[k]||{};
+    if(v==='') delete OV.result[k][f]; else OV.result[k][f]=parseFloat(v.replace(',','.'))||0;
+    if(!Object.keys(OV.result[k]).length) delete OV.result[k];
+    saveOverrides(); route({keepScroll:true}); return;
   }
   if(kind==='itemProd'||kind==='itemProdAdd'){   // troca de produto (string)
     const v=el.value.trim();
@@ -3625,6 +3701,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-flx'){ filterFluxo(); return; }
   if(e.target.matches('[data-flxf]')){ if(fluxoDraft){ const f=e.target.dataset.flxf; fluxoDraft[f]= (f==='valor')?_mmC(e.target.value):e.target.value; } return; }
   if(e.target.id==='q-tar'){ filterTarefas(); return; }
+  if(e.target.id==='q-res'){ filterResultados(); return; }
   if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
   if(e.target.matches('[data-eqf]')){ equipeDraft[e.target.dataset.eqf]=e.target.value; return; }
   if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
