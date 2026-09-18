@@ -513,6 +513,11 @@ function applyTalhao(tid, edits, out){
         if (op){ var Lx = findInOp(vals, op, ed.produto, m);
           if (Lx){ vals[Lx - 1][m.classe] = ''; vals[Lx - 1][m.produto] = ''; vals[Lx - 1][m.dose] = ''; dirty = true; } }
         out.ok++;                                                           // idempotente
+      } else if (ed.type === 'dae'){                                         // DAE (dias após emergência) na coluna DAP (B)
+        if (!op) throw 'operação não encontrada (dae)';
+        if (m.dap < 0) throw 'planilha sem coluna DAP';
+        s.getRange(op.head, m.dap + 1).setValue(N(ed.value) || '');         // linha-cabeçalho da operação
+        out.ok++;
       } else { throw 'tipo desconhecido p/ talhão: ' + ed.type; }
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
   });
@@ -538,7 +543,7 @@ function opByIndex(vals, r0, r1, opIdx, m){
   var blocks = [], cur = null;
   for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (!row) continue;
     var a = S(row[m.op]);
-    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { body: [], has: false }; blocks.push(cur); }
+    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { head: L, body: [], has: false }; blocks.push(cur); }
     else if (cur){ cur.body.push(L); if (S(row[m.produto])) cur.has = true; }
   }
   return blocks[opIdx] || null;

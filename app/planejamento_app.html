@@ -119,6 +119,11 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 /* Operação de Campo: barra de ações da execução */
 .camp-actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .camp-done-tag{font-size:13px;font-weight:700;color:var(--green)}
+.camp-plan{font-size:13px;color:var(--ink);background:var(--teal-soft);border-radius:8px;padding:6px 10px;margin:6px 0}
+.op-dae{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);font-weight:700}
+.op-dae input{font-size:13px;font-weight:700;text-align:center;border:1.5px solid var(--line);border-radius:8px;padding:4px 4px;background:var(--card)}
+.op-dae input:focus{outline:none;border-color:var(--teal)}
+.op-dae-dt{font-weight:600}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
@@ -856,7 +861,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-102';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-103';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1293,6 +1298,7 @@ function loadOverrides(){
   OV.cultura = OV.cultura || {};   // empreendimento -> preço venda
   OV.maquina = OV.maquina || {};   // conjunto -> R$/HM
   OV.opMaq   = OV.opMaq   || {};   // "TL|tagOp" -> conjunto atribuído
+  OV.opDae   = OV.opDae   || {};   // "TL|tagOp" -> DAE (dias após emergência/plantio) da operação
   OV.dreOp   = OV.dreOp   || {};   // empreendimento -> custo operação R$/ha
   OV.arrend  = OV.arrend  || {};   // empreendimento -> arrendamento/outros R$/ha
   OV.dreCfg  = OV.dreCfg  || {};   // premissas gerenciais da DRE: {impostoPct, estruturaHa, financeiroPct, outrasHa}
@@ -1319,7 +1325,7 @@ function countEdits(){
   return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.dose).length +
          Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
-         Object.keys(OV.opMaq).length + Object.keys(OV.arrend).length + Object.keys(OV.dreCfg||{}).length + Object.keys(OV.dreUnit||{}).length + Object.keys(OV.dreProdHa||{}).length + (OV.diesel!==6.00?1:0) +
+         Object.keys(OV.opMaq).length + Object.keys(OV.opDae||{}).length + Object.keys(OV.arrend).length + Object.keys(OV.dreCfg||{}).length + Object.keys(OV.dreUnit||{}).length + Object.keys(OV.dreProdHa||{}).length + (OV.diesel!==6.00?1:0) +
          Object.keys(OV.itemRemoved).length + Object.keys(OV.itemProd).length +
          Object.values(OV.itemAdd).reduce((a,arr)=>a+arr.length,0) +
          OV.talhaoAdd.length + Object.keys(OV.talhaoRemoved).length +
@@ -1475,6 +1481,17 @@ function sugereMaquina(clsArr){
   return m?m.conjunto:null;
 }
 const opMaqKey=(tid,opref)=>`${tid}|${opref}`;
+// DAE (dias após emergência/plantio) da operação: override do app, senão o DAP da planilha
+function opDaeDe(tid,tagoi,opDap){ const k=`${tid}|${tagoi}`; return (OV.opDae && k in OV.opDae) ? (+OV.opDae[k]||0) : (+opDap||0); }
+// data planejada da operação = plantio (ou plantio_safrinha) + DAE
+function opDataPlan(tid,tagoi,opDap){
+  const seq=tagoi[0]==='S'?'safrinha':'principal', pl=planoDe(tid)||{};
+  const plantio=(seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
+  const dae=opDaeDe(tid,tagoi,opDap);
+  if(!/^\d{4}-\d{2}-\d{2}/.test(plantio)) return '';
+  const d=new Date(plantio.slice(0,10)+'T12:00:00'); if(dae) d.setDate(d.getDate()+dae);
+  return d.toISOString().slice(0,10);
+}
 // conjunto atribuído à operação (override do usuário, senão sugestão)
 function opMaqDe(tid,tag,oi,op){
   const k=opMaqKey(tid,`${tag}${oi}`);
@@ -1861,6 +1878,7 @@ V.talhao = function(id){
       <div class="op-head">
         <span class="op-title" data-optoggle="${okey}"><span class="op-chevron">⌄</span>${esc(op.nome)}</span>
         <span class="op-sum">${items.length} insumo${items.length===1?'':'s'} · ${brl(totOp)}/ha</span>
+        <span class="op-dae" title="Dias após emergência/plantio — usado para agendar a data da operação">DAE <input class="cell" inputmode="numeric" data-edit="opDae" data-id="${t.id}" data-op="${tagoi}" value="${(`${t.id}|${tagoi}` in OV.opDae)?esc(OV.opDae[`${t.id}|${tagoi}`]):(op.dap||'')}" placeholder="—" style="width:52px">${(()=>{const dt=opDataPlan(t.id,tagoi,op.dap);return dt?`<span class="op-dae-dt mut">→ ${fmtDataBR(dt)}</span>`:'';})()}</span>
         <span class="op-maq"><span class="mut">🚜</span>
         <select class="sel" data-edit="opMaq" data-id="${t.id}" data-op="${tagoi}" ${isOv?'style="border-color:var(--ink2)"':''}>${selHtml}</select>
         <span class="op-maqv">${brl(mHa)}/ha</span></span></div>
@@ -2268,7 +2286,7 @@ function importarOperacoes(){
         const items=effItems(t.id,tagoi,op.itens); if(!items.length) return;   // só operações com insumos
         const opKey=t.id+'|'+tagoi;
         if(existing.has(opKey)) return;                                        // já importada
-        const dap=+(op.dap||0)||0;
+        const dap=opDaeDe(t.id,tagoi,op.dap);
         const plantio=(seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
         let inicio=new Date().toISOString().slice(0,10);
         if(/^\d{4}-\d{2}-\d{2}/.test(plantio)){ const d=new Date(plantio.slice(0,10)+'T12:00:00'); if(dap) d.setDate(d.getDate()+dap); inicio=d.toISOString().slice(0,10); }
@@ -3419,7 +3437,7 @@ function recomCreate(talId, opKey){
   const t=findTalhao(talId); if(!t) return null;
   const o=opKey?opsDoTalhao(t).find(x=>x.key===opKey):null;
   // DAP (dias após plantio) da operação -> janela e data sugerida (plantio + DAP)
-  const dap=(o&&o.op&&o.op.dap)?+o.op.dap:0;
+  const dap=o?opDaeDe(talId,o.tagoi,o.op&&o.op.dap):0;
   const pl=planoDe(talId)||{};
   const plantio=(o&&o.seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
   let data=new Date().toISOString().slice(0,10), janela='';
@@ -3911,6 +3929,7 @@ V.campo = function(arg){
         ${r.status==='concluido'?`<span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span>
            <button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button>`:''}
       </div>
+      ${(()=>{ const dp=opDataPlan(t.id,o.tagoi,o.op.dap); const dae=opDaeDe(t.id,o.tagoi,o.op.dap); return dp?`<div class="camp-plan">📅 Planejado: <b>${fmtDataBR(dp)}</b>${dae?` <span class="mut">(${dae} DAE)</span>`:''}</div>`:(dae?`<div class="camp-plan mut">Planejado: ${dae} DAE (defina o plantio no talhão)</div>`:''); })()}
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
       <div class="table-wrap"><table class="camp-ins">
         <thead><tr><th>Insumo</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead>
@@ -4046,6 +4065,11 @@ function applyEdit(el){
   if(kind==='opMaq'){   // valor é o conjunto (string); "" = sem máquina
     const k=opMaqKey(el.dataset.id, el.dataset.op);
     OV.opMaq[k]=el.value; saveOverrides(); route(); return;
+  }
+  if(kind==='opDae'){   // DAE (dias) da operação — grava override e vai p/ a coluna DAP da planilha
+    const k=`${el.dataset.id}|${el.dataset.op}`, v=el.value.trim();
+    if(v==='') delete OV.opDae[k]; else OV.opDae[k]=parseInt(v,10)||0;
+    saveOverrides(); route(); return;
   }
   if(kind==='itemProd'||kind==='itemProdAdd'){   // troca de produto (string)
     const v=el.value.trim();
@@ -4739,6 +4763,8 @@ function buildFieldEdits(){
   const eds=[];
   for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])||gone(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
+  for(const k in OV.opDae){ const p=k.split('|'); if(p.length<2||!isBase(p[0])||gone(p[0])) continue;
+    eds.push({type:'dae',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),value:+OV.opDae[k]||0}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
   for(const pr in OV.pedido)  eds.push({type:'pedido', produto:pr,value:+OV.pedido[pr]});
   // preço de referência: ajuste LOCAL do app (a coluna de preço da planilha é fórmula/importada) — não envia
@@ -4815,6 +4841,10 @@ function reconcileOverrides(){
     const it=baseDoseOf(p[0],p[1],+p[2]); if(it && near(OV.dose[k],it.dose)) delete OV.dose[k]; }
   for(const rk in OV.itemProd){ const p=rk.split('|'); const it=baseDoseOf(p[0],p[1],+p[2]);
     if(it && String(OV.itemProd[rk])===String(it.produto)) delete OV.itemProd[rk]; }
+  // DAE das operações (compara com o DAP da planilha)
+  for(const k in OV.opDae){ const p=k.split('|'); if(p.length<2){ continue; }
+    const seq=p[1][0]==='S'?'safrinha':'principal', oi=+p[1].slice(1), op=(planoDe(p[0])[seq]||[])[oi];
+    if(op && near(+OV.opDae[k]||0, +op.dap||0)) delete OV.opDae[k]; }
   // culturas / área / produtividade do talhão
   Object.keys(OV.talhao).forEach(id=>{ const o=OV.talhao[id], t=DATA.talhoes.find(x=>x.id===id); if(!t) return;
     if(o.area!=null && near(o.area,t.area)) delete o.area;

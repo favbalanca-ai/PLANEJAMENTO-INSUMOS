@@ -104,6 +104,11 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 /* Operação de Campo: barra de ações da execução */
 .camp-actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .camp-done-tag{font-size:13px;font-weight:700;color:var(--green)}
+.camp-plan{font-size:13px;color:var(--ink);background:var(--teal-soft);border-radius:8px;padding:6px 10px;margin:6px 0}
+.op-dae{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);font-weight:700}
+.op-dae input{font-size:13px;font-weight:700;text-align:center;border:1.5px solid var(--line);border-radius:8px;padding:4px 4px;background:var(--card)}
+.op-dae input:focus{outline:none;border-color:var(--teal)}
+.op-dae-dt{font-weight:600}
 .ec-ico{font-size:36px;line-height:1}
 .ec-name{font-size:19px;font-weight:800;color:var(--ink)}
 .ec-desc{font-size:13.5px;color:var(--muted);line-height:1.45}
