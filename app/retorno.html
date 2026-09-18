@@ -163,7 +163,11 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
 
   // ---- decodifica a recomendação do link (#) ----
   var REC=null;
-  try{ var h=location.hash.slice(1); if(h) REC=JSON.parse(decodeURIComponent(h)); }catch(e){ REC=null; }
+  try{
+    var d=null; try{ d=new URLSearchParams(location.search).get('d'); }catch(e){}
+    if(d){ REC=JSON.parse(d); }                                   // novo: ?d= (já vem decodificado)
+    else { var h=location.hash.slice(1); if(h) REC=JSON.parse(decodeURIComponent(h)); }  // compat: #fragmento
+  }catch(e){ REC=null; }
   var wrap=document.getElementById('wrap');
   if(!REC || !REC.it || !REC.it.length){
     wrap.innerHTML='<div class="err-page"><h2>Link incompleto</h2><p>Peça para reenviarem a recomendação pelo app. O link precisa vir completo do WhatsApp.</p></div>';
