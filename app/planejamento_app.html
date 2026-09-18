@@ -862,7 +862,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-104';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-105';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2277,6 +2277,29 @@ function realizadoApplyPulled(map){
   if(changed){ saveOverrides(); lastRealizadoSig=realizadoSig(); }
   return changed;
 }
+// ---- Resultados (OV.result: colhido/preço por talhão) — sincroniza por chave (mais recente vence) ----
+let resultPushTimer=null, lastResultSig='';
+function resultSig(){ return JSON.stringify((OV&&OV.result)||{}); }
+function scheduleResultPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(resultPushTimer);
+  resultPushTimer=setTimeout(()=>{ if(resultSig()===lastResultSig) return; resultPush({auto:true}); }, 1800); }
+async function resultPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
+  if(syncBusy){ if(opts.auto) scheduleResultPush(); return; }
+  const sig=resultSig(); if(opts.auto && sig===lastResultSig) return;
+  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando resultados…');
+  try{ const r=await syncPost(url, JSON.stringify({__result:(OV.result||{})}));
+    lastResultSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Resultados: '+((r&&r.ok)||0));
+    if(!opts.auto) toast('Resultados enviados'); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar resultados'); }
+}
+function resultApplyPulled(map){
+  if(!map || typeof map!=='object' || !OV) return false;
+  OV.result=OV.result||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=OV.result[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>=lu){ OV.result[k]=inc; changed=true; } }
+  if(changed){ saveOverrides(); lastResultSig=resultSig(); }
+  return changed;
+}
 function funcById(id){ return (EQUIPE.funcionarios||[]).find(f=>f.id===id)||null; }
 function funcNome(id){ const f=funcById(id); return f?f.nome:'Sem responsável'; }
 function funcCor(id){ const fs=(EQUIPE.funcionarios||[]); const i=fs.findIndex(f=>f.id===id); return i>=0?EQ_CORES[i%EQ_CORES.length]:'#9aa0a6'; }
@@ -3589,7 +3612,7 @@ function applyRetornos(retornos){
   retornos.forEach(row=>{ if(row&&row.id) (byId[row.id]=byId[row.id]||[]).push(row); });
   Object.keys(byId).forEach(id=>{
     const r=recomById(id); if(!r) return; recomNorm(r);
-    if(r.status!=='enviada' && r.status!=='rascunho') return;   // já em retorno/aprovada: não sobrescreve
+    if(r.status==='aprovada') return;   // já concluída: não reprocessa (evita re-baixa). retorno/enviada seguem
     const rows=byId[id];
     (r.itens||[]).forEach(it=>{ const row=rows.find(x=>x.produto&&it.produto&&String(x.produto).toLowerCase()===String(it.produto).toLowerCase());
       if(row) it.real=+row.real||0; });
@@ -4141,12 +4164,13 @@ function applyEdit(el){
     if(v==='') delete OV.opDae[k]; else OV.opDae[k]=parseInt(v,10)||0;
     saveOverrides(); route(); return;
   }
-  if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra) — local
+  if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra)
     const k=el.dataset.key, v=el.value.trim(), f=(kind==='resProd')?'prodHa':'preco';
     OV.result[k]=OV.result[k]||{};
     if(v==='') delete OV.result[k][f]; else OV.result[k][f]=parseFloat(v.replace(',','.'))||0;
-    if(!Object.keys(OV.result[k]).length) delete OV.result[k];
-    saveOverrides(); route({keepScroll:true}); return;
+    const keys=Object.keys(OV.result[k]).filter(x=>x!=='_u');
+    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=Date.now();
+    saveOverrides(); scheduleResultPush(); route({keepScroll:true}); return;
   }
   if(kind==='itemProd'||kind==='itemProdAdd'){   // troca de produto (string)
     const v=el.value.trim();
@@ -4905,6 +4929,7 @@ function applyPulledData(d){
   try{ if(PRECOS) precosApplyPulled(d.precos_app); }catch(e){}
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
   try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
+  try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -5018,6 +5043,7 @@ async function syncPush(opts){
   try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushSaidasPendentes(); }catch(e){}
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
+  try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
