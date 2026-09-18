@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-105';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-106';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2766,7 +2766,7 @@ function applyRetornos(retornos){
       rl.baixa=baixa; rl.status='concluido';
       if(!rl.data) rl.data=r.data||(last.ts?new Date(last.ts).toISOString().slice(0,10):new Date().toISOString().slice(0,10));
       rl.app=rl.app||{}; if(!rl.app.operador && last.operador) rl.app.operador=last.operador;
-      rl.saidaPushed=false; rl._u=Date.now(); ovChanged=true; concluidas.push(r.opKey);
+      rl.saidaPushed=false; rl._u=Date.now(); fillDosesFromBaixa(r.opKey); ovChanged=true; concluidas.push(r.opKey);
     } else {
       r.status='retorno';
     }
@@ -3073,6 +3073,18 @@ V.mapa=function(){
 
 /* --- Execução da operação: baixa de estoque por operação (id estável = op:<talhão|op>) --- */
 function opBaixaId(key){ return 'op:'+key; }
+// preenche a coluna "Realizado" (dose/ha) da operação a partir do VOLUME baixado (volume ÷ área),
+// para o realizado voltar pelo que o operador efetivamente usou.
+function fillDosesFromBaixa(key){
+  const rl=OV.realizado&&OV.realizado[key]; if(!rl||!rl.baixa) return;
+  const i=key.indexOf('|'); if(i<0) return; const talId=key.slice(0,i), t=findTalhao(talId); if(!t) return;
+  const area=areaDe(t)||0; if(!area) return;
+  const o=opsDoTalhao(t).find(x=>x.key===key); if(!o) return;
+  rl.doses=rl.doses||{};
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const vol=(rl.baixa[it.produto]!=null)?+rl.baixa[it.produto]:null;
+    if(vol!=null) rl.doses[iid]=+(vol/area).toFixed(4); });
+}
 function opSaidaPayload(key){
   const r=(OV.realizado&&OV.realizado[key])||{}, b=r.baixa||{}, talId=key.split('|')[0];
   const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0}));
@@ -3571,7 +3583,7 @@ document.addEventListener('click',e=>{
       const opEl=document.querySelector('#fin-ov [data-finmeta="operador"]'), dtEl=document.querySelector('#fin-ov [data-finmeta="data"]');
       r.app=r.app||{}; if(opEl) r.app.operador=opEl.value.trim();
       r.data=(dtEl&&dtEl.value)||r.data||new Date().toISOString().slice(0,10);
-      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; stampReal(key);
+      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; fillDosesFromBaixa(key); stampReal(key);
       const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
       route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
