@@ -856,7 +856,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-99';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-100';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3466,7 +3466,8 @@ function recomLink(r){
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
     a:+r.area||0, v:_mmC(r.calda), al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
-  return recomBase()+'retorno.html#'+encodeURIComponent(JSON.stringify(payload));
+  // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
+  return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
 }
 // mensagem de WhatsApp: resumo + link para o operador dosar no tanque e dar baixa
 function recomWhats(id){
