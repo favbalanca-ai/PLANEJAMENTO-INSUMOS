@@ -136,6 +136,24 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .ag-due.late{color:#c0392b;font-weight:700}
 .ag-done{max-width:760px;margin:6px auto 0}
 .ag-done summary{cursor:pointer;color:var(--muted);font-size:13px;padding:6px 2px}
+/* Calendário mensal (estilo Google Calendar) */
+.cal-head{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 12px}
+.cal-head .cal-title{font-size:18px;font-weight:800;color:var(--ink);min-width:180px;text-align:center}
+.cal-head .icon-btn{width:38px;height:38px;font-size:20px;border:1px solid var(--line);border-radius:10px}
+.cal-wrap{overflow-x:auto}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(96px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:680px}
+.cal-dow{background:var(--bg);text-align:center;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:7px 0}
+.cal-cell{background:var(--card);min-height:96px;padding:4px 4px 6px;display:flex;flex-direction:column;gap:3px}
+.cal-cell.cal-off{background:var(--bg)}
+.cal-cell.cal-off .cal-dn{color:var(--muted);opacity:.55}
+.cal-dn{font-size:12px;font-weight:700;color:var(--ink);align-self:flex-end;line-height:1;padding:2px 4px}
+.cal-cell.cal-today .cal-dn{background:var(--teal);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+.cal-ev{font-size:11px;line-height:1.2;background:var(--teal-soft);border-left:3px solid var(--teal);border-radius:4px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--ink)}
+.cal-ev.done{text-decoration:line-through;opacity:.6}
+.cal-ev.late{background:#fdecec;color:#c0392b}
+.cal-more{font-size:10px;color:var(--muted);padding:0 5px}
+.cal-legw{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0 0}
+.cal-leg{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
 /* Operação de Campo: barra de ações da execução */
 .camp-actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .camp-done-tag{font-size:13px;font-weight:700;color:var(--green)}
@@ -817,7 +835,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/estoque" data-view="estoque" data-mod="planejamento"><span class="ico">📦</span><span class="lbl">Estoque</span><span class="lbl-s">Estoque</span></a>
       <a href="#/entradas" data-view="entradas" data-mod="admin"><span class="ico">🧾</span><span class="lbl">Compras</span><span class="lbl-s">Compras</span></a>
       <a href="#/fluxocaixa" data-view="fluxocaixa" data-mod="admin"><span class="ico">💵</span><span class="lbl">Fluxo de Caixa</span><span class="lbl-s">Caixa</span></a>
-      <a href="#/agenda" data-view="agenda" data-mod="tarefas"><span class="ico">🗓️</span><span class="lbl">Agenda</span><span class="lbl-s">Agenda</span></a>
+      <a href="#/calendario" data-view="calendario" data-mod="tarefas"><span class="ico">🗓️</span><span class="lbl">Calendário</span><span class="lbl-s">Calend.</span></a>
       <a href="#/tarefas" data-view="tarefas" data-mod="tarefas"><span class="ico">🗂️</span><span class="lbl">Quadro</span><span class="lbl-s">Quadro</span></a>
       <a href="#/cronograma" data-view="cronograma" data-mod="tarefas"><span class="ico">📅</span><span class="lbl">Cronograma</span><span class="lbl-s">Gantt</span></a>
       <a href="#/equipe" data-view="equipe" data-mod="tarefas"><span class="ico">👷</span><span class="lbl">Equipe</span><span class="lbl-s">Equipe</span></a>
@@ -883,7 +901,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-107';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-108';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1291,7 +1309,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin',
-  tarefas:'tarefas', agenda:'tarefas', cronograma:'tarefas', equipe:'tarefas',
+  tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
@@ -2488,6 +2506,49 @@ V.agenda=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria tarefas a partir das operações dos talhões">⬇ Importar operações</button></div>
   <div class="ag-list">${html}${doneHtml}</div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no ✓ para concluir. As tarefas 🔗 Campo mudam de status pela Operação de Campo (toque para abrir).</p>`;
+};
+// ---- Calendário mensal (estilo Google Calendar) ----
+const _MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+let calMes=null;
+function calMesAtual(){ if(!calMes){ const d=new Date(); calMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); } return calMes; }
+V.calendario=function(){
+  const ym=calMesAtual(), Y=+ym.split('-')[0], M=+ym.split('-')[1];
+  const first=new Date(Y,M-1,1), startDow=first.getDay();
+  const gridStart=new Date(Y,M-1,1-startDow);
+  const today=_today0();
+  const ts=(TAREFAS.tarefas||[]).filter(t=>_pYMD(t.inicio));
+  const byDay={};
+  ts.forEach(t=>{ const a=_pYMD(t.inicio); a.setHours(0,0,0,0); const f=tarefaFim(t)||a; f.setHours(0,0,0,0);
+    for(let d=new Date(a); d<=f; d.setDate(d.getDate()+1)){ (byDay[d.toISOString().slice(0,10)]=byDay[d.toISOString().slice(0,10)]||[]).push(t); } });
+  const dows=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const head=dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  let cells='';
+  for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    const k=d.toISOString().slice(0,10), inMonth=(d.getMonth()===M-1);
+    const isHoje=(d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate());
+    const items=byDay[k]||[];
+    const chips=items.slice(0,4).map(t=>{ const done=tarefaStatusEff(t)==='concluida', atr=tarefaAtraso(t)>0;
+      return `<div class="cal-ev${done?' done':''}${atr?' late':''}" style="border-left-color:${funcCor(t.funcionarioId)}" data-act="calEv" data-id="${esc(t.id)}" title="${esc((t.titulo||'')+' · '+funcNome(t.funcionarioId))}">${esc(t.titulo||'')}</div>`; }).join('');
+    const more=items.length>4?`<div class="cal-more">+${items.length-4}</div>`:'';
+    cells+=`<div class="cal-cell${inMonth?'':' cal-off'}${isHoje?' cal-today':''}"><div class="cal-dn">${d.getDate()}</div>${chips}${more}</div>`;
+  }
+  // legenda de responsáveis (cores)
+  const usados=[...new Set(ts.map(t=>t.funcionarioId).filter(Boolean))];
+  const legenda=usados.map(id=>`<span class="cal-leg"><span class="kb-dot" style="background:${funcCor(id)}"></span>${esc(funcNome(id))}</span>`).join('');
+  return `
+  <div class="toolbar">
+    <a class="btn btn-outline btn-sm" data-go="#/tarefas">🗂️ Quadro</a>
+    <a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Gantt</a>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria tarefas a partir das operações dos talhões">⬇ Importar operações</button></div>
+  <div class="cal-head">
+    <button class="icon-btn" data-act="calPrev" title="Mês anterior">‹</button>
+    <div class="cal-title">${_MESES_FULL[M-1]} ${Y}</div>
+    <button class="icon-btn" data-act="calNext" title="Próximo mês">›</button>
+    <button class="btn btn-outline btn-sm" data-act="calHoje" style="margin-left:8px">Hoje</button>
+  </div>
+  <div class="cal-wrap"><div class="cal-grid">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div></div>
+  ${legenda?`<div class="cal-legw">${legenda}</div>`:''}
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque numa tarefa para abrir. Cor = responsável · barra riscada = concluída · vermelho = atrasada.</p>`;
 };
 // ---- Cronograma (Gantt) ----
 V.cronograma=function(){
@@ -4191,7 +4252,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -4591,6 +4652,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
     else if(a.act==='tarImport'){ const n=importarOperacoes(); route(); toast(n?`${n} operação(ões) importada(s) como tarefa`:'Nenhuma operação nova para importar'); }
     else if(a.act==='agToggle'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t && !t.opKey){ t.status=(t.status==='concluida')?'afazer':'concluida'; saveTarefas(); route({keepScroll:true}); } }
+    else if(a.act==='calEv'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ if(t.opKey){ location.hash='#/campo'; } else { tarefaDraft={...t}; location.hash='#/tarefas'; } } }
+    else if(a.act==='calPrev'||a.act==='calNext'){ const Y=+calMesAtual().split('-')[0], M=+calMesAtual().split('-')[1]; const d=new Date(Y,M-1+(a.act==='calNext'?1:-1),1); calMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); route({keepScroll:true}); }
+    else if(a.act==='calHoje'){ calMes=null; route({keepScroll:true}); }
     else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
       EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
       saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
