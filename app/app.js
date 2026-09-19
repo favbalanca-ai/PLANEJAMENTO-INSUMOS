@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-106';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-107';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -410,7 +410,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin',
-  tarefas:'tarefas', cronograma:'tarefas', equipe:'tarefas',
+  tarefas:'tarefas', agenda:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
@@ -1565,6 +1565,49 @@ function filterTarefas(){
   const q=(($('#q-tar')&&$('#q-tar').value)||'').toLowerCase().trim();
   document.querySelectorAll('.kb-card').forEach(c=>{ const s=c.getAttribute('data-search')||''; c.style.display=(!q||s.includes(q))?'':'none'; });
 }
+// ---- Agenda (estilo Google Tarefas: lista por data, com check) ----
+const AG_BUCKETS=[['atrasada','⚠ Atrasadas'],['hoje','Hoje'],['amanha','Amanhã'],['semana','Esta semana'],['depois','Mais adiante'],['semdata','Sem data']];
+function agendaBucket(t){
+  if(tarefaStatusEff(t)==='concluida') return 'done';
+  const ini=_pYMD(t.inicio); if(!ini) return 'semdata';
+  const fim=tarefaFim(t)||ini, today=_today0();
+  const a=new Date(ini); a.setHours(0,0,0,0); const f=new Date(fim); f.setHours(0,0,0,0);
+  if(f<today) return 'atrasada';
+  if(a<=today && today<=f) return 'hoje';
+  const du=_diffDays(today,a);   // dias até começar (0=hoje, 1=amanhã)
+  if(du<=0) return 'hoje';
+  if(du===1) return 'amanha';
+  if(du<=7) return 'semana';
+  return 'depois';
+}
+V.agenda=function(){
+  const ts=(TAREFAS.tarefas||[]), groups={};
+  ts.forEach(t=>{ const bk=agendaBucket(t); (groups[bk]=groups[bk]||[]).push(t); });
+  const sortB=arr=>arr.slice().sort((a,b)=>{ const fa=tarefaFim(a), fb=tarefaFim(b); return (fa?fa.getTime():9e15)-(fb?fb.getTime():9e15) || String(a.inicio||'').localeCompare(String(b.inicio||'')); });
+  const rowHtml=t=>{ const done=tarefaStatusEff(t)==='concluida', linked=!!t.opKey, atraso=tarefaAtraso(t), fim=tarefaFim(t);
+    const per=_pYMD(t.inicio)?(fmtDataBR(t.inicio)+(fim&&+t.dias>1?'–'+fmtDataBR(fim.toISOString().slice(0,10)):'')):'sem data';
+    return `<div class="ag-row${atraso>0?' ag-late':''}">
+      <button class="ag-check${done?' on':''}" data-act="agToggle" data-id="${esc(t.id)}"${linked?' disabled title="O status vem da Operação de Campo"':' title="Concluir/reabrir"'}>${done?'✓':''}</button>
+      <div class="ag-main"${linked?' data-go="#/campo"':''}>
+        <div class="ag-title${done?' done':''}">${esc(t.titulo||'(sem título)')}</div>
+        <div class="ag-sub">${t.talhaoId?`🗺️ ${esc(t.talhaoId)} · `:''}<span class="kb-dot" style="background:${funcCor(t.funcionarioId)}"></span> ${esc(funcNome(t.funcionarioId))}${linked?' · 🔗 Campo':''}</div>
+      </div>
+      <div class="ag-due${atraso>0?' late':''}">${atraso>0?atraso+'d atraso':esc(per)}</div>
+    </div>`; };
+  let html='';
+  AG_BUCKETS.forEach(([bk,lbl])=>{ const arr=sortB(groups[bk]||[]); if(!arr.length) return;
+    html+=`<div class="ag-sec"><div class="ag-sec-h${bk==='atrasada'?' late':''}">${lbl} <span class="ag-n">${arr.length}</span></div>${arr.map(rowHtml).join('')}</div>`; });
+  if(!html) html='<div class="empty">Sem tarefas. Crie no Quadro ou toque em "Importar operações".</div>';
+  const done=groups.done||[];
+  const doneHtml=done.length?`<details class="ag-done"><summary>✔ Concluídas (${done.length})</summary>${sortB(done).map(rowHtml).join('')}</details>`:'';
+  return `
+  <div class="toolbar">
+    <a class="btn btn-outline btn-sm" data-go="#/tarefas">🗂️ Quadro</a>
+    <a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Gantt</a>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria tarefas a partir das operações dos talhões">⬇ Importar operações</button></div>
+  <div class="ag-list">${html}${doneHtml}</div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no ✓ para concluir. As tarefas 🔗 Campo mudam de status pela Operação de Campo (toque para abrir).</p>`;
+};
 // ---- Cronograma (Gantt) ----
 V.cronograma=function(){
   const ts=(TAREFAS.tarefas||[]).filter(t=>_pYMD(t.inicio));
@@ -3267,7 +3310,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -3666,6 +3709,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='tarMove'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ const i=TAR_ORDER.indexOf(t.status)+(+a.dir||0); if(i>=0&&i<TAR_ORDER.length){ t.status=TAR_ORDER[i]; saveTarefas(); route({keepScroll:true}); } } }
     else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
     else if(a.act==='tarImport'){ const n=importarOperacoes(); route(); toast(n?`${n} operação(ões) importada(s) como tarefa`:'Nenhuma operação nova para importar'); }
+    else if(a.act==='agToggle'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t && !t.opKey){ t.status=(t.status==='concluida')?'afazer':'concluida'; saveTarefas(); route({keepScroll:true}); } }
     else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
       EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
       saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
