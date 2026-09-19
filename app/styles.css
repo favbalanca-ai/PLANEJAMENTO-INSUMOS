@@ -121,6 +121,24 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 .ag-due.late{color:#c0392b;font-weight:700}
 .ag-done{max-width:760px;margin:6px auto 0}
 .ag-done summary{cursor:pointer;color:var(--muted);font-size:13px;padding:6px 2px}
+/* Calendário mensal (estilo Google Calendar) */
+.cal-head{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 12px}
+.cal-head .cal-title{font-size:18px;font-weight:800;color:var(--ink);min-width:180px;text-align:center}
+.cal-head .icon-btn{width:38px;height:38px;font-size:20px;border:1px solid var(--line);border-radius:10px}
+.cal-wrap{overflow-x:auto}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(96px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;min-width:680px}
+.cal-dow{background:var(--bg);text-align:center;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:7px 0}
+.cal-cell{background:var(--card);min-height:96px;padding:4px 4px 6px;display:flex;flex-direction:column;gap:3px}
+.cal-cell.cal-off{background:var(--bg)}
+.cal-cell.cal-off .cal-dn{color:var(--muted);opacity:.55}
+.cal-dn{font-size:12px;font-weight:700;color:var(--ink);align-self:flex-end;line-height:1;padding:2px 4px}
+.cal-cell.cal-today .cal-dn{background:var(--teal);color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center}
+.cal-ev{font-size:11px;line-height:1.2;background:var(--teal-soft);border-left:3px solid var(--teal);border-radius:4px;padding:2px 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--ink)}
+.cal-ev.done{text-decoration:line-through;opacity:.6}
+.cal-ev.late{background:#fdecec;color:#c0392b}
+.cal-more{font-size:10px;color:var(--muted);padding:0 5px}
+.cal-legw{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0 0}
+.cal-leg{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
 /* Operação de Campo: barra de ações da execução */
 .camp-actbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
 .camp-done-tag{font-size:13px;font-weight:700;color:var(--green)}

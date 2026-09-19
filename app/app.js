@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-107';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-108';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -410,7 +410,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin',
-  tarefas:'tarefas', agenda:'tarefas', cronograma:'tarefas', equipe:'tarefas',
+  tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
@@ -1607,6 +1607,49 @@ V.agenda=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria tarefas a partir das operações dos talhões">⬇ Importar operações</button></div>
   <div class="ag-list">${html}${doneHtml}</div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no ✓ para concluir. As tarefas 🔗 Campo mudam de status pela Operação de Campo (toque para abrir).</p>`;
+};
+// ---- Calendário mensal (estilo Google Calendar) ----
+const _MESES_FULL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+let calMes=null;
+function calMesAtual(){ if(!calMes){ const d=new Date(); calMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); } return calMes; }
+V.calendario=function(){
+  const ym=calMesAtual(), Y=+ym.split('-')[0], M=+ym.split('-')[1];
+  const first=new Date(Y,M-1,1), startDow=first.getDay();
+  const gridStart=new Date(Y,M-1,1-startDow);
+  const today=_today0();
+  const ts=(TAREFAS.tarefas||[]).filter(t=>_pYMD(t.inicio));
+  const byDay={};
+  ts.forEach(t=>{ const a=_pYMD(t.inicio); a.setHours(0,0,0,0); const f=tarefaFim(t)||a; f.setHours(0,0,0,0);
+    for(let d=new Date(a); d<=f; d.setDate(d.getDate()+1)){ (byDay[d.toISOString().slice(0,10)]=byDay[d.toISOString().slice(0,10)]||[]).push(t); } });
+  const dows=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const head=dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  let cells='';
+  for(let i=0;i<42;i++){ const d=new Date(gridStart); d.setDate(gridStart.getDate()+i);
+    const k=d.toISOString().slice(0,10), inMonth=(d.getMonth()===M-1);
+    const isHoje=(d.getFullYear()===today.getFullYear()&&d.getMonth()===today.getMonth()&&d.getDate()===today.getDate());
+    const items=byDay[k]||[];
+    const chips=items.slice(0,4).map(t=>{ const done=tarefaStatusEff(t)==='concluida', atr=tarefaAtraso(t)>0;
+      return `<div class="cal-ev${done?' done':''}${atr?' late':''}" style="border-left-color:${funcCor(t.funcionarioId)}" data-act="calEv" data-id="${esc(t.id)}" title="${esc((t.titulo||'')+' · '+funcNome(t.funcionarioId))}">${esc(t.titulo||'')}</div>`; }).join('');
+    const more=items.length>4?`<div class="cal-more">+${items.length-4}</div>`:'';
+    cells+=`<div class="cal-cell${inMonth?'':' cal-off'}${isHoje?' cal-today':''}"><div class="cal-dn">${d.getDate()}</div>${chips}${more}</div>`;
+  }
+  // legenda de responsáveis (cores)
+  const usados=[...new Set(ts.map(t=>t.funcionarioId).filter(Boolean))];
+  const legenda=usados.map(id=>`<span class="cal-leg"><span class="kb-dot" style="background:${funcCor(id)}"></span>${esc(funcNome(id))}</span>`).join('');
+  return `
+  <div class="toolbar">
+    <a class="btn btn-outline btn-sm" data-go="#/tarefas">🗂️ Quadro</a>
+    <a class="btn btn-outline btn-sm" data-go="#/cronograma">📅 Gantt</a>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="tarImport" title="Cria tarefas a partir das operações dos talhões">⬇ Importar operações</button></div>
+  <div class="cal-head">
+    <button class="icon-btn" data-act="calPrev" title="Mês anterior">‹</button>
+    <div class="cal-title">${_MESES_FULL[M-1]} ${Y}</div>
+    <button class="icon-btn" data-act="calNext" title="Próximo mês">›</button>
+    <button class="btn btn-outline btn-sm" data-act="calHoje" style="margin-left:8px">Hoje</button>
+  </div>
+  <div class="cal-wrap"><div class="cal-grid">${dows.map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div></div>
+  ${legenda?`<div class="cal-legw">${legenda}</div>`:''}
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque numa tarefa para abrir. Cor = responsável · barra riscada = concluída · vermelho = atrasada.</p>`;
 };
 // ---- Cronograma (Gantt) ----
 V.cronograma=function(){
@@ -3310,7 +3353,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -3710,6 +3753,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
     else if(a.act==='tarImport'){ const n=importarOperacoes(); route(); toast(n?`${n} operação(ões) importada(s) como tarefa`:'Nenhuma operação nova para importar'); }
     else if(a.act==='agToggle'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t && !t.opKey){ t.status=(t.status==='concluida')?'afazer':'concluida'; saveTarefas(); route({keepScroll:true}); } }
+    else if(a.act==='calEv'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ if(t.opKey){ location.hash='#/campo'; } else { tarefaDraft={...t}; location.hash='#/tarefas'; } } }
+    else if(a.act==='calPrev'||a.act==='calNext'){ const Y=+calMesAtual().split('-')[0], M=+calMesAtual().split('-')[1]; const d=new Date(Y,M-1+(a.act==='calNext'?1:-1),1); calMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); route({keepScroll:true}); }
+    else if(a.act==='calHoje'){ calMes=null; route({keepScroll:true}); }
     else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
       EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
       saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
