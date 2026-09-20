@@ -83,7 +83,53 @@ function readData(){
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
-    result_app:readMapApp('RESULTADO APP') };
+    result_app:readMapApp('RESULTADO APP'), equipe_sst:readEquipeSST() };
+}
+// ---- Equipe puxada da aba SST (colaboradores/funcionários) ----
+// Detecta a aba (SST, EQUIPE SST, EQUIPE, FUNCIONÁRIOS...) e as colunas de nome/função pelo cabeçalho.
+function readEquipeSST(){
+  var b = ss(), all = b.getSheets(), s = null;
+  // 1) casamento exato preferido, depois "contém"
+  var pref = ['SST','EQUIPE SST','EQUIPE','FUNCIONÁRIOS','FUNCIONARIOS','COLABORADORES','PESSOAL'];
+  for (var p=0; p<pref.length && !s; p++){
+    for (var i=0;i<all.length;i++){ if (all[i].getName().toUpperCase().trim() === pref[p]){ s = all[i]; break; } }
+  }
+  if (!s){ for (var j=0;j<all.length;j++){ if (all[j].getName().toUpperCase().indexOf('SST') >= 0){ s = all[j]; break; } } }
+  if (!s) return [];
+  var last = s.getLastRow(); if (last < 1) return [];
+  var lastCol = Math.max(2, Math.min(20, s.getLastColumn()));
+  var grid = s.getRange(1, 1, last, lastCol).getValues();
+  // acha a linha de cabeçalho e as colunas de nome/função
+  var hdrRow = -1, cNome = -1, cFunc = -1;
+  for (var h=0; h<Math.min(grid.length, 8); h++){
+    var row = grid[h], gotNome = -1, gotFunc = -1;
+    for (var c=0;c<row.length;c++){
+      var t = S(row[c]).toUpperCase();
+      if (gotNome<0 && (t==='NOME' || t.indexOf('FUNCIONÁRIO')>=0 || t.indexOf('FUNCIONARIO')>=0 || t.indexOf('COLABORADOR')>=0 || t==='NOME COMPLETO')) gotNome = c;
+      if (gotFunc<0 && (t.indexOf('FUNÇÃO')>=0 || t.indexOf('FUNCAO')>=0 || t.indexOf('CARGO')>=0 || t.indexOf('SETOR')>=0 || t.indexOf('ATIVIDADE')>=0)) gotFunc = c;
+    }
+    if (gotNome>=0){ hdrRow = h; cNome = gotNome; cFunc = gotFunc; break; }
+  }
+  var out = [], seen = {};
+  if (hdrRow >= 0){
+    for (var r=hdrRow+1; r<grid.length; r++){
+      var nome = S(grid[r][cNome]); if (!nome) continue;
+      var funcao = (cFunc>=0) ? S(grid[r][cFunc]) : '';
+      var key = nome.toUpperCase(); if (seen[key]) continue; seen[key] = 1;
+      out.push({ id:'sst:'+nome, nome:nome, funcao:funcao, sst:true });
+    }
+  } else {
+    // sem cabeçalho reconhecido: assume col A = nome, col B = função
+    for (var r2=0; r2<grid.length; r2++){
+      var nm = S(grid[r2][0]); if (!nm) continue;
+      var up = nm.toUpperCase();
+      if (up==='NOME' || up.indexOf('FUNCIONÁRIO')>=0 || up.indexOf('FUNCIONARIO')>=0 || up.indexOf('COLABORADOR')>=0) continue;
+      var fc = (lastCol>=2) ? S(grid[r2][1]) : '';
+      var k2 = up; if (seen[k2]) continue; seen[k2] = 1;
+      out.push({ id:'sst:'+nm, nome:nm, funcao:fc, sst:true });
+    }
+  }
+  return out;
 }
 // ---- Execução das operações de campo (OV.realizado): sincroniza status entre aparelhos ----
 var REALIZADO_SHEET_APP = 'REALIZADO APP';

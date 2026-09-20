@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-108';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-109';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -413,7 +413,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
-function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/tarefas':'#/dashboard'))); }
+function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/calendario':'#/dashboard'))); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
 function applyModule(){
   const m=currentModule();
@@ -1440,9 +1440,12 @@ function resultApplyPulled(map){
   if(changed){ saveOverrides(); lastResultSig=resultSig(); }
   return changed;
 }
-function funcById(id){ return (EQUIPE.funcionarios||[]).find(f=>f.id===id)||null; }
+// equipe puxada da aba SST da planilha (read-only) + integrantes manuais adicionados no app
+function sstFuncs(){ return (DATA && Array.isArray(DATA.equipe_sst)) ? DATA.equipe_sst : []; }
+function allFuncs(){ return sstFuncs().concat(EQUIPE.funcionarios||[]); }
+function funcById(id){ return allFuncs().find(f=>f.id===id)||null; }
 function funcNome(id){ const f=funcById(id); return f?f.nome:'Sem responsável'; }
-function funcCor(id){ const fs=(EQUIPE.funcionarios||[]); const i=fs.findIndex(f=>f.id===id); return i>=0?EQ_CORES[i%EQ_CORES.length]:'#9aa0a6'; }
+function funcCor(id){ const fs=allFuncs(); const i=fs.findIndex(f=>f.id===id); return i>=0?EQ_CORES[i%EQ_CORES.length]:'#9aa0a6'; }
 function tarefaNovoDraft(){ return {titulo:'', talhaoId:'', funcionarioId:'', inicio:new Date().toISOString().slice(0,10), dias:1, status:'afazer', obs:''}; }
 function _pYMD(s){ const p=String(s||'').slice(0,10).split('-'); return p.length===3?new Date(+p[0],+p[1]-1,+p[2]):null; }
 function _addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
@@ -1483,7 +1486,7 @@ function importarOperacoes(){
 function tarefaFormHtml(){
   const d=tarefaDraft||(tarefaDraft=tarefaNovoDraft());
   const talhoes=talhoesAll();
-  const fs=EQUIPE.funcionarios||[];
+  const fs=allFuncs();
   const editando=!!d.id;
   return `<div class="panel"><div class="panel-head"><h2>${editando?'Editar tarefa':'Nova tarefa'}</h2><span class="sub">quem faz o quê, quando e por quantos dias</span></div>
     <div class="app-grid" style="padding:12px 14px">
@@ -1701,22 +1704,27 @@ V.cronograma=function(){
 // ---- Equipe (funcionários) ----
 let equipeDraft={nome:'',funcao:''};
 V.equipe=function(){
-  const fs=EQUIPE.funcionarios||[];
+  const sst=sstFuncs();
+  const manual=EQUIPE.funcionarios||[];
   const ts=(TAREFAS.tarefas||[]);
-  const rows=fs.map(f=>{ const n=ts.filter(t=>t.funcionarioId===f.id).length, ativas=ts.filter(t=>t.funcionarioId===f.id&&t.status!=='concluida').length;
+  const linha=(f,rem)=>{ const n=ts.filter(t=>t.funcionarioId===f.id).length, ativas=ts.filter(t=>t.funcionarioId===f.id&&t.status!=='concluida').length;
     return `<tr><td><span class="kb-dot" style="background:${funcCor(f.id)}"></span> <b>${esc(f.nome)}</b></td>
       <td>${esc(f.funcao||'—')}</td><td class="num">${ativas}</td><td class="num">${n}</td>
-      <td><button class="icon-btn del" data-act="funcDel" data-id="${esc(f.id)}" title="Remover">🗑</button></td></tr>`; }).join('');
+      <td>${rem?`<button class="icon-btn del" data-act="funcDel" data-id="${esc(f.id)}" title="Remover">🗑</button>`:'<span class="mut" title="Vem da aba SST da planilha">🔒</span>'}</td></tr>`; };
+  const sstRows=sst.map(f=>linha(f,false)).join('');
+  const manRows=manual.map(f=>linha(f,true)).join('');
   return `
-  <div class="panel"><div class="panel-head"><h2>Novo integrante</h2><span class="sub">operadores / funcionários da equipe</span></div>
+  <div class="panel"><div class="panel-head"><h2>Equipe (SST)</h2><span class="sub">${sst.length} · puxada da aba SST da planilha</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${sstRows||'<tr><td colspan="5" class="mut" style="padding:14px">Sem integrantes na aba SST. Sincronize (🔄) ou preencha a aba <b>SST</b> na planilha (colunas Nome e Função).</td></tr>'}</tbody></table></div></div>
+  <div class="panel"><div class="panel-head"><h2>Integrantes manuais</h2><span class="sub">adicionados no app · ${manual.length}</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Nome<input class="txt" data-eqf="nome" value="${esc(equipeDraft.nome)}" placeholder="nome do funcionário"></label>
       <label>Função<input class="txt" data-eqf="funcao" value="${esc(equipeDraft.funcao)}" placeholder="ex.: tratorista, aplicador…"></label>
     </div>
-    <div style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="funcAdd">➕ Adicionar</button></div></div>
-  <div class="panel"><div class="panel-head"><h2>Equipe</h2><span class="sub">${fs.length} integrante(s)</span></div>
+    <div style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="funcAdd">➕ Adicionar</button></div>
     <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" class="mut" style="padding:14px">Nenhum integrante. Adicione o primeiro acima.</td></tr>'}</tbody></table></div></div>`;
+      <tbody>${manRows||'<tr><td colspan="5" class="mut" style="padding:14px">Nenhum integrante manual. Use a aba SST ou adicione acima.</td></tr>'}</tbody></table></div></div>`;
 };
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
