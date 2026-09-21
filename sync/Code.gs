@@ -85,49 +85,68 @@ function readData(){
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
     result_app:readMapApp('RESULTADO APP'), equipe_sst:readEquipeSST() };
 }
-// ---- Equipe puxada da aba SST (colaboradores/funcionários) ----
-// Detecta a aba (SST, EQUIPE SST, EQUIPE, FUNCIONÁRIOS...) e as colunas de nome/função pelo cabeçalho.
+// ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
+// Cole aqui o ID da planilha de RH (a "SST_GoogleSheets_BancoDeDados"): é a parte
+// da URL entre /d/ e /edit — ex.: https://docs.google.com/spreadsheets/d/AQUI_O_ID/edit
+// Deixe '' para procurar uma aba SST/EQUIPE dentro da própria planilha de planejamento.
+var SST_DB_ID = '';
+function sstSS(){ if (SST_DB_ID){ try { return SpreadsheetApp.openById(SST_DB_ID); } catch(e){} } return ss(); }
+// Detecta a aba (BancoDeDados / SST / EQUIPE / 01_RH_MESTRE / RH...) e as colunas
+// (nome, função, setor, status) pelo cabeçalho. Retorna só quem está ATIVO.
 function readEquipeSST(){
-  var b = ss(), all = b.getSheets(), s = null;
-  // 1) casamento exato preferido, depois "contém"
-  var pref = ['SST','EQUIPE SST','EQUIPE','FUNCIONÁRIOS','FUNCIONARIOS','COLABORADORES','PESSOAL'];
-  for (var p=0; p<pref.length && !s; p++){
-    for (var i=0;i<all.length;i++){ if (all[i].getName().toUpperCase().trim() === pref[p]){ s = all[i]; break; } }
+  var b = sstSS(), all = b.getSheets();
+  var pref = ['BANCODEDADOS','BANCO DE DADOS','SST','EQUIPE SST','EQUIPE','01_RH_MESTRE','RH_MESTRE','FUNCIONÁRIOS','FUNCIONARIOS','COLABORADORES','PESSOAL'];
+  // ordena as abas: as preferidas primeiro (mantém a ordem da lista), o resto depois
+  var ordered = [];
+  for (var p=0;p<pref.length;p++){ for (var i=0;i<all.length;i++){ var nm=all[i].getName().toUpperCase().trim(); if (nm===pref[p] || (pref[p].length>=3 && nm.indexOf(pref[p])>=0)) { if (ordered.indexOf(all[i])<0) ordered.push(all[i]); } } }
+  for (var j=0;j<all.length;j++){ if (ordered.indexOf(all[j])<0) ordered.push(all[j]); }
+  for (var s=0;s<ordered.length;s++){
+    var got = _parseEquipeSheet(ordered[s]);
+    if (got && got.length) return got;   // primeira aba que tem gente vence
   }
-  if (!s){ for (var j=0;j<all.length;j++){ if (all[j].getName().toUpperCase().indexOf('SST') >= 0){ s = all[j]; break; } } }
-  if (!s) return [];
-  var last = s.getLastRow(); if (last < 1) return [];
-  var lastCol = Math.max(2, Math.min(20, s.getLastColumn()));
-  var grid = s.getRange(1, 1, last, lastCol).getValues();
-  // acha a linha de cabeçalho e as colunas de nome/função
-  var hdrRow = -1, cNome = -1, cFunc = -1;
-  for (var h=0; h<Math.min(grid.length, 8); h++){
-    var row = grid[h], gotNome = -1, gotFunc = -1;
+  return [];
+}
+function _parseEquipeSheet(sh){
+  if (!sh) return []; var last = sh.getLastRow(); if (last < 1) return [];
+  var lastCol = Math.max(2, Math.min(30, sh.getLastColumn()));
+  var grid = sh.getRange(1, 1, last, lastCol).getValues();
+  var hdrRow=-1, cFull=-1, cShort=-1, cFunc=-1, cSetor=-1, cStatus=-1, cId=-1;
+  for (var h=0; h<Math.min(grid.length, 10); h++){
+    var row = grid[h]; var full=-1, sht=-1, fun=-1, set=-1, sta=-1, idc=-1;
     for (var c=0;c<row.length;c++){
-      var t = S(row[c]).toUpperCase();
-      if (gotNome<0 && (t==='NOME' || t.indexOf('FUNCIONÁRIO')>=0 || t.indexOf('FUNCIONARIO')>=0 || t.indexOf('COLABORADOR')>=0 || t==='NOME COMPLETO')) gotNome = c;
-      if (gotFunc<0 && (t.indexOf('FUNÇÃO')>=0 || t.indexOf('FUNCAO')>=0 || t.indexOf('CARGO')>=0 || t.indexOf('SETOR')>=0 || t.indexOf('ATIVIDADE')>=0)) gotFunc = c;
+      var t = S(row[c]).toUpperCase().replace(/_/g,' ');
+      if (full<0 && (t==='NOME COMPLETO' || t.indexOf('NOME COMPLETO')>=0)) full=c;
+      if (sht<0 && (t==='NOME CURTO' || t==='NOME'|| t.indexOf('NOME CURTO')>=0)) sht=c;
+      if (full<0 && sht<0 && (t.indexOf('FUNCIONÁRIO')>=0 || t.indexOf('FUNCIONARIO')>=0 || t.indexOf('COLABORADOR')>=0)) full=c;
+      if (fun<0 && (t==='FUNCAO' || t==='FUNÇÃO' || t.indexOf('FUNCAO')>=0 || t.indexOf('FUNÇÃO')>=0 || t==='CARGO' || t.indexOf('CARGO')>=0)) fun=c;
+      if (set<0 && (t==='SETOR' || t.indexOf('SETOR')>=0)) set=c;
+      if (sta<0 && (t==='STATUS' || t.indexOf('STATUS')>=0 || t==='SITUACAO' || t.indexOf('SITUAÇÃO')>=0)) sta=c;
+      if (idc<0 && (t==='ID FUNC' || t.indexOf('ID FUNC')>=0 || t==='MATRICULA' || t.indexOf('MATRÍCULA')>=0)) idc=c;
     }
-    if (gotNome>=0){ hdrRow = h; cNome = gotNome; cFunc = gotFunc; break; }
+    if (full>=0 || sht>=0){ hdrRow=h; cFull=full; cShort=sht; cFunc=fun; cSetor=set; cStatus=sta; cId=idc; break; }
   }
-  var out = [], seen = {};
-  if (hdrRow >= 0){
-    for (var r=hdrRow+1; r<grid.length; r++){
-      var nome = S(grid[r][cNome]); if (!nome) continue;
-      var funcao = (cFunc>=0) ? S(grid[r][cFunc]) : '';
-      var key = nome.toUpperCase(); if (seen[key]) continue; seen[key] = 1;
-      out.push({ id:'sst:'+nome, nome:nome, funcao:funcao, sst:true });
+  var out=[], seen={};
+  if (hdrRow < 0){
+    // sem cabeçalho reconhecido: col A = nome, col B = função
+    for (var r0=0; r0<grid.length; r0++){
+      var nm0=S(grid[r0][0]); if(!nm0) continue; var up0=nm0.toUpperCase();
+      if (up0==='NOME'||up0.indexOf('FUNCION')>=0||up0.indexOf('COLABORADOR')>=0) continue;
+      var k0=up0; if(seen[k0]) continue; seen[k0]=1;
+      out.push({ id:'sst:'+nm0, nome:nm0, funcao:(lastCol>=2?S(grid[r0][1]):''), setor:'', sst:true });
     }
-  } else {
-    // sem cabeçalho reconhecido: assume col A = nome, col B = função
-    for (var r2=0; r2<grid.length; r2++){
-      var nm = S(grid[r2][0]); if (!nm) continue;
-      var up = nm.toUpperCase();
-      if (up==='NOME' || up.indexOf('FUNCIONÁRIO')>=0 || up.indexOf('FUNCIONARIO')>=0 || up.indexOf('COLABORADOR')>=0) continue;
-      var fc = (lastCol>=2) ? S(grid[r2][1]) : '';
-      var k2 = up; if (seen[k2]) continue; seen[k2] = 1;
-      out.push({ id:'sst:'+nm, nome:nm, funcao:fc, sst:true });
-    }
+    return out;
+  }
+  for (var r=hdrRow+1; r<grid.length; r++){
+    var full = cFull>=0 ? S(grid[r][cFull]) : '';
+    var sh1  = cShort>=0 ? S(grid[r][cShort]) : '';
+    var nome = full || sh1; if (!nome) continue;
+    var status = cStatus>=0 ? S(grid[r][cStatus]).toUpperCase() : '';
+    if (status && (status.indexOf('DESLIG')>=0 || status.indexOf('DEMIT')>=0 || status.indexOf('EX-')>=0 || status.indexOf('EX ')>=0 || status.indexOf('INATIV')>=0)) continue; // fora: só time ativo
+    var idf = cId>=0 ? S(grid[r][cId]) : '';
+    var display = sh1 || full;                          // nome curto é melhor no quadro
+    var key = (idf||display).toUpperCase(); if (seen[key]) continue; seen[key]=1;
+    out.push({ id:'sst:'+(idf||display), nome:display, nomeCompleto:full||display,
+      funcao: cFunc>=0 ? S(grid[r][cFunc]) : '', setor: cSetor>=0 ? S(grid[r][cSetor]) : '', sst:true });
   }
   return out;
 }

@@ -901,7 +901,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-109';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-110';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2391,7 +2391,7 @@ function tarefaFormHtml(){
     <div class="app-grid" style="padding:12px 14px">
       <label>Tarefa / Operação<input class="txt" data-tarf="titulo" value="${esc(d.titulo)}" placeholder="ex.: Plantio, Pulverização 1…"></label>
       <label>Talhão / Área<select class="txt" data-tarf="talhaoId"><option value="">—</option>${talhoes.map(t=>`<option value="${esc(t.id)}"${d.talhaoId===t.id?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''}</option>`).join('')}</select></label>
-      <label>Responsável<select class="txt" data-tarf="funcionarioId"><option value="">— sem responsável —</option>${fs.map(f=>`<option value="${esc(f.id)}"${d.funcionarioId===f.id?' selected':''}>${esc(f.nome)}</option>`).join('')}</select></label>
+      <label>Responsável<select class="txt" data-tarf="funcionarioId"><option value="">— sem responsável —</option>${fs.map(f=>`<option value="${esc(f.id)}"${d.funcionarioId===f.id?' selected':''}>${esc(f.nome)}${f.funcao?' · '+esc(f.funcao):''}</option>`).join('')}</select></label>
       <label>Início<input type="date" data-tarf="inicio" value="${esc(d.inicio)}"></label>
       <label>Dias<input class="cell" inputmode="numeric" data-tarf="dias" value="${d.dias||''}" placeholder="1"></label>
       <label>Status<select class="txt" data-tarf="status">${TAR_ORDER.map(s=>`<option value="${s}"${d.status===s?' selected':''}>${TAR_ST[s].lbl}</option>`).join('')}</select></label>
@@ -2608,22 +2608,22 @@ V.equipe=function(){
   const ts=(TAREFAS.tarefas||[]);
   const linha=(f,rem)=>{ const n=ts.filter(t=>t.funcionarioId===f.id).length, ativas=ts.filter(t=>t.funcionarioId===f.id&&t.status!=='concluida').length;
     return `<tr><td><span class="kb-dot" style="background:${funcCor(f.id)}"></span> <b>${esc(f.nome)}</b></td>
-      <td>${esc(f.funcao||'—')}</td><td class="num">${ativas}</td><td class="num">${n}</td>
-      <td>${rem?`<button class="icon-btn del" data-act="funcDel" data-id="${esc(f.id)}" title="Remover">🗑</button>`:'<span class="mut" title="Vem da aba SST da planilha">🔒</span>'}</td></tr>`; };
+      <td>${esc(f.funcao||'—')}</td><td>${esc(f.setor||'—')}</td><td class="num">${ativas}</td><td class="num">${n}</td>
+      <td>${rem?`<button class="icon-btn del" data-act="funcDel" data-id="${esc(f.id)}" title="Remover">🗑</button>`:'<span class="mut" title="Vem do sistema de RH / SST">🔒</span>'}</td></tr>`; };
   const sstRows=sst.map(f=>linha(f,false)).join('');
   const manRows=manual.map(f=>linha(f,true)).join('');
   return `
-  <div class="panel"><div class="panel-head"><h2>Equipe (SST)</h2><span class="sub">${sst.length} · puxada da aba SST da planilha</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
-      <tbody>${sstRows||'<tr><td colspan="5" class="mut" style="padding:14px">Sem integrantes na aba SST. Sincronize (🔄) ou preencha a aba <b>SST</b> na planilha (colunas Nome e Função).</td></tr>'}</tbody></table></div></div>
-  <div class="panel"><div class="panel-head"><h2>Integrantes manuais</h2><span class="sub">adicionados no app · ${manual.length}</span></div>
+  <div class="panel"><div class="panel-head"><h2>Equipe (RH / SST)</h2><span class="sub">${sst.length} ativo(s) · puxada do sistema de RH</span></div>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${sstRows||'<tr><td colspan="6" class="mut" style="padding:14px">Sem integrantes do RH. Sincronize (🔄) — e confira se o <b>ID da planilha de RH (SST)</b> está preenchido no Code.gs (<code>SST_DB_ID</code>).</td></tr>'}</tbody></table></div></div>
+  <div class="panel"><div class="panel-head"><h2>Integrantes manuais</h2><span class="sub">adicionados no app (avulsos) · ${manual.length}</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Nome<input class="txt" data-eqf="nome" value="${esc(equipeDraft.nome)}" placeholder="nome do funcionário"></label>
       <label>Função<input class="txt" data-eqf="funcao" value="${esc(equipeDraft.funcao)}" placeholder="ex.: tratorista, aplicador…"></label>
     </div>
     <div style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="funcAdd">➕ Adicionar</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
-      <tbody>${manRows||'<tr><td colspan="5" class="mut" style="padding:14px">Nenhum integrante manual. Use a aba SST ou adicione acima.</td></tr>'}</tbody></table></div></div>`;
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+      <tbody>${manRows||'<tr><td colspan="6" class="mut" style="padding:14px">Nenhum integrante manual. A equipe vem do RH; adicione aqui só avulsos.</td></tr>'}</tbody></table></div></div>`;
 };
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
 V.compras = function(){
