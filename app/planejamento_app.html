@@ -910,7 +910,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-113';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-114';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1535,13 +1535,41 @@ function sugereMaquina(clsArr){
 const opMaqKey=(tid,opref)=>`${tid}|${opref}`;
 // DAE (dias após emergência/plantio) da operação: override do app, senão o DAP da planilha
 function opDaeDe(tid,tagoi,opDap){ const k=`${tid}|${tagoi}`; return (OV.opDae && k in OV.opDae) ? (+OV.opDae[k]||0) : (+opDap||0); }
-// data planejada da operação = plantio (ou plantio_safrinha) + DAE
+// ---- DATA DE PLANTIO por safra: PREVISTA (planejamento) e REALIZADA (execução) ----
+const _isISO=s=>/^\d{4}-\d{2}-\d{2}/.test(String(s||''));
+// prevista: override do app (OV.talhao) > planilha (aba do talhão, "Data de plantio"); safrinha cai p/ a 1ª se vazia
+function plantioPrevDe(tid,seq){
+  const o=OV.talhao[tid]||{}, pl=planoDe(tid)||{};
+  if(seq==='safrinha'){ const v=(o.plantio_safrinha!=null)?o.plantio_safrinha:(pl.plantio_safrinha||''); return _isISO(v)?String(v).slice(0,10):(_isISO(pl.plantio)?String(pl.plantio).slice(0,10):''); }
+  const v=(o.plantio!=null)?o.plantio:(pl.plantio||''); return _isISO(v)?String(v).slice(0,10):'';
+}
+// a "operação de plantio" da safra = a 1ª operação que leva SEMENTE (classe) — é o dia 0 do DAE
+function plantingOpOf(tid,seq){
+  const tag=seq==='safrinha'?'S':'P';
+  const ops=opsOf(tid,seq)||[];
+  for(let oi=0;oi<ops.length;oi++){ const tagoi=`${tag}${oi}`;
+    if(effItems(tid,tagoi,ops[oi].itens).some(it=>/semente/i.test(it.classe||''))) return tagoi; }
+  return '';
+}
+// realizada AUTOMÁTICA: data em que a operação de plantio foi concluída no Campo
+function plantioRealAutoDe(tid,seq){
+  const tagoi=plantingOpOf(tid,seq); if(!tagoi) return '';
+  const r=OV.realizado&&OV.realizado[`${tid}|${tagoi}`];
+  return (r && r.status==='concluido' && _isISO(r.data)) ? String(r.data).slice(0,10) : '';
+}
+// realizada EFETIVA: ajuste manual (sincroniza junto com Resultados) > automática
+function plantioRealDe(tid,seq){
+  const m=OV.result&&OV.result[`${tid}|${seq}`]&&OV.result[`${tid}|${seq}`].plantioReal;
+  return _isISO(m)?String(m).slice(0,10):plantioRealAutoDe(tid,seq);
+}
+// data-base do DAE: realizada (se o plantio já aconteceu) senão prevista
+function plantioEffDe(tid,seq){ return plantioRealDe(tid,seq)||plantioPrevDe(tid,seq); }
+// data planejada da operação = plantio (realizado > previsto) + DAE
 function opDataPlan(tid,tagoi,opDap){
-  const seq=tagoi[0]==='S'?'safrinha':'principal', pl=planoDe(tid)||{};
-  const plantio=(seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
-  const dae=opDaeDe(tid,tagoi,opDap);
-  if(!/^\d{4}-\d{2}-\d{2}/.test(plantio)) return '';
-  const d=new Date(plantio.slice(0,10)+'T12:00:00'); if(dae) d.setDate(d.getDate()+dae);
+  const seq=tagoi[0]==='S'?'safrinha':'principal';
+  const plantio=plantioEffDe(tid,seq), dae=opDaeDe(tid,tagoi,opDap);
+  if(!plantio) return '';
+  const d=new Date(plantio+'T12:00:00'); if(dae) d.setDate(d.getDate()+dae);
   return d.toISOString().slice(0,10);
 }
 // conjunto atribuído à operação (override do usuário, senão sugestão)
@@ -2074,6 +2102,15 @@ V.talhao = function(id){
       <label class="mut" style="font-size:12px">2ª cultura <input class="txt" list="emplist" data-edit="empSaf" data-id="${t.id}" value="${esc(empSafDe(t))}" placeholder="— sem safrinha —" style="min-width:190px"></label>
       <label class="mut" style="font-size:12px">prod. <input class="cell" data-edit="prodSaf" data-id="${t.id}" value="${temSafrinha(t)?prodSafDe(t):''}" placeholder="sc/ha" style="width:72px"> sc/ha</label>
     </div>
+    ${(()=>{ const dt=(seq,edPrev,edReal)=>{ const prev=plantioPrevDe(t.id,seq), man=(OV.result[`${t.id}|${seq}`]||{}).plantioReal, auto=plantioRealAutoDe(t.id,seq), real=_isISO(man)?String(man).slice(0,10):'';
+        return `<label class="mut" style="font-size:12px">Plantio previsto <input type="date" class="cell" data-edit="${edPrev}" data-id="${t.id}" value="${esc(prev)}" title="Dia 0 do DAE — dirige as datas das operações, tarefas e recomendações" style="width:140px"></label>
+        <label class="mut" style="font-size:12px">Plantio realizado <input type="date" class="cell${real?' edited':''}" data-edit="${edReal}" data-id="${t.id}" value="${esc(real||auto)}" title="${real?'Ajustado manualmente':(auto?'Automático: data em que a operação de plantio (semente) foi concluída no Campo':'Preenche sozinho ao concluir a operação de plantio no Campo — ou informe aqui')}" style="width:140px">${(!real&&auto)?'<span class="pill pill-buy" title="veio da conclusão no Campo">auto</span>':''}</label>`; };
+      return `<div class="bulk-add" style="margin-top:8px">
+        <span class="mut" style="font-size:12px;font-weight:700">1ª</span>${dt('principal','plantio','plantioReal')}
+        ${temSafrinha(t)?`<span style="width:1px;align-self:stretch;background:var(--line);margin:0 4px"></span><span class="mut" style="font-size:12px;font-weight:700">2ª</span>${dt('safrinha','plantioSaf','plantioRealSaf')}`:''}
+        <button class="btn btn-outline btn-sm" data-act="reagendar" data-id="${esc(t.id)}" title="Recalcula a data das tarefas (não concluídas) deste talhão = plantio + DAE">↻ Recalcular tarefas por DAE</button>
+      </div>
+      <p class="mut" style="font-size:11px;margin:6px 14px 12px">Data de cada operação = <b>plantio + DAE</b>. Enquanto o plantio não acontece, vale o <b>previsto</b>; ao concluir a operação de plantio no Campo, o <b>realizado</b> passa a valer e as demais operações recalculam.</p>`; })()}
   </div>
   <div class="toolbar" style="margin-top:-4px">
     <button class="btn btn-outline btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}">🖨 Exportar PDF</button>
@@ -2470,9 +2507,7 @@ function importarOperacoes(){
         const opKey=t.id+'|'+tagoi;
         if(existing.has(opKey)) return;                                        // já importada
         const dap=opDaeDe(t.id,tagoi,op.dap);
-        const plantio=(seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
-        let inicio=new Date().toISOString().slice(0,10);
-        if(/^\d{4}-\d{2}-\d{2}/.test(plantio)){ const d=new Date(plantio.slice(0,10)+'T12:00:00'); if(dap) d.setDate(d.getDate()+dap); inicio=d.toISOString().slice(0,10); }
+        const inicio=opDataPlan(t.id,tagoi,op.dap)||new Date().toISOString().slice(0,10);   // plantio (real > previsto) + DAE
         const cult=(seq==='safrinha'?empSafDe(t):empDe(t))||'';
         TAREFAS.tarefas.push({ id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
           titulo:op.nome||('Operação '+(oi+1)), talhaoId:t.id, funcionarioId:'', inicio, dias:1, status:'afazer',
@@ -2484,6 +2519,26 @@ function importarOperacoes(){
   });
   if(add) saveTarefas();
   return add;
+}
+// recalcula o início das tarefas (não concluídas) ligadas às operações de um talhão/safra = plantio + DAE
+function reagendarTarefasSafra(tid,seq){
+  const tag=seq==='safrinha'?'S':'P', ops=planoDe(tid)[seq]||[]; let n=0;
+  (TAREFAS.tarefas||[]).forEach(tf=>{ if(!tf.opKey||tf.opKey.indexOf(`${tid}|${tag}`)!==0) return;
+    if(tf.status==='concluida'||tarefaStatusEff(tf)==='concluida') return;
+    const tagoi=tf.opKey.slice(tid.length+1), oi=+tagoi.slice(1), op=ops[oi]; if(!op) return;
+    const dt=opDataPlan(tid,tagoi,op.dap); if(dt && dt!==tf.inicio){ tf.inicio=dt; n++; } });
+  if(n) saveTarefas();
+  return n;
+}
+// ao concluir uma operação no Campo: se for a operação de PLANTIO da safra (dia 0), a data real vira
+// o plantio realizado (automático) e as demais tarefas da safra recalculam por DAE
+function maybePlantioConcluido(key){
+  const i=key.indexOf('|'); if(i<0) return; const tid=key.slice(0,i), tagoi=key.slice(i+1), seq=tagoi[0]==='S'?'safrinha':'principal';
+  if(plantingOpOf(tid,seq)!==tagoi) return;
+  const man=OV.result&&OV.result[`${tid}|${seq}`]&&OV.result[`${tid}|${seq}`].plantioReal; if(_isISO(man)) return;   // ajuste manual manda
+  const real=plantioRealAutoDe(tid,seq); if(!real) return;
+  const n=reagendarTarefasSafra(tid,seq);
+  toast(`🌱 Plantio realizado em ${fmtDataBR(real)}${n?` — ${n} tarefa(s) recalculada(s) por DAE`:''}`);
 }
 
 // ---- formulário compartilhado (nova/editar tarefa) ----
@@ -3769,11 +3824,9 @@ function recomCreate(talId, opKey){
   const o=opKey?opsDoTalhao(t).find(x=>x.key===opKey):null;
   // DAP (dias após plantio) da operação -> janela e data sugerida (plantio + DAP)
   const dap=o?opDaeDe(talId,o.tagoi,o.op&&o.op.dap):0;
-  const pl=planoDe(talId)||{};
-  const plantio=(o&&o.seq==='safrinha')?(pl.plantio_safrinha||pl.plantio||''):(pl.plantio||'');
   let data=new Date().toISOString().slice(0,10), janela='';
   if(dap){ janela=dap+' dias após plantio';
-    if(/^\d{4}-\d{2}-\d{2}/.test(plantio)){ const d=new Date(plantio.slice(0,10)+'T12:00:00'); d.setDate(d.getDate()+dap); data=d.toISOString().slice(0,10); } }
+    const dp=o?opDataPlan(talId,o.tagoi,o.op&&o.op.dap):''; if(dp) data=dp; }   // plantio (real > previsto) + DAE
   const r={ id:recomNovoId(), talhao:talId, opKey:opKey||'', opNome:(o&&o.op&&o.op.nome)||'',
     data, janela, alvo:'', calda:'', adjuvante:'', cond:'', resp:'', obs:'',
     area:areaDe(t)||0, itens: opKey?recomItensFromOp(t,opKey):[{produto:'',un:'',dose:0,real:null}],
@@ -3865,6 +3918,7 @@ function applyRetornos(retornos){
       if(!rl.data) rl.data=r.data||(last.ts?new Date(last.ts).toISOString().slice(0,10):new Date().toISOString().slice(0,10));
       rl.app=rl.app||{}; if(!rl.app.operador && last.operador) rl.app.operador=last.operador;
       rl.saidaPushed=false; rl._u=Date.now(); fillDosesFromBaixa(r.opKey); ovChanged=true; concluidas.push(r.opKey);
+      try{ maybePlantioConcluido(r.opKey); }catch(e){}
     } else {
       r.status='retorno';
     }
@@ -4417,6 +4471,23 @@ function applyEdit(el){
   if(kind==='opNome'){   // renomear operação (apelido local, sincroniza pela ordem/nome) — não re-renderiza p/ manter o cursor
     opRename(el.dataset.id, el.dataset.op, el.value); return;
   }
+  if(kind==='plantio'||kind==='plantioSaf'){   // data de plantio PREVISTA (dia 0 do DAE) — vai p/ a aba do talhão
+    const id=el.dataset.id, v=el.value.trim(), pl=planoDe(id)||{};
+    const key=kind==='plantio'?'plantio':'plantio_safrinha', base=String(pl[key]||'').slice(0,10);
+    OV.talhao[id]=OV.talhao[id]||{};
+    if(v===base) delete OV.talhao[id][key]; else OV.talhao[id][key]=v;
+    if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id];
+    saveOverrides(); route(); return;
+  }
+  if(kind==='plantioReal'||kind==='plantioRealSaf'){   // data de plantio REALIZADA (ajuste manual; sincroniza c/ Resultados)
+    const id=el.dataset.id, seq=kind==='plantioReal'?'principal':'safrinha', k=`${id}|${seq}`, v=el.value.trim();
+    OV.result[k]=OV.result[k]||{};
+    if(v===''||v===plantioRealAutoDe(id,seq)) delete OV.result[k].plantioReal; else OV.result[k].plantioReal=v;
+    const keys=Object.keys(OV.result[k]).filter(x=>x!=='_u');
+    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=Date.now();
+    saveOverrides(); scheduleResultPush();
+    const n=reagendarTarefasSafra(id,seq); route(); if(n) toast(`Plantio realizado salvo — ${n} tarefa(s) recalculada(s)`); return;
+  }
   if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra)
     const k=el.dataset.key, v=el.value.trim(), f=(kind==='resProd')?'prodHa':'preco';
     OV.result[k]=OV.result[k]||{};
@@ -4625,6 +4696,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='opup'){   const tag=a.op[0]; opMove(a.id, tag, a.op, -1); }
     else if(a.act==='opdown'){ const tag=a.op[0]; opMove(a.id, tag, a.op, +1); }
     else if(a.act==='opins'){  const tag=a.op[0]; opInsertAfter(a.id, tag, a.op); }
+    else if(a.act==='reagendar'){ const n=reagendarTarefasSafra(a.id,'principal')+reagendarTarefasSafra(a.id,'safrinha'); route({keepScroll:true});
+      toast(n?`${n} tarefa(s) recalculada(s) por plantio + DAE`:'Nada a recalcular — defina o plantio e o DAE das operações (e importe as operações em Tarefas)'); }
     else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
     else if(a.act==='bulkadd'){
       const prod=($('#ba-prod').value||'').trim();
@@ -4688,6 +4761,7 @@ document.addEventListener('click',e=>{
       r.app=r.app||{}; if(opEl) r.app.operador=opEl.value.trim();
       r.data=(dtEl&&dtEl.value)||r.data||new Date().toISOString().slice(0,10);
       r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; fillDosesFromBaixa(key); stampReal(key);
+      try{ maybePlantioConcluido(key); }catch(e){}
       const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
       route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
@@ -4731,6 +4805,7 @@ document.addEventListener('click',e=>{
         rl.baixa=baixa; rl.status='concluido'; if(!rl.data) rl.data=r.data||new Date().toISOString().slice(0,10);
         rl.app=rl.app||{}; if(!rl.app.operador && r.retorno && r.retorno.quem) rl.app.operador=r.retorno.quem;
         rl.saidaPushed=false; stampReal(r.opKey);
+        try{ maybePlantioConcluido(r.opKey); }catch(e){}
         toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
         pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
       } else {
@@ -5152,7 +5227,9 @@ function buildFieldEdits(){
     if(o.produtividade!=null) eds.push({type:'produtividade',talhao:id,value:+o.produtividade});
     if(o.empreendimento!=null) eds.push({type:'empreendimento',talhao:id,value:String(o.empreendimento)});
     if(o.emp_safrinha!=null) eds.push({type:'emp_safrinha',talhao:id,value:String(o.emp_safrinha)});
-    if(o.prod_safrinha!=null) eds.push({type:'prod_safrinha',talhao:id,value:+o.prod_safrinha}); }
+    if(o.prod_safrinha!=null) eds.push({type:'prod_safrinha',talhao:id,value:+o.prod_safrinha});
+    if(o.plantio!=null) eds.push({type:'plantio',talhao:id,value:String(o.plantio)});                       // aba do talhão B4
+    if(o.plantio_safrinha!=null) eds.push({type:'plantio_safrinha',talhao:id,value:String(o.plantio_safrinha)}); }   // aba do talhão (resumo safrinha)
   // troca de produto de um insumo base -> grava classe/produto na linha (casa pelo produto ANTIGO)
   for(const rk in OV.itemProd){ const p=rk.split('|'); if(p.length<3) continue;
     const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)||gone(tid)) continue;
@@ -5235,6 +5312,9 @@ function reconcileOverrides(){
     if(o.empreendimento!=null && String(o.empreendimento)===String(t.empreendimento||'')) delete o.empreendimento;
     if(o.emp_safrinha!=null && String(o.emp_safrinha)===String(t.emp_safrinha||'')) delete o.emp_safrinha;
     if(o.prod_safrinha!=null && near(o.prod_safrinha,t.prod_safrinha||0)) delete o.prod_safrinha;
+    const pl=planoDe(id)||{};   // datas de plantio vivem na aba do talhão
+    if(o.plantio!=null && String(o.plantio)===String(pl.plantio||'').slice(0,10)) delete o.plantio;
+    if(o.plantio_safrinha!=null && String(o.plantio_safrinha)===String(pl.plantio_safrinha||'').slice(0,10)) delete o.plantio_safrinha;
     if(!Object.keys(o).length) delete OV.talhao[id]; });
   // preço de venda por cultura (DRE) — só dropa se já bater com a planilha
   for(const e in OV.cultura){ if(near(OV.cultura[e], DATA.precos_cultura[e]||0)) delete OV.cultura[e]; }
