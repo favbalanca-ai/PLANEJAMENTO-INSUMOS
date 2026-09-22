@@ -476,6 +476,15 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
   font-size:12px;font-weight:600;color:var(--ink2);background:#eef2f4;
   border-radius:20px;padding:4px 10px;white-space:nowrap}
 .sync-status .dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+/* faixa "edições não sincronizadas" + portão de sincronização (entrar/sair) */
+.sync-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 18px;font-size:13px;font-weight:600;border-bottom:1px solid var(--line)}
+.sync-bar.warn{background:#fff6d6;color:#6b4e00}
+.sync-bar.err{background:#fde3e3;color:#7a1f1f}
+.sync-bar.off{background:#eef2f4;color:var(--muted)}
+.sync-bar .btn{margin-left:auto}
+#edit-badge{cursor:pointer}
+.sg-step{padding:4px 0;font-size:13px;color:var(--ink)}
+.sg-step+.sg-step{border-top:1px dashed var(--line)}
 .sync-status.is-ok .dot{background:#1f9d55}
 .sync-status.is-busy .dot{background:#e0a800;animation:sync-pulse 1s ease-in-out infinite}
 .sync-status.is-err .dot{background:#d64545}
