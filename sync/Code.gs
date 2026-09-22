@@ -57,8 +57,8 @@ function readData(){
     var sR0 = (split > 0) ? split + 1 : 238;
     var plantioSaf = '';
     if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = big[L - 1];
-      if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0){ plantioSaf = S(rr[1]); break; } } }
-    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:S(big[3][1]), plantio_safrinha:plantioSaf,
+      if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0){ plantioSaf = dateISO(rr[1]); break; } } }
+    planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:dateISO(big[3][1]), plantio_safrinha:plantioSaf,
       principal: readOpsArr(big, 10, pR1, m), safrinha: readOpsArr(big, sR0, Math.min(451, n), m) };
   });
 
@@ -429,6 +429,22 @@ function escreveUnPortifolio(list){
 
 // mapa das colunas da tabela do talhão, detectado pelo cabeçalho (linha 9), 0-based.
 // Suporta o layout NOVO (igual ao app) e o ORIGINAL (retrocompatível: Classe=B, Produto=C, Un=F, Dose=I).
+// data -> "yyyy-mm-dd" (aceita célula de data, "dd/mm/yyyy" ou ISO); vazio se não for data
+function dateISO(v){
+  if (v instanceof Date && !isNaN(v)){ var z = function(n){ return (n < 10 ? '0' : '') + n; }; return v.getFullYear() + '-' + z(v.getMonth() + 1) + '-' + z(v.getDate()); }
+  var s = S(v); if (!s) return '';
+  var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[1] + '-' + m[2] + '-' + m[3];
+  var b = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (b) return b[3] + '-' + (b[2].length < 2 ? '0' : '') + b[2] + '-' + (b[1].length < 2 ? '0' : '') + b[1];
+  return '';
+}
+// "yyyy-mm-dd" -> Date (meio-dia local, p/ não virar o dia anterior por fuso) ou null
+function parseISODate(v){ var m = S(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0) : null; }
+// linha "Data de plantio:" do resumo da safrinha (procura antes do 2º cabeçalho; padrão 234)
+function plantioSafRow(vals, n, split){
+  if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = vals[L - 1];
+    if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0) return L; } }
+  return 234;
+}
 function talColMap(headerRow){
   var m = { op:0, dap:-1, classe:1, produto:2, un:5, dose:8 };   // padrão = layout original
   if (headerRow && headerRow.length){
@@ -591,6 +607,13 @@ function applyTalhao(tid, edits, out){
   edits.forEach(function(ed){
     try {
       if (ed.type === 'reorderops'){ reorders.push(ed); return; }   // espelho: reescreve a faixa inteira (depois)
+      if (ed.type === 'plantio' || ed.type === 'plantio_safrinha'){   // data de plantio PREVISTA (resumo da aba: B4 / safrinha)
+        var prow = (ed.type === 'plantio') ? 4 : plantioSafRow(vals, n, split);
+        var dv = parseISODate(ed.value);
+        if (dv){ s.getRange(prow, 2).setValue(dv); s.getRange(prow, 2).setNumberFormat('dd/mm/yyyy'); }
+        else s.getRange(prow, 2).setValue('');
+        out.ok++; return;
+      }
       var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
       var op = opByIndex(vals, faixa[0], faixa[1], ed.op, m);
       if (ed.type === 'dose'){
