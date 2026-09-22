@@ -49,7 +49,7 @@ function readData(){
   var planos = {};
   talhoes.forEach(function(t){
     var s = sh(t.id); if (!s) return;
-    var n = Math.min(451, s.getMaxRows());               // 1 leitura por aba (em vez de 4)
+    var n = s.getMaxRows();                              // sem teto: a aba cresce quando há mais de 12 operações
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
     var split = findSafraSplit(big, n, m);               // linha do 2º cabeçalho = início da safrinha
@@ -58,8 +58,10 @@ function readData(){
     var plantioSaf = '';
     if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = big[L - 1];
       if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0){ plantioSaf = dateISO(rr[1]); break; } } }
+    var cicloSaf = (split > 0) ? N(resumoVal(big, Math.max(5, split - 8), split - 1, 'CICLO')) : 0;
     planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:dateISO(big[3][1]), plantio_safrinha:plantioSaf,
-      principal: readOpsArr(big, 10, pR1, m), safrinha: readOpsArr(big, sR0, Math.min(451, n), m) };
+      ciclo:N(resumoVal(big, 1, 8, 'CICLO')), ciclo_safrinha:cicloSaf,                       // ciclo da cultura (dias) -> colheita estimada
+      principal: readOpsArr(big, 10, pR1, m), safrinha: readOpsArr(big, sR0, n, m) };
   });
 
   var precos = {}, D = sh('DRE ORÇADA');
@@ -439,6 +441,40 @@ function dateISO(v){
 }
 // "yyyy-mm-dd" -> Date (meio-dia local, p/ não virar o dia anterior por fuso) ou null
 function parseISODate(v){ var m = S(v).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0) : null; }
+// valor (col B) da linha do resumo cujo rótulo (col A) contém `label`, procurando nas linhas r0..r1
+function resumoVal(vals, r0, r1, label){
+  for (var L = r0; L <= r1; L++){ var rr = vals[L - 1]; if (rr && S(rr[0]).toUpperCase().indexOf(label) >= 0) return rr[1]; }
+  return '';
+}
+// nº da linha do resumo (a partir de `base`, até 6 linhas) cujo rótulo contém `label`; 0 se não existir
+function resumoLabelRow(vals, base, label){
+  for (var L = base; L <= base + 6 && L <= vals.length; L++){ var rr = vals[L - 1]; if (rr && S(rr[0]).toUpperCase().indexOf(label) >= 0) return L; }
+  return 0;
+}
+// insere UM bloco novo de operação (BLK linhas: cabeçalho + itens, com as fórmulas) no fim da faixa da safra.
+// A safrinha (e o que estiver abaixo) desce; as referências das fórmulas/resumos se ajustam sozinhas.
+function addOpBlock(s, tag){
+  var n = s.getMaxRows(), vals = s.getRange(1, 1, n, 9).getValues(), m = talColMap(vals[8]);
+  var split = findSafraSplit(vals, n, m);
+  var r0 = (tag === 'S') ? (split > 0 ? split + 1 : 238) : 10;
+  var r1 = (tag === 'S') ? n : (split > 0 ? split - 1 : Math.min(224, n));
+  var heads = [];
+  for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (row && S(row[m.op]).toUpperCase().indexOf('OPERA') === 0) heads.push(L); }
+  var BLK = (heads.length >= 2) ? (heads[1] - heads[0]) : 17;
+  var lastEnd = heads.length ? heads[heads.length - 1] + BLK - 1 : r0 - 1;
+  if (tag === 'S' && lastEnd >= n) s.insertRowsAfter(n, BLK); else s.insertRowsAfter(lastEnd, BLK);
+  var r = lastEnd + 1, first = r + 1, last = r + BLK - 1, k = heads.length;
+  if (heads.length) s.getRange(heads[heads.length - 1], 1, BLK, TAL_COLS).copyFormatToRange(s, 1, TAL_COLS, r, last);  // mesma formatação do bloco anterior
+  var rows = []; for (var i = 0; i < BLK; i++) rows.push(blank(TAL_COLS));
+  rows[0][0] = 'OPERAÇÃO ' + (k + 1);
+  rows[0][7] = '=SUM($H' + first + ':$H' + last + ')';  rows[0][8] = '=SUM($I' + first + ':$I' + last + ')';
+  for (var L2 = first; L2 <= last; L2++){ var i2 = L2 - r, dose = numCell('$E' + L2), area = numCell('$B$2');
+    rows[i2][6] = '=IF($D' + L2 + '="","",IFERROR(VLOOKUP($D' + L2 + ',PORTIFÓLIO!$C:$S,17,0),0))';
+    rows[i2][7] = '=IF($D' + L2 + '="","",' + dose + '*$G' + L2 + ')';
+    rows[i2][8] = '=IF($D' + L2 + '="","",$H' + L2 + '*' + area + ')'; }
+  s.getRange(r, 1, BLK, TAL_COLS).clearDataValidations();
+  s.getRange(r, 1, BLK, TAL_COLS).setValues(rows);
+}
 // linha "Data de plantio:" do resumo da safrinha (procura antes do 2º cabeçalho; padrão 234)
 function plantioSafRow(vals, n, split){
   if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = vals[L - 1];
@@ -597,7 +633,11 @@ function applyAreaPlantio(edits, out){
 function applyTalhao(tid, edits, out){
   var s = sh(tid);
   if (!s){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba não encontrada: ' + tid); return; }
-  var n = Math.min(451, s.getMaxRows());
+  // 1) operações NOVAS além das existentes: insere os blocos (linhas) primeiro e relê a aba
+  edits.forEach(function(ed){ if (ed.type !== 'addopblock') return;
+    try { var cnt = Math.max(1, Math.min(50, N(ed.count) || 1)); for (var c = 0; c < cnt; c++) addOpBlock(s, ed.tag); out.ok++; }
+    catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push('addopblock: ' + err); } });
+  var n = s.getMaxRows();                          // sem teto de 451: a aba cresce com as operações
   var vals = s.getRange(1, 1, n, 9).getValues();   // 0-based: linha L -> vals[L-1]
   var m = talColMap(vals[8]);                      // colunas detectadas pelo cabeçalho
   var split = findSafraSplit(vals, n, m);          // fronteira 1ª safra / safrinha
@@ -606,6 +646,7 @@ function applyTalhao(tid, edits, out){
   var dirty = false, reorders = [];
   edits.forEach(function(ed){
     try {
+      if (ed.type === 'addopblock') return;                            // já feito acima
       if (ed.type === 'reorderops'){ reorders.push(ed); return; }   // espelho: reescreve a faixa inteira (depois)
       if (ed.type === 'plantio' || ed.type === 'plantio_safrinha'){   // data de plantio PREVISTA (resumo da aba: B4 / safrinha)
         var prow = (ed.type === 'plantio') ? 4 : plantioSafRow(vals, n, split);
@@ -614,7 +655,18 @@ function applyTalhao(tid, edits, out){
         else s.getRange(prow, 2).setValue('');
         out.ok++; return;
       }
-      var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
+      if (ed.type === 'ciclo' || ed.type === 'ciclo_safrinha'){       // ciclo (dias) + colheita estimada (fórmula) no resumo
+        var base = (ed.type === 'ciclo') ? 1 : (split > 0 ? split - 6 : 231);
+        var rowP = base + 3;                                            // "Data de plantio:"
+        var rowC = resumoLabelRow(vals, base, 'CICLO') || (base + 4);
+        var rowH = resumoLabelRow(vals, base, 'COLHEITA') || (base + 5);
+        s.getRange(rowC, 1).setValue('Ciclo (dias):'); s.getRange(rowC, 2).setValue(N(ed.value) || '');
+        s.getRange(rowH, 1).setValue('Colheita estimada:');
+        s.getRange(rowH, 2).setFormula('=IF(OR($B' + rowP + '="",$B' + rowC + '=""),"",$B' + rowP + '+$B' + rowC + ')');
+        s.getRange(rowH, 2).setNumberFormat('dd/mm/yyyy');
+        out.ok++; return;
+      }
+      var faixa = ed.tag === 'S' ? [sR0, n] : [10, pR1];
       var op = opByIndex(vals, faixa[0], faixa[1], ed.op, m);
       if (ed.type === 'dose'){
         if (!op) throw 'operação não encontrada (dose)';
@@ -650,11 +702,11 @@ function applyTalhao(tid, edits, out){
   if (dirty){
     // grava só nas FAIXAS DE OPERAÇÃO (pula o resumo da safrinha, que tem fórmulas)
     escreveColsTalhao(s, vals, 10, pR1, m);
-    escreveColsTalhao(s, vals, sR0, Math.min(451, n), m);
+    escreveColsTalhao(s, vals, sR0, n, m);
   }
   // ESPELHO: reescreve a faixa inteira da safra na ordem/nome do app (depois das edições granulares)
   reorders.forEach(function(ed){
-    try { var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
+    try { var faixa = ed.tag === 'S' ? [sR0, n] : [10, pR1];
       writeReorderOps(s, vals, m, faixa, ed.ops || []); out.ok++;
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push('reorder: ' + err); }
   });
@@ -1205,17 +1257,19 @@ function talhaoMatrix(t, plano){
   var N = 451, v = [];
   for (var i = 0; i < N; i++) v.push(blank(TAL_COLS));
   // ---- 1ª safra: resumo (linhas 1-4, o app lê B2/B3/B4), cabeçalho (9) e operações (10-224) ----
-  resumoBloco(v, 1, (t.nome || t.id), t.area || 0, t.produtividade || 0, t.empreendimento || '', t.plantio || '', 10, 224);
+  resumoBloco(v, 1, (t.nome || t.id), t.area || 0, t.produtividade || 0, t.empreendimento || '', t.plantio || '', 10, 224, plano.ciclo);
   hdrRow(v, 9);
   preencheOps(v, plano.principal || [], 10, 17);
   // ---- safrinha: resumo (231-234), cabeçalho (237) e operações (238-451) ----
-  resumoBloco(v, 231, (t.nome || t.id) + ' — Safrinha', t.area || 0, t.prod_safrinha || 0, t.emp_safrinha || '', t.plantio_safrinha || '', 238, 451);
+  resumoBloco(v, 231, (t.nome || t.id) + ' — Safrinha', t.area || 0, t.prod_safrinha || 0, t.emp_safrinha || '', t.plantio_safrinha || '', 238, 451, plano.ciclo_safrinha);
   hdrRow(v, 237);
   preencheOps(v, plano.safrinha || [], 238, 17);
   return v;
 }
 // bloco de resumo do talhão a partir da linha r (1-based): título, área, produtividade, cultura, plantio + custos
-function resumoBloco(v, r, titulo, area, prod, cultura, plantio, opR0, opR1){
+function resumoBloco(v, r, titulo, area, prod, cultura, plantio, opR0, opR1, ciclo){
+  v[r + 3][0] = 'Ciclo (dias):';        v[r + 3][1] = ciclo || '';                                    // A{r+4} · B{r+4}
+  v[r + 4][0] = 'Colheita estimada:';   v[r + 4][1] = '=IF(OR($B' + (r + 3) + '="",$B' + (r + 4) + '=""),"",$B' + (r + 3) + '+$B' + (r + 4) + ')';  // plantio + ciclo
   v[r - 1][1] = titulo;                              // B{r} título
   v[r - 1][2] = 'Custo estimado R$/ha';              // C{r}
   v[r - 1][3] = '=IFERROR(SUMIF($A' + opR0 + ':$A' + opR1 + ',"OPERA*",$H' + opR0 + ':$H' + opR1 + '),0)';  // D{r} total R$/ha

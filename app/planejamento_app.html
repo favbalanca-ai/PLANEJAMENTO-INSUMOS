@@ -910,7 +910,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-114';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-115';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1364,6 +1364,8 @@ function loadOverrides(){
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
   OV.result        = OV.result        || {}; // "TL|seq" -> {prodHa, preco} colhido/vendido (Resultados — DRE realizada)
   OV.opPlan        = OV.opPlan        || {}; // "TL|seq" -> {order:[tagoi...], names:{tagoi:nome}, _u} (ordem + nomes das operações — sincroniza)
+  OV.opExtra       = OV.opExtra       || {}; // "TL|tag" -> nº de operações NOVAS além das da planilha (viram blocos lá ao sincronizar)
+  OV.opDel         = OV.opDel         || {}; // "TL|tagOp" -> true (operação excluída no app; some da planilha ao sincronizar)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -1383,6 +1385,7 @@ function countEdits(){
          Object.keys(OV.maqAttr).length + OV.maqAdd.length +
          Object.values(OV.opAdd).reduce((a,o)=>a+(o.P||[]).length+(o.S||[]).length,0) +
          Object.keys(OV.opPlan||{}).reduce((a,k)=>{ const p=k.split('|'); let d=false; try{ d=opPlanDirty(p[0],p[1]); }catch(_){ } return a+(d?1:0); },0) +
+         Object.keys(OV.opDel||{}).length + Object.values(OV.opExtra||{}).reduce((a,v)=>a+(+v||0),0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -1564,6 +1567,12 @@ function plantioRealDe(tid,seq){
 }
 // data-base do DAE: realizada (se o plantio já aconteceu) senão prevista
 function plantioEffDe(tid,seq){ return plantioRealDe(tid,seq)||plantioPrevDe(tid,seq); }
+// ciclo da cultura (dias): override do app > aba do talhão ("Ciclo (dias):")
+function cicloDe(tid,seq){ const o=OV.talhao[tid]||{}, pl=planoDe(tid)||{}, k=seq==='safrinha'?'ciclo_safrinha':'ciclo';
+  const v=(o[k]!=null)?o[k]:pl[k]; return +v||0; }
+// colheita estimada = plantio (realizado > previsto) + ciclo — se atualiza sozinha quando o plantio é concluído
+function colheitaPrevDe(tid,seq){ const p=plantioEffDe(tid,seq), c=cicloDe(tid,seq); if(!p||!c) return '';
+  const d=new Date(p+'T12:00:00'); d.setDate(d.getDate()+c); return d.toISOString().slice(0,10); }
 // data planejada da operação = plantio (realizado > previsto) + DAE
 function opDataPlan(tid,tagoi,opDap){
   const seq=tagoi[0]==='S'?'safrinha':'principal';
@@ -1665,7 +1674,10 @@ function opsOf(tid, seq){
   // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios.
   // A ORDEM aqui é sempre física (índice = slot); o NOME exibido é limpo (sem o marcador "OPERAÇÃO n").
   const tag=seq==='safrinha'?'S':'P';
-  return (planoDe(tid)[seq]||[]).map((op,oi)=>{
+  const base=(planoDe(tid)[seq]||[]).slice();
+  const extra=(OV.opExtra&&OV.opExtra[`${tid}|${tag}`])||0;         // operações novas (ainda não existem na planilha)
+  for(let i=0;i<extra;i++) base.push({nome:'',itens:[],dap:'',extra:true});
+  return base.map((op,oi)=>{
     const nm=opNomeEff(tid,`${tag}${oi}`,op.nome);
     return (nm===op.nome)?op:Object.assign({},op,{nome:nm});   // troca só o nome; mantém itens/dap/etc.
   });
@@ -1691,7 +1703,7 @@ function opLabelForSheet(tid,tagoi,rawBase){
 }
 // ordem de exibição das operações reveladas: array de ÍNDICES FÍSICOS (oi) na ordem escolhida
 function opDisplayOrder(tid, tag, cnt){
-  const tags=[]; for(let i=0;i<cnt;i++) tags.push(`${tag}${i}`);
+  const tags=[]; for(let i=0;i<cnt;i++){ if(OV.opDel&&OV.opDel[`${tid}|${tag}${i}`]) continue; tags.push(`${tag}${i}`); }   // excluídas somem
   const pl=opPlanOf(tid,_seqOfTag(tag));
   let seqTags=tags;
   if(pl&&Array.isArray(pl.order)){ const set=new Set(tags), out=[];
@@ -1701,7 +1713,10 @@ function opDisplayOrder(tid, tag, cnt){
   return seqTags.map(tg=>+tg.slice(1));   // -> índices físicos
 }
 // a safra tem alguma mudança de ordem/nome ainda não espelhada na planilha?
-function opPlanDirty(tid,seq){ const pl=opPlanOf(tid,seq); if(!pl) return false;
+function opPlanDirty(tid,seq){
+  const tg=seq==='safrinha'?'S':'P', pref=`${tid}|${tg}`;
+  for(const k in (OV.opDel||{})){ if(k.indexOf(pref)===0 && OV.opDel[k]) return true; }   // exclusão pendente = reescreve a safra
+  const pl=opPlanOf(tid,seq); if(!pl) return false;
   const namesN=pl.names?Object.keys(pl.names).length:0;
   if(namesN) return true;
   if(Array.isArray(pl.order)){ for(let i=0;i<pl.order.length;i++){ if(pl.order[i]!==`${seq==='safrinha'?'S':'P'}${i}`) return true; } }
@@ -1729,8 +1744,8 @@ function opMove(tid,tag,tagoi,dir){ const seq=_seqOfTag(tag);
   const pl=opPlanEnsure(tid,seq); pl.order=order; opPlanStamp(tid,seq); route({keepScroll:true}); }
 function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
   if(hasExecInSafra(tid,tag)){ toast('Não dá para inserir: há operação em execução/concluída nesta safra'); return; }
-  const total=(planoDe(tid)[seq]||[]).length, cnt=opsShownCount(tid,tag);
-  if(cnt>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
+  const total=opsOf(tid,seq).length, cnt=opsShownCount(tid,tag);
+  if(cnt>=total){ OV.opExtra=OV.opExtra||{}; OV.opExtra[`${tid}|${tag}`]=(OV.opExtra[`${tid}|${tag}`]||0)+1; }   // sem slot livre: cria uma operação NOVA (vira bloco na planilha)
   const newTag=`${tag}${cnt}`;                       // próximo slot físico livre
   revealOps[`${tid}|${tag}`]=cnt+1;                  // revela o slot
   const order=opDisplayOrder(tid,tag,cnt+1).map(oi=>`${tag}${oi}`);
@@ -1739,6 +1754,14 @@ function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
   order.splice(at+1,0,newTag);
   const pl=opPlanEnsure(tid,seq); pl.order=order; if(!pl.names[newTag]) pl.names[newTag]='Nova operação';
   opPlanStamp(tid,seq); route(); toast('Operação inserida — renomeie e adicione os insumos'); }
+// excluir uma operação: some do app na hora; ao sincronizar, a safra é reescrita sem ela (planilha = espelho)
+function opDelete(tid,tag,tagoi){
+  if(hasExecInSafra(tid,tag)){ toast('Não dá para excluir: há operação em execução/concluída nesta safra'); return; }
+  const op=(opsOf(tid,_seqOfTag(tag))||[])[+tagoi.slice(1)], n=op?effItems(tid,tagoi,op.itens).length:0;
+  if(!ask(`Excluir esta operação${n?` e seus ${n} insumo(s)`:''}? Ela some da planilha ao sincronizar.`)) return;
+  OV.opDel=OV.opDel||{}; OV.opDel[`${tid}|${tagoi}`]=true;
+  opPlanEnsure(tid,_seqOfTag(tag)); opPlanStamp(tid,_seqOfTag(tag)); route({keepScroll:true}); toast('Operação excluída');
+}
 // depois que a aba do talhão foi reescrita na planilha (espelho): a planilha vira a verdade.
 // remapeia a máquina p/ o novo slot e descarta os overrides já gravados (ordem/nome/insumo/DAE) dessa safra.
 function reconcileReorder(e){
@@ -1747,17 +1770,18 @@ function reconcileReorder(e){
   const pref=`${tid}|${tag}`;
   if(OV.opMaq){ const nm={}; for(const k in OV.opMaq){ if(k.indexOf(pref)===0){ const oi=+k.slice(pref.length);
     const ni=(oi in oldToNew)?oldToNew[oi]:oi; nm[`${tid}|${tag}${ni}`]=OV.opMaq[k]; } else nm[k]=OV.opMaq[k]; } OV.opMaq=nm; }
-  [OV.dose,OV.itemAdd,OV.itemRemoved,OV.itemProd,OV.opDae].forEach(map=>{ if(!map) return;
+  [OV.dose,OV.itemAdd,OV.itemRemoved,OV.itemProd,OV.opDae,OV.opDel].forEach(map=>{ if(!map) return;
     for(const k in map){ if(k.indexOf(pref)===0) delete map[k]; } });
   if(OV.opPlan) delete OV.opPlan[`${tid}|${seq}`];
+  if(OV.opExtra) delete OV.opExtra[`${tid}|${tag}`];   // as novas já viraram blocos na planilha
   delete revealOps[`${tid}|${tag}`];
 }
 // quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
 const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
 function opsShownCount(tid, tag){
-  const seq=tag==='S'?'safrinha':'principal', all=(planoDe(tid)[seq]||[]);
+  const seq=tag==='S'?'safrinha':'principal', all=opsOf(tid,seq);   // inclui as operações novas do app
   let lastFilled=-1;
-  all.forEach((op,oi)=>{ if(effItems(tid,`${tag}${oi}`,op.itens).length) lastFilled=oi; });
+  all.forEach((op,oi)=>{ if(effItems(tid,`${tag}${oi}`,op.itens).length||op.extra) lastFilled=oi; });
   return Math.min(all.length, Math.max(lastFilled+1, revealOps[`${tid}|${tag}`]||0));
 }
 // custo de insumos (R$/ha) de UMA safra do talhão
@@ -2043,7 +2067,7 @@ V.talhao = function(id){
     if(cnt===0) return '';
     const order=opDisplayOrder(t.id,tag,cnt);   // índices físicos (oi) na ordem de exibição
     const canReveal = cnt < all.length;
-    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${cnt} de ${all.length} operações · arraste a ordem com ▲▼</span></div>
+    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${order.length} operações · ordene com ▲▼ · ＋ insere · 🗑 exclui</span></div>
     ${order.map((oi,pos)=>{ const op=all[oi];
       const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
       let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto));
@@ -2060,7 +2084,8 @@ V.talhao = function(id){
         <span class="op-reorder">
           <button class="icon-btn op-mv" data-act="opup" data-id="${t.id}" data-op="${tagoi}" title="Subir"${pos===0?' disabled':''}>▲</button>
           <button class="icon-btn op-mv" data-act="opdown" data-id="${t.id}" data-op="${tagoi}" title="Descer"${pos===order.length-1?' disabled':''}>▼</button>
-          <button class="icon-btn op-mv" data-act="opins" data-id="${t.id}" data-op="${tagoi}" title="Inserir operação abaixo"${!canReveal?' disabled':''}>＋</button>
+          <button class="icon-btn op-mv" data-act="opins" data-id="${t.id}" data-op="${tagoi}" title="Inserir operação abaixo">＋</button>
+          <button class="icon-btn op-mv del" data-act="opdel" data-id="${t.id}" data-op="${tagoi}" title="Excluir operação">🗑</button>
         </span>
         <span class="op-sum">${items.length} insumo${items.length===1?'':'s'} · ${brl(totOp)}/ha</span>
         <span class="op-dae" title="Dias após emergência/plantio — usado para agendar a data da operação">DAE <input class="cell" inputmode="numeric" data-edit="opDae" data-id="${t.id}" data-op="${tagoi}" value="${(`${t.id}|${tagoi}` in OV.opDae)?esc(OV.opDae[`${t.id}|${tagoi}`]):(op.dap||'')}" placeholder="—" style="width:52px">${(()=>{const dt=opDataPlan(t.id,tagoi,op.dap);return dt?`<span class="op-dae-dt mut">→ ${fmtDataBR(dt)}</span>`:'';})()}</span>
@@ -2078,9 +2103,7 @@ V.talhao = function(id){
       <div class="op-add"><button class="btn btn-outline btn-sm" data-act="additem" data-id="${t.id}" data-op="${tagoi}">+ adicionar insumo</button></div>
       </div></div>`;
     }).join('')||'<div class="mut" style="padding:14px 18px 0">Nenhuma operação nesta safra ainda.</div>'}
-    <div class="op-add">${canReveal
-      ? `<button class="btn btn-primary btn-sm" data-act="addop" data-id="${t.id}" data-tag="${tag}">+ adicionar operação</button>`
-      : '<span class="mut" style="font-size:12px">As 12 operações da planilha já estão em uso.</span>'}</div>
+    <div class="op-add"><button class="btn btn-primary btn-sm" data-act="addop" data-id="${t.id}" data-tag="${tag}">+ adicionar operação</button>${canReveal?'':' <span class="mut" style="font-size:12px">cria uma operação nova (vira um bloco na planilha ao sincronizar)</span>'}</div>
     </div>`;
   }
   const empOpts=empList().filter(e=>e&&e!=='—').map(e=>`<option value="${esc(e)}">`).join('');
@@ -2102,12 +2125,15 @@ V.talhao = function(id){
       <label class="mut" style="font-size:12px">2ª cultura <input class="txt" list="emplist" data-edit="empSaf" data-id="${t.id}" value="${esc(empSafDe(t))}" placeholder="— sem safrinha —" style="min-width:190px"></label>
       <label class="mut" style="font-size:12px">prod. <input class="cell" data-edit="prodSaf" data-id="${t.id}" value="${temSafrinha(t)?prodSafDe(t):''}" placeholder="sc/ha" style="width:72px"> sc/ha</label>
     </div>
-    ${(()=>{ const dt=(seq,edPrev,edReal)=>{ const prev=plantioPrevDe(t.id,seq), man=(OV.result[`${t.id}|${seq}`]||{}).plantioReal, auto=plantioRealAutoDe(t.id,seq), real=_isISO(man)?String(man).slice(0,10):'';
+    ${(()=>{ const dt=(seq,edPrev,edReal,edCiclo)=>{ const prev=plantioPrevDe(t.id,seq), man=(OV.result[`${t.id}|${seq}`]||{}).plantioReal, auto=plantioRealAutoDe(t.id,seq), real=_isISO(man)?String(man).slice(0,10):'';
+        const ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq), pelaReal=!!plantioRealDe(t.id,seq);
         return `<label class="mut" style="font-size:12px">Plantio previsto <input type="date" class="cell" data-edit="${edPrev}" data-id="${t.id}" value="${esc(prev)}" title="Dia 0 do DAE — dirige as datas das operações, tarefas e recomendações" style="width:140px"></label>
-        <label class="mut" style="font-size:12px">Plantio realizado <input type="date" class="cell${real?' edited':''}" data-edit="${edReal}" data-id="${t.id}" value="${esc(real||auto)}" title="${real?'Ajustado manualmente':(auto?'Automático: data em que a operação de plantio (semente) foi concluída no Campo':'Preenche sozinho ao concluir a operação de plantio no Campo — ou informe aqui')}" style="width:140px">${(!real&&auto)?'<span class="pill pill-buy" title="veio da conclusão no Campo">auto</span>':''}</label>`; };
+        <label class="mut" style="font-size:12px">Plantio realizado <input type="date" class="cell${real?' edited':''}" data-edit="${edReal}" data-id="${t.id}" value="${esc(real||auto)}" title="${real?'Ajustado manualmente':(auto?'Automático: data em que a operação de plantio (semente) foi concluída no Campo':'Preenche sozinho ao concluir a operação de plantio no Campo — ou informe aqui')}" style="width:140px">${(!real&&auto)?'<span class="pill pill-buy" title="veio da conclusão no Campo">auto</span>':''}</label>
+        <label class="mut" style="font-size:12px">Ciclo <input class="cell${(OV.talhao[t.id]&&OV.talhao[t.id][seq==='safrinha'?'ciclo_safrinha':'ciclo']!=null)?' edited':''}" inputmode="numeric" data-edit="${edCiclo}" data-id="${t.id}" value="${ciclo||''}" placeholder="dias" title="Ciclo da cultura (dias do plantio à colheita)" style="width:62px"> dias</label>
+        <span class="mut" style="font-size:12px">🌾 Colheita estimada: ${col?`<b>${fmtDataBR(col)}</b>${pelaReal?' <span class="pill pill-buy" title="calculada pelo plantio realizado">pelo plantio real</span>':' <span class="mut">(prevista)</span>'}`:'<span class="mut">— informe plantio e ciclo</span>'}</span>`; };
       return `<div class="bulk-add" style="margin-top:8px">
-        <span class="mut" style="font-size:12px;font-weight:700">1ª</span>${dt('principal','plantio','plantioReal')}
-        ${temSafrinha(t)?`<span style="width:1px;align-self:stretch;background:var(--line);margin:0 4px"></span><span class="mut" style="font-size:12px;font-weight:700">2ª</span>${dt('safrinha','plantioSaf','plantioRealSaf')}`:''}
+        <span class="mut" style="font-size:12px;font-weight:700">1ª</span>${dt('principal','plantio','plantioReal','ciclo')}
+        ${temSafrinha(t)?`<span style="width:1px;align-self:stretch;background:var(--line);margin:0 4px"></span><span class="mut" style="font-size:12px;font-weight:700">2ª</span>${dt('safrinha','plantioSaf','plantioRealSaf','cicloSaf')}`:''}
         <button class="btn btn-outline btn-sm" data-act="reagendar" data-id="${esc(t.id)}" title="Recalcula a data das tarefas (não concluídas) deste talhão = plantio + DAE">↻ Recalcular tarefas por DAE</button>
       </div>
       <p class="mut" style="font-size:11px;margin:6px 14px 12px">Data de cada operação = <b>plantio + DAE</b>. Enquanto o plantio não acontece, vale o <b>previsto</b>; ao concluir a operação de plantio no Campo, o <b>realizado</b> passa a valer e as demais operações recalculam.</p>`; })()}
@@ -4326,7 +4352,7 @@ V.campo = function(arg){
         ${r.status==='concluido'?`<span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span>
            <button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button>`:''}
       </div>
-      ${(()=>{ const dp=opDataPlan(t.id,o.tagoi,o.op.dap); const dae=opDaeDe(t.id,o.tagoi,o.op.dap); return dp?`<div class="camp-plan">📅 Planejado: <b>${fmtDataBR(dp)}</b>${dae?` <span class="mut">(${dae} DAE)</span>`:''}</div>`:(dae?`<div class="camp-plan mut">Planejado: ${dae} DAE (defina o plantio no talhão)</div>`:''); })()}
+      ${(()=>{ const dp=opDataPlan(t.id,o.tagoi,o.op.dap); const dae=opDaeDe(t.id,o.tagoi,o.op.dap); const col=colheitaPrevDe(t.id,o.seq); const colHtml=col?` · 🌾 colheita est. <b>${fmtDataBR(col)}</b>`:''; return dp?`<div class="camp-plan">📅 Planejado: <b>${fmtDataBR(dp)}</b>${dae?` <span class="mut">(${dae} DAE)</span>`:''}${colHtml}</div>`:(dae?`<div class="camp-plan mut">Planejado: ${dae} DAE (defina o plantio no talhão)</div>`:''); })()}
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
       <div class="table-wrap"><table class="camp-ins">
         <thead><tr><th>Insumo</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead>
@@ -4476,6 +4502,14 @@ function applyEdit(el){
     const key=kind==='plantio'?'plantio':'plantio_safrinha', base=String(pl[key]||'').slice(0,10);
     OV.talhao[id]=OV.talhao[id]||{};
     if(v===base) delete OV.talhao[id][key]; else OV.talhao[id][key]=v;
+    if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id];
+    saveOverrides(); route(); return;
+  }
+  if(kind==='ciclo'||kind==='cicloSaf'){   // ciclo da cultura (dias) -> colheita estimada; vai p/ o resumo da aba do talhão
+    const id=el.dataset.id, pl=planoDe(id)||{}, key=kind==='ciclo'?'ciclo':'ciclo_safrinha';
+    const v=el.value.trim(), n=v===''?null:(parseInt(v,10)||0), base=+pl[key]||0;
+    OV.talhao[id]=OV.talhao[id]||{};
+    if(n==null||n===base) delete OV.talhao[id][key]; else OV.talhao[id][key]=n;
     if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id];
     saveOverrides(); route(); return;
   }
@@ -4690,9 +4724,10 @@ document.addEventListener('click',e=>{
     if(a.act==='delitem'){ delItem(a); saveOverrides(); route(); }
     else if(a.act==='additem'){ const k=`${a.id}|${a.op}`; (OV.itemAdd[k]=OV.itemAdd[k]||[]).push({produto:'',dose:0}); saveOverrides(); route(); }
     else if(a.act==='addop'){ const rk=`${a.id}|${a.tag}`;
-      const shown=opsShownCount(a.id,a.tag), seq=a.tag==='S'?'safrinha':'principal', total=(planoDe(a.id)[seq]||[]).length;
-      if(shown>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
+      const shown=opsShownCount(a.id,a.tag), seq=a.tag==='S'?'safrinha':'principal', total=opsOf(a.id,seq).length;
+      if(shown>=total){ OV.opExtra=OV.opExtra||{}; OV.opExtra[rk]=(OV.opExtra[rk]||0)+1; saveOverrides(); }   // além das da planilha: operação nova
       revealOps[rk]=shown+1; route(); }
+    else if(a.act==='opdel'){ opDelete(a.id, a.op[0], a.op); }
     else if(a.act==='opup'){   const tag=a.op[0]; opMove(a.id, tag, a.op, -1); }
     else if(a.act==='opdown'){ const tag=a.op[0]; opMove(a.id, tag, a.op, +1); }
     else if(a.act==='opins'){  const tag=a.op[0]; opInsertAfter(a.id, tag, a.op); }
@@ -5213,6 +5248,9 @@ function buildFieldEdits(){
     reord.add(tid+'|'+seq);
   }
   const skip=(tid,tag)=>reord.has(tid+'|'+(tag==='S'?'safrinha':'principal'));
+  // operações NOVAS (além das da planilha) -> cria os blocos lá (processado ANTES dos demais edits do talhão)
+  for(const rk in (OV.opExtra||{})){ const cnt=+OV.opExtra[rk]||0; if(!cnt) continue; const p=rk.split('|');
+    if(!isBase(p[0])||gone(p[0])) continue; eds.push({type:'addopblock',talhao:p[0],tag:p[1],count:cnt}); }
   for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])||gone(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
     if(skip(p[0],p[1][0])) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
@@ -5229,7 +5267,9 @@ function buildFieldEdits(){
     if(o.emp_safrinha!=null) eds.push({type:'emp_safrinha',talhao:id,value:String(o.emp_safrinha)});
     if(o.prod_safrinha!=null) eds.push({type:'prod_safrinha',talhao:id,value:+o.prod_safrinha});
     if(o.plantio!=null) eds.push({type:'plantio',talhao:id,value:String(o.plantio)});                       // aba do talhão B4
-    if(o.plantio_safrinha!=null) eds.push({type:'plantio_safrinha',talhao:id,value:String(o.plantio_safrinha)}); }   // aba do talhão (resumo safrinha)
+    if(o.plantio_safrinha!=null) eds.push({type:'plantio_safrinha',talhao:id,value:String(o.plantio_safrinha)});   // aba do talhão (resumo safrinha)
+    if(o.ciclo!=null) eds.push({type:'ciclo',talhao:id,value:+o.ciclo||0});                               // ciclo (dias) + colheita estimada no resumo
+    if(o.ciclo_safrinha!=null) eds.push({type:'ciclo_safrinha',talhao:id,value:+o.ciclo_safrinha||0}); }
   // troca de produto de um insumo base -> grava classe/produto na linha (casa pelo produto ANTIGO)
   for(const rk in OV.itemProd){ const p=rk.split('|'); if(p.length<3) continue;
     const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)||gone(tid)) continue;
@@ -5246,8 +5286,8 @@ function buildFieldEdits(){
     const tag=tagoi[0], oi=+tagoi.slice(1);
     const seq=tag==='S'?'safrinha':'principal';
     if(skip(tid,tag)) continue;
-    const baseLen=(planoDe(tid)[seq]||[]).length;
-    if(!(oi<baseLen)) continue; // operação criada no app não existe na planilha
+    const baseLen=(planoDe(tid)[seq]||[]).length + ((OV.opExtra&&OV.opExtra[`${tid}|${tag}`])||0);   // + operações novas (bloco criado antes, no mesmo envio)
+    if(!(oi<baseLen)) continue;
     OV.itemAdd[key].forEach(a=>{ if(!a.produto) return; const p=PROD[a.produto];
       eds.push({type:'additem',talhao:tid,tag,op:oi,classe:(p&&p.classe)||'',produto:a.produto,dose:+a.dose||0}); });
   }
@@ -5312,9 +5352,11 @@ function reconcileOverrides(){
     if(o.empreendimento!=null && String(o.empreendimento)===String(t.empreendimento||'')) delete o.empreendimento;
     if(o.emp_safrinha!=null && String(o.emp_safrinha)===String(t.emp_safrinha||'')) delete o.emp_safrinha;
     if(o.prod_safrinha!=null && near(o.prod_safrinha,t.prod_safrinha||0)) delete o.prod_safrinha;
-    const pl=planoDe(id)||{};   // datas de plantio vivem na aba do talhão
+    const pl=planoDe(id)||{};   // datas de plantio e ciclo vivem na aba do talhão
     if(o.plantio!=null && String(o.plantio)===String(pl.plantio||'').slice(0,10)) delete o.plantio;
     if(o.plantio_safrinha!=null && String(o.plantio_safrinha)===String(pl.plantio_safrinha||'').slice(0,10)) delete o.plantio_safrinha;
+    if(o.ciclo!=null && near(o.ciclo, pl.ciclo||0)) delete o.ciclo;
+    if(o.ciclo_safrinha!=null && near(o.ciclo_safrinha, pl.ciclo_safrinha||0)) delete o.ciclo_safrinha;
     if(!Object.keys(o).length) delete OV.talhao[id]; });
   // preço de venda por cultura (DRE) — só dropa se já bater com a planilha
   for(const e in OV.cultura){ if(near(OV.cultura[e], DATA.precos_cultura[e]||0)) delete OV.cultura[e]; }
@@ -5426,8 +5468,9 @@ async function syncPush(opts){
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
     // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
-    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao'), reo=eds.filter(e=>e.type==='reorderops');
-    if(res.fail===0 && (adds.length||dels.length||newT.length||delT.length||reo.length)){
+    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao'), reo=eds.filter(e=>e.type==='reorderops'), grow=eds.filter(e=>e.type==='addopblock');
+    if(res.fail===0 && (adds.length||dels.length||newT.length||delT.length||reo.length||grow.length)){
+      grow.forEach(e=>{ if(OV.opExtra) delete OV.opExtra[`${e.talhao}|${e.tag}`]; });   // blocos criados: a planilha agora tem essas operações
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
       dels.forEach(e=>{ if(e.rk) delete OV.itemRemoved[e.rk]; });
