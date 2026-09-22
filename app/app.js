@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-111';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-112';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -455,6 +455,7 @@ function loadOverrides(){
   OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
   OV.result        = OV.result        || {}; // "TL|seq" -> {prodHa, preco} colhido/vendido (Resultados — DRE realizada)
+  OV.opPlan        = OV.opPlan        || {}; // "TL|seq" -> {order:[tagoi...], names:{tagoi:nome}, _u} (ordem + nomes das operações — sincroniza)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -724,9 +725,58 @@ const temSafrinha = t => !!String(empSafDe(t)||'').trim();
 function prodSafDe(t){ const o=OV.talhao[t.id]; return o&&o.prod_safrinha!=null?+o.prod_safrinha:(t.prod_safrinha||0); }
 // operações de uma safra = base (planilha) + operações criadas no app
 function opsOf(tid, seq){
-  // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios
-  return (planoDe(tid)[seq]||[]).slice();
+  // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios.
+  // A ORDEM aqui é sempre física (índice = slot); só o NOME pode ter apelido do usuário (opPlan.names).
+  const tag=seq==='safrinha'?'S':'P';
+  return (planoDe(tid)[seq]||[]).map((op,oi)=>{
+    const nm=opNomeEff(tid,`${tag}${oi}`,op.nome);
+    return (nm===op.nome)?op:Object.assign({},op,{nome:nm});   // troca só o nome; mantém itens/dap/etc.
+  });
 }
+// ---- ordem + nomes das operações (opPlan): o slot físico (tagoi) é a identidade estável;
+// só a exibição (ordem) e o rótulo (nome) mudam — nada de execução/realizado é afetado ----
+function opPlanKey(tid,seq){ return tid+'|'+seq; }
+function opPlanOf(tid,seq){ return (OV.opPlan&&OV.opPlan[opPlanKey(tid,seq)])||null; }
+function _seqOfTag(tag){ return tag==='S'?'safrinha':'principal'; }
+function opNomeEff(tid,tagoi,fallback){
+  const pl=opPlanOf(tid,_seqOfTag(tagoi[0])); const nm=pl&&pl.names&&pl.names[tagoi];
+  return (nm!=null&&String(nm).trim()!=='')?nm:(fallback||'');
+}
+// ordem de exibição das operações reveladas: array de ÍNDICES FÍSICOS (oi) na ordem escolhida
+function opDisplayOrder(tid, tag, cnt){
+  const tags=[]; for(let i=0;i<cnt;i++) tags.push(`${tag}${i}`);
+  const pl=opPlanOf(tid,_seqOfTag(tag));
+  let seqTags=tags;
+  if(pl&&Array.isArray(pl.order)){ const set=new Set(tags), out=[];
+    pl.order.forEach(x=>{ if(set.has(x)&&out.indexOf(x)<0) out.push(x); });   // ordem salva (só reveladas)
+    tags.forEach(x=>{ if(out.indexOf(x)<0) out.push(x); });                   // reveladas que faltaram → no fim
+    seqTags=out; }
+  return seqTags.map(tg=>+tg.slice(1));   // -> índices físicos
+}
+function opPlanEnsure(tid,seq){ OV.opPlan=OV.opPlan||{}; const k=opPlanKey(tid,seq);
+  const pl=OV.opPlan[k]||{order:null,names:{}}; pl.names=pl.names||{}; OV.opPlan[k]=pl; return pl; }
+function opPlanStamp(tid,seq){ const pl=opPlanEnsure(tid,seq); pl._u=Date.now(); saveOverrides(); if(typeof scheduleOpPlanPush==='function') scheduleOpPlanPush(); }
+function opRename(tid,tagoi,nome){ const seq=_seqOfTag(tagoi[0]), pl=opPlanEnsure(tid,seq);
+  const base=(planoDe(tid)[seq]||[])[+tagoi.slice(1)]; const orig=(base&&base.nome)||'';
+  nome=String(nome||'').trim();
+  if(nome===''||nome===orig) delete pl.names[tagoi]; else pl.names[tagoi]=nome;
+  opPlanStamp(tid,seq); }
+function opMove(tid,tag,tagoi,dir){ const seq=_seqOfTag(tag), cnt=opsShownCount(tid,tag);
+  const order=opDisplayOrder(tid,tag,cnt).map(oi=>`${tag}${oi}`);
+  const i=order.indexOf(tagoi); if(i<0) return; const j=i+dir; if(j<0||j>=order.length) return;
+  const tmp=order[i]; order[i]=order[j]; order[j]=tmp;
+  const pl=opPlanEnsure(tid,seq); pl.order=order; opPlanStamp(tid,seq); route({keepScroll:true}); }
+function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
+  const total=(planoDe(tid)[seq]||[]).length, cnt=opsShownCount(tid,tag);
+  if(cnt>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
+  const newTag=`${tag}${cnt}`;                       // próximo slot físico livre
+  revealOps[`${tid}|${tag}`]=cnt+1;                  // revela o slot
+  const order=opDisplayOrder(tid,tag,cnt+1).map(oi=>`${tag}${oi}`);
+  const ni=order.indexOf(newTag); if(ni>=0) order.splice(ni,1);
+  let at= tagoi ? order.indexOf(tagoi) : order.length-1; if(at<0) at=order.length-1;
+  order.splice(at+1,0,newTag);
+  const pl=opPlanEnsure(tid,seq); pl.order=order; if(!pl.names[newTag]) pl.names[newTag]='Nova operação';
+  opPlanStamp(tid,seq); route(); toast('Operação inserida — renomeie e adicione os insumos'); }
 // quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
 const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
 function opsShownCount(tid, tag){
@@ -1016,10 +1066,10 @@ V.talhao = function(id){
     const nShow=opsShownCount(t.id,tag);
     const cnt = nShow>0 ? nShow : (show?1:0);
     if(cnt===0) return '';
-    const ops=all.slice(0,cnt);
+    const order=opDisplayOrder(t.id,tag,cnt);   // índices físicos (oi) na ordem de exibição
     const canReveal = cnt < all.length;
-    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${cnt} de ${all.length} operações</span></div>
-    ${ops.map((op,oi)=>{
+    return `<div class="panel"><div class="panel-head"><h2>${titulo}</h2><span class="sub">${cnt} de ${all.length} operações · arraste a ordem com ▲▼</span></div>
+    ${order.map((oi,pos)=>{ const op=all[oi];
       const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
       let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto));
       const conj=opMaqDe(t.id,tag,oi,op), mHa=custoOpHa(t.id,tag,oi,op);
@@ -1029,7 +1079,14 @@ V.talhao = function(id){
       const okey=`${t.id}|${tagoi}`, collapsed=collapsedOps.has(okey);
       return `<div class="op-block${collapsed?' op-collapsed':''}">
       <div class="op-head">
-        <span class="op-title" data-optoggle="${okey}"><span class="op-chevron">⌄</span>${esc(op.nome)}</span>
+        <span class="op-chevron-btn" data-optoggle="${okey}" title="Recolher/expandir"><span class="op-chevron">⌄</span></span>
+        <span class="op-ord" title="Ordem da operação">${pos+1}</span>
+        <input class="op-name-in" data-edit="opNome" data-id="${t.id}" data-op="${tagoi}" value="${esc(op.nome)}" placeholder="Nome da operação" title="Renomear operação">
+        <span class="op-reorder">
+          <button class="icon-btn op-mv" data-act="opup" data-id="${t.id}" data-op="${tagoi}" title="Subir"${pos===0?' disabled':''}>▲</button>
+          <button class="icon-btn op-mv" data-act="opdown" data-id="${t.id}" data-op="${tagoi}" title="Descer"${pos===order.length-1?' disabled':''}>▼</button>
+          <button class="icon-btn op-mv" data-act="opins" data-id="${t.id}" data-op="${tagoi}" title="Inserir operação abaixo"${!canReveal?' disabled':''}>＋</button>
+        </span>
         <span class="op-sum">${items.length} insumo${items.length===1?'':'s'} · ${brl(totOp)}/ha</span>
         <span class="op-dae" title="Dias após emergência/plantio — usado para agendar a data da operação">DAE <input class="cell" inputmode="numeric" data-edit="opDae" data-id="${t.id}" data-op="${tagoi}" value="${(`${t.id}|${tagoi}` in OV.opDae)?esc(OV.opDae[`${t.id}|${tagoi}`]):(op.dap||'')}" placeholder="—" style="width:52px">${(()=>{const dt=opDataPlan(t.id,tagoi,op.dap);return dt?`<span class="op-dae-dt mut">→ ${fmtDataBR(dt)}</span>`:'';})()}</span>
         <span class="op-maq"><span class="mut">🚜</span>
@@ -1438,6 +1495,29 @@ function resultApplyPulled(map){
     const loc=OV.result[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>=lu){ OV.result[k]=inc; changed=true; } }
   if(changed){ saveOverrides(); lastResultSig=resultSig(); }
+  return changed;
+}
+// ---- ordem/nomes das operações (OV.opPlan) — sincroniza por chave (mais recente vence) ----
+let opPlanPushTimer=null, lastOpPlanSig='';
+function opPlanSig(){ return JSON.stringify((OV&&OV.opPlan)||{}); }
+function scheduleOpPlanPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(opPlanPushTimer);
+  opPlanPushTimer=setTimeout(()=>{ if(opPlanSig()===lastOpPlanSig) return; opPlanPush({auto:true}); }, 1800); }
+async function opPlanPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
+  if(syncBusy){ if(opts.auto) scheduleOpPlanPush(); return; }
+  const sig=opPlanSig(); if(opts.auto && sig===lastOpPlanSig) return;
+  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando ordem das operações…');
+  try{ const r=await syncPost(url, JSON.stringify({__opplan:(OV.opPlan||{})}));
+    lastOpPlanSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Operações (ordem/nome): '+((r&&r.ok)||0));
+    if(!opts.auto) toast('Ordem das operações enviada'); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar ordem das operações'); }
+}
+function opPlanApplyPulled(map){
+  if(!map || typeof map!=='object' || !OV) return false;
+  OV.opPlan=OV.opPlan||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=OV.opPlan[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>=lu){ OV.opPlan[k]=inc; changed=true; } }
+  if(changed){ saveOverrides(); lastOpPlanSig=opPlanSig(); }
   return changed;
 }
 // equipe puxada da aba SST da planilha (read-only) + integrantes manuais adicionados no app
@@ -3410,6 +3490,9 @@ function applyEdit(el){
     if(v==='') delete OV.opDae[k]; else OV.opDae[k]=parseInt(v,10)||0;
     saveOverrides(); route(); return;
   }
+  if(kind==='opNome'){   // renomear operação (apelido local, sincroniza pela ordem/nome) — não re-renderiza p/ manter o cursor
+    opRename(el.dataset.id, el.dataset.op, el.value); return;
+  }
   if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra)
     const k=el.dataset.key, v=el.value.trim(), f=(kind==='resProd')?'prodHa':'preco';
     OV.result[k]=OV.result[k]||{};
@@ -3615,6 +3698,9 @@ document.addEventListener('click',e=>{
       const shown=opsShownCount(a.id,a.tag), seq=a.tag==='S'?'safrinha':'principal', total=(planoDe(a.id)[seq]||[]).length;
       if(shown>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
       revealOps[rk]=shown+1; route(); }
+    else if(a.act==='opup'){   const tag=a.op[0]; opMove(a.id, tag, a.op, -1); }
+    else if(a.act==='opdown'){ const tag=a.op[0]; opMove(a.id, tag, a.op, +1); }
+    else if(a.act==='opins'){  const tag=a.op[0]; opInsertAfter(a.id, tag, a.op); }
     else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
     else if(a.act==='bulkadd'){
       const prod=($('#ba-prod').value||'').trim();
@@ -4180,6 +4266,7 @@ function applyPulledData(d){
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
   try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
+  try{ opPlanApplyPulled(d.opplan_app); }catch(e){}         // ordem + nomes das operações (merge por chave)
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -4294,6 +4381,7 @@ async function syncPush(opts){
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
+  try{ if(opPlanSig()!==lastOpPlanSig) await opPlanPush({auto:true}); }catch(e){}            // ordem + nomes das operações
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)

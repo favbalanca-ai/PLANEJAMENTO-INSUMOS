@@ -394,6 +394,15 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .detail-head .di .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600}
 .detail-head .di .v{font-size:17px;font-weight:700;color:var(--ink);margin-top:2px}
 .op-title{font-size:13px;font-weight:700;color:#fff;background:var(--ink2);padding:7px 14px;border-radius:7px 7px 0 0;display:inline-flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+/* cabeçalho da operação: nº + nome editável + reordenar */
+.op-chevron-btn{display:inline-flex;align-items:center;justify-content:center;width:24px;height:28px;background:var(--ink2);color:#fff;border-radius:7px;cursor:pointer;user-select:none;flex:none}
+.op-ord{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;background:var(--ink);color:#fff;border-radius:12px;font-size:12px;font-weight:700;flex:none}
+.op-name-in{font-size:13px;font-weight:700;color:#fff;background:var(--ink2);border:1px solid transparent;padding:6px 12px;border-radius:7px;min-width:150px;max-width:260px}
+.op-name-in::placeholder{color:rgba(255,255,255,.6);font-weight:500}
+.op-name-in:focus{outline:none;border-color:#fff;background:var(--ink)}
+.op-reorder{display:inline-flex;gap:4px;flex:none}
+.op-mv{width:28px;height:28px;font-size:12px}
+.op-mv:disabled{opacity:.35;cursor:default}
 .op-chevron{font-size:10px;transition:transform .15s}
 .op-block.op-collapsed .op-chevron{transform:rotate(-90deg)}
 .op-block.op-collapsed .op-body{display:none}
