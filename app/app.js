@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-115';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-116';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -939,7 +939,8 @@ function toast(msg){
 function ask(m){ try{ return window.confirm(m); }catch(e){ return true; } }
 function updateEditBadge(){
   const n=countEdits(), b=$('#edit-badge');
-  b.hidden=n===0; b.textContent=n+(n===1?' edição':' edições');
+  b.hidden=n===0; b.textContent=n+(n===1?' edição':' edições'); b.title='Toque para sincronizar agora';
+  if(typeof updateSyncBar==='function') updateSyncBar();
 }
 const PILL={COMPRAR:['pill-buy','Comprar'],SEM_PRECO:['pill-noprice','Sem preço'],
   ESTOQUE:['pill-stock','Em estoque'],SEM_DEMANDA:['pill-none','Sem demanda']};
@@ -3823,6 +3824,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='opup'){   const tag=a.op[0]; opMove(a.id, tag, a.op, -1); }
     else if(a.act==='opdown'){ const tag=a.op[0]; opMove(a.id, tag, a.op, +1); }
     else if(a.act==='opins'){  const tag=a.op[0]; opInsertAfter(a.id, tag, a.op); }
+    else if(a.act==='syncNow'){ syncGate('manual'); }
     else if(a.act==='reagendar'){ const n=reagendarTarefasSafra(a.id,'principal')+reagendarTarefasSafra(a.id,'safrinha'); route({keepScroll:true});
       toast(n?`${n} tarefa(s) recalculada(s) por plantio + DAE`:'Nada a recalcular — defina o plantio e o DAE das operações (e importe as operações em Tarefas)'); }
     else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
@@ -4311,11 +4313,14 @@ function setSyncStatus(state, msg){
   const el=$('#sync-status'); if(!el) return;
   if(!syncUrl()){ el.hidden=true; return; }
   el.hidden=false;
-  const s = state || (syncBusy?'busy':(autoOn()?'ok':'off'));
+  const offline=(typeof navigator!=='undefined' && navigator.onLine===false);
+  const s = offline ? 'err' : (state || (syncBusy?'busy':(autoOn()?'ok':'off')));
+  if(offline && !msg) msg='Sem internet';
   el.classList.remove('is-ok','is-busy','is-err','is-off');
   el.classList.add('is-'+s);
   const txt={ok:'Sincronizado',busy:'Sincronizando…',err:'Erro na sincronia',off:'Auto desligado'}[s]||'Local';
   const t=el.querySelector('.sync-status-txt'); if(t) t.textContent=msg||txt;
+  if(typeof updateSyncBar==='function' && s!=='busy') updateSyncBar();
 }
 // assinatura das edições pendentes (para não reenviar/reler à toa)
 function fieldSig(){ return JSON.stringify(buildFieldEdits()); }
@@ -4458,9 +4463,12 @@ function reconcileOverrides(){
 async function syncFetch(url, opts, ms){
   const ctrl = ('AbortController' in window) ? new AbortController() : null;
   const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||120000) : null;
-  try{ return await fetch(url, ctrl ? Object.assign({}, opts, {signal:ctrl.signal}) : opts); }
+  // keepalive: pedido disparado ao SAIR do app (aba escondida/fechando) continua mesmo com a página em segundo plano
+  const o=Object.assign({}, opts, syncKeepalive?{keepalive:true}:{}, ctrl?{signal:ctrl.signal}:{});
+  try{ return await fetch(url, o); }
   finally{ if(to) clearTimeout(to); }
 }
+let syncKeepalive=false;
 // GET com timeout longo + 1 tentativa extra (a 1ª chamada do Apps Script costuma ser lenta = "aquecimento")
 async function syncGet(url, opts){
   opts=opts||{}; let lastErr;
@@ -4487,7 +4495,7 @@ async function syncPull(opts){
   // automático: se nada mudou na planilha (mesmo hash), nem baixa o pacote grande
   if(opts.auto && !opts.force && lastServerHash){
     const h=await getServerHash(url);
-    if(h && h===lastServerHash){ syncBusy=false; setSyncStatus('ok'); markSynced(); return; }
+    if(h && h===lastServerHash){ syncBusy=false; setSyncStatus('ok'); markSynced(); return true; }
   }
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   try{
@@ -4498,7 +4506,7 @@ async function syncPull(opts){
     markSynced();
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
       if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças'); }
-      syncBusy=false; setSyncStatus('ok'); return;
+      syncBusy=false; setSyncStatus('ok'); return true;
     }
     lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
     addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões`);
@@ -4509,6 +4517,7 @@ async function syncPull(opts){
     if(!opts.auto){ route(); }
     else if(!isEditing()){ pendingRerender=false; route({keepScroll:true}); }
     else { pendingRerender=true; }   // você está editando: aplica os dados agora, atualiza a tela quando parar
+    return true;
   }catch(e){ syncBusy=false; setSyncStatus('err');
     const aborted=/abort/i.test(e&&e.message||'');
     addHist('pull',false, aborted?'Tempo esgotado (planilha lenta)':('Erro: '+(e&&e.message||'')));
@@ -4517,7 +4526,8 @@ async function syncPull(opts){
         ? '✖ A planilha demorou demais para responder. Toque em "Puxar agora" de novo — a 1ª vez costuma ser mais lenta.'
         : '✖ Erro ao puxar: '+(e&&e.message)+'  (verifique a URL e o acesso "Qualquer pessoa")');
       toast(aborted?'Planilha lenta — tente puxar de novo':'Falha ao puxar');
-    } }
+    }
+    return false; }
 }
 // POST com timeout longo (120s) + 1 tentativa extra (rede instável / Apps Script lento)
 async function syncPost(url, body){
@@ -4539,9 +4549,9 @@ async function syncPush(opts){
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
-  if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
-  if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
-  if(syncBusy){ scheduleAutoPush(); return; }       // ocupado: tenta de novo depois
+  if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
+  if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
+  if(syncBusy){ scheduleAutoPush(); return false; }       // ocupado: tenta de novo depois
   syncBusy=true; setSyncStatus('busy');
   if(!opts.auto) syncLog(`⏳ Enviando ${eds.length} edições…`);
   try{
@@ -4576,16 +4586,18 @@ async function syncPush(opts){
       reo.forEach(e=>reconcileReorder(e));
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
-      syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;
+      syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); updateSyncBar(); return true;
     }
-    syncBusy=false; setSyncStatus('ok');
-  }catch(e){ syncBusy=false; setSyncStatus('err');
+    syncBusy=false; setSyncStatus('ok'); updateSyncBar();
+    return lastPushOk;
+  }catch(e){ syncBusy=false; setSyncStatus('err'); lastPushOk=false; updateSyncBar();
     const aborted=/abort|failed to fetch/i.test(e&&e.message||'');
     addHist('push',false, aborted?'Tempo esgotado — tente enviar de novo':('Erro: '+(e&&e.message||'')));
     if(!opts.auto){
       syncLog(aborted?'✖ A planilha demorou demais para gravar. Toque em "Enviar agora" de novo — as edições que já entraram não se perdem.':'✖ Erro ao enviar: '+e.message);
       toast(aborted?'Planilha lenta — tente enviar de novo':'Falha ao enviar');
-    } }
+    }
+    return false; }
 }
 /* ---- Sincronização do módulo PREÇOS (troca a aba "PREÇOS APP" inteira) ----
    Modelo simples e seguro: PUXAR substitui os preços locais pela planilha (fonte
@@ -4764,7 +4776,93 @@ function startPolling(){
   const ms = (window.matchMedia && window.matchMedia('(max-width:640px)').matches) ? 120000 : POLL_MS;
   pollTimer=setInterval(pollTick, ms);
 }
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') pollTick(); });
+/* ---- ENTRAR / SAIR do app: sincroniza sempre ----
+   Ao entrar (abrir o app ou voltar a ele): envia o que ficou pendente e puxa a última versão, com um
+   "portão" visível (e opção de continuar offline). Ao sair (aba escondida / fechando): envia o pendente
+   na hora (keepalive) e, se ainda houver algo não salvo, o navegador avisa antes de fechar. */
+// há algo local ainda não enviado? (edições de campo, compras/baixas offline, tarefas/execução/resultados alterados)
+function hasPending(){
+  try{
+    if(!DATA||!OV) return false;
+    if(buildFieldEdits().length>0) return true;
+    if(COMPRAS && (COMPRAS.registros||[]).some(c=>!c.pushed)) return true;
+    if(lastTarefasPushSig!=='' && typeof tarefasSig==='function' && tarefasSig()!==lastTarefasPushSig) return true;
+    if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) return true;
+    if(lastResultSig!=='' && resultSig()!==lastResultSig) return true;
+  }catch(e){}
+  return false;
+}
+// faixa no topo: "N edições não sincronizadas — Sincronizar agora" (ou "sem internet")
+function updateSyncBar(){
+  const bar=$('#sync-bar'); if(!bar) return;
+  if(!syncUrl()||!DATA){ bar.hidden=true; return; }
+  const n=countEdits(), pend=hasPending(), off=(typeof navigator!=='undefined' && navigator.onLine===false);
+  if(!pend && !off){ bar.hidden=true; return; }
+  bar.hidden=false;
+  if(off){ bar.className='sync-bar off'; bar.innerHTML=`📴 Sem internet — ${n?`${n} ${n===1?'edição guardada':'edições guardadas'}; `:''}sincroniza sozinho quando a conexão voltar.`; return; }
+  bar.className='sync-bar '+(lastPushOk?'warn':'err');
+  bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} ${n?`${n} ${n===1?'edição':'edições'}`:'Alterações'} ainda não sincronizada${n===1?'':'s'}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
+}
+// portão de sincronização (modal): envia pendentes -> puxa a planilha; se falhar, deixa tentar de novo ou seguir offline
+let syncGateOpen=false;
+async function syncGate(mode){
+  if(!syncUrl()||syncGateOpen) return; syncGateOpen=true;
+  const ov=document.createElement('div'); ov.className='modal-ov sync-gate'; ov.id='sync-gate';
+  ov.innerHTML=`<div class="modal-box" style="width:min(460px,100%)"><div class="modal-head"><h3>🔄 Sincronizar com a planilha</h3></div>
+    <div id="sg-body"></div><div class="modal-foot" id="sg-foot"></div></div>`;
+  document.body.appendChild(ov);
+  const body=ov.querySelector('#sg-body'), foot=ov.querySelector('#sg-foot');
+  const step=t=>{ const d=document.createElement('div'); d.className='sg-step'; d.innerHTML=t; body.appendChild(d); };
+  const close=()=>{ ov.remove(); syncGateOpen=false; updateSyncBar(); };
+  const run=async()=>{
+    foot.innerHTML=''; body.innerHTML='';
+    try{
+      if(navigator.onLine===false) throw new Error('offline');
+      // (os overrides só somem depois do PUXAR reconciliar com a planilha — por isso não se checa hasPending() aqui)
+      if(hasPending()){ step('⏳ Enviando suas edições…'); const okP=await syncPush({auto:true}); if(okP===false) throw new Error('push'); step('✔ Edições enviadas'); }
+      step('⏳ Buscando a última versão da planilha…');
+      const okG=await syncPull({auto:true, force:true, silentToast:true}); if(okG===false) throw new Error('pull');
+      step('✔ Sincronizado'); setTimeout(close, 450);
+    }catch(e){
+      const off=navigator.onLine===false||/offline/.test(String(e&&e.message||''));
+      body.innerHTML='';
+      step(off?'📴 <b>Sem conexão com a internet.</b>':'⚠️ <b>Não foi possível sincronizar agora.</b>');
+      step(hasPending()?'Você tem <b>edições ainda não enviadas</b>. Elas ficam guardadas neste aparelho e serão enviadas na próxima sincronização.':`Você pode continuar com os dados locais (${lastSyncTxt().toLowerCase()}).`);
+      foot.innerHTML=`<button class="btn btn-primary btn-sm" data-sg="retry">↻ Tentar de novo</button><button class="btn btn-outline btn-sm" data-sg="skip">Continuar sem sincronizar</button>`;
+    }
+  };
+  ov.addEventListener('click',e=>{ const b=e.target.closest('[data-sg]'); if(!b) return;
+    if(b.dataset.sg==='skip') close(); else run(); });
+  if(!autoOn() && mode!=='manual'){   // auto desligado: PERGUNTA (não força)
+    step(`A sincronização automática está <b>desligada</b>.${hasPending()?' Você tem <b>edições não enviadas</b>.':''}`); step('Sincronizar agora com a planilha?');
+    foot.innerHTML=`<button class="btn btn-primary btn-sm" data-sg="go">🔄 Sincronizar</button><button class="btn btn-outline btn-sm" data-sg="skip">Continuar</button>`;
+    return;
+  }
+  await run();
+}
+// voltou ao app (aba visível de novo / internet voltou): envia o pendente e puxa a última versão
+let lastHiddenTs=0;
+async function syncOnReturn(){
+  if(!syncUrl()||!autoOn()||syncBusy) return;
+  if(hasPending()){ await syncPush({auto:true}); }
+  if(!isEditing()) await syncPull({auto:true, force:true, silentToast:true});
+  updateSyncBar();
+}
+// saindo do app (aba escondida / fechando): envia o pendente na hora, com keepalive
+function flushOnLeave(){
+  if(!syncUrl()||!autoOn()||!hasPending()||syncBusy) return;
+  clearTimeout(pushTimer); syncKeepalive=true;
+  Promise.resolve().then(()=>syncPush({auto:true})).catch(()=>{}).finally(()=>{ syncKeepalive=false; });
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){ lastHiddenTs=Date.now(); flushOnLeave(); return; }
+  // voltou: se ficou fora por mais de 1 min, sincroniza de verdade (envia + puxa); senão só o tick leve
+  if(lastHiddenTs && Date.now()-lastHiddenTs>60000) syncOnReturn(); else pollTick();
+});
+window.addEventListener('pagehide', flushOnLeave);
+window.addEventListener('beforeunload', e=>{ if(hasPending()){ flushOnLeave(); e.preventDefault(); e.returnValue='Você tem edições ainda não sincronizadas com a planilha.'; return e.returnValue; } });
+window.addEventListener('online', ()=>{ updateSyncBar(); toast('Internet de volta — sincronizando…'); syncOnReturn(); });
+window.addEventListener('offline', ()=>{ updateSyncBar(); setSyncStatus('err','Sem internet'); });
 
 $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringify(OV,null,2),'application/json'); toast('Edições exportadas'); };
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
@@ -4789,13 +4887,19 @@ function boot(d){
   route();
   // sincronização automática (planilha <-> app) quando a URL está configurada e o auto está ligado
   lastPushSig='';   // nada enviado ainda nesta sessão -> as edições pendentes serão reenviadas
-  if(syncUrl() && autoOn()){
-    // ao ABRIR: força buscar a última atualização da planilha (mesmo já tendo dado em cache)
-    if(buildFieldEdits().length===0){ syncPull({auto:true, force:true, silentToast:true}); }
-    else scheduleAutoPush();   // há edições locais não salvas: envia para a planilha
-    startPolling();
+  // conjuntos locais VAZIOS não têm o que enviar: já marca como "em dia" (evita 3 envios inúteis a cada abertura)
+  try{
+    if(!(TAREFAS.tarefas||[]).length && !(EQUIPE.funcionarios||[]).length) lastTarefasPushSig=tarefasSig();
+    if(!Object.keys(OV.realizado||{}).length) lastRealizadoSig=realizadoSig();
+    if(!Object.keys(OV.result||{}).length) lastResultSig=resultSig();
+  }catch(e){}
+  if(syncUrl()){
+    // ao ENTRAR: portão de sincronização (envia o pendente e puxa a última versão; offline = pode seguir local)
+    syncGate('entrada');
+    if(autoOn()) startPolling();
   }
-  setSyncStatus();
+  setSyncStatus(); updateSyncBar();
+  { const eb=$('#edit-badge'); if(eb) eb.onclick=()=>{ if(syncUrl()) syncGate('manual'); else location.hash='#/sync'; }; }
 }
 // abre JÁ com os últimos dados sincronizados (cache local); se não houver, usa o data.json embutido
 (function(){
