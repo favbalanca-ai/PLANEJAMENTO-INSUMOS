@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-112';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-113';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -474,6 +474,7 @@ function countEdits(){
          OV.talhaoAdd.length + Object.keys(OV.talhaoRemoved).length +
          Object.keys(OV.maqAttr).length + OV.maqAdd.length +
          Object.values(OV.opAdd).reduce((a,o)=>a+(o.P||[]).length+(o.S||[]).length,0) +
+         Object.keys(OV.opPlan||{}).reduce((a,k)=>{ const p=k.split('|'); let d=false; try{ d=opPlanDirty(p[0],p[1]); }catch(_){ } return a+(d?1:0); },0) +
          Object.values(OV.talhao).reduce((a,t)=>a+Object.keys(t).length,0);
 }
 
@@ -726,21 +727,31 @@ function prodSafDe(t){ const o=OV.talhao[t.id]; return o&&o.prod_safrinha!=null?
 // operações de uma safra = base (planilha) + operações criadas no app
 function opsOf(tid, seq){
   // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios.
-  // A ORDEM aqui é sempre física (índice = slot); só o NOME pode ter apelido do usuário (opPlan.names).
+  // A ORDEM aqui é sempre física (índice = slot); o NOME exibido é limpo (sem o marcador "OPERAÇÃO n").
   const tag=seq==='safrinha'?'S':'P';
   return (planoDe(tid)[seq]||[]).map((op,oi)=>{
     const nm=opNomeEff(tid,`${tag}${oi}`,op.nome);
     return (nm===op.nome)?op:Object.assign({},op,{nome:nm});   // troca só o nome; mantém itens/dap/etc.
   });
 }
-// ---- ordem + nomes das operações (opPlan): o slot físico (tagoi) é a identidade estável;
-// só a exibição (ordem) e o rótulo (nome) mudam — nada de execução/realizado é afetado ----
+// ---- ordem + nomes das operações (opPlan): estado LOCAL pendente até virar espelho na planilha.
+// O slot físico é a identidade; ao sincronizar, a aba do talhão é reescrita na ordem/nome do app. ----
 function opPlanKey(tid,seq){ return tid+'|'+seq; }
 function opPlanOf(tid,seq){ return (OV.opPlan&&OV.opPlan[opPlanKey(tid,seq)])||null; }
 function _seqOfTag(tag){ return tag==='S'?'safrinha':'principal'; }
-function opNomeEff(tid,tagoi,fallback){
-  const pl=opPlanOf(tid,_seqOfTag(tagoi[0])); const nm=pl&&pl.names&&pl.names[tagoi];
-  return (nm!=null&&String(nm).trim()!=='')?nm:(fallback||'');
+// remove o marcador "OPERAÇÃO n" do começo do nome (a planilha exige esse prefixo p/ reconhecer a operação)
+function opStripMarker(s){ return String(s||'').replace(/^\s*opera[çc]?[ãa]?o?\s*n?[ºo°]?\s*\d+\s*[·:\-–—.]*\s*/i,'').trim(); }
+// nome EXIBIDO da operação: apelido pendente (app) > nome limpo da planilha > "Operação n"
+function opNomeEff(tid,tagoi,rawBase){
+  const pl=opPlanOf(tid,_seqOfTag(tagoi[0])); const pend=pl&&pl.names&&pl.names[tagoi];
+  if(pend!=null && String(pend).trim()!=='') return String(pend).trim();
+  const clean=opStripMarker(rawBase); return clean || ('Operação '+(+tagoi.slice(1)+1));
+}
+// rótulo a GRAVAR na planilha (sem o "Operação n" genérico): apelido pendente > custom já existente na planilha
+function opLabelForSheet(tid,tagoi,rawBase){
+  const pl=opPlanOf(tid,_seqOfTag(tagoi[0])); const pend=pl&&pl.names&&pl.names[tagoi];
+  if(pend!=null && String(pend).trim()!=='') return String(pend).trim();
+  return opStripMarker(rawBase);   // "" se for genérico
 }
 // ordem de exibição das operações reveladas: array de ÍNDICES FÍSICOS (oi) na ordem escolhida
 function opDisplayOrder(tid, tag, cnt){
@@ -753,20 +764,35 @@ function opDisplayOrder(tid, tag, cnt){
     seqTags=out; }
   return seqTags.map(tg=>+tg.slice(1));   // -> índices físicos
 }
+// a safra tem alguma mudança de ordem/nome ainda não espelhada na planilha?
+function opPlanDirty(tid,seq){ const pl=opPlanOf(tid,seq); if(!pl) return false;
+  const namesN=pl.names?Object.keys(pl.names).length:0;
+  if(namesN) return true;
+  if(Array.isArray(pl.order)){ for(let i=0;i<pl.order.length;i++){ if(pl.order[i]!==`${seq==='safrinha'?'S':'P'}${i}`) return true; } }
+  return false; }
+// alguma operação da safra já está em execução/concluída? (aí não deixamos reordenar, só renomear)
+function hasExecInSafra(tid,tag){ const cnt=opsShownCount(tid,tag);
+  for(let oi=0;oi<cnt;oi++){ const r=OV.realizado&&OV.realizado[`${tid}|${tag}${oi}`];
+    if(r && (r.status==='andamento'||r.status==='concluido'||r.baixa)) return true; }
+  return false; }
 function opPlanEnsure(tid,seq){ OV.opPlan=OV.opPlan||{}; const k=opPlanKey(tid,seq);
   const pl=OV.opPlan[k]||{order:null,names:{}}; pl.names=pl.names||{}; OV.opPlan[k]=pl; return pl; }
-function opPlanStamp(tid,seq){ const pl=opPlanEnsure(tid,seq); pl._u=Date.now(); saveOverrides(); if(typeof scheduleOpPlanPush==='function') scheduleOpPlanPush(); }
+function opPlanStamp(tid,seq){ const pl=opPlanEnsure(tid,seq); pl._u=Date.now(); saveOverrides(); }  // saveOverrides agenda o envio (reescreve a aba do talhão)
 function opRename(tid,tagoi,nome){ const seq=_seqOfTag(tagoi[0]), pl=opPlanEnsure(tid,seq);
-  const base=(planoDe(tid)[seq]||[])[+tagoi.slice(1)]; const orig=(base&&base.nome)||'';
+  const base=(planoDe(tid)[seq]||[])[+tagoi.slice(1)]; const orig=opStripMarker((base&&base.nome)||'');
   nome=String(nome||'').trim();
-  if(nome===''||nome===orig) delete pl.names[tagoi]; else pl.names[tagoi]=nome;
+  const generico=/^opera[çc][ãa]o\s*\d+$/i.test(nome);   // "Operação 3" = rótulo genérico → sem apelido
+  if(nome===''||nome===orig||generico) delete pl.names[tagoi]; else pl.names[tagoi]=nome;
   opPlanStamp(tid,seq); }
-function opMove(tid,tag,tagoi,dir){ const seq=_seqOfTag(tag), cnt=opsShownCount(tid,tag);
+function opMove(tid,tag,tagoi,dir){ const seq=_seqOfTag(tag);
+  if(hasExecInSafra(tid,tag)){ toast('Não dá para reordenar: há operação em execução/concluída nesta safra (renomear ainda é possível)'); return; }
+  const cnt=opsShownCount(tid,tag);
   const order=opDisplayOrder(tid,tag,cnt).map(oi=>`${tag}${oi}`);
   const i=order.indexOf(tagoi); if(i<0) return; const j=i+dir; if(j<0||j>=order.length) return;
   const tmp=order[i]; order[i]=order[j]; order[j]=tmp;
   const pl=opPlanEnsure(tid,seq); pl.order=order; opPlanStamp(tid,seq); route({keepScroll:true}); }
 function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
+  if(hasExecInSafra(tid,tag)){ toast('Não dá para inserir: há operação em execução/concluída nesta safra'); return; }
   const total=(planoDe(tid)[seq]||[]).length, cnt=opsShownCount(tid,tag);
   if(cnt>=total){ toast('As 12 operações da planilha já estão em uso'); return; }
   const newTag=`${tag}${cnt}`;                       // próximo slot físico livre
@@ -777,6 +803,19 @@ function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
   order.splice(at+1,0,newTag);
   const pl=opPlanEnsure(tid,seq); pl.order=order; if(!pl.names[newTag]) pl.names[newTag]='Nova operação';
   opPlanStamp(tid,seq); route(); toast('Operação inserida — renomeie e adicione os insumos'); }
+// depois que a aba do talhão foi reescrita na planilha (espelho): a planilha vira a verdade.
+// remapeia a máquina p/ o novo slot e descarta os overrides já gravados (ordem/nome/insumo/DAE) dessa safra.
+function reconcileReorder(e){
+  const tid=e.talhao, tag=e.tag, seq=_seqOfTag(tag), order=e.order||[];
+  const oldToNew={}; order.forEach((tg,p)=>{ oldToNew[+String(tg).slice(1)]=p; });
+  const pref=`${tid}|${tag}`;
+  if(OV.opMaq){ const nm={}; for(const k in OV.opMaq){ if(k.indexOf(pref)===0){ const oi=+k.slice(pref.length);
+    const ni=(oi in oldToNew)?oldToNew[oi]:oi; nm[`${tid}|${tag}${ni}`]=OV.opMaq[k]; } else nm[k]=OV.opMaq[k]; } OV.opMaq=nm; }
+  [OV.dose,OV.itemAdd,OV.itemRemoved,OV.itemProd,OV.opDae].forEach(map=>{ if(!map) return;
+    for(const k in map){ if(k.indexOf(pref)===0) delete map[k]; } });
+  if(OV.opPlan) delete OV.opPlan[`${tid}|${seq}`];
+  delete revealOps[`${tid}|${tag}`];
+}
 // quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
 const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
 function opsShownCount(tid, tag){
@@ -1495,29 +1534,6 @@ function resultApplyPulled(map){
     const loc=OV.result[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>=lu){ OV.result[k]=inc; changed=true; } }
   if(changed){ saveOverrides(); lastResultSig=resultSig(); }
-  return changed;
-}
-// ---- ordem/nomes das operações (OV.opPlan) — sincroniza por chave (mais recente vence) ----
-let opPlanPushTimer=null, lastOpPlanSig='';
-function opPlanSig(){ return JSON.stringify((OV&&OV.opPlan)||{}); }
-function scheduleOpPlanPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(opPlanPushTimer);
-  opPlanPushTimer=setTimeout(()=>{ if(opPlanSig()===lastOpPlanSig) return; opPlanPush({auto:true}); }, 1800); }
-async function opPlanPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
-  if(syncBusy){ if(opts.auto) scheduleOpPlanPush(); return; }
-  const sig=opPlanSig(); if(opts.auto && sig===lastOpPlanSig) return;
-  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando ordem das operações…');
-  try{ const r=await syncPost(url, JSON.stringify({__opplan:(OV.opPlan||{})}));
-    lastOpPlanSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Operações (ordem/nome): '+((r&&r.ok)||0));
-    if(!opts.auto) toast('Ordem das operações enviada'); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar ordem das operações'); }
-}
-function opPlanApplyPulled(map){
-  if(!map || typeof map!=='object' || !OV) return false;
-  OV.opPlan=OV.opPlan||{}; let changed=false;
-  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
-    const loc=OV.opPlan[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
-    if(!loc || iu>=lu){ OV.opPlan[k]=inc; changed=true; } }
-  if(changed){ saveOverrides(); lastOpPlanSig=opPlanSig(); }
   return changed;
 }
 // equipe puxada da aba SST da planilha (read-only) + integrantes manuais adicionados no app
@@ -4199,9 +4215,26 @@ function buildFieldEdits(){
   const isBase=id=>DATA.planos.hasOwnProperty(id)||DATA.talhoes.some(t=>t.id===id);
   const gone=id=>!!(OV.talhaoRemoved&&OV.talhaoRemoved[id]);   // talhão excluído no app (não envia edições dele)
   const eds=[];
+  // ESPELHO: safras com ordem/nome mudados no app -> reescreve a aba do talhão nessa ordem (nome + DAP + insumos).
+  // Enquanto a safra tem reorderops, os edits granulares dela são pulados (o reorderops já leva tudo efetivo).
+  const reord=new Set();
+  for(const key in (OV.opPlan||{})){ const p=key.split('|'); const tid=p[0], seq=p[1];
+    if(!isBase(tid)||gone(tid)) continue; if(!opPlanDirty(tid,seq)) continue;
+    const tag=seq==='safrinha'?'S':'P', cnt=opsShownCount(tid,tag); if(!cnt) continue;
+    const order=opDisplayOrder(tid,tag,cnt), base=planoDe(tid)[seq]||[];
+    const ops=order.map(oi=>{ const tagoi=`${tag}${oi}`, bop=base[oi]||{};
+      const dae=(`${tid}|${tagoi}` in OV.opDae)?(+OV.opDae[`${tid}|${tagoi}`]||0):(+bop.dap||0);
+      const itens=effItems(tid,tagoi,bop.itens).filter(it=>it.produto).map(it=>({classe:it.classe||'',produto:it.produto,dose:+it.dose||0,un:it.un||''}));
+      return { label:opLabelForSheet(tid,tagoi,bop.nome), dap:dae||'', itens }; });
+    eds.push({type:'reorderops', talhao:tid, tag, ops, order:order.map(oi=>`${tag}${oi}`)});
+    reord.add(tid+'|'+seq);
+  }
+  const skip=(tid,tag)=>reord.has(tid+'|'+(tag==='S'?'safrinha':'principal'));
   for(const k in OV.dose){ const p=k.split('|'); if(!isBase(p[0])||gone(p[0])) continue; if(String(p[2]).indexOf('a')===0) continue;
+    if(skip(p[0],p[1][0])) continue;
     eds.push({type:'dose',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),item:+p[2],value:+OV.dose[k]}); }
   for(const k in OV.opDae){ const p=k.split('|'); if(p.length<2||!isBase(p[0])||gone(p[0])) continue;
+    if(skip(p[0],p[1][0])) continue;
     eds.push({type:'dae',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),value:+OV.opDae[k]||0}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
   for(const pr in OV.pedido)  eds.push({type:'pedido', produto:pr,value:+OV.pedido[pr]});
@@ -4216,6 +4249,7 @@ function buildFieldEdits(){
   for(const rk in OV.itemProd){ const p=rk.split('|'); if(p.length<3) continue;
     const tid=p[0], tagoi=p[1], ii=+p[2]; if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
+    if(skip(tid,tag)) continue;
     const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
     const from=op.itens[ii].produto, to=OV.itemProd[rk]; if(!from||!to||from===to) continue;
     const pr=PROD[to];
@@ -4226,6 +4260,7 @@ function buildFieldEdits(){
     if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1);
     const seq=tag==='S'?'safrinha':'principal';
+    if(skip(tid,tag)) continue;
     const baseLen=(planoDe(tid)[seq]||[]).length;
     if(!(oi<baseLen)) continue; // operação criada no app não existe na planilha
     OV.itemAdd[key].forEach(a=>{ if(!a.produto) return; const p=PROD[a.produto];
@@ -4236,6 +4271,7 @@ function buildFieldEdits(){
     const tid=p[0], tagoi=p[1], ii=+p[2];
     if(!isBase(tid)||gone(tid)) continue;
     const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
+    if(skip(tid,tag)) continue;
     const op=(planoDe(tid)[seq]||[])[oi]; if(!op||!op.itens||!op.itens[ii]) continue;
     const prod=op.itens[ii].produto; if(!prod) continue;
     eds.push({type:'delitem',talhao:tid,tag,op:oi,produto:prod,rk:rk});
@@ -4266,7 +4302,6 @@ function applyPulledData(d){
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
   try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
-  try{ opPlanApplyPulled(d.opplan_app); }catch(e){}         // ordem + nomes das operações (merge por chave)
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -4381,7 +4416,6 @@ async function syncPush(opts){
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
-  try{ if(opPlanSig()!==lastOpPlanSig) await opPlanPush({auto:true}); }catch(e){}            // ordem + nomes das operações
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; return; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
@@ -4404,8 +4438,8 @@ async function syncPush(opts){
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
     // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
-    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao');
-    if(res.fail===0 && (adds.length||dels.length||newT.length||delT.length)){
+    const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao'), reo=eds.filter(e=>e.type==='reorderops');
+    if(res.fail===0 && (adds.length||dels.length||newT.length||delT.length||reo.length)){
       adds.forEach(e=>{ const k=`${e.talhao}|${e.tag}${e.op}`, arr=OV.itemAdd[k];
         if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } });
       dels.forEach(e=>{ if(e.rk) delete OV.itemRemoved[e.rk]; });
@@ -4414,6 +4448,9 @@ async function syncPush(opts){
         if(i>=0) OV.talhaoAdd.splice(i,1); cleanTalhaoOverlays(e.talhao); });
       // talhão excluído já saiu da planilha: limpa a marca e os overlays (não volta no próximo puxar)
       delT.forEach(e=>{ delete OV.talhaoRemoved[e.talhao]; cleanTalhaoOverlays(e.talhao); });
+      // ESPELHO aplicado: a aba do talhão foi reescrita na nova ordem/nome. Agora a planilha é a verdade:
+      // remapeia a máquina por posição, limpa os overrides de insumo/DAE/ordem dessa safra e re-puxa.
+      reo.forEach(e=>reconcileReorder(e));
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
       syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); return;
