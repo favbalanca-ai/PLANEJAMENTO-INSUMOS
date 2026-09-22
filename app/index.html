@@ -12,7 +12,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Planejamento">
-<link rel="stylesheet" href="styles.css">
+<meta http-equiv="Cache-Control" content="no-store">
+<!-- sem cache: o CSS é pedido com um carimbo de hora, então nunca vem uma versão velha do cache do navegador -->
+<script>document.write('<link rel="stylesheet" href="styles.css?t=' + Date.now() + '">');</script>
 </head>
 <body>
 <div id="app">
@@ -93,6 +95,7 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<script src="app.js"></script>
+<!-- sem cache: o app.js também é pedido com carimbo de hora (sempre a versão publicada mais nova) -->
+<script>document.write('<script src="app.js?t=' + Date.now() + '"><\/script>');</script>
 </body>
 </html>
