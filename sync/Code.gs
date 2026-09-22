@@ -587,9 +587,10 @@ function applyTalhao(tid, edits, out){
   var split = findSafraSplit(vals, n, m);          // fronteira 1ª safra / safrinha
   var pR1 = (split > 0) ? split - 1 : Math.min(224, n);
   var sR0 = (split > 0) ? split + 1 : 238;
-  var dirty = false;
+  var dirty = false, reorders = [];
   edits.forEach(function(ed){
     try {
+      if (ed.type === 'reorderops'){ reorders.push(ed); return; }   // espelho: reescreve a faixa inteira (depois)
       var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
       var op = opByIndex(vals, faixa[0], faixa[1], ed.op, m);
       if (ed.type === 'dose'){
@@ -628,6 +629,48 @@ function applyTalhao(tid, edits, out){
     escreveColsTalhao(s, vals, 10, pR1, m);
     escreveColsTalhao(s, vals, sR0, Math.min(451, n), m);
   }
+  // ESPELHO: reescreve a faixa inteira da safra na ordem/nome do app (depois das edições granulares)
+  reorders.forEach(function(ed){
+    try { var faixa = ed.tag === 'S' ? [sR0, Math.min(451, n)] : [10, pR1];
+      writeReorderOps(s, vals, m, faixa, ed.ops || []); out.ok++;
+    } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push('reorder: ' + err); }
+  });
+}
+// reescreve as operações de UMA safra (faixa [r0,r1]) na ordem recebida: nome (marcador "OPERAÇÃO n" +
+// rótulo), DAP e insumos. Grava só as colunas detectadas (op/dap/classe/produto/dose/un); as colunas de
+// fórmula (preço/custo) ficam intactas. Renumera os slots físicos = ordem exibida no app (planilha = espelho).
+function writeReorderOps(s, vals, m, faixa, ops){
+  var r0 = faixa[0], r1 = faixa[1];
+  // detecta os blocos (cabeçalho "OPERA" + linhas de corpo) na faixa
+  var blocks = [], cur = null;
+  for (var L = r0; L <= r1; L++){ var row = vals[L - 1]; if (!row) continue;
+    var a = S(row[m.op]);
+    if (a.toUpperCase().indexOf('OPERA') === 0){ cur = { head:L, body:[] }; blocks.push(cur); }
+    else if (cur){ cur.body.push(L); } }
+  if (!blocks.length) throw 'sem operações na aba';
+  for (var p = 0; p < blocks.length; p++){
+    var blk = blocks[p], op = ops[p] || null;
+    var label = (op && op.label) ? (' · ' + S(op.label)) : '';
+    vals[blk.head - 1][m.op] = 'OPERAÇÃO ' + (p + 1) + label;                 // cabeçalho: marcador + rótulo
+    if (m.dap >= 0) vals[blk.head - 1][m.dap] = (op && op.dap !== '' && op.dap != null) ? N(op.dap) : '';
+    vals[blk.head - 1][m.classe] = ''; vals[blk.head - 1][m.produto] = '';    // cabeçalho não tem insumo
+    vals[blk.head - 1][m.dose] = '';   vals[blk.head - 1][m.un] = '';
+    var itens = (op && op.itens) || [];
+    for (var j = 0; j < blk.body.length; j++){ var L2 = blk.body[j], it = itens[j];
+      vals[L2 - 1][m.op] = ''; if (m.dap >= 0) vals[L2 - 1][m.dap] = '';
+      if (it){ vals[L2 - 1][m.classe] = S(it.classe); vals[L2 - 1][m.produto] = S(it.produto);
+               vals[L2 - 1][m.dose] = N(it.dose);     vals[L2 - 1][m.un] = S(it.un); }
+      else   { vals[L2 - 1][m.classe] = ''; vals[L2 - 1][m.produto] = ''; vals[L2 - 1][m.dose] = ''; vals[L2 - 1][m.un] = ''; }
+    }
+  }
+  // grava SÓ as colunas gerenciadas (deixa preço/custo = fórmulas intactas)
+  var cols = [m.op, m.classe, m.produto, m.dose, m.un]; if (m.dap >= 0) cols.push(m.dap);
+  var wn = r1 - r0 + 1;
+  cols.forEach(function(c){ var colv = [];
+    for (var L = r0; L <= r1; L++) colv.push([vals[L - 1][c]]);
+    s.getRange(r0, c + 1, wn, 1).clearDataValidations();
+    s.getRange(r0, c + 1, wn, 1).setValues(colv);
+  });
 }
 // grava Classe/Produto (contíguas: produto = classe+1) e Dose de uma faixa — não toca em outras colunas/fórmulas
 function escreveColsTalhao(s, vals, r0, r1, m){
