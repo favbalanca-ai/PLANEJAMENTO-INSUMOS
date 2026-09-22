@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-116';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-117';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4857,7 +4857,7 @@ function flushOnLeave(){
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){ lastHiddenTs=Date.now(); flushOnLeave(); return; }
   // voltou: se ficou fora por mais de 1 min, sincroniza de verdade (envia + puxa); senão só o tick leve
-  if(lastHiddenTs && Date.now()-lastHiddenTs>60000) syncOnReturn(); else pollTick();
+  if(lastHiddenTs && Date.now()-lastHiddenTs>60000){ checkNewVersion(); syncOnReturn(); } else pollTick();
 });
 window.addEventListener('pagehide', flushOnLeave);
 window.addEventListener('beforeunload', e=>{ if(hasPending()){ flushOnLeave(); e.preventDefault(); e.returnValue='Você tem edições ainda não sincronizadas com a planilha.'; return e.returnValue; } });
@@ -4868,13 +4868,31 @@ $('#btn-export').onclick=()=>{ download('planejamento_edicoes.json',JSON.stringi
 $('#btn-reset').onclick=()=>{ if(confirm('Descartar todas as suas edições e voltar aos dados originais?')){ localStorage.removeItem(LS_KEY); loadOverrides(); saveOverrides(); route(); toast('Dados restaurados'); } };
 // Forçar atualização: limpa o cache do PWA, remove o service worker e recarrega da rede.
 // Resolve o caso "o app do celular ficou preso numa versão antiga". NÃO apaga seus dados/edições.
-{ const bu=$('#btn-update'); if(bu) bu.onclick=async ()=>{
+async function forceUpdate(){
   toast('Atualizando… o app vai recarregar');
   try{ if('serviceWorker' in navigator){ const rs=await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r=>r.unregister())); } }catch(e){}
   try{ if(window.caches){ const ks=await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } }catch(e){}
   const u=new URL(location.href); u.searchParams.set('v', Date.now());   // fura qualquer cache de CDN
   location.replace(u.toString());
-}; }
+}
+{ const bu=$('#btn-update'); if(bu) bu.onclick=forceUpdate; }
+// SEM CACHE NOS APARELHOS: ao abrir (e ao voltar ao app) confere a versão publicada (version.json, sempre da
+// rede). Se for diferente da que está rodando, atualiza sozinho — sem depender de o usuário tocar em "Atualizar".
+const AUTOUPD_KEY='planejamento_autoupd';
+async function checkNewVersion(){
+  if(location.protocol==='file:' || navigator.onLine===false) return;
+  try{
+    const r=await fetch('version.json?t='+Date.now(), {cache:'no-store'}); if(!r.ok) return;
+    const j=await r.json(); const pub=j&&j.version; if(!pub || pub===APP_VERSION) { try{ sessionStorage.removeItem(AUTOUPD_KEY); }catch(e){} return; }
+    // já tentou atualizar para esta mesma versão nesta sessão e continuou diferente? não fica em loop — só avisa
+    let tried=''; try{ tried=sessionStorage.getItem(AUTOUPD_KEY)||''; }catch(e){}
+    if(tried===pub){ toast('Nova versão v'+pub+' publicada — toque em 🔄 Atualizar'); return; }
+    try{ sessionStorage.setItem(AUTOUPD_KEY, pub); }catch(e){}
+    if(hasPending()){ try{ await syncPush({auto:true}); }catch(e){} }   // não perde nada: envia o pendente antes de recarregar
+    toast('Nova versão v'+pub+' — atualizando…');
+    setTimeout(forceUpdate, 400);
+  }catch(e){}
+}
 
 /* ================= INIT ================= */
 function boot(d){
@@ -4893,6 +4911,7 @@ function boot(d){
     if(!Object.keys(OV.realizado||{}).length) lastRealizadoSig=realizadoSig();
     if(!Object.keys(OV.result||{}).length) lastResultSig=resultSig();
   }catch(e){}
+  checkNewVersion();   // versão publicada mais nova? atualiza sozinho (nada fica em cache no aparelho)
   if(syncUrl()){
     // ao ENTRAR: portão de sincronização (envia o pendente e puxa a última versão; offline = pode seguir local)
     syncGate('entrada');
