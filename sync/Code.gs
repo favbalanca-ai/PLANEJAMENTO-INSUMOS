@@ -86,20 +86,36 @@ function readData(){
     result_app:readMapApp('RESULTADO APP'), equipe_sst:readEquipeSST() };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
-// Cole aqui o ID da planilha de RH (a "SST_GoogleSheets_BancoDeDados"): é a parte
-// da URL entre /d/ e /edit — ex.: https://docs.google.com/spreadsheets/d/AQUI_O_ID/edit
+// Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
+// O ID é a parte entre /d/ e /edit — ex.: https://docs.google.com/spreadsheets/d/AQUI_O_ID/edit
+// (pode colar a URL inteira que o código extrai o ID). NÃO é a URL do Web App (/exec).
 // Deixe '' para procurar uma aba SST/EQUIPE dentro da própria planilha de planejamento.
-var SST_DB_ID = '';
-function sstSS(){ if (SST_DB_ID){ try { return SpreadsheetApp.openById(SST_DB_ID); } catch(e){} } return ss(); }
-// Detecta a aba (BancoDeDados / SST / EQUIPE / 01_RH_MESTRE / RH...) e as colunas
-// (nome, função, setor, status) pelo cabeçalho. Retorna só quem está ATIVO.
+var SST_DB_ID = '1y-lZPzzJkj-F2at99XrEpCeUJ2MYjA1Ddf3sgzeYXGw';
+// extrai o ID de uma URL de planilha; ignora URLs de Web App (/exec) e outras
+function _sstId(){
+  var v = String(SST_DB_ID||'').trim(); if (!v) return '';
+  var m = v.match(/\/d\/([a-zA-Z0-9_-]{20,})/); if (m) return m[1];   // URL de planilha
+  if (/^https?:/i.test(v)) return '';                                 // qualquer outra URL: inválida aqui
+  return v;                                                           // já é o ID puro
+}
+function sstSS(){
+  var id = _sstId();
+  if (id){ try { return SpreadsheetApp.openById(id); } catch(e){ return null; } }  // ID externo: não cai na planilha local
+  return ss();                                                        // sem ID: procura aba na própria planilha
+}
+// abas internas do app que NUNCA são equipe (evita ler "EQUIPE APP", "TAREFAS APP"...)
+function _isAppTab(nm){ nm = String(nm||'').toUpperCase(); return / APP$/.test(nm) || nm.indexOf('MOVIMENTA')>=0 || nm.indexOf(' APP ')>=0; }
+// Detecta a aba (FUNCIONARIOS / BancoDeDados / SST / EQUIPE / RH...) e as colunas
+// (nome, função, setor/unidade, status) pelo cabeçalho. Retorna só quem está ATIVO.
 function readEquipeSST(){
-  var b = sstSS(), all = b.getSheets();
-  var pref = ['BANCODEDADOS','BANCO DE DADOS','SST','EQUIPE SST','EQUIPE','01_RH_MESTRE','RH_MESTRE','FUNCIONÁRIOS','FUNCIONARIOS','COLABORADORES','PESSOAL'];
-  // ordena as abas: as preferidas primeiro (mantém a ordem da lista), o resto depois
+  var b = sstSS(); if (!b) return [];               // ID configurado mas ilegível
+  var all = b.getSheets();
+  var pref = ['FUNCIONARIOS','FUNCIONÁRIOS','BANCODEDADOS','BANCO DE DADOS','SST','EQUIPE SST','EQUIPE','01_RH_MESTRE','RH_MESTRE','COLABORADORES','PESSOAL'];
   var ordered = [];
-  for (var p=0;p<pref.length;p++){ for (var i=0;i<all.length;i++){ var nm=all[i].getName().toUpperCase().trim(); if (nm===pref[p] || (pref[p].length>=3 && nm.indexOf(pref[p])>=0)) { if (ordered.indexOf(all[i])<0) ordered.push(all[i]); } } }
-  for (var j=0;j<all.length;j++){ if (ordered.indexOf(all[j])<0) ordered.push(all[j]); }
+  for (var p=0;p<pref.length;p++){ for (var i=0;i<all.length;i++){ var nm=all[i].getName().toUpperCase().trim();
+    if (_isAppTab(nm)) continue;
+    if (nm===pref[p] || (pref[p].length>=4 && nm.indexOf(pref[p])>=0)) { if (ordered.indexOf(all[i])<0) ordered.push(all[i]); } } }
+  for (var j=0;j<all.length;j++){ if (!_isAppTab(all[j].getName()) && ordered.indexOf(all[j])<0) ordered.push(all[j]); }
   for (var s=0;s<ordered.length;s++){
     var got = _parseEquipeSheet(ordered[s]);
     if (got && got.length) return got;   // primeira aba que tem gente vence
@@ -110,21 +126,23 @@ function _parseEquipeSheet(sh){
   if (!sh) return []; var last = sh.getLastRow(); if (last < 1) return [];
   var lastCol = Math.max(2, Math.min(30, sh.getLastColumn()));
   var grid = sh.getRange(1, 1, last, lastCol).getValues();
-  var hdrRow=-1, cFull=-1, cShort=-1, cFunc=-1, cSetor=-1, cStatus=-1, cId=-1;
+  var hdrRow=-1, cFull=-1, cShort=-1, cFunc=-1, cSetor=-1, cUnid=-1, cStatus=-1, cId=-1;
   for (var h=0; h<Math.min(grid.length, 10); h++){
-    var row = grid[h]; var full=-1, sht=-1, fun=-1, set=-1, sta=-1, idc=-1;
+    var row = grid[h]; var full=-1, sht=-1, fun=-1, set=-1, uni=-1, sta=-1, idc=-1;
     for (var c=0;c<row.length;c++){
       var t = S(row[c]).toUpperCase().replace(/_/g,' ');
-      if (full<0 && (t==='NOME COMPLETO' || t.indexOf('NOME COMPLETO')>=0)) full=c;
+      if (full<0 && t.indexOf('NOME COMPLETO')>=0) full=c;
       if (sht<0 && (t==='NOME CURTO' || t==='NOME'|| t.indexOf('NOME CURTO')>=0)) sht=c;
       if (full<0 && sht<0 && (t.indexOf('FUNCIONÁRIO')>=0 || t.indexOf('FUNCIONARIO')>=0 || t.indexOf('COLABORADOR')>=0)) full=c;
       if (fun<0 && (t==='FUNCAO' || t==='FUNÇÃO' || t.indexOf('FUNCAO')>=0 || t.indexOf('FUNÇÃO')>=0 || t==='CARGO' || t.indexOf('CARGO')>=0)) fun=c;
       if (set<0 && (t==='SETOR' || t.indexOf('SETOR')>=0)) set=c;
+      if (uni<0 && (t==='UNIDADE' || t.indexOf('UNIDADE')>=0 || t.indexOf('FAZENDA')>=0)) uni=c;
       if (sta<0 && (t==='STATUS' || t.indexOf('STATUS')>=0 || t==='SITUACAO' || t.indexOf('SITUAÇÃO')>=0)) sta=c;
-      if (idc<0 && (t==='ID FUNC' || t.indexOf('ID FUNC')>=0 || t==='MATRICULA' || t.indexOf('MATRÍCULA')>=0)) idc=c;
+      if (idc<0 && (t==='ID' || t==='ID FUNC' || t.indexOf('ID FUNC')>=0 || t==='MATRICULA' || t.indexOf('MATRÍCULA')>=0)) idc=c;
     }
-    if (full>=0 || sht>=0){ hdrRow=h; cFull=full; cShort=sht; cFunc=fun; cSetor=set; cStatus=sta; cId=idc; break; }
+    if (full>=0 || sht>=0){ hdrRow=h; cFull=full; cShort=sht; cFunc=fun; cSetor=set; cUnid=uni; cStatus=sta; cId=idc; break; }
   }
+  var cSet = cSetor>=0 ? cSetor : cUnid;               // sem SETOR? usa UNIDADE (fazenda)
   var out=[], seen={};
   if (hdrRow < 0){
     // sem cabeçalho reconhecido: col A = nome, col B = função
@@ -141,12 +159,12 @@ function _parseEquipeSheet(sh){
     var sh1  = cShort>=0 ? S(grid[r][cShort]) : '';
     var nome = full || sh1; if (!nome) continue;
     var status = cStatus>=0 ? S(grid[r][cStatus]).toUpperCase() : '';
-    if (status && (status.indexOf('DESLIG')>=0 || status.indexOf('DEMIT')>=0 || status.indexOf('EX-')>=0 || status.indexOf('EX ')>=0 || status.indexOf('INATIV')>=0)) continue; // fora: só time ativo
+    if (status && (status.indexOf('DESLIG')>=0 || status.indexOf('DEMIT')>=0 || status.indexOf('EX-')>=0 || status.indexOf('EX ')>=0 || status.indexOf('INATIV')>=0 || status.indexOf('AFAST')>=0)) continue; // fora: só time ativo
     var idf = cId>=0 ? S(grid[r][cId]) : '';
     var display = sh1 || full;                          // nome curto é melhor no quadro
     var key = (idf||display).toUpperCase(); if (seen[key]) continue; seen[key]=1;
     out.push({ id:'sst:'+(idf||display), nome:display, nomeCompleto:full||display,
-      funcao: cFunc>=0 ? S(grid[r][cFunc]) : '', setor: cSetor>=0 ? S(grid[r][cSetor]) : '', sst:true });
+      funcao: cFunc>=0 ? S(grid[r][cFunc]) : '', setor: cSet>=0 ? S(grid[r][cSet]) : '', sst:true });
   }
   return out;
 }

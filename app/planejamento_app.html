@@ -901,7 +901,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-110';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-111';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2614,7 +2614,7 @@ V.equipe=function(){
   const manRows=manual.map(f=>linha(f,true)).join('');
   return `
   <div class="panel"><div class="panel-head"><h2>Equipe (RH / SST)</h2><span class="sub">${sst.length} ativo(s) · puxada do sistema de RH</span></div>
-    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor / Unidade</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
       <tbody>${sstRows||'<tr><td colspan="6" class="mut" style="padding:14px">Sem integrantes do RH. Sincronize (🔄) — e confira se o <b>ID da planilha de RH (SST)</b> está preenchido no Code.gs (<code>SST_DB_ID</code>).</td></tr>'}</tbody></table></div></div>
   <div class="panel"><div class="panel-head"><h2>Integrantes manuais</h2><span class="sub">adicionados no app (avulsos) · ${manual.length}</span></div>
     <div class="app-grid" style="padding:12px 14px">
@@ -2622,7 +2622,7 @@ V.equipe=function(){
       <label>Função<input class="txt" data-eqf="funcao" value="${esc(equipeDraft.funcao)}" placeholder="ex.: tratorista, aplicador…"></label>
     </div>
     <div style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="funcAdd">➕ Adicionar</button></div>
-    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Função</th><th>Setor / Unidade</th><th class="num">Tarefas ativas</th><th class="num">Total</th><th></th></tr></thead>
       <tbody>${manRows||'<tr><td colspan="6" class="mut" style="padding:14px">Nenhum integrante manual. A equipe vem do RH; adicione aqui só avulsos.</td></tr>'}</tbody></table></div></div>`;
 };
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
