@@ -518,6 +518,24 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area tr.grp td{background:#f2f2f2;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
   #print-area tfoot th{background:#e0e0e0}
   @page{margin:14mm}
+  /* PDF do talhão: tabelas alinhadas (largura fixa), resumo/cronograma, blocos por operação sem quebrar */
+  #print-area .pdf-ops{table-layout:fixed}
+  #print-area .pdf-ops th,#print-area .pdf-ops td{overflow:hidden;text-overflow:ellipsis;word-wrap:break-word}
+  #print-area .pdf-ops tbody tr:nth-child(even) td{background:#f7f7f7}
+  #print-area .pdf-ops thead{display:table-header-group}
+  #print-area .pdf-sum{margin-bottom:10px}
+  #print-area .pdf-sum th,#print-area .pdf-sum td{font-size:10.5px;padding:3px 5px}
+  #print-area .pdf-kv{margin:6px 0 4px}
+  #print-area .pdf-kv td{border:1px solid #bbb;padding:5px 8px;font-size:11px;background:#fafafa}
+  #print-area .pdf-kv small{display:block;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.04em}
+  #print-area .pdf-kv b{font-size:12.5px}
+  #print-area .op-blk{break-inside:avoid;page-break-inside:avoid;margin:0 0 8px}
+  #print-area .op-blk h3{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0 3px;font-size:12px}
+  #print-area .op-n{display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;background:#222;color:#fff;font-size:10.5px;font-weight:700}
+  #print-area .mut2{color:#555;font-weight:400}
+  #print-area tfoot tr.tot th{background:#d5d5d5}
+  #print-area .pdf-seq+.pdf-seq{page-break-before:always}
+  #print-area .pdf-foot{margin-top:10px;font-size:10px;color:#555;border-top:1px solid #bbb;padding-top:4px}
 }
 
 /* ---- mobile / toque ---- */
