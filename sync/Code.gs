@@ -481,6 +481,10 @@ function plantioSafRow(vals, n, split){
     if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0) return L; } }
   return 234;
 }
+// onde fica o DAE da operação: na coluna "DAP (dias)" quando a aba tem; senão, na linha-cabeçalho da
+// operação, ao lado do nome (coluna da CLASSE, que nessa linha é vazia), como "25 DAE" (N() lê o número)
+function daeCol(m){ return (m.dap >= 0) ? m.dap : m.classe; }
+function daeVal(m, n){ n = N(n); if (m.dap >= 0) return n || ''; return n ? (n + ' DAE') : ''; }
 function talColMap(headerRow){
   var m = { op:0, dap:-1, classe:1, produto:2, un:5, dose:8 };   // padrão = layout original
   if (headerRow && headerRow.length){
@@ -512,7 +516,7 @@ function readOpsArr(big, r0, r1, m){
     var a = S(row[m.op]), prod = S(row[m.produto]);
     if (a.toUpperCase().indexOf('OPERA') === 0){
       cur = { nome:a, itens:[] };
-      if (m.dap >= 0){ var d = N(row[m.dap]); if (d > 0) cur.dap = d; }   // dias após plantio
+      var d = N(row[daeCol(m)]); if (d > 0) cur.dap = d;                  // DAE: coluna DAP ou "25 DAE" ao lado do nome
       ops.push(cur);
     }
     if (prod && cur) cur.itens.push({ classe:S(row[m.classe]), produto:prod, dose:N(row[m.dose]), un:S(row[m.un]) });
@@ -693,8 +697,8 @@ function applyTalhao(tid, edits, out){
         out.ok++;                                                           // idempotente
       } else if (ed.type === 'dae'){                                         // DAE (dias após emergência) na coluna DAP (B)
         if (!op) throw 'operação não encontrada (dae)';
-        if (m.dap < 0) throw 'planilha sem coluna DAP';
-        s.getRange(op.head, m.dap + 1).setValue(N(ed.value) || '');         // linha-cabeçalho da operação
+        var dc = daeCol(m), dvv = daeVal(m, ed.value);                        // com ou sem coluna DAP
+        vals[op.head - 1][dc] = dvv; s.getRange(op.head, dc + 1).setValue(dvv);   // linha-cabeçalho da operação
         out.ok++;
       } else { throw 'tipo desconhecido p/ talhão: ' + ed.type; }
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
@@ -727,8 +731,9 @@ function writeReorderOps(s, vals, m, faixa, ops){
     var blk = blocks[p], op = ops[p] || null;
     var label = (op && op.label) ? (' · ' + S(op.label)) : '';
     vals[blk.head - 1][m.op] = 'OPERAÇÃO ' + (p + 1) + label;                 // cabeçalho: marcador + rótulo
-    if (m.dap >= 0) vals[blk.head - 1][m.dap] = (op && op.dap !== '' && op.dap != null) ? N(op.dap) : '';
-    vals[blk.head - 1][m.classe] = ''; vals[blk.head - 1][m.produto] = '';    // cabeçalho não tem insumo
+    if (m.dap >= 0) vals[blk.head - 1][m.classe] = '';                         // (sem coluna DAP, a classe do cabeçalho guarda o DAE)
+    vals[blk.head - 1][daeCol(m)] = (op && op.dap !== '' && op.dap != null) ? daeVal(m, op.dap) : '';
+    vals[blk.head - 1][m.produto] = '';                                        // cabeçalho não tem insumo
     vals[blk.head - 1][m.dose] = '';   vals[blk.head - 1][m.un] = '';
     var itens = (op && op.itens) || [];
     for (var j = 0; j < blk.body.length; j++){ var L2 = blk.body[j], it = itens[j];
