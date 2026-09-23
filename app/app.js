@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-117';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-118';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3521,6 +3521,8 @@ V.sync = function(){
       <b>Fica só no app</b> (para não quebrar as fórmulas/estrutura da planilha): operações, talhões e máquinas <b>criados</b> no app, e os ajustes de máquina (largura/velocidade, que na planilha vêm de fórmulas).<br>
       Os botões acima forçam um puxar/enviar imediato quando você quiser.</p>
     </div></div>
+  <div class="panel"><div class="panel-head"><h2>Edições pendentes</h2><span class="sub">${eds.length?`${eds.length} ainda não confirmada(s) pela planilha`:'nenhuma'}</span></div>
+    <div id="sync-pend">${pendingPanelHtml(eds)}</div></div>
   <div class="panel"><div class="panel-head"><h2>Histórico de sincronização</h2><span class="sub">últimas 50</span>
       <div class="spacer"></div><button class="btn btn-ghost btn-sm" data-act="hist-clear">Limpar histórico</button></div>
     <div id="sync-hist" class="sync-hist">${histRowsHtml()}</div></div>
@@ -4586,9 +4588,12 @@ async function syncPush(opts){
       reo.forEach(e=>reconcileReorder(e));
       saveOverrides();
       if(!opts.auto) syncLog('↻ Reconciliando com a planilha…');
-      syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); updateSyncBar(); return true;
+      syncBusy=false; await syncPull({auto:true, force:true, silentToast:true}); updateSyncBar();
+      logAindaPendentes(eds); return true;
     }
     syncBusy=false; setSyncStatus('ok'); updateSyncBar();
+    // gravou sem falhas: puxa a planilha p/ reconciliar (as edições só somem quando a planilha devolve o mesmo valor)
+    if(res.fail===0){ await syncPull({auto:true, force:true, silentToast:true}); logAindaPendentes(eds); }
     return lastPushOk;
   }catch(e){ syncBusy=false; setSyncStatus('err'); lastPushOk=false; updateSyncBar();
     const aborted=/abort|failed to fetch/i.test(e&&e.message||'');
@@ -4780,6 +4785,36 @@ function startPolling(){
    Ao entrar (abrir o app ou voltar a ele): envia o que ficou pendente e puxa a última versão, com um
    "portão" visível (e opção de continuar offline). Ao sair (aba escondida / fechando): envia o pendente
    na hora (keepalive) e, se ainda houver algo não salvo, o navegador avisa antes de fechar. */
+// resumo legível das edições pendentes, agrupado por tipo (p/ a tela Sincronizar e o log): "dae ×6: TL03 P2=25, …"
+const EDIT_TIPO={dose:'Dose',dae:'DAE',estoque:'Estoque',pedido:'Em pedido',area:'Área',produtividade:'Produtividade',empreendimento:'1ª cultura',emp_safrinha:'2ª cultura',prod_safrinha:'Prod. safrinha',plantio:'Plantio previsto',plantio_safrinha:'Plantio previsto (2ª)',ciclo:'Ciclo',ciclo_safrinha:'Ciclo (2ª)',itemprod:'Troca de produto',additem:'Insumo adicionado',delitem:'Insumo removido',addtalhao:'Talhão novo',deltalhao:'Talhão excluído',reorderops:'Ordem/nome das operações',addopblock:'Operação nova'};
+function pendingGroups(eds){
+  const g={}; (eds||[]).forEach(e=>{ const t=e.type; (g[t]=g[t]||[]).push(e); });
+  return Object.keys(g).map(t=>{ const items=g[t].map(e=>{
+      const op=(e.tag!=null&&e.op!=null)?` ${e.tag}${e.op}`:'';
+      const det = e.type==='dose'?`=${e.value}`: e.type==='dae'?`=${e.value}`: (e.type==='itemprod')?` ${e.from}→${e.to}`: (e.type==='additem'||e.type==='delitem')?` ${e.produto}`: (e.produto&&!e.talhao)?` ${e.produto}=${e.value}`: (e.value!=null&&!e.ops)?`=${e.value}`:'';
+      return `${e.talhao||''}${op}${det}`.trim(); });
+    return {type:t, label:EDIT_TIPO[t]||t, n:g[t].length, items}; });
+}
+function pendingSummaryTxt(eds){ return pendingGroups(eds).map(x=>`${x.label} ×${x.n} (${x.items.slice(0,4).join(', ')}${x.n>4?'…':''})`).join(' · '); }
+// painel "Edições pendentes" da tela Sincronizar (o que ainda não foi confirmado pela planilha)
+function pendingPanelHtml(eds){
+  const gs=pendingGroups(eds);
+  if(!gs.length) return `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
+  return `<div style="padding:8px 18px 14px;font-size:13px">${gs.map(x=>`<div style="padding:6px 0;border-bottom:1px dashed var(--line)"><b>${esc(x.label)}</b> <span class="badge badge-muted">×${x.n}</span><div class="mut" style="font-size:12px;margin-top:2px">${esc(x.items.slice(0,12).join(' · '))}${x.n>12?' …':''}</div></div>`).join('')}
+    <p class="mut" style="font-size:11px;margin:10px 0 0">Uma edição só sai desta lista quando a planilha devolve o mesmo valor ao puxar. Se ela ficar aqui mesmo após "gravadas, 0 falhas", a planilha gravou em outro lugar/formato — me mande esta lista.</p></div>`;
+}
+// depois de gravar (0 falhas) e re-puxar: o que continua pendente é porque a planilha não devolveu o mesmo valor
+function logAindaPendentes(enviadas){
+  try{
+    const rest=buildFieldEdits(); const pend=$('#sync-pend'); if(pend) pend.innerHTML=pendingPanelHtml(rest);
+    if(!rest.length) return;
+    const same=rest.filter(r=>(enviadas||[]).some(e=>JSON.stringify(e)===JSON.stringify(r)));
+    if(!same.length) return;
+    const txt=pendingSummaryTxt(same);
+    syncLog(`⚠ ${same.length} edição(ões) gravada(s) sem falha, mas a planilha não devolveu o mesmo valor ao puxar: ${txt}`);
+    addHist('push', true, `${same.length} não confirmada(s) pela planilha: ${txt}`);
+  }catch(e){}
+}
 // há algo local ainda não enviado? (edições de campo, compras/baixas offline, tarefas/execução/resultados alterados)
 function hasPending(){
   try{
