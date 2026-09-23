@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-119';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-120';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1101,6 +1101,7 @@ V.talhoes = function(){
     </div>
   </details>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
+    <button class="btn btn-outline btn-sm" data-act="pdfcronogeral" title="Cronograma de planejamento de todos os talhões: datas, operações, o que aplicar e máquina (sem custos)">🖨 Cronograma geral (PDF)</button>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
     <thead><tr><th>Talhão</th><th>Nome</th><th>Cultura</th><th class="num">Área (ha)</th>
@@ -1232,7 +1233,8 @@ V.talhao = function(id){
       <p class="mut" style="font-size:11px;margin:6px 14px 12px">Data de cada operação = <b>plantio + DAE</b>. Enquanto o plantio não acontece, vale o <b>previsto</b>; ao concluir a operação de plantio no Campo, o <b>realizado</b> passa a valer e as demais operações recalculam.</p>`; })()}
   </div>
   <div class="toolbar" style="margin-top:-4px">
-    <button class="btn btn-outline btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}">🖨 Exportar PDF</button>
+    <button class="btn btn-outline btn-sm" data-act="pdfcrono" data-id="${esc(t.id)}" title="Relatório leve para orientar a execução: datas, operações, o que aplicar e máquina — sem custos">🖨 Cronograma (PDF)</button>
+    <button class="btn btn-ghost btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}" title="Relatório completo com preços, custos por operação e totais">📑 PDF com custos</button>
     <button class="btn btn-outline btn-sm" data-act="duptalhao" data-id="${esc(t.id)}">⧉ Duplicar plano</button>
     <button class="btn btn-outline btn-sm" data-act="deltalhao" data-id="${esc(t.id)}" data-novo="${DATA.talhoes.some(x=>x.id===t.id)?0:1}" style="color:var(--red)">🗑 Excluir talhão</button>
     <div class="spacer"></div>
@@ -3848,6 +3850,8 @@ document.addEventListener('click',e=>{
       saveOverrides(); toast(`Talhão ${id} criado`); location.hash='#/talhao/'+id;
     }
     else if(a.act==='pdftalhao'){ exportTalhaoPDF(a.id); }
+    else if(a.act==='pdfcrono'){ exportCronogramaPDF(a.id); }
+    else if(a.act==='pdfcronogeral'){ exportCronogramaGeralPDF(); }
     else if(a.act==='duptalhao'){
       const s=findTalhao(a.id); if(!s) return;
       const id=nextTalhaoId(), plano=snapshotPlano(a.id);
@@ -4244,6 +4248,53 @@ function exportDemandaEmpPDF(){
   toast('Gerando relatório por empreendimento — escolha "Salvar como PDF"');
 }
 // TALHÃO: planejamento do talhão por safra/empreendimento (operações, insumos e doses)
+// CRONOGRAMA DE PLANEJAMENTO (leve, para orientar a execução): por safra, uma tabela em ordem de data com
+// # · data prevista · DAE · operação · o que aplicar (insumo · dose/ha) · máquina · "realizado em" p/ anotar. Sem custos.
+function cronogramaTalhaoHtml(t){
+  const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);
+  const area=areaDe(t), cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
+  const datas=(seq)=>{ const prev=plantioPrevDe(t.id,seq), real=plantioRealDe(t.id,seq), ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq);
+    return [real?`Plantio realizado <b>${fmtDataBR(real)}</b>`:(prev?`Plantio previsto <b>${fmtDataBR(prev)}</b>`:'<b>Plantio não definido</b> (datas por DAE)'), ciclo?`Ciclo <b>${ciclo} dias</b>`:'', col?`Colheita estimada <b>${fmtDataBR(col)}</b>`:''].filter(Boolean).join(' · '); };
+  const seqTable=(seq,tag,cultura,prod)=>{
+    const all=opsOf(t.id,seq); if(!all.length) return '';
+    const order=opDisplayOrder(t.id,tag,opsShownCount(t.id,tag));
+    const rows=[];
+    order.forEach((oi,pos)=>{ const op=all[oi], tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto); if(!items.length) return;
+      rows.push({pos:pos+1, nome:op.nome, items, conj:opMaqDe(t.id,tag,oi,op), dae:opDaeDe(t.id,tagoi,op.dap), dp:opDataPlan(t.id,tagoi,op.dap)}); });
+    if(!rows.length) return '';
+    rows.sort((a,b)=>((a.dp||'9999')<(b.dp||'9999')?-1:((a.dp||'9999')>(b.dp||'9999')?1:a.pos-b.pos)));   // ordem cronológica (sem data: mantém a ordem)
+    let s=`<div class="crono-seq"><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2><div class="meta">${datas(seq)}</div>
+      <table class="crono"><colgroup><col style="width:4%"><col style="width:11%"><col style="width:6%"><col style="width:19%"><col style="width:34%"><col style="width:14%"><col style="width:12%"></colgroup>
+      <thead><tr><th>#</th><th>Data prev.</th><th class="num">DAE</th><th>Operação</th><th>O que aplicar (dose/ha)</th><th>Máquina</th><th>Realizado em</th></tr></thead><tbody>`;
+    rows.forEach((r,i)=>{ s+=`<tr><td class="num">${i+1}</td><td class="dt">${r.dp?fmtDataBR(r.dp):'—'}</td><td class="num">${r.dae||'—'}</td><td class="op">${esc(r.nome)}</td>
+      <td class="ins">${r.items.map(it=>`${esc(it.produto)} <span class="mut2">— ${fmtDose(it.dose)} ${esc(it.un||'')}</span>`).join('<br>')}</td><td>${esc(r.conj||'—')}</td><td class="fill">☐ ___/___</td></tr>`; });
+    return s+`</tbody></table></div>`;
+  };
+  let h=`<div class="crono-head"><h1>${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''} <span class="mut2">— ${num(area)} ha</span></h1></div>`;
+  h+=seqTable('principal','P',cult1,prodvDe(t));
+  if(cult2) h+=seqTable('safrinha','S',cult2,prodSafDe(t));
+  return h;
+}
+function exportCronogramaPDF(id){
+  const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
+  const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
+  const html=`<div class="pdf-head"><h1>Cronograma de planejamento</h1><div class="meta">Safra 2026/2027 · gerado em ${hoje}</div></div>
+    ${cronogramaTalhaoHtml(t)}
+    <div class="pdf-foot">Data prevista = plantio + DAE (recalcula pelo plantio realizado). Ao executar, marque ☐ e anote a data real — ou conclua a operação no módulo Campo.</div>`;
+  printDoc(html); toast('Gerando cronograma — escolha "Salvar como PDF"');
+}
+// todos os talhões (um bloco por talhão, cada um começando em página nova)
+function exportCronogramaGeralPDF(){
+  const ts=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
+  if(!ts.length){ toast('Nenhum talhão para imprimir'); return; }
+  const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
+  let html=`<div class="pdf-head"><h1>Cronograma de planejamento — todos os talhões</h1><div class="meta">Safra 2026/2027 · ${ts.length} talhões · gerado em ${hoje}</div></div>`;
+  let n=0; ts.forEach(t=>{ const b=cronogramaTalhaoHtml(t); if(!/<table/.test(b)) return;   // pula talhão sem operações
+    html+=`<section class="${n>0?'pb':''}">${b}</section>`; n++; });
+  if(!n){ toast('Nenhum talhão com operações planejadas'); return; }
+  html+=`<div class="pdf-foot">Data prevista = plantio + DAE (recalcula pelo plantio realizado). Ao executar, marque ☐ e anote a data real — ou conclua a operação no módulo Campo.</div>`;
+  printDoc(html); toast(`Gerando cronograma de ${n} talhões — escolha "Salvar como PDF"`);
+}
 function exportTalhaoPDF(id){
   const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
   const area=areaDe(t), c=custoTalhao(t), maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
