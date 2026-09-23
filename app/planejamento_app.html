@@ -535,6 +535,24 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area tr.grp td{background:#f2f2f2;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
   #print-area tfoot th{background:#e0e0e0}
   @page{margin:14mm}
+  /* PDF do talhão: tabelas alinhadas (largura fixa), resumo/cronograma, blocos por operação sem quebrar */
+  #print-area .pdf-ops{table-layout:fixed}
+  #print-area .pdf-ops th,#print-area .pdf-ops td{overflow:hidden;text-overflow:ellipsis;word-wrap:break-word}
+  #print-area .pdf-ops tbody tr:nth-child(even) td{background:#f7f7f7}
+  #print-area .pdf-ops thead{display:table-header-group}
+  #print-area .pdf-sum{margin-bottom:10px}
+  #print-area .pdf-sum th,#print-area .pdf-sum td{font-size:10.5px;padding:3px 5px}
+  #print-area .pdf-kv{margin:6px 0 4px}
+  #print-area .pdf-kv td{border:1px solid #bbb;padding:5px 8px;font-size:11px;background:#fafafa}
+  #print-area .pdf-kv small{display:block;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.04em}
+  #print-area .pdf-kv b{font-size:12.5px}
+  #print-area .op-blk{break-inside:avoid;page-break-inside:avoid;margin:0 0 8px}
+  #print-area .op-blk h3{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0 3px;font-size:12px}
+  #print-area .op-n{display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;background:#222;color:#fff;font-size:10.5px;font-weight:700}
+  #print-area .mut2{color:#555;font-weight:400}
+  #print-area tfoot tr.tot th{background:#d5d5d5}
+  #print-area .pdf-seq+.pdf-seq{page-break-before:always}
+  #print-area .pdf-foot{margin-top:10px;font-size:10px;color:#555;border-top:1px solid #bbb;padding-top:4px}
 }
 
 /* ---- mobile / toque ---- */
@@ -923,7 +941,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-118';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-119';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5168,25 +5186,55 @@ function exportDemandaEmpPDF(){
 function exportTalhaoPDF(id){
   const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
   const area=areaDe(t), c=custoTalhao(t), maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
-  let html=`<div class="pdf-head"><h1>Planejamento — ${esc(t.id)} · ${esc(t.nome||'')}</h1>
-    <div class="meta">Safra 2026/2027 · Área ${num(area)} ha · Custo total/ha ${brl(totHa)} · Custo total ${brl0(totHa*area)}</div></div>`;
+  const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
+  const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);   // dose com até 3 casas (0,26 · 0,04 · 0,005)
+  // datas da safra: plantio previsto/realizado, ciclo e colheita estimada (mesmo cálculo do app)
+  const seqInfo=(seq)=>{ const prev=plantioPrevDe(t.id,seq), real=plantioRealDe(t.id,seq), ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq);
+    return [prev?`Plantio previsto <b>${fmtDataBR(prev)}</b>`:'', real?`Plantio realizado <b>${fmtDataBR(real)}</b>`:'', ciclo?`Ciclo <b>${ciclo} dias</b>`:'',
+      col?`Colheita estimada <b>${fmtDataBR(col)}</b>${real?' (pelo plantio real)':''}`:''].filter(Boolean).join(' · '); };
   const seqBlock=(seq,tag,cultura,prod)=>{
-    const ops=opsOf(t.id,seq); if(!ops.length) return '';
-    let s=`<section><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>`;
-    ops.forEach((op,oi)=>{
-      const tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens);
+    const all=opsOf(t.id,seq); if(!all.length) return '';
+    const order=opDisplayOrder(t.id,tag,opsShownCount(t.id,tag));   // mesma ordem/nomes que a tela
+    const rows=[]; let insHa=0, maqSeq=0;
+    order.forEach((oi,pos)=>{ const op=all[oi], tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto);
       if(!items.length) return;   // não imprime operações vazias
-      const conj=opMaqDe(t.id,tag,oi,op);
-      s+=`<h3>${esc(op.nome)}${conj?` — 🚜 ${esc(conj)}`:''}</h3>
-        <table><thead><tr><th>Classe</th><th>Insumo</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Custo/ha</th></tr></thead><tbody>`;
-      if(!items.length) s+=`<tr><td colspan="5">— sem insumos —</td></tr>`;
-      items.forEach(it=>{ const p=precoDe(it.produto); s+=`<tr><td>${esc(it.classe||'—')}</td><td>${esc(it.produto)}</td><td class="num">${it.dose}</td><td>${esc(it.un)}</td><td class="num">${p>0?brl(it.dose*p):'—'}</td></tr>`; });
-      s+=`</tbody></table>`;
+      const conj=opMaqDe(t.id,tag,oi,op), mHa=custoOpHa(t.id,tag,oi,op); let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto));
+      rows.push({pos:pos+1, op, items, conj, mHa, sub, dae:opDaeDe(t.id,tagoi,op.dap), dp:opDataPlan(t.id,tagoi,op.dap)}); insHa+=sub; maqSeq+=mHa; });
+    if(!rows.length) return '';
+    const totSeq=insHa+maqSeq, lbl=seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura';
+    let s=`<section class="pdf-seq"><h2>${lbl} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>`;
+    const info=seqInfo(seq); if(info) s+=`<div class="meta">${info}</div>`;
+    // cronograma-resumo: uma linha por operação (ordem, DAE, data prevista, máquina e custos)
+    s+=`<table class="pdf-ops pdf-sum"><colgroup><col style="width:5%"><col style="width:29%"><col style="width:7%"><col style="width:11%"><col style="width:20%"><col style="width:9%"><col style="width:9%"><col style="width:10%"></colgroup>
+      <thead><tr><th>#</th><th>Operação</th><th class="num">DAE</th><th>Data prev.</th><th>Máquina</th><th class="num">Insumos/ha</th><th class="num">Máq./ha</th><th class="num">Total/ha</th></tr></thead><tbody>`;
+    rows.forEach(r=>{ s+=`<tr><td class="num">${r.pos}</td><td><b>${esc(r.op.nome)}</b> <span class="mut2">(${r.items.length} insumo${r.items.length===1?'':'s'})</span></td><td class="num">${r.dae||'—'}</td><td>${r.dp?fmtDataBR(r.dp):'—'}</td><td>${esc(r.conj||'—')}</td><td class="num">${brl(r.sub)}</td><td class="num">${r.mHa?brl(r.mHa):'—'}</td><td class="num"><b>${brl(r.sub+r.mHa)}</b></td></tr>`; });
+    s+=`</tbody><tfoot><tr><th colspan="5">Total da ${seq==='safrinha'?'2ª':'1ª'} cultura · ${rows.length} operações · por ha</th><th class="num">${brl(insHa)}</th><th class="num">${brl(maqSeq)}</th><th class="num">${brl(totSeq)}</th></tr>
+      <tr class="tot"><th colspan="5">Total na área (${num(area)} ha)</th><th class="num">${brl0(insHa*area)}</th><th class="num">${brl0(maqSeq*area)}</th><th class="num">${brl0(totSeq*area)}</th></tr></tfoot></table>`;
+    // detalhe por operação (tabelas com as mesmas larguras em todas as operações)
+    rows.forEach(r=>{
+      s+=`<div class="op-blk"><h3><span class="op-n">${r.pos}</span> ${esc(r.op.nome)}${r.dae?` <span class="mut2">· ${r.dae} DAE${r.dp?' → '+fmtDataBR(r.dp):''}</span>`:(r.dp?` <span class="mut2">· ${fmtDataBR(r.dp)}</span>`:'')}${r.conj?` <span class="mut2">· 🚜 ${esc(r.conj)}</span>`:''}</h3>
+        <table class="pdf-ops pdf-det"><colgroup><col style="width:17%"><col style="width:35%"><col style="width:10%"><col style="width:7%"><col style="width:10%"><col style="width:10%"><col style="width:11%"></colgroup>
+        <thead><tr><th>Classe</th><th>Insumo</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Preço</th><th class="num">Custo/ha</th><th class="num">Custo total</th></tr></thead><tbody>`;
+      r.items.forEach(it=>{ const p=precoDe(it.produto); s+=`<tr><td>${esc(it.classe||'—')}</td><td>${esc(it.produto)}</td><td class="num">${fmtDose(it.dose)}</td><td>${esc(it.un||'')}</td><td class="num">${p>0?brl(p):'—'}</td><td class="num">${p>0?brl(it.dose*p):'—'}</td><td class="num">${p>0?brl0(it.dose*p*area):'—'}</td></tr>`; });
+      s+=`</tbody><tfoot><tr><th colspan="5">Insumos/ha</th><th class="num">${brl(r.sub)}</th><th class="num">${brl0(r.sub*area)}</th></tr>
+        ${r.mHa?`<tr><th colspan="5">+ Máquina/ha${r.conj?` (${esc(r.conj)})`:''}</th><th class="num">${brl(r.mHa)}</th><th class="num">${brl0(r.mHa*area)}</th></tr>`:''}
+        <tr class="tot"><th colspan="5">Subtotal da operação</th><th class="num">${brl(r.sub+r.mHa)}</th><th class="num">${brl0((r.sub+r.mHa)*area)}</th></tr></tfoot></table></div>`;
     });
     return s+`</section>`;
   };
-  html+=seqBlock('principal','P',empDe(t),prodvDe(t));
-  if(temSafrinha(t)) html+=seqBlock('safrinha','S',empSafDe(t),prodSafDe(t));
+  const cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
+  let html=`<div class="pdf-head"><h1>Planejamento do talhão ${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''}</h1>
+    <div class="meta">Safra 2026/2027 · gerado em ${hoje}</div>
+    <table class="pdf-ops pdf-kv"><colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup><tbody>
+      <tr><td><small>Área</small><b>${num(area)} ha</b></td>
+          <td><small>1ª cultura</small><b>${esc(cult1||'—')}</b>${prodvDe(t)?`<br><span class="mut2">${num(prodvDe(t))} sc/ha</span>`:''}</td>
+          <td><small>2ª cultura</small><b>${esc(cult2||'—')}</b>${cult2&&prodSafDe(t)?`<br><span class="mut2">${num(prodSafDe(t))} sc/ha</span>`:''}</td>
+          <td><small>Custo total do talhão</small><b>${brl0(totHa*area)}</b><br><span class="mut2">${brl(totHa)}/ha</span></td></tr>
+      <tr><td><small>Insumos/ha</small><b>${brl(c.ha)}</b></td><td><small>Máquinas/ha</small><b>${brl(maqHa)}</b></td><td><small>Total/ha</small><b>${brl(totHa)}</b></td><td><small>Insumos na área</small><b>${brl0(c.ha*area)}</b></td></tr>
+    </tbody></table></div>`;
+  html+=seqBlock('principal','P',cult1,prodvDe(t));
+  if(temSafrinha(t)) html+=seqBlock('safrinha','S',cult2,prodSafDe(t));
+  html+=`<div class="pdf-foot">Planejamento de Safra 26/27 · ${esc(t.id)} · preços de referência do app · custo total = custo/ha × ${num(area)} ha · data prevista = plantio + DAE.</div>`;
   printDoc(html);
   toast('Gerando PDF do talhão — escolha "Salvar como PDF"');
 }
