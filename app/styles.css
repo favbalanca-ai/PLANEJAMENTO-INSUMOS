@@ -536,6 +536,20 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area tfoot tr.tot th{background:#d5d5d5}
   #print-area .pdf-seq+.pdf-seq{page-break-before:always}
   #print-area .pdf-foot{margin-top:10px;font-size:10px;color:#555;border-top:1px solid #bbb;padding-top:4px}
+  /* Cronograma de planejamento: leve, para orientar a execução (sem custos) */
+  #print-area .crono-head h1{font-size:16px;margin:10px 0 2px}
+  #print-area .crono-seq{margin-bottom:8px}
+  #print-area .crono-seq h2{border-bottom:1px solid #999;font-size:13px;margin:10px 0 4px}
+  #print-area .crono-seq .meta{margin-bottom:5px}
+  #print-area table.crono{table-layout:fixed;font-size:11px}
+  #print-area table.crono th,#print-area table.crono td{border:0;border-bottom:1px solid #ccc;padding:6px 6px;vertical-align:top;word-wrap:break-word}
+  #print-area table.crono th{background:#fff;border-bottom:2px solid #333;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
+  #print-area table.crono tbody tr:nth-child(even) td{background:#fff}
+  #print-area table.crono td.dt{font-weight:700;white-space:nowrap}
+  #print-area table.crono td.op{font-weight:700}
+  #print-area table.crono td.ins{font-size:10.5px;line-height:1.5}
+  #print-area table.crono td.fill{color:#777;white-space:nowrap}
+  #print-area table.crono tr{page-break-inside:avoid;break-inside:avoid}
 }
 
 /* ---- mobile / toque ---- */
