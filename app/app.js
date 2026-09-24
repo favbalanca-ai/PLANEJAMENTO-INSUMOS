@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-120';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-121';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -937,6 +937,8 @@ function toast(msg){
   clearTimeout(t._h); t._h=setTimeout(()=>t.hidden=true,2200);
 }
 function ask(m){ try{ return window.confirm(m); }catch(e){ return true; } }
+// quantidade de produto (dose, total, por tanque): até 3 casas, sem zeros à toa — 0,26 · 0,04 · 6,25 · 12
+const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);
 function updateEditBadge(){
   const n=countEdits(), b=$('#edit-badge');
   b.hidden=n===0; b.textContent=n+(n===1?' edição':' edições'); b.title='Toque para sincronizar agora';
@@ -2932,7 +2934,23 @@ function recomNorm(r){
   }
   if(r.area==null){ const t=findTalhao(r.talhao); r.area=t?areaDe(t):0; }
   if(r.opNome==null) r.opNome='';
+  // modelo agronômico (registros antigos ganham os campos com padrão)
+  if(r.cultura==null){ const t=findTalhao(r.talhao); r.cultura=(t?empDe(t):'')||''; }
+  ['estadio','cultivar','nivel','justif','crea','maquina','ponta','pressao','velocidade','horario','reentrada'].forEach(k=>{ if(r[k]==null) r[k]=''; });
+  if(r.tmax==null) r.tmax=30; if(r.urmin==null) r.urmin=55; if(r.vmax==null) r.vmax=10;   // limites climáticos usuais
+  if(r.epi==null) r.epi=RECOM_EPI_PADRAO;
+  if(!r.resp){ try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); if(d.resp) r.resp=d.resp; if(d.crea&&!r.crea) r.crea=d.crea; }catch(e){} }
+  (r.itens||[]).forEach(it=>{ if(it.ativo==null) it.ativo=(PROD[it.produto]&&PROD[it.produto].ativos)||''; if(it.car==null) it.car=''; });
   return r;
+}
+const RECOM_TEC_KEY='planejamento_recom_tec';   // último responsável técnico/CREA usado (vira padrão)
+const RECOM_EPI_PADRAO='Luvas nitrílicas, óculos, respirador com filtro, macacão hidrorrepelente, botas e boné árabe';
+// cálculo da calda: ha por tanque, nº de tanques, volume total e produto por tanque
+function recomCalda(r){
+  const area=+r.area||0, calda=_mmC(r.calda)||0, tk=_mmC(r.tanque)||0;
+  const total=area*calda, haTk=(tk&&calda)?tk/calda:0, nTk=(haTk&&area)?Math.ceil(area/haTk-1e-9):0;
+  const ultimo=(haTk&&area&&nTk)?+(area-(nTk-1)*haTk).toFixed(2):0;
+  return {area,calda,tk,total,haTk,nTk,ultimo};
 }
 // itens prontos a partir de uma operação planejada do talhão (produto · dose · unidade)
 function recomItensFromOp(t, opKey){
@@ -2951,7 +2969,12 @@ function recomCreate(talId, opKey){
   const r={ id:recomNovoId(), talhao:talId, opKey:opKey||'', opNome:(o&&o.op&&o.op.nome)||'',
     data, janela, alvo:'', calda:'', adjuvante:'', cond:'', resp:'', obs:'',
     area:areaDe(t)||0, itens: opKey?recomItensFromOp(t,opKey):[{produto:'',un:'',dose:0,real:null}],
+    // modelo agronômico: identificação, aplicação e segurança já vêm sugeridos do planejamento
+    cultura:((o&&o.seq==='safrinha')?empSafDe(t):empDe(t))||'', estadio:'', cultivar:'', nivel:'', justif:'',
+    maquina:(o?opMaqDe(talId,o.tag,o.oi,o.op):'')||'', ponta:'', pressao:'', velocidade:'', horario:'',
+    tmax:30, urmin:55, vmax:10, reentrada:'', epi:RECOM_EPI_PADRAO, crea:'',
     produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
+  recomNorm(r);
   RECOM.registros.push(r); saveRecom(); return r;
 }
 // Operação de Campo → reaproveita/cria a recomendação da operação e marca como enviada,
@@ -2975,9 +2998,13 @@ function recomSetField(el){
   if(f==='area'){ r.area=_mmC(v); rerender=true; }
   else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
-  else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]) r.itens[+i].un=PROD[p].un||r.itens[+i].un; rerender=true; }
+  else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true; }
+  else if(f==='itAtivo'){ r.itens[+i].ativo=v; }
+  else if(f==='itCar'){ r.itens[+i].car=v; }
   else if(f==='retQuem'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.quem=v; }
   else if(f==='retObs'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.obs=v; }
+  else if(f==='calda'||f==='tanque'){ r[f]=v; rerender=true; }   // recalcula a calda por tanque
+  else if(f==='resp'||f==='crea'){ r[f]=v; try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); d[f]=v; localStorage.setItem(RECOM_TEC_KEY, JSON.stringify(d)); }catch(e){} }
   else { r[f]=v; }
   saveRecom();
   if(rerender) route();
@@ -2990,29 +3017,41 @@ function recomLink(r){
   let tanque=_mmC(r.tanque)||0;   // tanque definido na própria recomendação (junto com a vazão/calda)
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
-    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.cond||'', op:r.opNome||'',
+    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
   return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
 }
 // mensagem de WhatsApp: resumo + link para o operador dosar no tanque e dar baixa
+// condições climáticas em texto: limites (T ≤ · UR ≥ · vento ≤) + observação livre
+function recomCondTxt(r){
+  const p=[]; if(+r.tmax) p.push(`T ≤ ${r.tmax}°C`); if(+r.urmin) p.push(`UR ≥ ${r.urmin}%`); if(+r.vmax) p.push(`vento ≤ ${r.vmax} km/h`);
+  if(r.horario) p.push(r.horario); if(r.cond) p.push(r.cond);
+  return p.join(' · ');
+}
 function recomWhats(id){
   const r=recomById(id); if(!r) return; recomNorm(r);
-  const t=findTalhao(r.talhao), area=+r.area||0;
-  let x=`*Recomendação de aplicação*\n`;
+  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r);
+  let x=`*RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO*\n`;
   x+=`Talhão: ${r.talhao}${t&&t.nome?` · ${t.nome}`:''}${area?` (${num(area)} ha)`:''}\n`;
+  if(r.cultura||r.estadio) x+=`Cultura: ${r.cultura||'—'}${r.estadio?` · estádio ${r.estadio}`:''}\n`;
   if(r.opNome) x+=`Operação: ${r.opNome}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}${r.janela?` · janela: ${r.janela}`:''}\n`;
-  if(r.alvo) x+=`Alvo: ${r.alvo}\n`;
+  if(r.alvo) x+=`Alvo: ${r.alvo}${r.nivel?` (${r.nivel})`:''}\n`;
   const its=(r.itens||[]).filter(it=>it.produto);
-  if(its.length){ x+=`\n*Produtos e doses:*\n`+its.map(it=>{
-    const tot=(area&&it.dose)?` = ${num(it.dose*area)} ${it.un||''} no talhão`:'';
-    return `• ${it.produto} — ${num(it.dose)} ${it.un||''}/ha${tot}`;
+  if(its.length){ x+=`\n*Produtos — na ordem de mistura:*\n`+its.map((it,i)=>{
+    const tot=(area&&it.dose)?` = ${fmtDose(it.dose*area)} ${it.un||''} no talhão`:'';
+    const tk=(cd.haTk&&it.dose)?` · ${fmtDose(it.dose*cd.haTk)} ${it.un||''}/tanque`:'';
+    return `${i+1}. ${it.produto}${it.ativo?` (${it.ativo})`:''} — ${fmtDose(it.dose)} ${it.un||''}/ha${tot}${tk}${it.car?` · carência ${it.car} d`:''}`;
   }).join('\n')+'\n'; }
-  if(r.calda) x+=`\nVolume de calda: ${r.calda} L/ha\n`;
-  if(_mmC(r.tanque)>0) x+=`Tanque: ${num(_mmC(r.tanque))} L\n`;
+  if(cd.calda) x+=`\n*Calda:* ${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L (${num(cd.haTk)} ha/tanque)`:''}${cd.nTk?` · ${cd.nTk} tanque(s)${cd.ultimo&&cd.ultimo<cd.haTk-0.01?`, último com ${num(cd.ultimo)} ha`:''}`:''}${cd.total?` · total ${num(cd.total)} L`:''}\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
-  if(r.cond) x+=`Condições: ${r.cond}\n`;
+  const apl=[r.maquina, r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
+  if(apl) x+=`Aplicação: ${apl}\n`;
+  const cond=recomCondTxt(r); if(cond) x+=`Condições: ${cond}\n`;
+  const seg=[r.epi?`EPI: ${r.epi}`:'', r.reentrada?`reentrada ${r.reentrada} h`:''].filter(Boolean).join(' · ');
+  if(seg) x+=`\n⚠️ ${seg}\n`;
+  if(r.resp) x+=`Resp. técnico: ${r.resp}${r.crea?` · ${r.crea}`:''}\n`;
   x+=`\n👉 *Abrir para dosar no tanque e dar baixa:*\n${recomLink(r)}\n`;
   if(!syncUrl()) x+=`\n_(configure a Sincronização no app para a baixa do operador voltar automática)_`;
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
@@ -3052,47 +3091,84 @@ function applyRetornos(retornos){
 // cartão de uma recomendação, com aparência/ações conforme o estado
 function recomCard(r,t){
   const st=RECOM_ST[r.status]||RECOM_ST.rascunho;
-  const area=+r.area||0, its=r.itens||[];
+  const area=+r.area||0, its=r.itens||[], cd=recomCalda(r);
   const editable=(r.status==='rascunho'), retEdit=(r.status==='retorno');
+  const F=(f)=>`data-id="${esc(r.id)}" data-recf="${f}"`;
   const rows=its.map((it,i)=>{
-    const planTot=(it.dose&&area)?it.dose*area:0;
+    const planTot=(it.dose&&area)?it.dose*area:0, porTk=(it.dose&&cd.haTk)?it.dose*cd.haTk:0;
     const prodCell=editable
-      ? `<input list="prodlist" class="txt prod-in" data-id="${esc(r.id)}" data-recf="itProd" data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo">`
-      : `<b>${esc(it.produto||'—')}</b>`;
+      ? `<input list="prodlist" class="txt prod-in" ${F('itProd')} data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo"><br><input class="txt" ${F('itAtivo')} data-reci="${i}" value="${esc(it.ativo||'')}" placeholder="ingrediente ativo" style="font-size:11px;margin-top:3px;max-width:240px">`
+      : `<b>${esc(it.produto||'—')}</b>${it.ativo?`<br><small class="mut">${esc(it.ativo)}</small>`:''}`;
     const doseCell=editable
-      ? `<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="itDose" data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
-      : `${num(it.dose)}<small> ${esc(it.un||'')}/ha</small>`;
+      ? `<input class="cell" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
+      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`;
+    const carCell=editable
+      ? `<input class="cell" inputmode="numeric" ${F('itCar')} data-reci="${i}" value="${esc(it.car||'')}" placeholder="dias" style="width:56px">`
+      : (it.car?`${esc(it.car)}<small> d</small>`:'<span class="mut">—</span>');
     let realCell;
     if(r.status==='rascunho'||r.status==='enviada'){ realCell='<span class="mut">—</span>'; }
-    else if(retEdit){ realCell=`<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="itReal" data-reci="${i}" value="${it.real!=null?it.real:''}" placeholder="${planTot?num(planTot):'total'}"><small> ${esc(it.un||'')}</small>`; }
-    else { realCell=(it.real!=null?`${num(it.real)}<small> ${esc(it.un||'')}</small>`:'<span class="mut">—</span>'); }
+    else if(retEdit){ realCell=`<input class="cell" inputmode="decimal" ${F('itReal')} data-reci="${i}" value="${it.real!=null?it.real:''}" placeholder="${planTot?num(planTot):'total'}"><small> ${esc(it.un||'')}</small>`; }
+    else { realCell=(it.real!=null?`${fmtDose(it.real)}<small> ${esc(it.un||'')}</small>`:'<span class="mut">—</span>'); }
     const dif=(it.real!=null&&planTot)?(it.real-planTot):null;
-    const difTag=(dif!=null&&Math.abs(dif)>0.0001)?` <span class="rc-dif ${dif>0?'up':'down'}">${dif>0?'+':''}${num(dif)}</span>`:'';
-    const del=editable?`<button class="icon-btn del" data-act="recomDelItem" data-id="${esc(r.id)}" data-i="${i}" title="Remover">🗑</button>`:'';
+    const difTag=(dif!=null&&Math.abs(dif)>0.0001)?` <span class="rc-dif ${dif>0?'up':'down'}">${dif>0?'+':''}${fmtDose(dif)}</span>`:'';
+    const acts=editable?`<span style="display:inline-flex;gap:3px"><button class="icon-btn op-mv" data-act="recomItUp" data-id="${esc(r.id)}" data-i="${i}" title="Antes na ordem de mistura"${i===0?' disabled':''}>▲</button><button class="icon-btn op-mv" data-act="recomItDown" data-id="${esc(r.id)}" data-i="${i}" title="Depois na ordem de mistura"${i===its.length-1?' disabled':''}>▼</button><button class="icon-btn del op-mv" data-act="recomDelItem" data-id="${esc(r.id)}" data-i="${i}" title="Remover">🗑</button></span>`:'';
     return `<tr>
+      <td class="num"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
       <td class="c-full">${prodCell}</td>
       <td class="num">${doseCell}</td>
-      <td class="num">${planTot?num(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="num">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="num">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
+      <td class="num">${carCell}</td>
       <td class="num">${realCell}${difTag}</td>
-      <td class="rc-del">${del}</td></tr>`;
+      <td class="rc-del">${acts}</td></tr>`;
   }).join('');
+  const caldaTxt=cd.calda?`${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L = <b>${num(cd.haTk)} ha/tanque</b>`:''}${cd.nTk?` · <b>${cd.nTk} tanque(s)</b>${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último com ${num(cd.ultimo)} ha)`:''}`:''}${cd.total?` · total ${num(cd.total)} L de calda`:''}`:'';
+  const sec=(titulo,inner)=>`<div class="rc-sec"><div class="rc-sec-t">${titulo}</div>${inner}</div>`;
   const head = editable ? `
-    <div class="app-grid" style="padding:10px 12px">
-      <label>Data<input type="date" data-id="${esc(r.id)}" data-recf="data" value="${esc(r.data||'')}"></label>
-      <label>Área (ha)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="area" value="${area||''}"></label>
-      <label>Alvo<input class="txt" list="monit-alvos" data-id="${esc(r.id)}" data-recf="alvo" value="${esc(r.alvo||'')}" placeholder="ex.: Ferrugem"></label>
-      <label>Janela<input class="txt" data-id="${esc(r.id)}" data-recf="janela" value="${esc(r.janela||'')}" placeholder="ex.: até 3 dias"></label>
-      <label>Calda (L/ha)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="calda" value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
-      <label>Tanque (L)<input class="cell" inputmode="decimal" data-id="${esc(r.id)}" data-recf="tanque" value="${esc(r.tanque||'')}" placeholder="ex.: 3000"></label>
-      <label>Adjuvante<input class="txt" data-id="${esc(r.id)}" data-recf="adjuvante" value="${esc(r.adjuvante||'')}"></label>
-      <label>Condições<input class="txt" data-id="${esc(r.id)}" data-recf="cond" value="${esc(r.cond||'')}"></label>
-      <label>Responsável<input class="txt" data-id="${esc(r.id)}" data-recf="resp" value="${esc(r.resp||'')}"></label>
-    </div>` : `
+    ${sec('Identificação',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label>Data<input type="date" ${F('data')} value="${esc(r.data||'')}"></label>
+      <label>Área (ha)<input class="cell" inputmode="decimal" ${F('area')} value="${area||''}"></label>
+      <label>Cultura<input class="txt" ${F('cultura')} value="${esc(r.cultura||'')}"></label>
+      <label>Estádio fenológico<input class="txt" ${F('estadio')} value="${esc(r.estadio||'')}" placeholder="ex.: V4, R1, pré-plantio"></label>
+      <label>Cultivar<input class="txt" ${F('cultivar')} value="${esc(r.cultivar||'')}" placeholder="opcional"></label>
+      <label>Janela<input class="txt" ${F('janela')} value="${esc(r.janela||'')}" placeholder="ex.: até 3 dias"></label></div>`)}
+    ${sec('Diagnóstico',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label>Alvo<input class="txt" list="monit-alvos" ${F('alvo')} value="${esc(r.alvo||'')}" placeholder="ex.: Ferrugem asiática"></label>
+      <label>Nível / infestação<input class="txt" ${F('nivel')} value="${esc(r.nivel||'')}" placeholder="ex.: 15% desfolha · 2 lagartas/m"></label>
+      <label style="grid-column:1/-1">Justificativa técnica<input class="txt" ${F('justif')} value="${esc(r.justif||'')}" placeholder="por que aplicar agora (monitoramento, limiar, clima…)"></label></div>`)}` : `
     <div class="rc-meta">
       ${r.data?`<span>📅 ${esc(fmtData(r.data))}</span>`:''}${r.janela?`<span>⏱ ${esc(r.janela)}</span>`:''}
-      ${r.alvo?`<span>🎯 ${esc(r.alvo)}</span>`:''}${area?`<span>📐 ${num(area)} ha</span>`:''}
-      ${r.calda?`<span>💧 ${esc(r.calda)} L/ha</span>`:''}${r.adjuvante?`<span>Adj.: ${esc(r.adjuvante)}</span>`:''}
-      ${r.cond?`<span>${esc(r.cond)}</span>`:''}${r.resp?`<span>👤 ${esc(r.resp)}</span>`:''}
+      ${(r.cultura||r.estadio)?`<span>🌱 ${esc(r.cultura||'')}${r.estadio?` · ${esc(r.estadio)}`:''}${r.cultivar?` · ${esc(r.cultivar)}`:''}</span>`:''}${area?`<span>📐 ${num(area)} ha</span>`:''}
+      ${r.alvo?`<span>🎯 ${esc(r.alvo)}${r.nivel?` <small class="mut">(${esc(r.nivel)})</small>`:''}</span>`:''}
+    </div>${r.justif?`<div class="rc-obs mut">📝 ${esc(r.justif)}</div>`:''}`;
+  const tail = editable ? `
+    ${sec('Calda',`<div class="app-grid" style="padding:6px 12px 6px">
+      <label>Volume de calda (L/ha)<input class="cell" inputmode="decimal" ${F('calda')} value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
+      <label>Tanque (L)<input class="cell" inputmode="decimal" ${F('tanque')} value="${esc(r.tanque||'')}" placeholder="ex.: 3000"></label>
+      <label>Adjuvante / pH<input class="txt" ${F('adjuvante')} value="${esc(r.adjuvante||'')}" placeholder="ex.: óleo mineral 0,5% · pH 5,5"></label></div>
+      ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}`)}
+    ${sec('Aplicação',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label>Máquina / conjunto<input class="txt" ${F('maquina')} value="${esc(r.maquina||'')}"></label>
+      <label>Ponta / bico<input class="txt" ${F('ponta')} value="${esc(r.ponta||'')}" placeholder="ex.: leque 110-02 · cone vazio"></label>
+      <label>Pressão (bar)<input class="cell" inputmode="decimal" ${F('pressao')} value="${esc(r.pressao||'')}"></label>
+      <label>Velocidade (km/h)<input class="cell" inputmode="decimal" ${F('velocidade')} value="${esc(r.velocidade||'')}"></label>
+      <label>Horário<input class="txt" ${F('horario')} value="${esc(r.horario||'')}" placeholder="ex.: até 10h e após 16h"></label>
+      <label>Temp. máx (°C)<input class="cell" inputmode="decimal" ${F('tmax')} value="${esc(r.tmax??'')}"></label>
+      <label>UR mín (%)<input class="cell" inputmode="decimal" ${F('urmin')} value="${esc(r.urmin??'')}"></label>
+      <label>Vento máx (km/h)<input class="cell" inputmode="decimal" ${F('vmax')} value="${esc(r.vmax??'')}"></label>
+      <label style="grid-column:1/-1">Outras condições<input class="txt" ${F('cond')} value="${esc(r.cond||'')}" placeholder="ex.: sem orvalho, sem chuva nas próximas 2 h"></label></div>`)}
+    ${sec('Segurança',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label style="grid-column:1/-1">EPI obrigatório<input class="txt" ${F('epi')} value="${esc(r.epi||'')}"></label>
+      <label>Intervalo de reentrada (h)<input class="cell" inputmode="numeric" ${F('reentrada')} value="${esc(r.reentrada||'')}" placeholder="ex.: 24"></label></div>`)}
+    ${sec('Responsável técnico',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label>Nome<input class="txt" ${F('resp')} value="${esc(r.resp||'')}" placeholder="engenheiro(a) agrônomo(a)"></label>
+      <label>CREA / registro<input class="txt" ${F('crea')} value="${esc(r.crea||'')}"></label></div>`)}` : `
+    <div class="rc-meta">
+      ${caldaTxt?`<span>💧 ${caldaTxt}</span>`:''}${r.adjuvante?`<span>🧪 ${esc(r.adjuvante)}</span>`:''}
+      ${(r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.maquina,r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
+      ${recomCondTxt(r)?`<span>🌤 ${esc(recomCondTxt(r))}</span>`:''}
+      ${(r.epi||r.reentrada)?`<span>⚠️ ${esc(r.epi||'')}${r.reentrada?` · reentrada ${esc(r.reentrada)} h`:''}</span>`:''}
+      ${r.resp?`<span>👤 ${esc(r.resp)}${r.crea?` · ${esc(r.crea)}`:''}</span>`:''}
     </div>`;
   let retBlock='';
   if(retEdit){
@@ -3122,18 +3198,54 @@ function recomCard(r,t){
       <span class="spacer"></span>
       <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">↩️ Reabrir</button>`;
   }
+  actions=`<button class="btn btn-outline btn-sm" data-act="recomPrint" data-id="${esc(r.id)}" title="Imprimir a recomendação técnica (receituário) em PDF">🖨 PDF</button> `+actions;
   return `<div class="recom-card ${st.cls}">
     <div class="rc-head"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
       ${r.opNome?`<span class="rc-op">${esc(r.opNome)}</span>`:''}<span class="spacer"></span>
       <span class="mut" style="font-size:11px">${esc(fmtData(r.data))}</span></div>
     ${head}
+    ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
-      <thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Planejado</th><th class="num">Utilizado</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="5" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table></div>
+      <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table></div>
     ${editable?`<div style="padding:4px 12px 8px"><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}">+ insumo</button></div>`:''}
+    ${tail}
     ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
     ${retBlock}
     <div class="rc-actions">${actions}</div></div>`;
+}
+// impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
+function exportRecomPDF(id){
+  const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
+  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
+  const kv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
+  const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
+  let h=`<div class="rx-title"><h1>RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
+  <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
+    ${kv('Talhão',`<b>${esc(r.talhao)}</b>${t&&t.nome?` · ${esc(t.nome)}`:''}`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
+    ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}</div></div>
+  <div class="rx-sec"><h2>2. Diagnóstico</h2><div class="rx-kv">
+    ${kv('Alvo',esc(r.alvo||''),'w2')}${kv('Nível / infestação',esc(r.nivel||''),'w2')}${kv('Justificativa técnica',esc(r.justif||''),'w4')}</div></div>
+  <div class="rx-sec"><h2>3. Produtos — na ordem de mistura no tanque</h2>
+    <table class="rx pdf-ops"><colgroup><col style="width:4%"><col style="width:24%"><col style="width:22%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:8%"></colgroup>
+    <thead><tr><th>#</th><th>Produto</th><th>Ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (${num(area)} ha)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th></tr></thead><tbody>`;
+  its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num">${fmtDose(it.dose)} ${esc(it.un||'')}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
+  if(!its.length) h+=`<tr><td colspan="8">— sem produtos —</td></tr>`;
+  h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}</div>
+  <div class="rx-sec"><h2>4. Calda</h2><div class="rx-kv">
+    ${kv('Volume de calda',cd.calda?`${num(cd.calda)} L/ha`:'')}${kv('Tanque',cd.tk?`${num(cd.tk)} L`:'')}${kv('Área por tanque',cd.haTk?`${num(cd.haTk)} ha`:'')}${kv('Nº de tanques',cd.nTk?`${cd.nTk}${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último: ${num(cd.ultimo)} ha)`:''}`:'')}
+    ${kv('Volume total de calda',cd.total?`${num(cd.total)} L`:'')}</div></div>
+  <div class="rx-sec"><h2>5. Aplicação</h2><div class="rx-kv">
+    ${kv('Máquina / conjunto',esc(r.maquina||''),'w2')}${kv('Ponta / bico',esc(r.ponta||''))}${kv('Pressão',r.pressao?`${esc(r.pressao)} bar`:'')}
+    ${kv('Velocidade',r.velocidade?`${esc(r.velocidade)} km/h`:'')}${kv('Horário',esc(r.horario||''))}${kv('Temperatura',+r.tmax?`≤ ${esc(String(r.tmax))} °C`:'')}${kv('Umidade relativa',+r.urmin?`≥ ${esc(String(r.urmin))} %`:'')}
+    ${kv('Vento',+r.vmax?`≤ ${esc(String(r.vmax))} km/h`:'')}${kv('Outras condições',esc(r.cond||''),'w2')}</div></div>
+  <div class="rx-sec"><h2>6. Segurança</h2><div class="rx-kv">
+    ${kv('EPI obrigatório',esc(r.epi||''),'w2')}${kv('Intervalo de reentrada',r.reentrada?`${esc(r.reentrada)} h`:'')}${kv('Carência',its.some(it=>it.car)?'ver tabela':'')}</div>
+    <div class="rx-warn">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Não aplicar fora das condições indicadas. Fazer a tríplice lavagem e destinar as embalagens vazias ao ponto de recebimento. Manter o receituário junto ao operador durante a aplicação.</div></div>
+  ${r.obs?`<div class="rx-sec"><h2>7. Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
+  <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
+  <div class="pdf-foot">Planejamento de Safra 26/27 · gerado em ${fmtDataBR(new Date().toISOString().slice(0,10))} · status: ${esc((RECOM_ST[r.status]||{}).lbl||r.status)}</div>`;
+  printDoc(h); toast('Gerando recomendação técnica — escolha "Salvar como PDF"');
 }
 V.recomendacao=function(arg){
   const all=talhoesAll();
@@ -3925,6 +4037,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomNova'){ if(recomCreate(a.t,'')){ route(); toast('Recomendação em branco criada'); } }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
+    else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
+      if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom(); route({keepScroll:true}); } } }
+    else if(a.act==='recomPrint'){ exportRecomPDF(a.id); }
     else if(a.act==='recomEnviar'){ const r=recomById(a.id); if(r){ if(!(r.itens||[]).some(it=>it.produto)){ toast('Adicione ao menos um produto'); return; }
       r.status='enviada'; r.enviadaTs=Date.now(); saveRecom(); recomWhats(a.id); route(); toast('Marcada como enviada ao operador'); } }
     else if(a.act==='recomWa'){ recomWhats(a.id); }
