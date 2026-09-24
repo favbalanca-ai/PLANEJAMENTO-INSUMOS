@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-121';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-122';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1103,7 +1103,8 @@ V.talhoes = function(){
     </div>
   </details>
   <div class="toolbar"><div class="search"><input id="q-talhao" placeholder="Buscar talhão ou cultura…"></div>
-    <button class="btn btn-outline btn-sm" data-act="pdfcronogeral" title="Cronograma de planejamento de todos os talhões: datas, operações, o que aplicar e máquina (sem custos)">🖨 Cronograma geral (PDF)</button>
+    <button class="btn btn-outline btn-sm" data-act="pdfprodopgeral" title="Produtos planejados por operação de todos os talhões (dose/ha e total na área)">🖨 Produtos por operação (PDF)</button>
+    <button class="btn btn-ghost btn-sm" data-act="pdfcronogeral" title="Cronograma de planejamento de todos os talhões: datas, operações, o que aplicar e máquina">📅 Cronograma geral</button>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
     <thead><tr><th>Talhão</th><th>Nome</th><th>Cultura</th><th class="num">Área (ha)</th>
@@ -1235,8 +1236,9 @@ V.talhao = function(id){
       <p class="mut" style="font-size:11px;margin:6px 14px 12px">Data de cada operação = <b>plantio + DAE</b>. Enquanto o plantio não acontece, vale o <b>previsto</b>; ao concluir a operação de plantio no Campo, o <b>realizado</b> passa a valer e as demais operações recalculam.</p>`; })()}
   </div>
   <div class="toolbar" style="margin-top:-4px">
-    <button class="btn btn-outline btn-sm" data-act="pdfcrono" data-id="${esc(t.id)}" title="Relatório leve para orientar a execução: datas, operações, o que aplicar e máquina — sem custos">🖨 Cronograma (PDF)</button>
-    <button class="btn btn-ghost btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}" title="Relatório completo com preços, custos por operação e totais">📑 PDF com custos</button>
+    <button class="btn btn-outline btn-sm" data-act="pdfprodop" data-id="${esc(t.id)}" title="Relatório gerencial simples: produtos planejados por operação, dose/ha e total na área">🖨 Produtos por operação (PDF)</button>
+    <button class="btn btn-ghost btn-sm" data-act="pdfcrono" data-id="${esc(t.id)}" title="Cronograma para orientar a execução: datas, operações, o que aplicar e máquina">📅 Cronograma</button>
+    <button class="btn btn-ghost btn-sm" data-act="pdftalhao" data-id="${esc(t.id)}" title="Relatório completo com preços, custos por operação e totais">📑 Com custos</button>
     <button class="btn btn-outline btn-sm" data-act="duptalhao" data-id="${esc(t.id)}">⧉ Duplicar plano</button>
     <button class="btn btn-outline btn-sm" data-act="deltalhao" data-id="${esc(t.id)}" data-novo="${DATA.talhoes.some(x=>x.id===t.id)?0:1}" style="color:var(--red)">🗑 Excluir talhão</button>
     <div class="spacer"></div>
@@ -3964,6 +3966,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='pdftalhao'){ exportTalhaoPDF(a.id); }
     else if(a.act==='pdfcrono'){ exportCronogramaPDF(a.id); }
     else if(a.act==='pdfcronogeral'){ exportCronogramaGeralPDF(); }
+    else if(a.act==='pdfprodop'){ exportProdutosOpPDF(a.id); }
+    else if(a.act==='pdfprodopgeral'){ exportProdutosOpGeralPDF(); }
     else if(a.act==='duptalhao'){
       const s=findTalhao(a.id); if(!s) return;
       const id=nextTalhaoId(), plano=snapshotPlano(a.id);
@@ -4409,6 +4413,52 @@ function exportCronogramaGeralPDF(){
   if(!n){ toast('Nenhum talhão com operações planejadas'); return; }
   html+=`<div class="pdf-foot">Data prevista = plantio + DAE (recalcula pelo plantio realizado). Ao executar, marque ☐ e anote a data real — ou conclua a operação no módulo Campo.</div>`;
   printDoc(html); toast(`Gerando cronograma de ${n} talhões — escolha "Salvar como PDF"`);
+}
+// PRODUTOS PLANEJADOS POR OPERAÇÃO (gerencial, simples): uma tabela por safra — cada operação é uma
+// linha de grupo (com o custo/ha só como referência) e, abaixo, os produtos com dose/ha e total na área.
+function produtosOpTalhaoHtml(t){
+  const area=areaDe(t), cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
+  let totHaTal=0;
+  const seqTable=(seq,tag,cultura,prod)=>{
+    const all=opsOf(t.id,seq); if(!all.length) return '';
+    const order=opDisplayOrder(t.id,tag,opsShownCount(t.id,tag));
+    let body='', n=0, totHa=0;
+    order.forEach((oi)=>{ const op=all[oi], tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto); if(!items.length) return;
+      n++; let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto)); totHa+=sub;
+      const dae=opDaeDe(t.id,tagoi,op.dap);
+      body+=`<tr class="grp"><td colspan="4"><b>${n} · ${esc(op.nome)}</b> <span class="mut2">${items.length} produto${items.length===1?'':'s'}${dae?` · ${dae} DAE`:''}</span></td><td class="num mut2">${sub>0?brl(sub)+'/ha':''}</td></tr>`;
+      items.forEach(it=>{ body+=`<tr><td class="prod">${esc(it.produto)}</td><td>${esc(it.classe||'—')}</td><td class="num">${fmtDose(it.dose)}</td><td>${esc(it.un||'')}</td><td class="num">${area?`<b>${fmtDose(it.dose*area)}</b> ${esc(it.un||'')}`:'—'}</td></tr>`; });
+    });
+    if(!n) return '';
+    totHaTal+=totHa;
+    return `<div class="pop-seq"><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>
+      <table class="pop"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:11%"><col style="width:8%"><col style="width:19%"></colgroup>
+      <thead><tr><th>Operação / produto</th><th>Classe</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Total na área</th></tr></thead>
+      <tbody>${body}</tbody>
+      <tfoot><tr><th colspan="4">${n} operações · insumos da ${seq==='safrinha'?'2ª':'1ª'} cultura</th><th class="num">${brl(totHa)}/ha · ${brl0(totHa*area)}</th></tr></tfoot></table></div>`;
+  };
+  let h=`<div class="pop-head"><h1>${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''} <span class="mut2">— ${num(area)} ha</span></h1></div>`;
+  h+=seqTable('principal','P',cult1,prodvDe(t));
+  if(cult2) h+=seqTable('safrinha','S',cult2,prodSafDe(t));
+  return h;
+}
+function exportProdutosOpPDF(id){
+  const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
+  const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
+  const html=`<div class="pdf-head"><h1>Produtos planejados por operação</h1><div class="meta">Safra 2026/2027 · gerado em ${hoje}</div></div>
+    ${produtosOpTalhaoHtml(t)}
+    <div class="pdf-foot">Total na área = dose/ha × área do talhão. Custo/ha por operação é só referência (preços do app).</div>`;
+  printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
+}
+function exportProdutosOpGeralPDF(){
+  const ts=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
+  if(!ts.length){ toast('Nenhum talhão para imprimir'); return; }
+  const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
+  let html=`<div class="pdf-head"><h1>Produtos planejados por operação — todos os talhões</h1><div class="meta">Safra 2026/2027 · ${ts.length} talhões · gerado em ${hoje}</div></div>`;
+  let n=0; ts.forEach(t=>{ const b=produtosOpTalhaoHtml(t); if(!/<table/.test(b)) return; html+=`<section class="${n>0?'pb':''}">${b}</section>`; n++; });
+  if(!n){ toast('Nenhum talhão com operações planejadas'); return; }
+  html+=`<div class="pdf-foot">Total na área = dose/ha × área do talhão. Custo/ha por operação é só referência (preços do app).</div>`;
+  printDoc(html); toast(`Gerando relatório de ${n} talhões — escolha "Salvar como PDF"`);
 }
 function exportTalhaoPDF(id){
   const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
