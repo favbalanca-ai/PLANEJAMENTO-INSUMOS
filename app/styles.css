@@ -570,22 +570,34 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .rx-sign{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;margin-top:26px;font-size:10.5px;text-align:center}
   #print-area .rx-sign div{border-top:1px solid #222;padding-top:4px}
   #print-area .rx-warn{font-size:10px;color:#333;background:#f3f3f3;border:1px solid #ccc;padding:5px 8px;margin-top:6px}
-  /* Produtos planejados por operação (gerencial, simples) */
-  #print-area .pop-head h1{font-size:16px;margin:10px 0 2px}
-  #print-area .pop-seq h2{border-bottom:1px solid #999;font-size:13px;margin:10px 0 4px}
-  #print-area table.pop{table-layout:fixed;font-size:11px}
-  #print-area table.pop th,#print-area table.pop td{border:0;border-bottom:1px solid #ddd;padding:5px 6px;word-wrap:break-word}
-  #print-area table.pop th{background:#fff;border-bottom:2px solid #333;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
-  #print-area table.pop tbody tr:nth-child(even) td{background:#fff}
-  #print-area table.pop tr.grp td{border-bottom:1px solid #bbb;padding-top:7px;font-size:11.5px}
-  /* blocos alternados por operação: A = claro, B = mais escuro (cabeçalho e produtos) */
-  #print-area table.pop tbody tr.blk-a td{background:#fff}
-  #print-area table.pop tbody tr.grp.blk-a td{background:#e9edf0}
-  #print-area table.pop tbody tr.blk-b td{background:#eef1f4}
-  #print-area table.pop tbody tr.grp.blk-b td{background:#cfd7dd}
-  #print-area table.pop td.prod{padding-left:18px}
-  #print-area table.pop tfoot th{background:#f3f3f3;border-top:2px solid #333;border-bottom:0;text-transform:none;letter-spacing:0;font-size:11px}
-  #print-area table.pop tr{page-break-inside:avoid;break-inside:avoid}
+  /* Produtos planejados por operação — um CARTÃO por operação (borda sempre imprime; cores forçadas) */
+  #print-area .pop-head,#print-area .pop-seq,#print-area .pop-card,#print-area .pop-card *,#print-area .pop-tot{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #print-area .pop-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:10px 0 6px;padding:8px 10px;border:1.5px solid #2f4a55;border-radius:6px}
+  #print-area .pop-id{font-size:16px}
+  #print-area .pop-id b{font-size:18px}
+  #print-area .pop-kpis{display:flex;gap:18px;font-size:12px;font-weight:700;text-align:right}
+  #print-area .pop-kpis small{display:block;font-size:8.5px;font-weight:400;color:#555;text-transform:uppercase;letter-spacing:.05em}
+  #print-area .pop-seq h2{display:flex;align-items:baseline;gap:8px;border:0;border-bottom:2px solid #2f4a55;font-size:13.5px;margin:12px 0 4px;padding-bottom:3px}
+  #print-area .pop-seq h2 span{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#fff;background:#2f4a55;padding:2px 7px;border-radius:3px}
+  #print-area .pop-seq h2 small{font-weight:400;color:#555}
+  #print-area table.pop-cols,#print-area table.pop-t{table-layout:fixed;width:100%;border-collapse:collapse;margin:0}
+  #print-area table.pop-cols th{border:0;background:none;font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:#555;padding:2px 8px 3px;font-weight:700}
+  #print-area .pop-card{border:1.5px solid #2f4a55;border-radius:6px;margin:0 0 6px;overflow:hidden;break-inside:avoid;page-break-inside:avoid}
+  #print-area .pop-card .ch{display:flex;align-items:center;gap:8px;padding:5px 8px;font-size:11.5px;border-bottom:1.5px solid #2f4a55}
+  #print-area .pop-card.ca .ch{background:#dfe8ec;color:#12262e}
+  #print-area .pop-card.cb .ch{background:#2f4a55;color:#fff}
+  #print-area .pop-card .cn{display:inline-block;min-width:20px;height:20px;line-height:20px;text-align:center;border-radius:10px;font-weight:800;font-size:11px;background:#2f4a55;color:#fff}
+  #print-area .pop-card.cb .cn{background:#fff;color:#2f4a55}
+  #print-area .pop-card .cnm{font-weight:800;text-transform:uppercase;letter-spacing:.02em}
+  #print-area .pop-card .cwhen{font-size:10.5px;padding:1px 7px;border-radius:9px;border:1px solid currentColor;opacity:.9}
+  #print-area .pop-card .ccost{margin-left:auto;font-weight:700;font-size:11px}
+  #print-area table.pop-t td{border:0;border-top:1px solid #d9dee1;padding:4px 8px;font-size:11px;word-wrap:break-word;background:#fff}
+  #print-area table.pop-t tr:first-child td{border-top:0}
+  #print-area .pop-card.cb table.pop-t td{background:#f3f6f8}
+  #print-area table.pop-t td.cls,#print-area table.pop-t td.un{color:#444;font-size:10.5px}
+  #print-area table.pop-t td.tot{font-weight:800}
+  #print-area table.pop-t td.tot small{font-weight:400;color:#444}
+  #print-area .pop-tot{display:flex;justify-content:space-between;gap:10px;margin:4px 0 8px;padding:6px 10px;border:1.5px solid #2f4a55;border-radius:6px;background:#dfe8ec;font-size:11.5px}
 }
 
 /* ---- mobile / toque ---- */

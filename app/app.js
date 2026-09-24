@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-125';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-126';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4421,26 +4421,31 @@ function exportCronogramaGeralPDF(){
 function produtosOpTalhaoHtml(t){
   const area=areaDe(t), cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
   let totHaTal=0;
+  // mesmas larguras de coluna no cabeçalho e em todos os cartões (colunas alinhadas de ponta a ponta)
+  const COLS=`<colgroup><col style="width:43%"><col style="width:20%"><col style="width:12%"><col style="width:8%"><col style="width:17%"></colgroup>`;
   const seqTable=(seq,tag,cultura,prod)=>{
     const all=opsOf(t.id,seq); if(!all.length) return '';
     const order=opDisplayOrder(t.id,tag,opsShownCount(t.id,tag));
-    let body='', n=0, totHa=0;
+    let cards='', n=0, totHa=0, nProd=0;
     order.forEach((oi)=>{ const op=all[oi], tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto); if(!items.length) return;
-      n++; let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto)); totHa+=sub;
-      const dae=opDaeDe(t.id,tagoi,op.dap), dp=opDataPlan(t.id,tagoi,op.dap), cls=(n%2)?'blk-a':'blk-b';   // blocos alternados: claro / escuro
-      const quando=[dae?`DAE ${dae}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');                  // DAE e data prevista (plantio + DAE)
-      body+=`<tr class="grp ${cls}"><td colspan="4"><b>${n} · ${esc(op.nome)}</b> <span class="mut2">${quando}</span></td><td class="num mut2">${sub>0?brl(sub)+'/ha':''}</td></tr>`;
-      items.forEach(it=>{ body+=`<tr class="${cls}"><td class="prod">${esc(it.produto)}</td><td>${esc(it.classe||'—')}</td><td class="num">${fmtDose(it.dose)}</td><td>${esc(it.un||'')}</td><td class="num">${area?`<b>${fmtDose(it.dose*area)}</b> ${esc(it.un||'')}`:'—'}</td></tr>`; });
+      n++; nProd+=items.length; let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto)); totHa+=sub;
+      const dae=opDaeDe(t.id,tagoi,op.dap), dp=opDataPlan(t.id,tagoi,op.dap);
+      const quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');   // DAE e data prevista (plantio + DAE)
+      const rows=items.map(it=>`<tr><td class="prod">${esc(it.produto)}</td><td class="cls">${esc(it.classe||'—')}</td><td class="num">${fmtDose(it.dose)}</td><td class="un">${esc(it.un||'')}</td><td class="num tot">${area?`${fmtDose(it.dose*area)} <small>${esc(it.un||'')}</small>`:'—'}</td></tr>`).join('');
+      cards+=`<div class="pop-card ${(n%2)?'ca':'cb'}">
+        <div class="ch"><span class="cn">${n}</span><span class="cnm">${esc(op.nome)}</span>${quando?`<span class="cwhen">${quando}</span>`:''}<span class="ccost">${sub>0?`${brl(sub)}/ha`:''}</span></div>
+        <table class="pop-t">${COLS}<tbody>${rows}</tbody></table></div>`;
     });
     if(!n) return '';
     totHaTal+=totHa;
-    return `<div class="pop-seq"><h2>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} — ${esc(cultura||'—')}${prod?` · ${num(prod)} sc/ha`:''}</h2>
-      <table class="pop"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:11%"><col style="width:8%"><col style="width:19%"></colgroup>
-      <thead><tr><th>Operação / produto</th><th>Classe</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Total na área</th></tr></thead>
-      <tbody>${body}</tbody>
-      <tfoot><tr><th colspan="4">${n} operações · insumos da ${seq==='safrinha'?'2ª':'1ª'} cultura</th><th class="num">${brl(totHa)}/ha · ${brl0(totHa*area)}</th></tr></tfoot></table></div>`;
+    return `<div class="pop-seq"><h2><span>${seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'}</span> ${esc(cultura||'—')}${prod?` <small>· ${num(prod)} sc/ha</small>`:''}</h2>
+      <table class="pop-cols">${COLS}<thead><tr><th>Produto</th><th>Classe</th><th class="num">Dose/ha</th><th>Un</th><th class="num">Total na área</th></tr></thead></table>
+      ${cards}
+      <div class="pop-tot"><span><b>${n}</b> operações · <b>${nProd}</b> produtos</span><span>Insumos: <b>${brl(totHa)}/ha</b> · <b>${brl0(totHa*area)}</b> no talhão</span></div></div>`;
   };
-  let h=`<div class="pop-head"><h1>${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''} <span class="mut2">— ${num(area)} ha</span></h1></div>`;
+  const cultTxt=[cult1, cult2].filter(Boolean).map(esc).join(' → ');
+  let h=`<div class="pop-head"><div class="pop-id"><b>${esc(t.id)}</b>${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''}</div>
+    <div class="pop-kpis"><span><small>Área</small>${num(area)} ha</span>${cultTxt?`<span><small>Cultura(s)</small>${cultTxt}</span>`:''}</div></div>`;
   h+=seqTable('principal','P',cult1,prodvDe(t));
   if(cult2) h+=seqTable('safrinha','S',cult2,prodSafDe(t));
   return h;
