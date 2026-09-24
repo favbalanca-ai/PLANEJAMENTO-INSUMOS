@@ -55,9 +55,8 @@ function readData(){
     var split = findSafraSplit(big, n, m);               // linha do 2º cabeçalho = início da safrinha
     var pR1 = (split > 0) ? split - 1 : Math.min(224, n);
     var sR0 = (split > 0) ? split + 1 : 238;
-    var plantioSaf = '';
-    if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = big[L - 1];
-      if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0){ plantioSaf = dateISO(rr[1]); break; } } }
+    var psr = plantioSafRow(big, n, split);                               // MESMA regra da escrita (rótulo ou linha padrão)
+    var plantioSaf = (psr > 0 && big[psr - 1]) ? dateISO(big[psr - 1][1]) : '';
     var cicloSaf = (split > 0) ? N(resumoVal(big, Math.max(5, split - 8), split - 1, 'CICLO')) : 0;
     planos[t.id] = { area:N(big[1][1]), empreendimento:S(big[2][1]), plantio:dateISO(big[3][1]), plantio_safrinha:plantioSaf,
       ciclo:N(resumoVal(big, 1, 8, 'CICLO')), ciclo_safrinha:cicloSaf,                       // ciclo da cultura (dias) -> colheita estimada
@@ -477,9 +476,11 @@ function addOpBlock(s, tag){
 }
 // linha "Data de plantio:" do resumo da safrinha (procura antes do 2º cabeçalho; padrão 234)
 function plantioSafRow(vals, n, split){
-  if (split > 0){ for (var L = Math.max(5, split - 6); L < split; L++){ var rr = vals[L - 1];
-    if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0) return L; } }
-  return 234;
+  // procura o rótulo "Data de plantio:" no resumo da safrinha (antes do 2º cabeçalho; sem ele, na faixa padrão 225..240)
+  var r0 = (split > 0) ? Math.max(5, split - 8) : 225, r1 = (split > 0) ? split - 1 : Math.min(240, n);
+  for (var L = r0; L <= r1; L++){ var rr = vals[L - 1];
+    if (rr && S(rr[0]).toUpperCase().indexOf('PLANTIO') >= 0) return L; }
+  return (split > 0) ? split - 3 : 234;                                   // linha padrão do modelo (resumo em split-6 .. split-1)
 }
 // onde fica o DAE da operação: na coluna "DAP (dias)" quando a aba tem; senão, na linha-cabeçalho da
 // operação, ao lado do nome (coluna da CLASSE, que nessa linha é vazia), como "25 DAE" (N() lê o número)
@@ -516,7 +517,7 @@ function readOpsArr(big, r0, r1, m){
     var a = S(row[m.op]), prod = S(row[m.produto]);
     if (a.toUpperCase().indexOf('OPERA') === 0){
       cur = { nome:a, itens:[] };
-      var d = N(row[daeCol(m)]); if (d > 0) cur.dap = d;                  // DAE: coluna DAP ou "25 DAE" ao lado do nome
+      var d = N(row[daeCol(m)]); if (d) cur.dap = d;                      // DAE: coluna DAP ou "25 DAE" ao lado do nome (negativo = pré-plantio)
       ops.push(cur);
     }
     if (prod && cur) cur.itens.push({ classe:S(row[m.classe]), produto:prod, dose:N(row[m.dose]), un:S(row[m.un]) });
@@ -655,6 +656,9 @@ function applyTalhao(tid, edits, out){
       if (ed.type === 'plantio' || ed.type === 'plantio_safrinha'){   // data de plantio PREVISTA (resumo da aba: B4 / safrinha)
         var prow = (ed.type === 'plantio') ? 4 : plantioSafRow(vals, n, split);
         var dv = parseISODate(ed.value);
+        // garante o rótulo na coluna A (é por ele que a leitura acha a linha) sem apagar outro texto existente
+        var lblA = S((vals[prow - 1] || [])[0]);
+        if (!lblA || lblA.toUpperCase().indexOf('PLANTIO') >= 0){ s.getRange(prow, 1).setValue('Data de plantio:'); if (vals[prow - 1]) vals[prow - 1][0] = 'Data de plantio:'; }
         if (dv){ s.getRange(prow, 2).setValue(dv); s.getRange(prow, 2).setNumberFormat('dd/mm/yyyy'); }
         else s.getRange(prow, 2).setValue('');
         out.ok++; return;
