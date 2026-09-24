@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-124';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-125';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -940,8 +940,10 @@ function ask(m){ try{ return window.confirm(m); }catch(e){ return true; } }
 // quantidade de produto (dose, total, por tanque): até 3 casas, sem zeros à toa — 0,26 · 0,04 · 6,25 · 12
 const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);
 function updateEditBadge(){
-  const n=countEdits(), b=$('#edit-badge');
-  b.hidden=n===0; b.textContent=n+(n===1?' edição':' edições'); b.title='Toque para sincronizar agora';
+  // selo = só o que FALTA sincronizar (ajustes que vivem só no app — máquina, DRE, diesel… — não contam)
+  const b=$('#edit-badge'); if(!b) return;
+  const pi=(typeof pendingInfo==='function')?pendingInfo():{total:0,parts:[]}, n=pi.total;
+  b.hidden=n===0; b.textContent=n+(n===1?' pendente':' pendentes'); b.title=(pi.parts.join(' · ')||'')+' — toque para sincronizar agora';
   if(typeof updateSyncBar==='function') updateSyncBar();
 }
 const PILL={COMPRAR:['pill-buy','Comprar'],SEM_PRECO:['pill-noprice','Sem preço'],
@@ -5063,27 +5065,35 @@ function logAindaPendentes(enviadas){
   }catch(e){}
 }
 // há algo local ainda não enviado? (edições de campo, compras/baixas offline, tarefas/execução/resultados alterados)
-function hasPending(){
+// o que REALMENTE falta ir para a planilha (não confundir com countEdits, que inclui ajustes que só existem no app)
+function pendingInfo(){
+  const parts=[]; let total=0;
+  const add=(n,lbl)=>{ if(n>0){ parts.push(`${n} ${lbl}`); total+=n; } };
   try{
-    if(!DATA||!OV) return false;
-    if(buildFieldEdits().length>0) return true;
-    if(COMPRAS && (COMPRAS.registros||[]).some(c=>!c.pushed)) return true;
-    if(lastTarefasPushSig!=='' && typeof tarefasSig==='function' && tarefasSig()!==lastTarefasPushSig) return true;
-    if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) return true;
-    if(lastResultSig!=='' && resultSig()!==lastResultSig) return true;
+    if(!DATA||!OV) return {total:0, parts:[]};
+    add(buildFieldEdits().length, 'edição(ões) de campo');
+    if(COMPRAS) add((COMPRAS.registros||[]).filter(c=>!c.pushed).length, 'compra(s)');
+    let bx=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey && r.status==='aprovada' && !r.saidaPushed) bx++; });
+    const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) bx++; }
+    add(bx, 'baixa(s) de estoque');
+    if(lastTarefasPushSig!=='' && typeof tarefasSig==='function' && tarefasSig()!==lastTarefasPushSig) add(1, 'alteração em tarefas');
+    if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) add(1, 'alteração na execução');
+    if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
   }catch(e){}
-  return false;
+  return {total, parts};
 }
+function hasPending(){ return pendingInfo().total>0; }
 // faixa no topo: "N edições não sincronizadas — Sincronizar agora" (ou "sem internet")
 function updateSyncBar(){
   const bar=$('#sync-bar'); if(!bar) return;
   if(!syncUrl()||!DATA){ bar.hidden=true; return; }
-  const n=countEdits(), pend=hasPending(), off=(typeof navigator!=='undefined' && navigator.onLine===false);
-  if(!pend && !off){ bar.hidden=true; return; }
+  const pi=pendingInfo(), off=(typeof navigator!=='undefined' && navigator.onLine===false);
+  if(!pi.total && !off){ bar.hidden=true; return; }
   bar.hidden=false;
-  if(off){ bar.className='sync-bar off'; bar.innerHTML=`📴 Sem internet — ${n?`${n} ${n===1?'edição guardada':'edições guardadas'}; `:''}sincroniza sozinho quando a conexão voltar.`; return; }
+  const det=pi.parts.join(' · ');
+  if(off){ bar.className='sync-bar off'; bar.innerHTML=`📴 Sem internet — ${pi.total?`guardado no aparelho: ${esc(det)}; `:''}sincroniza sozinho quando a conexão voltar.`; return; }
   bar.className='sync-bar '+(lastPushOk?'warn':'err');
-  bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} ${n?`${n} ${n===1?'edição':'edições'}`:'Alterações'} ainda não sincronizada${n===1?'':'s'}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
+  bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} Falta sincronizar: ${esc(det)}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
 }
 // portão de sincronização (modal): envia pendentes -> puxa a planilha; se falhar, deixa tentar de novo ou seguir offline
 let syncGateOpen=false;
