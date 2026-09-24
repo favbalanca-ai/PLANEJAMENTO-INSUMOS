@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-122';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-123';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4425,9 +4425,9 @@ function produtosOpTalhaoHtml(t){
     let body='', n=0, totHa=0;
     order.forEach((oi)=>{ const op=all[oi], tagoi=`${tag}${oi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto); if(!items.length) return;
       n++; let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto)); totHa+=sub;
-      const dae=opDaeDe(t.id,tagoi,op.dap);
-      body+=`<tr class="grp"><td colspan="4"><b>${n} · ${esc(op.nome)}</b> <span class="mut2">${items.length} produto${items.length===1?'':'s'}${dae?` · ${dae} DAE`:''}</span></td><td class="num mut2">${sub>0?brl(sub)+'/ha':''}</td></tr>`;
-      items.forEach(it=>{ body+=`<tr><td class="prod">${esc(it.produto)}</td><td>${esc(it.classe||'—')}</td><td class="num">${fmtDose(it.dose)}</td><td>${esc(it.un||'')}</td><td class="num">${area?`<b>${fmtDose(it.dose*area)}</b> ${esc(it.un||'')}`:'—'}</td></tr>`; });
+      const dae=opDaeDe(t.id,tagoi,op.dap), cls=(n%2)?'blk-a':'blk-b';   // blocos alternados: claro / escuro
+      body+=`<tr class="grp ${cls}"><td colspan="4"><b>${n} · ${esc(op.nome)}</b> <span class="mut2">${dae?`DAE ${dae}`:''}</span></td><td class="num mut2">${sub>0?brl(sub)+'/ha':''}</td></tr>`;
+      items.forEach(it=>{ body+=`<tr class="${cls}"><td class="prod">${esc(it.produto)}</td><td>${esc(it.classe||'—')}</td><td class="num">${fmtDose(it.dose)}</td><td>${esc(it.un||'')}</td><td class="num">${area?`<b>${fmtDose(it.dose*area)}</b> ${esc(it.un||'')}`:'—'}</td></tr>`; });
     });
     if(!n) return '';
     totHaTal+=totHa;

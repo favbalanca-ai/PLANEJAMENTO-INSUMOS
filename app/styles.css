@@ -577,7 +577,12 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area table.pop th,#print-area table.pop td{border:0;border-bottom:1px solid #ddd;padding:5px 6px;word-wrap:break-word}
   #print-area table.pop th{background:#fff;border-bottom:2px solid #333;font-size:10.5px;text-transform:uppercase;letter-spacing:.03em;color:#333}
   #print-area table.pop tbody tr:nth-child(even) td{background:#fff}
-  #print-area table.pop tr.grp td{background:#eef1f3;border-bottom:1px solid #bbb;padding-top:7px;font-size:11.5px}
+  #print-area table.pop tr.grp td{border-bottom:1px solid #bbb;padding-top:7px;font-size:11.5px}
+  /* blocos alternados por operação: A = claro, B = mais escuro (cabeçalho e produtos) */
+  #print-area table.pop tbody tr.blk-a td{background:#fff}
+  #print-area table.pop tbody tr.grp.blk-a td{background:#e9edf0}
+  #print-area table.pop tbody tr.blk-b td{background:#eef1f4}
+  #print-area table.pop tbody tr.grp.blk-b td{background:#cfd7dd}
   #print-area table.pop td.prod{padding-left:18px}
   #print-area table.pop tfoot th{background:#f3f3f3;border-top:2px solid #333;border-bottom:0;text-transform:none;letter-spacing:0;font-size:11px}
   #print-area table.pop tr{page-break-inside:avoid;break-inside:avoid}
