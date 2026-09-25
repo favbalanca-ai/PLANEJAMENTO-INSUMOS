@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-128';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-129';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3555,17 +3555,43 @@ function finalizarOpModal(key){
     </div></div>`;
   document.body.appendChild(ov);
 }
+// ---- Operação de Campo: estado da tela (sessão) ----
+let campoFiltro='todas';                  // todas | pendente | andamento | concluido
+const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
+document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.matches&&d.matches('details.cp-det')){ const k=d.dataset.key; if(d.open) campoOpen.add(k); else campoOpen.delete(k); } },true);
+// operações REAIS do talhão para o campo: com insumo, com execução registrada ou com máquina escolhida — na ordem do planejamento
+function campoOpsDoTalhao(t){
+  const out=[];
+  ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P', all=opsOf(t.id,seq)||[];
+    opDisplayOrder(t.id,tag,opsShownCount(t.id,tag)).forEach(oi=>{ const op=all[oi]; if(!op) return;
+      const tagoi=`${tag}${oi}`, key=`${t.id}|${tagoi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto);
+      if(!items.length && !realOf(key) && !(opMaqKey(t.id,tagoi) in OV.opMaq)) return;   // posição vazia do modelo: fora do campo
+      out.push({seq,tag,oi,op,tagoi,key,items,cultura:seq==='safrinha'?empSafDe(t):empDe(t)}); }); });
+  return out;
+}
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   const selId=(arg && all.some(t=>t.id===arg))?arg:all[0].id;
   const t=all.find(x=>x.id===selId);
-  const prog=campoProgress(), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
-  const tOpt=all.map(x=>{ const ops=opsDoTalhao(x);
+  const tOpt=all.map(x=>{ const ops=campoOpsDoTalhao(x);
     const d=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')} — ${d}/${ops.length} ok</option>`; }).join('');
-  const ops=opsDoTalhao(t);
-  const opsHtml=ops.map(o=>{
+  const ops=campoOpsDoTalhao(t);
+  const stOf=o=>((realOf(o.key)||{}).status)||'pendente';
+  const cnt={pendente:0,andamento:0,concluido:0}; ops.forEach(o=>cnt[stOf(o)]++);
+  const pct=ops.length?Math.round(cnt.concluido/ops.length*100):0;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const diasAte=iso=>{ if(!iso) return null; const d=new Date(iso+'T00:00:00'); return Math.round((d-hoje)/86400000); };
+  // PRÓXIMA = a não concluída de data mais cedo (sem data: a primeira na ordem)
+  const abertas=ops.filter(o=>stOf(o)!=='concluido');
+  const prox=abertas.slice().sort((a,b)=>{ const da=opDataPlan(t.id,a.tagoi,a.op.dap)||'9999', db=opDataPlan(t.id,b.tagoi,b.op.dap)||'9999'; return da<db?-1:da>db?1:0; })[0];
+  if(!campoOpenInit.has(t.id)){ campoOpenInit.add(t.id); if(prox) campoOpen.add(prox.key); }
+  const nPos={}; let nP=0, nS=0; ops.forEach(o=>{ nPos[o.key]=(o.seq==='safrinha')?++nS:++nP; });
+  const visiveis=ops.filter(o=>campoFiltro==='todas'||stOf(o)===campoFiltro);
+  const chip=(v,l,n)=>`<button class="cp-chip${campoFiltro===v?' on':''}" data-act="campoFiltro" data-val="${v}">${l}${n!=null?` <b>${n}</b>`:''}</button>`;
+  let lastSeq='';
+  const opsHtml=visiveis.map(o=>{
     const r=realOf(o.key)||{status:'pendente',data:'',obs:'',doses:{},extras:[]};
     const items=effItems(t.id,o.tagoi,o.op.itens);
     const insRows=items.map(it=>{
@@ -3586,20 +3612,38 @@ V.campo = function(arg){
       </tr>`).join('');
     const st=REAL_ST[r.status]||REAL_ST.pendente;
     const sbtn=v=>`<button class="camp-st ${REAL_ST[v].cls}${r.status===v?' on':''}" data-act="realStatus" data-key="${esc(o.key)}" data-val="${v}">${REAL_ST[v].lbl}</button>`;
-    return `<div class="camp-op ${st.cls}">
-      <div class="camp-op-head">
-        <div class="camp-op-title">${esc(o.op.nome)}<small>${esc(o.cultura||'')}${o.seq==='safrinha'?' · 2ª safra':''}</small></div>
+    const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dd=diasAte(dp);
+    const conj=(r.app&&r.app.maq)||opMaqDe(t.id,o.tag,o.oi,o.op)||'';
+    const isProx=prox&&prox.key===o.key;
+    // quando: DAE · data · (atrasada N d / hoje / em N d)
+    let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
+    let prazo='';
+    if(r.status==='concluido') prazo=`<span class="cp-tag ok">✔ ${r.data?fmtDataBR(r.data):'concluída'}</span>`;
+    else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
+    const resumo=(o.items||[]).map(it=>`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join(' · ');
+    // ação principal do cartão, conforme o status
+    const acao= r.status==='pendente' ? `<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar ao operador</button>`
+      : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button><button class="btn btn-outline btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`
+      : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
+    const sep=(o.seq!==lastSeq && (o.seq==='safrinha'||ops.some(x=>x.seq==='safrinha')))?`<div class="cp-seqhd">${o.seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} · ${esc(o.cultura||'—')}</div>`:''; lastSeq=o.seq;
+    return `${sep}<div class="cp-card ${st.cls}${isProx?' prox':''}">
+      <div class="cp-face">
+        <span class="cp-n">${nPos[o.key]}</span>
+        <div class="cp-main">
+          <div class="cp-title">${esc(o.op.nome)}${isProx?' <span class="cp-tag next">PRÓXIMA</span>':''}</div>
+          <div class="cp-when">${quando?`📅 ${quando}`:'<span class="mut">sem data — defina o plantio no talhão</span>'} ${prazo}</div>
+          ${resumo?`<div class="cp-prods">${resumo}</div>`:''}
+          ${conj?`<div class="cp-maq">🚜 ${esc(conj)}</div>`:''}
+        </div>
         <span class="camp-badge ${st.cls}">${st.lbl}</span>
       </div>
+      <div class="cp-act">${acao}</div>
+      <details class="cp-det" data-key="${esc(o.key)}"${campoOpen.has(o.key)?' open':''}>
+        <summary><span>Detalhes · registrar execução</span><span class="panel-chevron">▸</span></summary>
+        <div class="cp-det-in">
       <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}</div>
-      <div class="camp-actbar">
-        ${r.status==='pendente'?`<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar ao operador (WhatsApp)</button>`:''}
-        ${r.status==='andamento'?`<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar — informar volume usado</button>
-           <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`:''}
-        ${r.status==='concluido'?`<span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span>
-           <button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button>`:''}
-      </div>
-      ${(()=>{ const dp=opDataPlan(t.id,o.tagoi,o.op.dap); const dae=opDaeDe(t.id,o.tagoi,o.op.dap); const col=colheitaPrevDe(t.id,o.seq); const colHtml=col?` · 🌾 colheita est. <b>${fmtDataBR(col)}</b>`:''; return dp?`<div class="camp-plan">📅 Planejado: <b>${fmtDataBR(dp)}</b>${dae?` <span class="mut">(${dae} DAE)</span>`:''}${colHtml}</div>`:(dae?`<div class="camp-plan mut">Planejado: ${dae} DAE (defina o plantio no talhão)</div>`:''); })()}
+      ${r.status==='concluido'?`<div class="camp-actbar"><span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
+      ${(()=>{ const col=colheitaPrevDe(t.id,o.seq); return col?`<div class="camp-plan">🌾 Colheita estimada: <b>${fmtDataBR(col)}</b></div>`:''; })()}
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
       <div class="table-wrap"><table class="camp-ins">
         <thead><tr><th>Insumo</th><th class="num">Planejado</th><th class="num">Realizado</th></tr></thead>
@@ -3634,19 +3678,21 @@ V.campo = function(arg){
         </div>
       </details>
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
+        </div>
+      </details>
     </div>`;
-  }).join('') || '<div class="mut" style="padding:14px">Este talhão não tem operações planejadas.</div>';
+  }).join('') || (ops.length?`<div class="cp-empty">Nenhuma operação ${campoFiltro==='concluido'?'concluída':campoFiltro==='andamento'?'em andamento':'pendente'} neste talhão.</div>`:'<div class="cp-empty">Este talhão não tem operações planejadas.</div>');
+  const plantio=plantioEffDe(t.id,'principal'), col=colheitaPrevDe(t.id,'principal');
   return `${prodDatalist()}
-  <div class="camp-top">
-    <div class="camp-prog">
-      <div class="camp-prog-bar"><div style="width:${pctDone}%"></div></div>
-      <div class="camp-prog-txt"><b>${prog.done}</b>/${prog.total} operações concluídas · ${pctDone}%${prog.running?` · ${prog.running} em andamento`:''}</div>
-    </div>
-    <div class="camp-sel"><label>Talhão</label><select class="sel" id="camp-talhao">${tOpt}</select></div>
+  <div class="cp-top">
+    <div class="cp-sel"><select class="sel" id="camp-talhao">${tOpt}</select></div>
+    <div class="cp-tinfo"><b>${esc(t.nome||t.id)}</b> <span>${esc(t.id)} · ${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
+      ${(plantio||col)?`<span>${plantio?`🌱 plantio ${fmtDataBR(plantio)}`:''}${col?` · 🌾 colheita ${fmtDataBR(col)}`:''}</span>`:''}</div>
+    <div class="cp-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span><b>${cnt.concluido}</b>/${ops.length} concluídas · ${pct}%</span></div>
+    <div class="cp-chips">${chip('todas','Todas',ops.length)}${chip('pendente','Pendentes',cnt.pendente)}${chip('andamento','Em andamento',cnt.andamento)}${chip('concluido','Concluídas',cnt.concluido)}</div>
   </div>
-  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` / ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div>
   ${opsHtml}
-  <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">O realizado fica salvo <b>no aparelho</b>. Digite a dose aplicada em cada insumo (deixe em branco = conforme o plano). Use “+ insumo extra” para aplicações fora do plano.</p>`;
+  <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">Toque em <b>Detalhes</b> para registrar data, doses realizadas (em branco = conforme o plano), insumos extras e a recomendação de aplicação. Salvo no aparelho e sincronizado com a planilha.</p>`;
 };
 
 V.sync = function(){
@@ -4038,6 +4084,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
+    else if(a.act==='campoFiltro'){ campoFiltro=a.val||'todas'; route({keepScroll:true}); }
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
       const r=realEnsure(a.key); const was=r.status; r.status=a.val;
       if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }
