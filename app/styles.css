@@ -447,6 +447,45 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .tl-row.prev .tl-date{display:inline-flex;gap:6px;align-items:center}
 .chip-f b{margin-left:3px;font-size:11px;opacity:.8}
 @media (max-width:640px){ .tlg-grid{grid-template-columns:1fr} }
+/* linha do tempo do talhão (plantio → estádios + operações + registros → colheita) */
+.lt-nowbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px 0}
+.lt-now{font-size:12px;color:#33691e;background:#eef6e4;border:1px solid #d3e7bd;border-radius:9px;padding:3px 9px}
+.lt-panel{padding-bottom:4px}
+.lt-sec{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f3f7f1,#fff)}
+.lt-sec b{font-size:14.5px;color:var(--ink)}
+.lt-sec span{font-size:12px;color:var(--muted)}
+.lt-aviso{margin:10px 14px 0;font-size:12px;color:#7a5600;background:#fff8e1;border:1px solid #f2dfa0;border-radius:9px;padding:7px 10px}
+.lt{position:relative;padding:8px 10px 12px}
+.lt::before{content:"";position:absolute;left:82px;top:10px;bottom:12px;width:2px;background:#d9e2e6;border-radius:2px}
+.lt .tl-month{position:relative;margin:10px 0 4px 60px;z-index:1}
+.lt-it{position:relative;display:grid;grid-template-columns:52px 26px 1fr;gap:8px;align-items:start;padding:4px 0}
+.lt-date{text-align:right;line-height:1.15;padding-top:5px}
+.lt-date b{display:block;font-size:13px;color:var(--ink)}
+.lt-date span{font-size:10.5px;color:var(--muted);font-weight:600}
+.lt-dot{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;color:#fff;border:3px solid #fff;box-shadow:0 0 0 1px #d9e2e6}
+.lt-card{background:#fff;border:1px solid var(--line);border-radius:11px;padding:8px 11px;min-width:0}
+.lt-top{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.lt-top b{font-size:13.5px}
+.lt-ref{font-size:11.5px;font-weight:700;color:var(--ink2);margin-top:2px}
+.lt-sub{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.lt-it.fut .lt-card{border-style:dashed;background:#fbfcfd}
+.lt-it.fut .lt-dot{opacity:.75}
+.lt-it.late .lt-card{border-color:#e8a3a3;background:#fff6f6}
+/* estádio fenológico: linha compacta */
+.lt-st{padding:1px 0}
+.lt-st .lt-date{padding-top:2px}
+.lt-st .lt-date b{font-size:11.5px;color:var(--muted)}
+.lt-dot.st{width:14px;height:14px;margin:4px 6px 0;border:2px solid #fff;background:#7cb342;box-shadow:0 0 0 1px #aed581}
+.lt-st.fut .lt-dot.st{background:#fff;box-shadow:0 0 0 2px #aed581}
+.lt-st .lt-card{border:0;background:none;padding:2px 0;font-size:12px}
+.lt-stc{display:inline-block;min-width:34px;text-align:center;font-weight:800;font-size:11.5px;color:#33691e;background:#eef6e4;border:1px solid #d3e7bd;border-radius:7px;padding:1px 6px;margin-right:4px}
+.lt-std{color:var(--muted)}
+.lt-st.fut .lt-stc{background:#fff;border-style:dashed}
+.lt-today{position:relative;display:flex;align-items:center;margin:8px 0;padding-left:60px}
+.lt-today::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:2px solid #e53935}
+.lt-today span{position:relative;background:#e53935;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 10px;border-radius:10px}
+.lt-today b{color:#fff}
+@media print{ .lt-it{break-inside:avoid} }
 /* ===== Operação de Campo (cartões compactos) ===== */
 .cp-top{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;display:grid;gap:8px}
 .cp-sel .sel{width:100%;font-weight:700}

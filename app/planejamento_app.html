@@ -464,6 +464,45 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 .tl-row.prev .tl-date{display:inline-flex;gap:6px;align-items:center}
 .chip-f b{margin-left:3px;font-size:11px;opacity:.8}
 @media (max-width:640px){ .tlg-grid{grid-template-columns:1fr} }
+/* linha do tempo do talhão (plantio → estádios + operações + registros → colheita) */
+.lt-nowbar{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px 0}
+.lt-now{font-size:12px;color:#33691e;background:#eef6e4;border:1px solid #d3e7bd;border-radius:9px;padding:3px 9px}
+.lt-panel{padding-bottom:4px}
+.lt-sec{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;justify-content:space-between;padding:12px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#f3f7f1,#fff)}
+.lt-sec b{font-size:14.5px;color:var(--ink)}
+.lt-sec span{font-size:12px;color:var(--muted)}
+.lt-aviso{margin:10px 14px 0;font-size:12px;color:#7a5600;background:#fff8e1;border:1px solid #f2dfa0;border-radius:9px;padding:7px 10px}
+.lt{position:relative;padding:8px 10px 12px}
+.lt::before{content:"";position:absolute;left:82px;top:10px;bottom:12px;width:2px;background:#d9e2e6;border-radius:2px}
+.lt .tl-month{position:relative;margin:10px 0 4px 60px;z-index:1}
+.lt-it{position:relative;display:grid;grid-template-columns:52px 26px 1fr;gap:8px;align-items:start;padding:4px 0}
+.lt-date{text-align:right;line-height:1.15;padding-top:5px}
+.lt-date b{display:block;font-size:13px;color:var(--ink)}
+.lt-date span{font-size:10.5px;color:var(--muted);font-weight:600}
+.lt-dot{position:relative;z-index:1;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:13px;color:#fff;border:3px solid #fff;box-shadow:0 0 0 1px #d9e2e6}
+.lt-card{background:#fff;border:1px solid var(--line);border-radius:11px;padding:8px 11px;min-width:0}
+.lt-top{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.lt-top b{font-size:13.5px}
+.lt-ref{font-size:11.5px;font-weight:700;color:var(--ink2);margin-top:2px}
+.lt-sub{font-size:12px;color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.lt-it.fut .lt-card{border-style:dashed;background:#fbfcfd}
+.lt-it.fut .lt-dot{opacity:.75}
+.lt-it.late .lt-card{border-color:#e8a3a3;background:#fff6f6}
+/* estádio fenológico: linha compacta */
+.lt-st{padding:1px 0}
+.lt-st .lt-date{padding-top:2px}
+.lt-st .lt-date b{font-size:11.5px;color:var(--muted)}
+.lt-dot.st{width:14px;height:14px;margin:4px 6px 0;border:2px solid #fff;background:#7cb342;box-shadow:0 0 0 1px #aed581}
+.lt-st.fut .lt-dot.st{background:#fff;box-shadow:0 0 0 2px #aed581}
+.lt-st .lt-card{border:0;background:none;padding:2px 0;font-size:12px}
+.lt-stc{display:inline-block;min-width:34px;text-align:center;font-weight:800;font-size:11.5px;color:#33691e;background:#eef6e4;border:1px solid #d3e7bd;border-radius:7px;padding:1px 6px;margin-right:4px}
+.lt-std{color:var(--muted)}
+.lt-st.fut .lt-stc{background:#fff;border-style:dashed}
+.lt-today{position:relative;display:flex;align-items:center;margin:8px 0;padding-left:60px}
+.lt-today::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:2px solid #e53935}
+.lt-today span{position:relative;background:#e53935;color:#fff;font-size:11px;font-weight:800;letter-spacing:.04em;padding:3px 10px;border-radius:10px}
+.lt-today b{color:#fff}
+@media print{ .lt-it{break-inside:avoid} }
 /* ===== Operação de Campo (cartões compactos) ===== */
 .cp-top{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;display:grid;gap:8px}
 .cp-sel .sel{width:100%;font-weight:700}
@@ -1074,7 +1113,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-130';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-131';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4528,11 +4567,13 @@ V.timeline = function(arg){
     const parados=tals.filter(t=>!(porTal[t.id]||[]).length);
     const card=(t)=>{ const l=porTal[t.id]||[], ops=campoOpsDoTalhao(t), ok=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length;
       const pct=ops.length?Math.round(ok/ops.length*100):0, u=l[0], d=u?_diasC(u.ts):null;
+      const hj=_hojeISO(), pS=temSafrinha(t)&&plantioEffDe(t.id,'safrinha'), sq=(pS&&pS<=hj)?'safrinha':'principal', fe=estadiosDe(t,sq), st=estadioEm(fe,hj);
       return `<div class="tlg-card">
         <div class="tlg-head" data-go="#/timeline/${encodeURIComponent(t.id)}">
           <div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div></div>
           <div class="tlg-meta"><span><b>${l.length}</b> evento(s)</span><span>${u?`última ${d===0?'hoje':d===1?'ontem':d+' dias atrás'}`:''}</span></div></div>
         ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações</span></div>`:''}
+        ${st?`<div class="lt-nowbar"><span class="lt-now">🌿 ${esc(fe.F.nome)} hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}</span></div>`:''}
         <div class="tl">${l.slice(0,4).map(e=>_tlWrap(e,true)).join('')}</div>
         <a class="link tlg-more" data-go="#/timeline/${encodeURIComponent(t.id)}">ver timeline do talhão →</a></div>`; };
     const geral=porTal['__geral']||[];
@@ -4544,44 +4585,98 @@ V.timeline = function(arg){
       ${parados.length?`<div class="tlg-parados">Sem atividade ainda: ${parados.map(t=>`<a class="link" data-go="#/timeline/${encodeURIComponent(t.id)}">${esc(t.id)}</a>`).join(' · ')}</div>`:''}
       ${!ev.length?'<p class="mut" style="padding:18px;text-align:center">Nenhum evento ainda. Registre atividades no Painel de Campo.</p>':''}`;
   }
-  // ===== UM TALHÃO: próximas (previstas) + histórico por mês =====
-  const t=tals.find(x=>x.id===sel), hist=(porTal[sel]||[]).slice().sort((a,b)=>(_isoEv(b)||'').localeCompare(_isoEv(a)||'')||(b.ts||0)-(a.ts||0));
-  const hoje=new Date(); hoje.setHours(0,0,0,0);
-  const prox=[]; campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='concluido') return;
-    const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), st=(r&&r.status)||'pendente';
-    const dd=dp?Math.round((new Date(dp+'T00:00:00')-hoje)/86400000):null;
-    const pr=o.items.map(it=>it.produto), prTxt=pr.slice(0,3).join(', ')+(pr.length>3?` +${pr.length-3}`:'');
-    prox.push({tipo:'prevista',data:dp,talhao:'',titulo:o.op.nome+(o.seq==='safrinha'?' · 2ª safra':'')+(st==='andamento'?' · em andamento':''),
-      resumo:[(dae||dp)?`DAE ${dae||0}`:'', prTxt].filter(Boolean).join(' · '),
-      late:dd!=null&&dd<0, dd}); });
-  prox.sort((a,b)=>(a.data||'9999').localeCompare(b.data||'9999'));
-  ['principal','safrinha'].forEach(seq=>{ if(seq==='safrinha'&&!temSafrinha(t)) return; const col=colheitaPrevDe(t.id,seq);
-    if(col) prox.push({tipo:'marco',data:col,talhao:'',titulo:'🌾 Colheita estimada'+(seq==='safrinha'?' (2ª)':''),resumo:`plantio ${fmtDataBR(plantioEffDe(t.id,seq))} + ${cicloDe(t.id,seq)} dias`}); });
-  const rowProx=e=>{ const ti=TL_EXTRA[e.tipo]; const tag=e.tipo==='prevista'?(e.dd==null?'':(e.late?`<span class="cp-tag late">atrasada ${-e.dd} d</span>`:(e.dd===0?'<span class="cp-tag today">hoje</span>':`<span class="cp-tag">em ${e.dd} d</span>`))):'';
-    return `<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')).toLowerCase())}" data-tipo="${e.tipo}"><div class="tl-row prev${e.late?' late':''}">
-      <div class="tl-ico" style="background:${ti.cor}22;color:${ti.cor}">${ti.ico}</div>
-      <div class="tl-body"><div class="tl-top"><b>${esc(e.titulo)}</b><span class="tl-date">${e.data?_dtBRc(e.data):'sem data'} ${tag}</span></div>
-        <div class="tl-sub">${esc(e.resumo||'')}</div></div></div></div>`; };
-  let mesAtual='', histHtml='';
-  hist.forEach(e=>{ const iso=_isoEv(e), mk=iso.slice(0,7); if(mk!==mesAtual){ mesAtual=mk; const [y,m]=mk.split('-'); histHtml+=`<div class="tl-month">${mk?`${_MES_TL[(+m||1)-1]} ${y}`:'Sem data'}</div>`; }
-    histHtml+=`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(Object.assign({},e,{talhao:''}))}</div>`; });
+  // ===== UM TALHÃO: linha do tempo única (plantio → estádios + operações + registros → colheita) =====
+  const t=tals.find(x=>x.id===sel), hojeIso=_hojeISO();
+  const histAll=(porTal[sel]||[]).filter(e=>e.tipo!=='operacao');      // operações entram pela própria lista (com DAE)
   const ops=campoOpsDoTalhao(t), ok=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length, pct=ops.length?Math.round(ok/ops.length*100):0;
+  const seqs=['principal'].concat(temSafrinha(t)?['safrinha']:[]);
+  const plS=plantioEffDe(t.id,'safrinha');
+  const seqDoEv=e=>(seqs.length>1 && plS && _isoEv(e)>=plS)?'safrinha':'principal';
+  const secs=seqs.map(seq=>{
+    const emp=seq==='safrinha'?empSafDe(t):empDe(t), fe=estadiosDe(t,seq), pl=plantioEffDe(t.id,seq), plReal=plantioRealDe(t.id,seq);
+    const daeDe=iso=>(pl&&iso)?Math.round((new Date(iso+'T12:00:00')-new Date(pl+'T12:00:00'))/86400000):null;
+    const it=[];
+    if(pl) it.push({tipo:'marco',data:pl,ord:0,titulo:'🌱 Plantio'+(plReal?' realizado':' previsto'),resumo:esc(emp||''),cls:plReal?'':'fut'});
+    fe.list.forEach(s=>it.push({tipo:'estadio',data:s.data,ord:1,cod:s.cod,titulo:s.cod,resumo:esc(s.desc),cls:s.data>hojeIso?'fut':''}));
+    ops.filter(o=>o.seq===seq).forEach(o=>{ const r=realOf(o.key), done=r&&r.status==='concluido', and=r&&r.status==='andamento';
+      const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dt=(done&&r.data)?String(r.data).slice(0,10):dp;
+      const pr=o.items.map(x=>x.produto), prTxt=pr.slice(0,4).join(', ')+(pr.length>4?` +${pr.length-4}`:'');
+      const dd=dt?Math.round((new Date(dt+'T00:00:00')-new Date(hojeIso+'T00:00:00'))/86400000):null;
+      const tag=done?'<span class="cp-tag ok">✓ concluída</span>':and?'<span class="cp-tag today">em andamento</span>':
+        dd==null?'<span class="cp-tag">sem data</span>':dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:dd===0?'<span class="cp-tag today">hoje</span>':`<span class="cp-tag">em ${dd} d</span>`;
+      const ref=`DAE ${dae||0}${done&&dp&&dp!==dt?` · previsto ${_dtBRc(dp)}`:''}`;
+      it.push({tipo:done?'operacao':'prevista',data:dt,ord:2,titulo:o.op.nome,tag,ref,resumo:esc(prTxt),cls:done?'':(dd!=null&&dd<0&&!and?'late':'fut'),
+        estad:estadioEm(fe,dt)}); });
+    histAll.filter(e=>seqDoEv(e)===seq).forEach(e=>{ const ti=CAMPO_TIPOS[e.tipo]||{}; it.push({tipo:e.tipo,data:_isoEv(e),ord:3,titulo:e.titulo,resumo:esc(e.resumo||''),estad:estadioEm(fe,_isoEv(e))}); });
+    const col=colheitaPrevDe(t.id,seq);
+    if(col) it.push({tipo:'marco',data:col,ord:9,titulo:'🌾 Colheita estimada',resumo:`plantio ${fmtDataBR(pl)} + ${cicloDe(t.id,seq)} dias`,cls:col>hojeIso?'fut':''});
+    const semData=it.filter(x=>!x.data), comData=it.filter(x=>x.data).sort((a,b)=>a.data.localeCompare(b.data)||a.ord-b.ord);
+    // HTML da seção
+    let h='', mes='', hojePos=false;
+    const hojeRow=()=>{ const st=estadioEm(fe,hojeIso), d=daeDe(hojeIso);
+      return `<div class="lt-today"><span>HOJE · ${_dtBRc(hojeIso)}${d!=null&&d>=0?` · DAE ${d}`:''}${st?` · <b>${esc(st.cod)}</b> estimado`:''}</span></div>`; };
+    const row=x=>{ const ti=CAMPO_TIPOS[x.tipo]||TL_EXTRA[x.tipo]||{ico:'•',cor:'#8aa'}, d=daeDe(x.data);
+      const srch=esc(((x.titulo||'')+' '+(x.cod||'')+' '+String(x.resumo||'').replace(/<[^>]+>/g,'')).toLowerCase());
+      if(x.tipo==='estadio') return `<div class="tl-wrap lt-it lt-st ${x.cls||''}" data-tipo="estadio" data-search="${srch}">
+        <div class="lt-date"><b>${_dtBRc(x.data).slice(0,5)}</b><span>DAE ${d}</span></div><div class="lt-dot st"></div>
+        <div class="lt-card"><span class="lt-stc">${esc(x.cod)}</span> <span class="lt-std">${x.resumo}</span></div></div>`;
+      return `<div class="tl-wrap lt-it ${x.cls||''}" data-tipo="${x.tipo}" data-search="${srch}">
+        <div class="lt-date">${x.data?`<b>${_dtBRc(x.data).slice(0,5)}</b><span>${d!=null?`DAE ${d}`:''}</span>`:'<b>—</b>'}</div>
+        <div class="lt-dot" style="background:${ti.cor}">${ti.ico}</div>
+        <div class="lt-card"><div class="lt-top"><b>${esc(x.titulo)}</b>${x.tag||''}</div>
+          ${x.ref||x.estad?`<div class="lt-ref">${x.ref?esc(x.ref):''}${x.estad?`${x.ref?' · ':''}estádio ~${esc(x.estad.cod)}`:''}</div>`:''}
+          ${x.resumo?`<div class="lt-sub">${x.resumo}</div>`:''}</div></div>`; };
+    comData.forEach(x=>{ if(!hojePos && x.data>hojeIso){ h+=hojeRow(); hojePos=true; }
+      const mk=x.data.slice(0,7); if(mk!==mes){ mes=mk; const [y,m]=mk.split('-'); h+=`<div class="tl-month">${_MES_TL[(+m||1)-1]} ${y}</div>`; }
+      h+=row(x); });
+    if(!hojePos && comData.length) h+=hojeRow();
+    if(semData.length) h+=`<div class="tl-month">Sem data definida</div>`+semData.map(row).join('');
+    const stHoje=estadioEm(fe,hojeIso);
+    const aviso=!pl?`<p class="lt-aviso">Informe a <b>data de plantio</b> no planejamento do talhão para posicionar operações e estádios na linha do tempo.</p>`:
+      !fe.F?`<p class="lt-aviso">Estádios fenológicos não disponíveis para “${esc(emp||'—')}”.</p>`:
+      fe.padrao?`<p class="lt-aviso">Ciclo não informado: estádios estimados com o ciclo de referência de ${fe.F.nome} (${fe.F.ref} dias). Informe o ciclo no planejamento para ajustar.</p>`:'';
+    return {seq,stHoje,fe,html:`<div class="lt-sec"><b>${seq==='safrinha'?'2ª safra':'1ª safra'} · ${esc(fe.F?fe.F.nome:(emp||'—'))}</b>
+        <span>${pl?`plantio ${fmtDataBR(pl)}${plReal?'':' (previsto)'}`:'sem plantio'}${cicloDe(t.id,seq)?` · ciclo ${cicloDe(t.id,seq)} d`:''}${col?` · colheita ~${fmtDataBR(col)}`:''}</span></div>
+      ${aviso}<div class="lt">${h||'<p class="mut" style="padding:14px">Nada para mostrar ainda.</p>'}</div>`};
+  });
+  const todos=[]; secs.forEach(s=>todos.push(...[...s.html.matchAll(/data-tipo="([a-z]+)"/g)].map(m=>({tipo:m[1]}))));
+  const stAtual=secs.map(s=>s.stHoje?`<span class="lt-now">🌿 ${esc(s.fe.F.nome)} hoje: <b>${esc(s.stHoje.cod)}</b> · ${esc(s.stHoje.desc)}</span>`:'').join('');
   const plantio=plantioEffDe(t.id,'principal');
   return `${top}
     <a class="link" data-go="#/timeline">‹ Todos os talhões</a>
     <div class="tlg-card tlg-hero"><div class="tlg-head" style="cursor:default"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha${plantio?` · 🌱 plantio ${fmtDataBR(plantio)}`:''}</div></div>
-      <div class="tlg-meta"><span><b>${hist.length}</b> no histórico</span><span><b>${prox.filter(p=>p.tipo==='prevista').length}</b> previstas</span></div></div>
+      <div class="tlg-meta"><span><b>${ok}</b>/${ops.length} operações</span><span><b>${histAll.length}</b> registros</span></div></div>
       ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações concluídas</span></div>`:''}
+      ${stAtual?`<div class="lt-nowbar">${stAtual}</div>`:''}
       <div class="tlg-links"><a class="link" data-go="#/campo/${encodeURIComponent(t.id)}">🧑‍🌾 Operação de campo</a><a class="link" data-go="#/monitoramento/${encodeURIComponent(t.id)}">🐛 Monitorar</a><a class="link" data-go="#/recomendacao/${encodeURIComponent(t.id)}">💊 Recomendação</a></div></div>
-    ${chipsDe(hist.concat(prox),['prevista','marco'])}
-    <div id="tl-list">
-      ${prox.length?`<div class="panel"><div class="panel-head"><h2>📅 Próximas</h2><span class="sub">operações previstas (plantio + DAE)</span></div><div class="tl">${prox.map(rowProx).join('')}</div></div>`:''}
-      <div class="panel"><div class="panel-head"><h2>🕘 Histórico</h2><span class="sub"><b id="tl-count">${hist.length}</b> evento(s)</span></div>
-        <div class="tl">${histHtml||'<p class="mut" style="padding:16px;text-align:center">Nenhum registro ainda neste talhão.</p>'}</div></div>
-    </div>`;
+    ${chipsDe(todos,['prevista','estadio','marco'])}
+    <div id="tl-list">${secs.map(s=>`<div class="panel lt-panel">${s.html}</div>`).join('')}</div>
+    <p class="mut" style="font-size:11px;margin:6px 4px">Estádios estimados a partir da data de plantio e do ciclo da cultura — servem de referência; confirme no campo.</p>`;
 };
 // tipos que só existem na timeline do talhão
-const TL_EXTRA={ prevista:{lbl:'Previstas',ico:'🗓️',cor:'#64757d'}, marco:{lbl:'Marcos',ico:'🚩',cor:'#1f4a55'} };
+const TL_EXTRA={ prevista:{lbl:'Previstas',ico:'🗓️',cor:'#64757d'}, estadio:{lbl:'Estádios',ico:'🌿',cor:'#558b2f'}, marco:{lbl:'Marcos',ico:'🚩',cor:'#1f4a55'} };
+// ===== FENOLOGIA: estádios estimados (dias após o plantio num ciclo de referência; escalam pelo ciclo informado) =====
+const FENO={
+  soja:{nome:'Soja',ref:120,st:[['VE',6,'emergência'],['VC',10,'cotilédones abertos'],['V1',14,'folhas unifolioladas abertas'],['V2',19,'1º trifólio aberto'],['V3',24,'2º trifólio aberto'],['V4',29,'3º trifólio aberto'],['V5',34,'4º trifólio aberto'],['V6',39,'5º trifólio aberto'],
+    ['R1',48,'início do florescimento'],['R2',54,'florescimento pleno'],['R3',62,'início da formação de vagens'],['R4',71,'vagens completamente desenvolvidas'],['R5.1',78,'início do enchimento de grãos (até 10%)'],['R5.2',82,'enchimento 11–25%'],['R5.3',86,'enchimento 26–50%'],['R5.4',90,'enchimento 51–75%'],['R5.5',94,'enchimento 76–100%'],['R6',99,'grão cheio · vagem verde'],['R7',108,'início da maturação'],['R8',116,'maturação plena']]},
+  milho:{nome:'Milho',ref:130,st:[['VE',6,'emergência'],['V2',13,'2 folhas desenvolvidas'],['V4',20,'4 folhas'],['V6',28,'6 folhas'],['V8',36,'8 folhas'],['V10',44,'10 folhas'],['V12',51,'12 folhas'],['V14',57,'14 folhas'],['VT',63,'pendoamento'],
+    ['R1',67,'embonecamento'],['R2',78,'grão bolha d’água'],['R3',88,'grão leitoso'],['R4',97,'grão pastoso'],['R5',107,'grão farináceo · dente'],['R6',122,'maturidade fisiológica']]},
+  sorgo:{nome:'Sorgo',ref:115,st:[['VE',6,'emergência'],['E1',14,'3 folhas'],['E2',22,'5 folhas'],['E3',32,'diferenciação do ponto de crescimento'],['E4',44,'folha bandeira visível'],['E5',54,'emborrachamento'],['E6',63,'florescimento'],['E7',74,'grão leitoso'],['E8',86,'grão pastoso'],['E9',104,'maturidade fisiológica']]},
+  feijao:{nome:'Feijão',ref:90,st:[['V1',6,'emergência'],['V2',10,'folhas primárias abertas'],['V3',16,'1ª folha trifoliolada'],['V4',23,'3ª folha trifoliolada'],['R5',32,'pré-floração'],['R6',38,'floração'],['R7',44,'formação de vagens'],['R8',55,'enchimento de vagens'],['R9',78,'maturação']]},
+  algodao:{nome:'Algodão',ref:170,st:[['VE',7,'emergência'],['V1',14,'1ª folha verdadeira'],['V4',30,'4 folhas'],['B1',40,'1º botão floral'],['F1',60,'1ª flor'],['F5',75,'flor no 5º ramo'],['C1',115,'1º capulho aberto'],['CM',150,'maturação']]},
+  trigo:{nome:'Trigo',ref:110,st:[['EM',7,'emergência'],['PF',25,'perfilhamento'],['AL',40,'alongamento'],['EB',55,'emborrachamento'],['ES',63,'espigamento'],['FL',70,'florescimento'],['GL',80,'grão leitoso'],['GP',90,'grão pastoso'],['MF',104,'maturação']]},
+  braquiaria:{nome:'Braquiária',ref:180,st:[['EM',10,'emergência'],['PF',30,'perfilhamento'],['AL',65,'alongamento'],['EP',110,'emissão de panículas'],['FL',125,'florescimento'],['MS',165,'maturação das sementes']]}
+};
+function culturaKey(emp){ const s=String(emp||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
+  return /SOJA/.test(s)?'soja':/MILHO/.test(s)?'milho':/SORGO/.test(s)?'sorgo':/FEIJ/.test(s)?'feijao':/ALGOD/.test(s)?'algodao':/TRIGO/.test(s)?'trigo':/BRAQ|BRACH/.test(s)?'braquiaria':''; }
+function _hojeISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+// estádios de uma safra do talhão: [{cod,desc,dae,data}] — plantio (realizado > previsto) + dias × (ciclo/ciclo de referência)
+function estadiosDe(t,seq){ const F=FENO[culturaKey(seq==='safrinha'?empSafDe(t):empDe(t))]||null, pl=plantioEffDe(t.id,seq);
+  if(!F||!pl) return {F,pl,list:[]};
+  const cic=cicloDe(t.id,seq), f=cic?cic/F.ref:1, base=new Date(pl+'T12:00:00');
+  return {F,pl,padrao:!cic,list:F.st.map(([cod,d,desc])=>{ const n=Math.round(d*f), x=new Date(base); x.setDate(x.getDate()+n); return {cod,desc,dae:n,data:x.toISOString().slice(0,10)}; })}; }
+// estádio estimado numa data (o último já atingido)
+function estadioEm(fe,iso){ if(!fe||!fe.list||!fe.list.length||!iso) return null; let c=null; fe.list.forEach(s=>{ if(s.data<=iso) c=s; }); return c; }
 function filterTimeline(){
   const list=document.querySelector('#tl-list'); if(!list) return;
   const q=(timelineQ||'').toLowerCase().trim(); let n=0;
