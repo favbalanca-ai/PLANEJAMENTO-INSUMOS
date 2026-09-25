@@ -1113,7 +1113,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-131';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-132';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4634,6 +4634,7 @@ V.timeline = function(arg){
     const stHoje=estadioEm(fe,hojeIso);
     const aviso=!pl?`<p class="lt-aviso">Informe a <b>data de plantio</b> no planejamento do talhão para posicionar operações e estádios na linha do tempo.</p>`:
       !fe.F?`<p class="lt-aviso">Estádios fenológicos não disponíveis para “${esc(emp||'—')}”.</p>`:
+      !plReal?`<p class="lt-aviso">🌱 Os <b>estádios</b> começam a ser informados a partir do <b>plantio realizado</b> — ao concluir a operação de plantio no Campo (ou informar a data realizada no planejamento).</p>`:
       fe.padrao?`<p class="lt-aviso">Ciclo não informado: estádios estimados com o ciclo de referência de ${fe.F.nome} (${fe.F.ref} dias). Informe o ciclo no planejamento para ajustar.</p>`:'';
     return {seq,stHoje,fe,html:`<div class="lt-sec"><b>${seq==='safrinha'?'2ª safra':'1ª safra'} · ${esc(fe.F?fe.F.nome:(emp||'—'))}</b>
         <span>${pl?`plantio ${fmtDataBR(pl)}${plReal?'':' (previsto)'}`:'sem plantio'}${cicloDe(t.id,seq)?` · ciclo ${cicloDe(t.id,seq)} d`:''}${col?` · colheita ~${fmtDataBR(col)}`:''}</span></div>
@@ -4670,9 +4671,9 @@ const FENO={
 function culturaKey(emp){ const s=String(emp||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
   return /SOJA/.test(s)?'soja':/MILHO/.test(s)?'milho':/SORGO/.test(s)?'sorgo':/FEIJ/.test(s)?'feijao':/ALGOD/.test(s)?'algodao':/TRIGO/.test(s)?'trigo':/BRAQ|BRACH/.test(s)?'braquiaria':''; }
 function _hojeISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
-// estádios de uma safra do talhão: [{cod,desc,dae,data}] — plantio (realizado > previsto) + dias × (ciclo/ciclo de referência)
-function estadiosDe(t,seq){ const F=FENO[culturaKey(seq==='safrinha'?empSafDe(t):empDe(t))]||null, pl=plantioEffDe(t.id,seq);
-  if(!F||!pl) return {F,pl,list:[]};
+// estádios de uma safra do talhão: [{cod,desc,dae,data}] — só a partir do PLANTIO REALIZADO: data real + dias × (ciclo/ciclo de referência)
+function estadiosDe(t,seq){ const F=FENO[culturaKey(seq==='safrinha'?empSafDe(t):empDe(t))]||null, pl=plantioRealDe(t.id,seq);
+  if(!F||!pl) return {F,pl,aguarda:!pl,list:[]};
   const cic=cicloDe(t.id,seq), f=cic?cic/F.ref:1, base=new Date(pl+'T12:00:00');
   return {F,pl,padrao:!cic,list:F.st.map(([cod,d,desc])=>{ const n=Math.round(d*f), x=new Date(base); x.setDate(x.getDate()+n); return {cod,desc,dae:n,data:x.toISOString().slice(0,10)}; })}; }
 // estádio estimado numa data (o último já atingido)
