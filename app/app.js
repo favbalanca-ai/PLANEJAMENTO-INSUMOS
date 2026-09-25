@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-129';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-130';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3436,17 +3436,80 @@ V.campopainel = function(){
     </div></div>`;
 };
 let timelineTipo='', timelineQ='';
-V.timeline = function(){
-  const ev=camposEventos();
-  const chips=`<button class="chip-f${timelineTipo===''?' on':''}" data-tlf="">Todos</button>`+
-    Object.keys(CAMPO_TIPOS).map(t=>`<button class="chip-f${timelineTipo===t?' on':''}" data-tlf="${t}">${CAMPO_TIPOS[t].ico} ${CAMPO_TIPOS[t].lbl}</button>`).join('');
-  const rows=ev.map(e=>`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')+' '+_talNomeC(e.talhao)).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(e)}</div>`).join('');
-  return `
-  <div class="toolbar"><div class="search"><input id="q-tl" value="${esc(timelineQ)}" placeholder="Buscar na timeline…" autocomplete="off"></div>
-    <div class="spacer"></div><span class="badge badge-muted"><b id="tl-count">${ev.length}</b> eventos</span></div>
-  <div class="classe-filter" id="tl-filter" style="margin:2px 0 10px">${chips}</div>
-  <div class="panel"><div class="tl" id="tl-list">${rows||'<p class="mut" style="padding:18px;text-align:center">Nenhum evento encontrado. Registre atividades no Painel de Campo.</p>'}</div></div>`;
+const _MES_TL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const _isoEv=e=>(e.data&&/^\d{4}-\d{2}-\d{2}/.test(String(e.data)))?String(e.data).slice(0,10):(e.ts?new Date(e.ts).toISOString().slice(0,10):'');
+const _tlWrap=(e,extra)=>`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')+' '+_talNomeC(e.talhao)).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(extra?Object.assign({},e,{talhao:''}):e)}</div>`;
+V.timeline = function(arg){
+  const tals=talhoesAll(), ev=camposEventos();
+  const sel=(arg&&tals.some(t=>t.id===arg))?arg:'';
+  const porTal={}; ev.forEach(e=>{ const k=e.talhao||'__geral'; (porTal[k]=porTal[k]||[]).push(e); });
+  const tOpt=`<option value="">Todos os talhões</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''} — ${(porTal[t.id]||[]).length} evento(s)</option>`).join('');
+  const top=`<div class="tl-top2"><select class="sel" id="tl-talhao">${tOpt}</select>
+    <div class="search"><input id="q-tl" value="${esc(timelineQ)}" placeholder="Buscar na timeline…" autocomplete="off"></div></div>`;
+  const chipsDe=(lista,extra)=>{ const cont={}; lista.forEach(e=>cont[e.tipo]=(cont[e.tipo]||0)+1);
+    return `<div class="classe-filter" id="tl-filter" style="margin:2px 0 10px"><button class="chip-f${timelineTipo===''?' on':''}" data-tlf="">Todos <b>${lista.length}</b></button>`+
+      Object.keys(CAMPO_TIPOS).concat(extra||[]).filter(t=>cont[t]).map(t=>{ const ti=CAMPO_TIPOS[t]||TL_EXTRA[t]; return `<button class="chip-f${timelineTipo===t?' on':''}" data-tlf="${t}">${ti.ico} ${ti.lbl} <b>${cont[t]}</b></button>`; }).join('')+`</div>`; };
+  // ===== VISÃO GERAL: um cartão por talhão =====
+  if(!sel){
+    const ult=id=>{ const l=porTal[id]||[]; return l.length?l[0].ts||0:0; };
+    const ativos=tals.filter(t=>(porTal[t.id]||[]).length).sort((a,b)=>ult(b.id)-ult(a.id));
+    const parados=tals.filter(t=>!(porTal[t.id]||[]).length);
+    const card=(t)=>{ const l=porTal[t.id]||[], ops=campoOpsDoTalhao(t), ok=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length;
+      const pct=ops.length?Math.round(ok/ops.length*100):0, u=l[0], d=u?_diasC(u.ts):null;
+      return `<div class="tlg-card">
+        <div class="tlg-head" data-go="#/timeline/${encodeURIComponent(t.id)}">
+          <div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div></div>
+          <div class="tlg-meta"><span><b>${l.length}</b> evento(s)</span><span>${u?`última ${d===0?'hoje':d===1?'ontem':d+' dias atrás'}`:''}</span></div></div>
+        ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações</span></div>`:''}
+        <div class="tl">${l.slice(0,4).map(e=>_tlWrap(e,true)).join('')}</div>
+        <a class="link tlg-more" data-go="#/timeline/${encodeURIComponent(t.id)}">ver timeline do talhão →</a></div>`; };
+    const geral=porTal['__geral']||[];
+    return `${top}
+      <p class="mut" style="font-size:12px;margin:0 2px 10px">Toque num talhão para ver a timeline completa (próximas operações + histórico por mês).</p>
+      ${ev.length?chipsDe(ev):''}
+      <div class="tlg-grid" id="tl-list">${ativos.map(card).join('')}
+      ${geral.length?`<div class="tlg-card"><div class="tlg-head"><div><b>🌧️ Geral</b><div class="tlg-sub">registros sem talhão (chuva…)</div></div><div class="tlg-meta"><span><b>${geral.length}</b> evento(s)</span></div></div><div class="tl">${geral.slice(0,4).map(e=>_tlWrap(e)).join('')}</div></div>`:''}</div>
+      ${parados.length?`<div class="tlg-parados">Sem atividade ainda: ${parados.map(t=>`<a class="link" data-go="#/timeline/${encodeURIComponent(t.id)}">${esc(t.id)}</a>`).join(' · ')}</div>`:''}
+      ${!ev.length?'<p class="mut" style="padding:18px;text-align:center">Nenhum evento ainda. Registre atividades no Painel de Campo.</p>':''}`;
+  }
+  // ===== UM TALHÃO: próximas (previstas) + histórico por mês =====
+  const t=tals.find(x=>x.id===sel), hist=(porTal[sel]||[]).slice().sort((a,b)=>(_isoEv(b)||'').localeCompare(_isoEv(a)||'')||(b.ts||0)-(a.ts||0));
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const prox=[]; campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='concluido') return;
+    const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), st=(r&&r.status)||'pendente';
+    const dd=dp?Math.round((new Date(dp+'T00:00:00')-hoje)/86400000):null;
+    const pr=o.items.map(it=>it.produto), prTxt=pr.slice(0,3).join(', ')+(pr.length>3?` +${pr.length-3}`:'');
+    prox.push({tipo:'prevista',data:dp,talhao:'',titulo:o.op.nome+(o.seq==='safrinha'?' · 2ª safra':'')+(st==='andamento'?' · em andamento':''),
+      resumo:[(dae||dp)?`DAE ${dae||0}`:'', prTxt].filter(Boolean).join(' · '),
+      late:dd!=null&&dd<0, dd}); });
+  prox.sort((a,b)=>(a.data||'9999').localeCompare(b.data||'9999'));
+  ['principal','safrinha'].forEach(seq=>{ if(seq==='safrinha'&&!temSafrinha(t)) return; const col=colheitaPrevDe(t.id,seq);
+    if(col) prox.push({tipo:'marco',data:col,talhao:'',titulo:'🌾 Colheita estimada'+(seq==='safrinha'?' (2ª)':''),resumo:`plantio ${fmtDataBR(plantioEffDe(t.id,seq))} + ${cicloDe(t.id,seq)} dias`}); });
+  const rowProx=e=>{ const ti=TL_EXTRA[e.tipo]; const tag=e.tipo==='prevista'?(e.dd==null?'':(e.late?`<span class="cp-tag late">atrasada ${-e.dd} d</span>`:(e.dd===0?'<span class="cp-tag today">hoje</span>':`<span class="cp-tag">em ${e.dd} d</span>`))):'';
+    return `<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')).toLowerCase())}" data-tipo="${e.tipo}"><div class="tl-row prev${e.late?' late':''}">
+      <div class="tl-ico" style="background:${ti.cor}22;color:${ti.cor}">${ti.ico}</div>
+      <div class="tl-body"><div class="tl-top"><b>${esc(e.titulo)}</b><span class="tl-date">${e.data?_dtBRc(e.data):'sem data'} ${tag}</span></div>
+        <div class="tl-sub">${esc(e.resumo||'')}</div></div></div></div>`; };
+  let mesAtual='', histHtml='';
+  hist.forEach(e=>{ const iso=_isoEv(e), mk=iso.slice(0,7); if(mk!==mesAtual){ mesAtual=mk; const [y,m]=mk.split('-'); histHtml+=`<div class="tl-month">${mk?`${_MES_TL[(+m||1)-1]} ${y}`:'Sem data'}</div>`; }
+    histHtml+=`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(Object.assign({},e,{talhao:''}))}</div>`; });
+  const ops=campoOpsDoTalhao(t), ok=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length, pct=ops.length?Math.round(ok/ops.length*100):0;
+  const plantio=plantioEffDe(t.id,'principal');
+  return `${top}
+    <a class="link" data-go="#/timeline">‹ Todos os talhões</a>
+    <div class="tlg-card tlg-hero"><div class="tlg-head" style="cursor:default"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha${plantio?` · 🌱 plantio ${fmtDataBR(plantio)}`:''}</div></div>
+      <div class="tlg-meta"><span><b>${hist.length}</b> no histórico</span><span><b>${prox.filter(p=>p.tipo==='prevista').length}</b> previstas</span></div></div>
+      ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações concluídas</span></div>`:''}
+      <div class="tlg-links"><a class="link" data-go="#/campo/${encodeURIComponent(t.id)}">🧑‍🌾 Operação de campo</a><a class="link" data-go="#/monitoramento/${encodeURIComponent(t.id)}">🐛 Monitorar</a><a class="link" data-go="#/recomendacao/${encodeURIComponent(t.id)}">💊 Recomendação</a></div></div>
+    ${chipsDe(hist.concat(prox),['prevista','marco'])}
+    <div id="tl-list">
+      ${prox.length?`<div class="panel"><div class="panel-head"><h2>📅 Próximas</h2><span class="sub">operações previstas (plantio + DAE)</span></div><div class="tl">${prox.map(rowProx).join('')}</div></div>`:''}
+      <div class="panel"><div class="panel-head"><h2>🕘 Histórico</h2><span class="sub"><b id="tl-count">${hist.length}</b> evento(s)</span></div>
+        <div class="tl">${histHtml||'<p class="mut" style="padding:16px;text-align:center">Nenhum registro ainda neste talhão.</p>'}</div></div>
+    </div>`;
 };
+// tipos que só existem na timeline do talhão
+const TL_EXTRA={ prevista:{lbl:'Previstas',ico:'🗓️',cor:'#64757d'}, marco:{lbl:'Marcos',ico:'🚩',cor:'#1f4a55'} };
 function filterTimeline(){
   const list=document.querySelector('#tl-list'); if(!list) return;
   const q=(timelineQ||'').toLowerCase().trim(); let n=0;
@@ -3454,6 +3517,12 @@ function filterTimeline(){
     const show=(!timelineTipo||el.dataset.tipo===timelineTipo)&&(!q||(el.dataset.search||'').includes(q));
     el.style.display=show?'':'none'; if(show) n++;
   });
+  // cabeçalho de mês sem nenhum evento visível abaixo dele some junto
+  list.querySelectorAll('.tl-month').forEach(h=>{ let s=h.nextElementSibling, vis=false;
+    while(s && !s.classList.contains('tl-month')){ if(s.classList.contains('tl-wrap') && s.style.display!=='none'){ vis=true; break; } s=s.nextElementSibling; }
+    h.style.display=vis?'':'none'; });
+  // visão geral: cartão de talhão sem evento visível some (busca/filtro)
+  list.querySelectorAll('.tlg-card').forEach(c=>{ const any=[...c.querySelectorAll('.tl-wrap')].some(w=>w.style.display!=='none'); c.style.display=(any||(!q&&!timelineTipo))?'':'none'; });
   const c=document.querySelector('#tl-count'); if(c) c.textContent=n;
 }
 V.relatorios = function(){
@@ -3981,6 +4050,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
