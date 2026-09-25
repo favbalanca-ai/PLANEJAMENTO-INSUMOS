@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-134';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-135';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3406,7 +3406,15 @@ function limSalvarImport(){
   _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:Date.now()}; n++; });
   _limImport=null; saveOverrides(); scheduleLimitesPush(); route(); toast(n?`${n} limite(s) salvo(s) no mapa`:'Nenhum talhão escolhido');
 }
-function limRemover(tid){ OV.limites=OV.limites||{}; OV.limites[tid]={del:true,_u:Date.now()}; saveOverrides(); scheduleLimitesPush(); route(); toast('Limite removido'); }
+// remover guarda o contorno anterior (se era importado) para poder restaurar; o do app volta sozinho
+function limRemover(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid], prev=(cur&&cur.coords)?Object.assign({},cur):null;
+  OV.limites[tid]=Object.assign({del:true,_u:Date.now()},prev?{prev}:{}); if(_map) _map.closePopup();
+  saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} removido do mapa`); }
+function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]||{};
+  OV.limites[tid]=cur.prev?Object.assign({},cur.prev,{_u:Date.now()}):{restore:true,_u:Date.now()};
+  saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} restaurado`); }
+// removidos que dá para restaurar (o publicado com o app ou o importado guardado)
+function limRemovidos(){ const o=(OV&&OV.limites)||{}; return Object.keys(o).filter(k=>o[k]&&o[k].del&&(o[k].prev||(LIM_BASE&&LIM_BASE[k]))); }
 // ---- sincronização (aba "LIMITES APP"; só envia se o Code.gs já tiver o ramo __limites) ----
 let limitesPushTimer=null, lastLimitesSig='';
 function limitesSig(){ return JSON.stringify((OV&&OV.limites)||{}); }
@@ -3449,7 +3457,8 @@ async function mapaInit(){
     pg.bindTooltip(`${esc(tid)}`,{permanent:true,direction:'center',className:'mapa-lbl'});
     pg.bindPopup(`<b>${esc(tid)}${t&&t.nome?' · '+esc(t.nome):''}</b><br>${esc(emp||'sem cultura')}<br>
       Área: ${t?num(areaDe(t))+' ha cadastro · ':''}${nf2.format(haLim)} ha no limite${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
-      <br><a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>`);
+      <br><a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>
+      <div style="margin-top:8px;padding-top:6px;border-top:1px solid #e3e8ea"><a class="link lim-del" data-act="limRemover" data-id="${esc(tid)}">🗑️ Remover limite</a></div>`);
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
   pts.forEach(r=>{
@@ -3738,7 +3747,9 @@ V.mapa=function(){
   const own=(OV.limites||{});
   const lista=comLim.map(t=>{ const lm=lims[t.id], ha=lm.ha||limAreaHa(lm.coords), dif=areaDe(t)?(ha/areaDe(t)-1)*100:null;
     return `<div class="lim-row"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
-      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button>${(own[t.id]&&!own[t.id].del)||LIM_BASE[t.id]?`<button class="btn btn-outline btn-sm" data-act="limRemover" data-id="${esc(t.id)}" title="Remover limite">✕</button>`:''}</div></div>`; }).join('');
+      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
+  const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(id)}</b>${t&&t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">limite removido</div></div>
+      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
       <div class="spacer"></div>
       <label class="btn btn-outline btn-sm" style="cursor:pointer">📥 Importar limites<input type="file" id="lim-file" accept=".kml,.kmz,.geojson,.json" hidden></label>
@@ -3750,6 +3761,7 @@ V.mapa=function(){
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Limites dos talhões</h2><span class="sub">${comLim.length}/${tals.length} com contorno</span></div>
     <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
+    ${remov?`<div class="lim-sub">Removidos</div><div class="lim-list">${remov}</div>`:''}
     ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(t.id)).join(' · ')}</p>`:''}
     <p class="mut" style="font-size:11.5px;padding:0 14px 12px">O talhão é reconhecido pelo nome do polígono (ex.: “AREA 1” → ÁREA 1); confira antes de salvar. Um arquivo pode ter vários talhões.</p></div>`;
 };
@@ -4384,7 +4396,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='limSalvar'){ limSalvarImport(); }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
-    else if(a.act==='limRemover'){ if(confirm('Remover o limite deste talhão do mapa?')) limRemover(a.id); }
+    else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(`Remover o limite de ${a.id}${t&&t.nome?' · '+t.nome:''} do mapa?\n(dá para restaurar depois)`)) limRemover(a.id); }
+    else if(a.act==='limRestaurar'){ limRestaurar(a.id); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }

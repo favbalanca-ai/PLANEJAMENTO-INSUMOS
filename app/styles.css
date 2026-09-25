@@ -1018,3 +1018,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .lim-acts{display:flex;gap:6px;flex:none}
 .lim-imp{border:2px solid #9ccc65}
 .lim-warn{color:#b3261e;font-weight:700}
+.lim-del{color:#b3261e !important}
+.btn.lim-del{border-color:#f0c4c0}
+.lim-sub{padding:8px 14px 2px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:1px solid var(--line)}
+.lim-off{opacity:.8}
