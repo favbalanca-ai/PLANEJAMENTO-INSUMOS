@@ -423,6 +423,51 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 #nav .lbl-s{display:none}
 .mut{color:var(--muted)}
 /* recomendação técnica: seções do formulário (identificação, diagnóstico, calda, aplicação, segurança…) */
+/* ===== Operação de Campo (cartões compactos) ===== */
+.cp-top{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px;display:grid;gap:8px}
+.cp-sel .sel{width:100%;font-weight:700}
+.cp-tinfo{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:12.5px;color:var(--muted)}
+.cp-tinfo b{font-size:16px;color:var(--ink)}
+.cp-prog{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.cp-prog-bar{flex:1;height:8px;border-radius:5px;background:#e6ecef;overflow:hidden}
+.cp-prog-bar>div{height:100%;background:linear-gradient(90deg,#1f9d55,#2fbf71);border-radius:5px}
+.cp-prog b{color:var(--ink)}
+.cp-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.cp-chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:18px;padding:6px 12px;font-size:12.5px;font-weight:600;color:var(--ink2);cursor:pointer}
+.cp-chip b{margin-left:3px;background:#eef2f4;border-radius:9px;padding:0 6px;font-size:11px}
+.cp-chip.on{background:var(--ink2);color:#fff;border-color:var(--ink2)}
+.cp-chip.on b{background:rgba(255,255,255,.22);color:#fff}
+.cp-seqhd{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);margin:14px 2px 6px}
+.cp-card{background:var(--card);border:1px solid var(--line);border-left:5px solid #b9c4ca;border-radius:12px;margin-bottom:10px;box-shadow:0 1px 2px rgba(0,0,0,.04);overflow:hidden}
+.cp-card.st-pend{border-left-color:#b9c4ca}
+.cp-card.st-and{border-left-color:#e0a800}
+.cp-card.st-ok{border-left-color:#1f9d55;opacity:.92}
+.cp-card.prox{box-shadow:0 0 0 2px rgba(31,74,85,.35),0 4px 14px rgba(0,0,0,.08)}
+.cp-face{display:flex;gap:10px;align-items:flex-start;padding:12px 12px 6px}
+.cp-n{flex:none;width:26px;height:26px;border-radius:13px;background:var(--ink2);color:#fff;font-weight:800;font-size:12.5px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.cp-card.st-ok .cp-n{background:#1f9d55}
+.cp-card.st-and .cp-n{background:#c08b00}
+.cp-main{flex:1;min-width:0;display:grid;gap:3px}
+.cp-title{font-weight:800;font-size:14.5px;color:var(--ink);line-height:1.25}
+.cp-when{font-size:12.5px;color:var(--ink2);display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.cp-prods{font-size:12px;color:var(--ink);line-height:1.45;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.cp-prods span{color:var(--muted)}
+.cp-maq{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:1px 7px;border-radius:9px;background:#eef2f4;color:var(--ink2)}
+.cp-tag.late{background:#fde3e3;color:#a61b1b}
+.cp-tag.today{background:#fff1c2;color:#7a5600}
+.cp-tag.ok{background:#e1f5ea;color:#16703c}
+.cp-tag.next{background:var(--ink2);color:#fff;letter-spacing:.04em;vertical-align:2px}
+.cp-act{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:4px 12px 10px 48px}
+.cp-baixa{font-size:12px;color:#16703c;font-weight:600}
+.cp-det{border-top:1px solid var(--line)}
+.cp-det>summary{list-style:none;display:flex;justify-content:space-between;align-items:center;padding:9px 12px;font-size:12.5px;font-weight:700;color:var(--ink2);cursor:pointer;background:#f7f9fa}
+.cp-det>summary::-webkit-details-marker{display:none}
+.cp-det[open]>summary .panel-chevron{transform:rotate(90deg)}
+.cp-det-in{padding:10px 12px 12px;display:grid;gap:10px}
+.cp-det-in .camp-strow,.cp-det-in .camp-actbar{margin:0}
+.cp-empty{padding:18px;text-align:center;color:var(--muted);background:var(--card);border:1px dashed var(--line);border-radius:12px}
+@media (max-width:640px){ .cp-act{padding-left:12px} .cp-act .btn{flex:1} }
 .dre-rev{border-left:4px solid #e0a800}
 .dre-rev li b{color:var(--ink)}
 .rc-sec{border-top:1px dashed var(--line)}
