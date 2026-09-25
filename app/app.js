@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-133';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-134';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3352,6 +3352,84 @@ function loadLeaflet(){
   return _leafletLoading;
 }
 const MONIT_CATCOLOR={praga:'#b7791f',doenca:'#b00020',daninha:'#2e7d32',outro:'#64757d'};
+// ===== LIMITES DOS TALHÕES (contornos KML/KMZ/GeoJSON) =====
+// base publicada com o app (app/limites.json) + importados no app (OV.limites, sincroniza com a aba "LIMITES APP")
+let LIM_BASE={}, _limImport=null;
+function loadLimBase(){ return fetch('limites.json',{cache:'no-store'}).then(r=>r.json()).then(d=>{ LIM_BASE=(d&&typeof d==='object')?d:{}; return LIM_BASE; }).catch(()=>LIM_BASE); }
+function limitesAll(){ const out={}; Object.keys(LIM_BASE||{}).forEach(k=>out[k]=LIM_BASE[k]);
+  const o=(OV&&OV.limites)||{}; Object.keys(o).forEach(k=>{ if(o[k]&&o[k].del) delete out[k]; else if(o[k]&&o[k].coords) out[k]=o[k]; }); return out; }
+// área (ha) de anéis [[lat,lng]…] — fórmula esférica com o raio médio da Terra
+function limAreaHa(rings){ const R=6371008.8, rad=Math.PI/180; let tot=0;
+  (rings||[]).forEach(r=>{ let s=0; for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; s+=(b[1]-a[1])*rad*(2+Math.sin(a[0]*rad)+Math.sin(b[0]*rad)); } tot+=Math.abs(s*R*R/2); });
+  return tot/10000; }
+const CULT_COR={soja:'#43a047',milho:'#fdd835',sorgo:'#fb8c00',braquiaria:'#26a69a',feijao:'#8d6e63',algodao:'#eceff1',trigo:'#d4a017'};
+function talSafraAtual(t){ const hj=_hojeISO(), pS=temSafrinha(t)&&plantioRealDe(t.id,'safrinha'); return (pS&&pS<=hj)?'safrinha':'principal'; }
+const _normNome=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+function limMatchTalhao(nome){ const n=_normNome(nome); if(!n) return '';
+  const t=talhoesAll().find(t=>_normNome(t.nome)===n||_normNome(t.id)===n); return t?t.id:''; }
+// ---- leitura de arquivos ----
+function parseKmlText(txt){
+  const doc=new DOMParser().parseFromString(txt,'text/xml'), out=[];
+  [...doc.getElementsByTagName('Placemark')].forEach((pm,i)=>{
+    const sd=n=>{ const e=[...pm.getElementsByTagName('SimpleData')].concat([...pm.getElementsByTagName('Data')]).find(x=>/^(fieldname|talhao|talhão|nome|name)$/i.test(x.getAttribute('name')||'')); return e?(e.textContent||'').trim():''; };
+    const nmEl=[...pm.children].find(c=>c.tagName==='name');
+    const nome=sd()||(nmEl?nmEl.textContent.trim():'')||`Polígono ${i+1}`;
+    const rings=[...pm.getElementsByTagName('Polygon')].map(pg=>{ const ob=pg.getElementsByTagName('outerBoundaryIs')[0]||pg; const c=ob.getElementsByTagName('coordinates')[0];
+      return c?c.textContent.trim().split(/\s+/).map(p=>p.split(',').map(Number)).filter(p=>isFinite(p[0])&&isFinite(p[1])).map(p=>[+p[1].toFixed(7),+p[0].toFixed(7)]):[]; }).filter(r=>r.length>2);
+    if(rings.length) out.push({nome,rings});
+  });
+  return out;
+}
+function parseGeoJSON(obj){ const out=[], feats=obj.type==='FeatureCollection'?obj.features:(obj.type==='Feature'?[obj]:[{type:'Feature',properties:{},geometry:obj}]);
+  (feats||[]).forEach((f,i)=>{ const g=f&&f.geometry; if(!g) return; const p=f.properties||{};
+    const nome=p.FieldName||p.fieldname||p.talhao||p.TALHAO||p.nome||p.NOME||p.name||p.Name||`Polígono ${i+1}`;
+    const polys=g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];
+    const rings=polys.map(pl=>(pl[0]||[]).map(c=>[+(+c[1]).toFixed(7),+(+c[0]).toFixed(7)])).filter(r=>r.length>2);
+    if(rings.length) out.push({nome:String(nome),rings}); });
+  return out; }
+function loadJSZip(){ if(window.JSZip) return Promise.resolve(window.JSZip);
+  return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload=()=>res(window.JSZip); s.onerror=()=>rej(new Error('sem internet')); document.head.appendChild(s); }); }
+async function limImportFile(file){
+  try{
+    let polys=[]; const nm=file.name||'';
+    if(/\.kmz$/i.test(nm)){ const JSZip=await loadJSZip(), zip=await JSZip.loadAsync(file); const kf=Object.keys(zip.files).find(f=>/\.kml$/i.test(f)); if(!kf) throw new Error('KMZ sem arquivo .kml dentro'); polys=parseKmlText(await zip.files[kf].async('string')); }
+    else { const txt=await file.text(); polys=/^\s*[{[]/.test(txt)?parseGeoJSON(JSON.parse(txt)):parseKmlText(txt); }
+    if(!polys.length){ toast('Nenhum polígono encontrado no arquivo'); return; }
+    _limImport={arquivo:nm, itens:polys.map(p=>({nome:p.nome, rings:p.rings, ha:limAreaHa(p.rings), tid:limMatchTalhao(p.nome)}))};
+    route({keepScroll:true}); toast(`${polys.length} polígono(s) lido(s) — confira o talhão de cada um e salve`);
+  }catch(e){ toast('Não consegui ler o arquivo: '+e.message); }
+}
+// célula da planilha aceita ~50 mil caracteres: reduz pontos se o contorno for muito detalhado
+function limCompact(rings){ let r=rings; while(JSON.stringify(r).length>40000 && r.some(x=>x.length>20)) r=r.map(x=>x.length>20?x.filter((p,i)=>i%2===0||i===x.length-1):x); return r; }
+function limSalvarImport(){
+  if(!_limImport) return; OV.limites=OV.limites||{}; let n=0;
+  _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:Date.now()}; n++; });
+  _limImport=null; saveOverrides(); scheduleLimitesPush(); route(); toast(n?`${n} limite(s) salvo(s) no mapa`:'Nenhum talhão escolhido');
+}
+function limRemover(tid){ OV.limites=OV.limites||{}; OV.limites[tid]={del:true,_u:Date.now()}; saveOverrides(); scheduleLimitesPush(); route(); toast('Limite removido'); }
+// ---- sincronização (aba "LIMITES APP"; só envia se o Code.gs já tiver o ramo __limites) ----
+let limitesPushTimer=null, lastLimitesSig='';
+function limitesSig(){ return JSON.stringify((OV&&OV.limites)||{}); }
+function limitesServerOk(){ return !!(DATA && DATA.limites_app && typeof DATA.limites_app==='object'); }
+function scheduleLimitesPush(){ if(!syncUrl()||!autoOn()||!limitesServerOk()) return; clearTimeout(limitesPushTimer);
+  limitesPushTimer=setTimeout(()=>{ if(limitesSig()===lastLimitesSig) return; limitesPush({auto:true}); }, 1500); }
+async function limitesPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!limitesServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleLimitesPush(); return; }
+  const sig=limitesSig(); if(opts.auto && sig===lastLimitesSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__limites:(OV.limites||{})}));
+    lastLimitesSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Limites: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+function limitesApplyPulled(map){
+  if(!map || typeof map!=='object' || !OV) return false;
+  OV.limites=OV.limites||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=OV.limites[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>=lu){ OV.limites[k]=inc; changed=true; } }
+  if(changed){ saveOverrides(); lastLimitesSig=limitesSig(); }
+  return changed;
+}
 async function mapaInit(){
   const el=document.getElementById('mapa-canvas'); if(!el) return;
   let L; try{ L=await loadLeaflet(); }catch(e){
@@ -3362,6 +3440,18 @@ async function mapaInit(){
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:19, attribution:'Esri World Imagery'}).addTo(_map);
   const bounds=[];
+  // contornos dos talhões, coloridos pela cultura da safra atual
+  const lims=limitesAll();
+  Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return;
+    const seq=t?talSafraAtual(t):'principal', emp=t?(seq==='safrinha'?empSafDe(t):empDe(t)):'', ck=culturaKey(emp), cor=CULT_COR[ck]||'#90a4ae';
+    const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
+    const pg=L.polygon(lm.coords,{color:'#fff',weight:2,fillColor:cor,fillOpacity:.32}).addTo(_map);
+    pg.bindTooltip(`${esc(tid)}`,{permanent:true,direction:'center',className:'mapa-lbl'});
+    pg.bindPopup(`<b>${esc(tid)}${t&&t.nome?' · '+esc(t.nome):''}</b><br>${esc(emp||'sem cultura')}<br>
+      Área: ${t?num(areaDe(t))+' ha cadastro · ':''}${nf2.format(haLim)} ha no limite${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
+      <br><a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>`);
+    lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
+  });
   pts.forEach(r=>{
     const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
     L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
@@ -3369,6 +3459,7 @@ async function mapaInit(){
     bounds.push([r.lat,r.lng]);
   });
   if(bounds.length>1){ try{ _map.fitBounds(bounds,{padding:[30,30]}); }catch(e){} }
+  else if(bounds.length===1){ _map.setView(bounds[0],15); }
   setTimeout(()=>{ try{ _map.invalidateSize(); }catch(e){} }, 120);
 }
 function mapaLocate(){
@@ -3635,16 +3726,34 @@ function exportCampoCsv(){
 }
 V.mapa=function(){
   const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
-  return `<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${n} ponto(s) de monitoramento com GPS</span>
-      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button></div>
+  const tals=talhoesAll(), lims=limitesAll(), comLim=tals.filter(t=>lims[t.id]), semLim=tals.filter(t=>!lims[t.id]);
+  const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''} (${num(areaDe(t))} ha)</option>`).join('');
+  const imp=_limImport?`<div class="panel lim-imp"><div class="panel-head"><h2>📥 Conferir importação</h2><span class="sub">${esc(_limImport.arquivo)}</span></div>
+      <div class="lim-list">${_limImport.itens.map((it,i)=>{ const t=it.tid&&findTalhao(it.tid), dif=t&&areaDe(t)?(it.ha/areaDe(t)-1)*100:null;
+        return `<div class="lim-row"><div><b>${esc(it.nome)}</b><div class="mut" style="font-size:12px">${nf2.format(it.ha)} ha no contorno${dif!=null?` · <span${Math.abs(dif)>10?' class="lim-warn"':''}>${dif>=0?'+':''}${nf1.format(dif)}% vs cadastro${Math.abs(dif)>10?' — confira o talhão':''}</span>`:''}</div></div>
+          <select class="sel" data-limsel="${i}">${tOpts(it.tid)}</select></div>`; }).join('')}</div>
+      <div class="bulk-add" style="padding:10px 14px"><button class="btn btn-primary btn-sm" data-act="limSalvar">Salvar limites</button><button class="btn btn-outline btn-sm" data-act="limCancelar">Cancelar</button></div></div>`:'';
+  const culturas=[...new Set(comLim.map(t=>culturaKey(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t))))];
+  const legCult=culturas.map(c=>`<span><i style="background:${CULT_COR[c]||'#90a4ae'};border-radius:3px"></i>${esc((FENO[c]||{}).nome||'Sem cultura')}</span>`).join('');
+  const own=(OV.limites||{});
+  const lista=comLim.map(t=>{ const lm=lims[t.id], ha=lm.ha||limAreaHa(lm.coords), dif=areaDe(t)?(ha/areaDe(t)-1)*100:null;
+    return `<div class="lim-row"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
+      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button>${(own[t.id]&&!own[t.id].del)||LIM_BASE[t.id]?`<button class="btn btn-outline btn-sm" data-act="limRemover" data-id="${esc(t.id)}" title="Remover limite">✕</button>`:''}</div></div>`; }).join('');
+  return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
+      <div class="spacer"></div>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer">📥 Importar limites<input type="file" id="lim-file" accept=".kml,.kmz,.geojson,.json" hidden></label>
+      <button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button></div>
     <div id="mapa-canvas" class="mapa-canvas"></div>
-    <div class="mapa-leg">
+    <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
       <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
       <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
-    </div>
-    <p class="mut" style="font-size:12px;padding:10px 16px">Mostra os pontos do <b>Monitoramento</b> com GPS, sobre imagem de satélite (precisa de internet). <br><b>Em breve:</b> desenhar o <b>contorno dos talhões</b> colorido por cultura — pra isso eu preciso do arquivo de contorno (KML/KMZ/GeoJSON), que dá pra exportar do Aqila ou do SICAR/CAR.</p>
-  </div>`;
+    </div></div>
+  <div class="panel"><div class="panel-head"><h2>Limites dos talhões</h2><span class="sub">${comLim.length}/${tals.length} com contorno</span></div>
+    <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
+    ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(t.id)).join(' · ')}</p>`:''}
+    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">O talhão é reconhecido pelo nome do polígono (ex.: “AREA 1” → ÁREA 1); confira antes de salvar. Um arquivo pode ter vários talhões.</p></div>`;
 };
+function limZoom(tid){ const lm=limitesAll()[tid]; if(!_map||!lm||!window.L) return; try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); document.getElementById('mapa-canvas').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
 
 /* --- Execução da operação: baixa de estoque por operação (id estável = op:<talhão|op>) --- */
 function opBaixaId(key){ return 'op:'+key; }
@@ -4131,6 +4240,8 @@ document.addEventListener('change',e=>{
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='lim-file'){ const f=e.target.files&&e.target.files[0]; if(f) limImportFile(f); e.target.value=''; return; }
+  if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
@@ -4270,6 +4381,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
+    else if(a.act==='limSalvar'){ limSalvarImport(); }
+    else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
+    else if(a.act==='limZoom'){ limZoom(a.id); }
+    else if(a.act==='limRemover'){ if(confirm('Remover o limite deste talhão do mapa?')) limRemover(a.id); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }
@@ -4916,6 +5031,7 @@ function applyPulledData(d){
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
   try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
+  try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -5040,6 +5156,7 @@ async function syncPush(opts){
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
+  try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
@@ -5320,6 +5437,7 @@ function pendingInfo(){
     if(lastTarefasPushSig!=='' && typeof tarefasSig==='function' && tarefasSig()!==lastTarefasPushSig) add(1, 'alteração em tarefas');
     if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) add(1, 'alteração na execução');
     if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
+    if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
   }catch(e){}
   return {total, parts};
 }
@@ -5443,6 +5561,7 @@ function boot(d){
     if(!(TAREFAS.tarefas||[]).length && !(EQUIPE.funcionarios||[]).length) lastTarefasPushSig=tarefasSig();
     if(!Object.keys(OV.realizado||{}).length) lastRealizadoSig=realizadoSig();
     if(!Object.keys(OV.result||{}).length) lastResultSig=resultSig();
+    if(!Object.keys(OV.limites||{}).length) lastLimitesSig=limitesSig();
   }catch(e){}
   checkNewVersion();   // versão publicada mais nova? atualiza sozinho (nada fica em cache no aparelho)
   if(syncUrl()){
@@ -5454,6 +5573,7 @@ function boot(d){
   { const eb=$('#edit-badge'); if(eb) eb.onclick=()=>{ if(syncUrl()) syncGate('manual'); else location.hash='#/sync'; }; }
 }
 // abre JÁ com os últimos dados sincronizados (cache local); se não houver, usa o data.json embutido
+loadLimBase().then(()=>{ try{ if(DATA && /^#\/mapa/.test(location.hash)) route({keepScroll:true}); }catch(e){} });   // contornos publicados com o app
 (function(){
   const cached=loadDataCache();
   if(cached && cached.produtos){ boot(cached); return; }

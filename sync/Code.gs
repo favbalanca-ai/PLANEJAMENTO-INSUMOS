@@ -84,7 +84,8 @@ function readData(){
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
-    result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST() };
+    result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
+    limites_app:readMapApp('LIMITES APP') };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -861,6 +862,8 @@ function doPost(e){
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
+    } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
+      var lim = writeMapApp('LIMITES APP', payload.__limites); out.ok = lim.rows;
     } else if (payload && payload.__opplan){          // ordem + nomes das operações (merge por chave)
       var opl = writeMapApp('PLANO OPS APP', payload.__opplan); out.ok = opl.rows;
     } else {
