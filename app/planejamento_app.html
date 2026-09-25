@@ -1005,7 +1005,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-127';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-128';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1597,6 +1597,9 @@ function eachOp(t, cb){
     opsOf(t.id,seq).forEach((op,oi)=>cb(seq,tag,oi,op,`${tag}${oi}`));
   });
 }
+// unidade de venda da cultura: ajuste do usuário > padrão pelo nome (braquiária = % de valor cultural/pontos) > sc
+function unidadePadrao(emp){ return /BRAQ|BRACH/i.test(String(emp||''))?'%':'sc'; }
+function unidadeCultura(emp){ return (OV.dreUnit&&OV.dreUnit[emp])||unidadePadrao(emp); }
 function precoCultura(emp){ return (emp in OV.cultura)?+OV.cultura[emp]:(DATA.precos_cultura[emp]||0); }
 function maquinasAll(){ return (DATA.maquinas||[]).concat(OV.maqAdd); }
 function maqAttr(m,k){ const o=OV.maqAttr[m.conjunto]; return (o&&o[k]!=null)?+o[k]:(+m[k]||0); }
@@ -3236,7 +3239,7 @@ V.resultados = function(){
   if(!cvs.length) return `<div class="empty">Sem talhões para analisar.</div>`;
   const rows=cvs.map(cv=>{
     const t=cv.t, area=cv.area, emp=cv.emp, key=`${t.id}|${cv.seq}`;
-    const unit=(OV.dreUnit&&OV.dreUnit[emp])||'sc';
+    const unit=unidadeCultura(emp);
     const prodHaOrc=(cv.seq==='safrinha'?prodSafDe(t):prodvDe(t))||0;
     const res=OV.result[key]||{};
     const prodHaReal=(res.prodHa!=null&&res.prodHa!=='')?+res.prodHa:prodHaOrc;
@@ -3305,7 +3308,7 @@ V.dre = function(){
   const list=Object.values(emps).map(g=>[g.name,g]).sort((a,b)=>b[1].area-a[1].area);
   const R=list.map(([e,g])=>{
     // unidade e produtividade/ha por cultura (estimativa da DRE; sc por padrão)
-    const unit=(OV.dreUnit&&OV.dreUnit[e])||'sc';
+    const unit=unidadeCultura(e);
     const prodHaBase=g.area>0?g.prod/g.area:0;
     const prodHa=(OV.dreProdHa&&e in OV.dreProdHa)?+OV.dreProdHa[e]:prodHaBase;
     const prod=prodHa*g.area;
@@ -3345,7 +3348,7 @@ V.dre = function(){
         ops.sort((a,b)=>b.c-a.c);
         it.push(`<b>${esc(r.e)}</b>: máquina calculada ${brl(r.opHaCalc)}/ha — maiores: ${ops.slice(0,3).map(o=>`${esc(o.t)} · ${esc(o.n)} (${esc(o.cj)}) ${brl(o.c)}/ha`).join(' · ')}.`); } });
     R.forEach(r=>{ if(!(r.preco>0)) it.push(`<b>${esc(r.e)}</b> está <b>sem preço de venda</b> — a receita fica zerada.`); });
-    R.forEach(r=>{ if(r.unit==='sc' && r.prodHa>1000) it.push(`<b>${esc(r.e)}</b>: produtividade ${nf0.format(r.prodHa)}/ha com unidade “sc” — se não for saca, troque a unidade (ex.: pontos, kg) ao lado da produtividade.`); });
+    R.forEach(r=>{ if(r.unit==='sc' && r.prodHa>1000) it.push(`<b>${esc(r.e)}</b>: produtividade ${nf0.format(r.prodHa)}/ha com unidade “sc” — se não for saca, troque a unidade (ex.: %, kg) ao lado da produtividade.`); });
     if(!impostoPct && !estruturaHa && !financeiroPct) it.push(`<b>Premissas zeradas</b> — impostos sobre venda (ex.: Funrural), estrutura/administrativo e custo financeiro estão em 0: o resultado fica <b>superestimado</b>. Preencha em “Premissas gerenciais”.`);
     if(!it.length) return `<div class="panel"><div class="panel-head"><h2>Revisão dos dados</h2><span class="sub">nenhum problema encontrado</span></div></div>`;
     return `<div class="panel dre-rev"><div class="panel-head"><h2>⚠️ Revisão dos dados</h2><span class="sub">${it.length} ponto(s) que distorcem a DRE</span></div>
@@ -3404,7 +3407,7 @@ V.dre = function(){
   // ---- tabela detalhada (editáveis) ----
   const body=R.map(r=>`<tr><td class="c-full"><b>${esc(r.e)}</b></td>
     <td class="num" data-th="Área (ha)">${num(r.g.area)}</td>
-    <td class="num" data-th="Produt./ha"><span class="dre-prod"><input class="cell ${(OV.dreProdHa&&r.e in OV.dreProdHa)?'edited':''}" inputmode="decimal" data-edit="dreProdHa" data-emp="${esc(r.e)}" value="${r.prodHa}" title="Produção total: ${nf0.format(r.prod)} ${esc(r.unit)}"><input class="cell dre-unit ${r.unit!=='sc'?'edited':''}" data-edit="dreUnit" data-emp="${esc(r.e)}" value="${esc(r.unit)}" title="unidade (sc, pontos, kg…)"></span></td>
+    <td class="num" data-th="Produt./ha"><span class="dre-prod"><input class="cell ${(OV.dreProdHa&&r.e in OV.dreProdHa)?'edited':''}" inputmode="decimal" data-edit="dreProdHa" data-emp="${esc(r.e)}" value="${r.prodHa}" title="Produção total: ${nf0.format(r.prod)} ${esc(r.unit)}"><input class="cell dre-unit ${(OV.dreUnit&&r.e in OV.dreUnit)?'edited':''}" data-edit="dreUnit" data-emp="${esc(r.e)}" value="${esc(r.unit)}" title="unidade de venda (sc, %, kg…)"></span></td>
     <td class="num" data-th="Preço (R$/un)"><input class="cell ${(r.e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(r.e)}" value="${r.preco}"></td>
     <td class="num" data-th="Receita">${brl0(r.receita)}</td>
     <td class="num" data-th="Custo insumos">${brl0(r.g.ins)}</td>
@@ -4853,7 +4856,7 @@ function applyEdit(el){
   else if(kind==='arrend'){ const e=el.dataset.emp; if(n==null||n===0) delete OV.arrend[e]; else OV.arrend[e]=n; }
   else if(kind==='dreCfg'){ const f=el.dataset.field; OV.dreCfg=OV.dreCfg||{}; if(n==null||n===0) delete OV.dreCfg[f]; else OV.dreCfg[f]=n; }
   else if(kind==='dreProdHa'){ const e=el.dataset.emp; OV.dreProdHa=OV.dreProdHa||{}; if(n==null) delete OV.dreProdHa[e]; else OV.dreProdHa[e]=n; }
-  else if(kind==='dreUnit'){ const e=el.dataset.emp; OV.dreUnit=OV.dreUnit||{}; const u=el.value.trim(); if(!u||u.toLowerCase()==='sc') delete OV.dreUnit[e]; else OV.dreUnit[e]=u; }
+  else if(kind==='dreUnit'){ const e=el.dataset.emp; OV.dreUnit=OV.dreUnit||{}; const u=el.value.trim(); if(!u||u.toLowerCase()===unidadePadrao(e).toLowerCase()) delete OV.dreUnit[e]; else OV.dreUnit[e]=u; }
   else if(kind==='prodSaf'){ const id=el.dataset.id, tt=findTalhao(id); OV.talhao[id]=OV.talhao[id]||{}; const base=(tt.prod_safrinha||0); if(n==null||n===base) delete OV.talhao[id].prod_safrinha; else OV.talhao[id].prod_safrinha=n; if(!Object.keys(OV.talhao[id]).length) delete OV.talhao[id]; }
   else if(kind==='dose'){ const k=doseKey(el.dataset.id,el.dataset.op,el.dataset.item); if(n==null) delete OV.dose[k]; else OV.dose[k]=n; }
   else if(kind==='doseAdd'){ const arr=OV.itemAdd[`${el.dataset.id}|${el.dataset.op}`]; if(arr&&arr[+el.dataset.ai]) arr[+el.dataset.ai].dose=(n==null?0:n); }
