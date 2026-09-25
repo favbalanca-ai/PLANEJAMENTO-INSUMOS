@@ -1047,6 +1047,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .mp-late{background:#fdecea;color:#8e1a14}.mp-soon{background:#fff8d6;color:#6b5400}.mp-ok{background:#e8f5e9;color:#1b5e20}.mp-none{background:#eef2f4;color:#46565c}
 .mp-ul{margin:2px 0 6px;padding-left:18px;font-size:12px;line-height:1.45}
 .mp-red{color:#b3261e}
+.lim-errs{margin:6px 14px 0;padding:7px 10px;font-size:12px;color:#8e1a14;background:#fdecea;border:1px solid #f5c2bd;border-radius:9px}
+@media (max-width:640px){ .lim-pasta{display:none} }
 
 </style>
 </head>
@@ -1137,7 +1139,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-136';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-137';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4524,21 +4526,100 @@ function parseGeoJSON(obj){ const out=[], feats=obj.type==='FeatureCollection'?o
   return out; }
 function loadJSZip(){ if(window.JSZip) return Promise.resolve(window.JSZip);
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'; s.onload=()=>res(window.JSZip); s.onerror=()=>rej(new Error('sem internet')); document.head.appendChild(s); }); }
-async function limImportFile(file){
+// ---- Shapefile (.shp + .dbf + .prj), direto ou dentro de .zip ----
+// projeção: geográfica (graus) ou Transversa de Mercator/UTM (ex.: SIRGAS 2000 / UTM 23S) lida do .prj
+function prjTransform(prj){
+  const t=String(prj||'');
+  if(!t || !/PROJCS/i.test(t)) return p=>[p[1],p[0]];   // geográfica: [lng,lat] -> [lat,lng]
+  if(!/Transverse_Mercator|UTM/i.test(t)) throw new Error('projeção do .prj não suportada (use UTM/SIRGAS ou exporte em KML)');
+  const par=n=>{ const m=t.match(new RegExp('PARAMETER\\[\\s*"'+n+'"\\s*,\\s*(-?[\\d.eE+-]+)','i')); return m?+m[1]:null; };
+  let lon0=par('central_meridian'), fe=par('false_easting'), fn=par('false_northing'), k0=par('scale_factor');
+  const z=t.match(/UTM[ _]?zone[ _]?(\d{1,2})\s*([NS])?/i)||t.match(/UTM[ _](\d{1,2})([NS])/i);
+  if(lon0==null && z) lon0=(+z[1])*6-183;
+  if(fn==null) fn=(z&&/S/i.test(z[2]||''))||/south/i.test(t)?10000000:0;
+  if(fe==null) fe=500000; if(k0==null) k0=0.9996; if(lon0==null) throw new Error('.prj sem meridiano central');
+  const a=6378137, f=1/298.257222101, e2=f*(2-f), ep2=e2/(1-e2), e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2)), rad=Math.PI/180;
+  return ([E,N])=>{ const x=E-fe, y=N-fn, M=y/k0, mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2*e2*e2/256));
+    const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+    const s=Math.sin(p1), c=Math.cos(p1), tn=Math.tan(p1), N1=a/Math.sqrt(1-e2*s*s), T1=tn*tn, C1=ep2*c*c, R1=a*(1-e2)/Math.pow(1-e2*s*s,1.5), D=x/(N1*k0);
+    const lat=p1-(N1*tn/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+    const lon=lon0*rad+(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/c;
+    return [lat/rad, lon/rad]; };
+}
+function parseDbf(buf,cpg){
+  const dv=new DataView(buf), n=dv.getUint32(4,true), hl=dv.getUint16(8,true), rl=dv.getUint16(10,true), fields=[];
+  let dec; try{ dec=new TextDecoder(/utf-?8/i.test(cpg||'')?'utf-8':'windows-1252'); }catch(e){ dec=new TextDecoder(); }
+  for(let o=32;o<hl-1 && dv.getUint8(o)!==0x0D;o+=32){ const nm=dec.decode(new Uint8Array(buf,o,11)).replace(/\0.*$/,'').trim(); fields.push({nm,len:dv.getUint8(o+16)}); }
+  const recs=[];
+  for(let i=0;i<n;i++){ const base=hl+i*rl; if(base+rl>buf.byteLength) break; let o=base+1; const r={};
+    fields.forEach(fd=>{ r[fd.nm]=dec.decode(new Uint8Array(buf,o,fd.len)).trim(); o+=fd.len; }); recs.push(r); }
+  return recs;
+}
+function parseShp(buf,tr){
+  const dv=new DataView(buf), out=[]; let o=100, i=0;
+  while(o+8<=buf.byteLength){ const len=dv.getInt32(o+4,false)*2, c=o+8, typ=len>=4?dv.getInt32(c,true):0;
+    if(typ===5||typ===15||typ===25){ const np=dv.getInt32(c+36,true), npt=dv.getInt32(c+40,true), parts=[];
+      for(let k=0;k<np;k++) parts.push(dv.getInt32(c+44+k*4,true));
+      const p0=c+44+np*4, rings=[];
+      for(let k=0;k<np;k++){ const a=parts[k], b=k+1<np?parts[k+1]:npt, ring=[]; let sa=0;
+        for(let j=a;j<b;j++){ const x=dv.getFloat64(p0+j*16,true), y=dv.getFloat64(p0+j*16+8,true); ring.push([x,y]); }
+        for(let j=0;j<ring.length-1;j++) sa+=ring[j][0]*ring[j+1][1]-ring[j+1][0]*ring[j][1];
+        rings.push({cw:sa<0, pts:ring}); }
+      const outer=rings.some(r=>r.cw)?rings.filter(r=>r.cw):rings;   // anéis horários = contorno externo (buracos saem)
+      out.push({idx:i, rings:outer.map(r=>r.pts.map(p=>tr(p)).map(([la,lo])=>[+la.toFixed(7),+lo.toFixed(7)])).filter(r=>r.length>2)}); }
+    else out.push({idx:i, rings:[]});
+    o=c+len; i++; }
+  return out;
+}
+const _NOME_CAMPO=/^(fieldname|field_name|talhao|talhão|nome|name|field|descricao|descr|gleba|id_talhao)$/i;
+function shpToPolys(base,f){ // f: {shp:ArrayBuffer, dbf?, prj?, cpg?}
+  let tr=prjTransform(f.prj);
+  const shapes=parseShp(f.shp,tr), recs=f.dbf?parseDbf(f.dbf,f.cpg):[];
+  if(!f.prj){ const s=shapes.find(x=>x.rings.length), p=s&&s.rings[0][0]; if(p && (Math.abs(p[0])>90||Math.abs(p[1])>180)) throw new Error(`${base}: falta o arquivo .prj (projeção) junto do .shp`); }
+  return shapes.filter(s=>s.rings.length).map(s=>{ const r=recs[s.idx]||{}, k=Object.keys(r).find(x=>_NOME_CAMPO.test(x)&&r[x]);
+    return {nome:(k?r[k]:'')||(shapes.length>1?`${base} ${s.idx+1}`:base), rings:s.rings, arquivo:base+'.shp'}; });
+}
+// lê um conjunto de arquivos (vários de uma vez, pasta ou .zip) e junta todos os polígonos
+async function limLerArquivos(files){
+  const polys=[], shp={}, erros=[];
+  const baseOf=n=>String(n).split('/').pop().replace(/\.[^.]+$/,'');
+  const addShpPart=(name,ext,data)=>{ const b=baseOf(name).toLowerCase(); (shp[b]=shp[b]||{base:baseOf(name)})[ext]=data; };
+  for(const file of files){ const nm=file.name||'', ext=(nm.match(/\.([^.]+)$/)||[])[1]; const e=(ext||'').toLowerCase();
+    try{
+      if(e==='kmz'||e==='zip'){ const JSZip=await loadJSZip(), zip=await JSZip.loadAsync(file);
+        for(const fn of Object.keys(zip.files)){ const zf=zip.files[fn]; if(zf.dir||/__MACOSX/.test(fn)) continue; const ze=((fn.match(/\.([^.]+)$/)||[])[1]||'').toLowerCase();
+          if(ze==='kml') polys.push(...parseKmlText(await zf.async('string')).map(p=>Object.assign(p,{arquivo:nm})));
+          else if(ze==='geojson'||ze==='json') polys.push(...parseGeoJSON(JSON.parse(await zf.async('string'))).map(p=>Object.assign(p,{arquivo:nm})));
+          else if(ze==='shp'||ze==='dbf') addShpPart(fn,ze,await zf.async('arraybuffer'));
+          else if(ze==='prj'||ze==='cpg') addShpPart(fn,ze,await zf.async('string')); } }
+      else if(e==='shp'||e==='dbf') addShpPart(nm,e,await file.arrayBuffer());
+      else if(e==='prj'||e==='cpg') addShpPart(nm,e,await file.text());
+      else if(e==='kml'||e==='geojson'||e==='json'||e==='xml'){ const txt=await file.text();
+        polys.push(...(/^\s*[{[]/.test(txt)?parseGeoJSON(JSON.parse(txt)):parseKmlText(txt)).map(p=>Object.assign(p,{arquivo:nm}))); }
+      // .shx, .sbn, .qmd, .cpg soltos etc.: ignorados (não são necessários)
+    }catch(err){ erros.push(`${nm}: ${err.message}`); }
+  }
+  Object.keys(shp).forEach(k=>{ const f=shp[k]; if(!f.shp){ if(f.dbf) erros.push(`${f.base}: falta o arquivo .shp`); return; }
+    try{ polys.push(...shpToPolys(f.base,f)); }catch(err){ erros.push(err.message); } });
+  return {polys, erros};
+}
+async function limImportFiles(fileList){
+  const files=[...(fileList||[])]; if(!files.length) return;
+  toast(`Lendo ${files.length} arquivo(s)…`);
   try{
-    let polys=[]; const nm=file.name||'';
-    if(/\.kmz$/i.test(nm)){ const JSZip=await loadJSZip(), zip=await JSZip.loadAsync(file); const kf=Object.keys(zip.files).find(f=>/\.kml$/i.test(f)); if(!kf) throw new Error('KMZ sem arquivo .kml dentro'); polys=parseKmlText(await zip.files[kf].async('string')); }
-    else { const txt=await file.text(); polys=/^\s*[{[]/.test(txt)?parseGeoJSON(JSON.parse(txt)):parseKmlText(txt); }
-    if(!polys.length){ toast('Nenhum polígono encontrado no arquivo'); return; }
-    _limImport={arquivo:nm, itens:polys.map(p=>({nome:p.nome, rings:p.rings, ha:limAreaHa(p.rings), tid:limMatchTalhao(p.nome)}))};
+    const {polys,erros}=await limLerArquivos(files);
+    if(!polys.length){ toast(erros.length?('Não consegui ler: '+erros[0]):'Nenhum polígono encontrado. Use KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj).'); return; }
+    const usados=new Set();
+    _limImport={arquivo:files.length===1?files[0].name:`${files.length} arquivos`, erros, itens:polys.map(p=>{ let tid=limMatchTalhao(p.nome); if(tid&&usados.has(tid)) tid=''; if(tid) usados.add(tid);
+      return {nome:p.nome, arquivo:p.arquivo||'', rings:p.rings, ha:limAreaHa(p.rings), tid}; })};
     route({keepScroll:true}); toast(`${polys.length} polígono(s) lido(s) — confira o talhão de cada um e salve`);
-  }catch(e){ toast('Não consegui ler o arquivo: '+e.message); }
+  }catch(e){ toast('Não consegui ler os arquivos: '+e.message); }
 }
 // célula da planilha aceita ~50 mil caracteres: reduz pontos se o contorno for muito detalhado
 function limCompact(rings){ let r=rings; while(JSON.stringify(r).length>40000 && r.some(x=>x.length>20)) r=r.map(x=>x.length>20?x.filter((p,i)=>i%2===0||i===x.length-1):x); return r; }
 function limSalvarImport(){
   if(!_limImport) return; OV.limites=OV.limites||{}; let n=0;
-  _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:Date.now()}; n++; });
+  _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:it.arquivo||_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:Date.now()}; n++; });
   _limImport=null; saveOverrides(); scheduleLimitesPush(); route(); toast(n?`${n} limite(s) salvo(s) no mapa`:'Nenhum talhão escolhido');
 }
 // remover guarda o contorno anterior (se era importado) para poder restaurar; o do app volta sozinho
@@ -4890,8 +4971,9 @@ V.mapa=function(){
   const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''} (${num(areaDe(t))} ha)</option>`).join('');
   const imp=_limImport?`<div class="panel lim-imp"><div class="panel-head"><h2>📥 Conferir importação</h2><span class="sub">${esc(_limImport.arquivo)}</span></div>
       <div class="lim-list">${_limImport.itens.map((it,i)=>{ const t=it.tid&&findTalhao(it.tid), dif=t&&areaDe(t)?(it.ha/areaDe(t)-1)*100:null;
-        return `<div class="lim-row"><div><b>${esc(it.nome)}</b><div class="mut" style="font-size:12px">${nf2.format(it.ha)} ha no contorno${dif!=null?` · <span${Math.abs(dif)>10?' class="lim-warn"':''}>${dif>=0?'+':''}${nf1.format(dif)}% vs cadastro${Math.abs(dif)>10?' — confira o talhão':''}</span>`:''}</div></div>
+        return `<div class="lim-row"><div><b>${esc(it.nome)}</b><div class="mut" style="font-size:12px">${it.arquivo?`${esc(it.arquivo)} · `:''}${nf2.format(it.ha)} ha no contorno${dif!=null?` · <span${Math.abs(dif)>10?' class="lim-warn"':''}>${dif>=0?'+':''}${nf1.format(dif)}% vs cadastro${Math.abs(dif)>10?' — confira o talhão':''}</span>`:''}</div></div>
           <select class="sel" data-limsel="${i}">${tOpts(it.tid)}</select></div>`; }).join('')}</div>
+      ${(_limImport.erros||[]).length?`<div class="lim-errs">⚠️ Não lidos:<br>${_limImport.erros.map(esc).join('<br>')}</div>`:''}
       <div class="bulk-add" style="padding:10px 14px"><button class="btn btn-primary btn-sm" data-act="limSalvar">Salvar limites</button><button class="btn btn-outline btn-sm" data-act="limCancelar">Cancelar</button></div></div>`:'';
   const stCount={late:0,soon:0,ok:0,none:0}; comLim.forEach(t=>stCount[talStatusOps(t).nivel]++);
   const legCult=['late','soon','ok','none'].filter(k=>k!=='none'||stCount.none).map(k=>`<span><i style="background:${OPST[k].cor};border-radius:3px"></i>${OPST[k].lbl} <b>${stCount[k]}</b></span>`).join('');
@@ -4904,7 +4986,8 @@ V.mapa=function(){
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
       <div class="spacer"></div>
-      <label class="btn btn-outline btn-sm" style="cursor:pointer">📥 Importar limites<input type="file" id="lim-file" accept=".kml,.kmz,.geojson,.json" hidden></label>
+      <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
+      <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
       <button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button></div>
     <div id="mapa-canvas" class="mapa-canvas"></div>
     <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
@@ -4915,7 +4998,7 @@ V.mapa=function(){
     <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
     ${remov?`<div class="lim-sub">Removidos</div><div class="lim-list">${remov}</div>`:''}
     ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(t.id)).join(' · ')}</p>`:''}
-    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">O talhão é reconhecido pelo nome do polígono (ex.: “AREA 1” → ÁREA 1); confira antes de salvar. Um arquivo pode ter vários talhões.</p></div>`;
+    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Aceita <b>KML, KMZ, GeoJSON, ZIP</b> e <b>Shapefile</b> (escolha juntos o .shp, o .dbf e o .prj de cada área). Pode selecionar vários arquivos de uma vez — ou a pasta inteira no computador. O talhão é reconhecido pelo nome do polígono/arquivo (ex.: “AREA 1” → ÁREA 1); confira antes de salvar.</p></div>`;
 };
 function limZoom(tid){ const lm=limitesAll()[tid]; if(!_map||!lm||!window.L) return; try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); document.getElementById('mapa-canvas').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
 
@@ -5404,7 +5487,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
-  if(e.target.id==='lim-file'){ const f=e.target.files&&e.target.files[0]; if(f) limImportFile(f); e.target.value=''; return; }
+  if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
