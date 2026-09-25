@@ -1022,3 +1022,11 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .btn.lim-del{border-color:#f0c4c0}
 .lim-sub{padding:8px 14px 2px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:1px solid var(--line)}
 .lim-off{opacity:.8}
+/* semáforo das operações no mapa */
+.leaflet-tooltip.mapa-lbl-late{background:#b71c1c}
+.leaflet-tooltip.mapa-lbl-soon{background:#8a6d00}
+.leaflet-tooltip.mapa-lbl-ok{background:#1b5e20}
+.mp-st{margin:7px 0 3px;padding:4px 8px;border-radius:8px;font-size:12.5px}
+.mp-late{background:#fdecea;color:#8e1a14}.mp-soon{background:#fff8d6;color:#6b5400}.mp-ok{background:#e8f5e9;color:#1b5e20}.mp-none{background:#eef2f4;color:#46565c}
+.mp-ul{margin:2px 0 6px;padding-left:18px;font-size:12px;line-height:1.45}
+.mp-red{color:#b3261e}
