@@ -12,6 +12,13 @@ data = open(os.path.join(A, "data.json"), encoding="utf-8").read()
 # embute os dados e dispensa o fetch
 js = js.replace("fetch('data.json').then(r=>r.json())", "Promise.resolve(window.__DATA__)")
 js = "window.__DATA__=" + data + ";\n" + js
+# limites dos talhões (contornos) publicados com o app
+lim_path = os.path.join(A, "limites.json")
+lim = open(lim_path, encoding="utf-8").read().strip() if os.path.exists(lim_path) else "{}"
+LIM_FETCH = "fetch('limites.json',{cache:'no-store'}).then(r=>r.json())"
+assert LIM_FETCH in js, "app.js: carregador de limites.json não encontrado"
+js = js.replace(LIM_FETCH, "Promise.resolve(window.__LIMITES__||{})")
+js = "window.__LIMITES__=" + lim + ";\n" + js
 
 CSS_LOADER = """<script>document.write('<link rel="stylesheet" href="styles.css?t=' + Date.now() + '">');</script>"""
 JS_LOADER  = """<script>document.write('<script src="app.js?t=' + Date.now() + '"><\\/script>');</script>"""

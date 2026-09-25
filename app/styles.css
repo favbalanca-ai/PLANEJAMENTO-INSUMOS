@@ -1007,3 +1007,14 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .est-saldo{font-variant-numeric:tabular-nums}
 .est-saldo.ok{color:var(--green)}
 .est-saldo.neg{color:var(--red)}
+/* ===== Mapa: limites dos talhões ===== */
+.leaflet-tooltip.mapa-lbl{background:rgba(20,40,48,.72);border:0;color:#fff;font-weight:800;font-size:11.5px;padding:2px 7px;border-radius:8px;box-shadow:none}
+.leaflet-tooltip.mapa-lbl::before{display:none}
+.mapa-sep{width:1px;align-self:stretch;background:var(--line)}
+.lim-list{display:flex;flex-direction:column}
+.lim-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line)}
+.lim-list .lim-row:first-child{border-top:0}
+.lim-row .sel{max-width:55%}
+.lim-acts{display:flex;gap:6px;flex:none}
+.lim-imp{border:2px solid #9ccc65}
+.lim-warn{color:#b3261e;font-weight:700}
