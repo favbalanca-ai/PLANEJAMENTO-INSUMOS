@@ -1039,6 +1039,14 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .btn.lim-del{border-color:#f0c4c0}
 .lim-sub{padding:8px 14px 2px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-top:1px solid var(--line)}
 .lim-off{opacity:.8}
+/* semáforo das operações no mapa */
+.leaflet-tooltip.mapa-lbl-late{background:#b71c1c}
+.leaflet-tooltip.mapa-lbl-soon{background:#8a6d00}
+.leaflet-tooltip.mapa-lbl-ok{background:#1b5e20}
+.mp-st{margin:7px 0 3px;padding:4px 8px;border-radius:8px;font-size:12.5px}
+.mp-late{background:#fdecea;color:#8e1a14}.mp-soon{background:#fff8d6;color:#6b5400}.mp-ok{background:#e8f5e9;color:#1b5e20}.mp-none{background:#eef2f4;color:#46565c}
+.mp-ul{margin:2px 0 6px;padding-left:18px;font-size:12px;line-height:1.45}
+.mp-red{color:#b3261e}
 
 </style>
 </head>
@@ -1129,7 +1137,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-135';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-136';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4565,6 +4573,18 @@ function limitesApplyPulled(map){
   if(changed){ saveOverrides(); lastLimitesSig=limitesSig(); }
   return changed;
 }
+// semáforo do talhão pelas operações: 🔴 atrasada · 🟡 vence em até 7 dias / em andamento · 🟢 em dia · ⚪ sem programação
+const OPST={late:{cor:'#e53935',lbl:'Operação atrasada',ico:'🔴'},soon:{cor:'#fdd835',lbl:'Próximos 7 dias',ico:'🟡'},ok:{cor:'#43a047',lbl:'Em dia',ico:'🟢'},none:{cor:'#b0bec5',lbl:'Sem programação',ico:'⚪'}};
+function talStatusOps(t){
+  const hj=new Date(_hojeISO()+'T00:00:00'), late=[], soon=[]; let prox=null, tem=false;
+  campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='concluido') return;
+    const dp=opDataPlan(t.id,o.tagoi,o.op.dap); if(!dp) return; tem=true;
+    const dd=Math.round((new Date(dp+'T00:00:00')-hj)/86400000), and=r&&r.status==='andamento', it={nome:o.op.nome+(o.seq==='safrinha'?' (2ª)':''),dd,dp,and};
+    if(dd<0 && !and) late.push(it); else if(dd<=7 || and) soon.push(it);
+    if(dd>=0 && (!prox||dd<prox.dd)) prox=it; });
+  late.sort((a,b)=>a.dd-b.dd); soon.sort((a,b)=>a.dd-b.dd);
+  return {nivel:late.length?'late':soon.length?'soon':tem?'ok':'none', late, soon, prox};
+}
 async function mapaInit(){
   const el=document.getElementById('mapa-canvas'); if(!el) return;
   let L; try{ L=await loadLeaflet(); }catch(e){
@@ -4580,12 +4600,16 @@ async function mapaInit(){
   Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return;
     const seq=t?talSafraAtual(t):'principal', emp=t?(seq==='safrinha'?empSafDe(t):empDe(t)):'', ck=culturaKey(emp), cor=CULT_COR[ck]||'#90a4ae';
     const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
-    const pg=L.polygon(lm.coords,{color:'#fff',weight:2,fillColor:cor,fillOpacity:.32}).addTo(_map);
-    pg.bindTooltip(`${esc(tid)}`,{permanent:true,direction:'center',className:'mapa-lbl'});
-    pg.bindPopup(`<b>${esc(tid)}${t&&t.nome?' · '+esc(t.nome):''}</b><br>${esc(emp||'sem cultura')}<br>
-      Área: ${t?num(areaDe(t))+' ha cadastro · ':''}${nf2.format(haLim)} ha no limite${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
-      <br><a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>
-      <div style="margin-top:8px;padding-top:6px;border-top:1px solid #e3e8ea"><a class="link lim-del" data-act="limRemover" data-id="${esc(tid)}">🗑️ Remover limite</a></div>`);
+    const so=t?talStatusOps(t):{nivel:'none',late:[],soon:[],prox:null}, sc=OPST[so.nivel];
+    const pg=L.polygon(lm.coords,{color:sc.cor,weight:3,fillColor:sc.cor,fillOpacity:.38}).addTo(_map);
+    pg.bindTooltip(`${esc(tid)}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
+    const li=(arr,fn)=>arr.slice(0,4).map(fn).join('')+(arr.length>4?`<li class="mut">+${arr.length-4}…</li>`:'');
+    pg.bindPopup(`<b>${esc(tid)}${t&&t.nome?' · '+esc(t.nome):''}</b><br>${esc(emp||'sem cultura')} · ${nf2.format(haLim)} ha${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
+      <div class="mp-st mp-${so.nivel}">${sc.ico} <b>${so.nivel==='late'?`${so.late.length} operação(ões) atrasada(s)`:so.nivel==='soon'?'Operação nos próximos dias':sc.lbl}</b></div>
+      ${so.late.length?`<ul class="mp-ul">${li(so.late,x=>`<li>${esc(x.nome)} — <b class="mp-red">${-x.dd} d atrasada</b></li>`)}</ul>`:''}
+      ${so.soon.length?`<ul class="mp-ul">${li(so.soon,x=>`<li>${esc(x.nome)} — ${x.and?'em andamento':x.dd===0?'<b>hoje</b>':`em ${x.dd} d (${_dtBRc(x.dp).slice(0,5)})`}</li>`)}</ul>`:''}
+      ${so.nivel==='ok'&&so.prox?`<div class="mut" style="font-size:12px">Próxima: ${esc(so.prox.nome)} em ${so.prox.dd} d (${_dtBRc(so.prox.dp).slice(0,5)})</div>`:''}
+      <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>`);
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
   pts.forEach(r=>{
@@ -4869,11 +4893,12 @@ V.mapa=function(){
         return `<div class="lim-row"><div><b>${esc(it.nome)}</b><div class="mut" style="font-size:12px">${nf2.format(it.ha)} ha no contorno${dif!=null?` · <span${Math.abs(dif)>10?' class="lim-warn"':''}>${dif>=0?'+':''}${nf1.format(dif)}% vs cadastro${Math.abs(dif)>10?' — confira o talhão':''}</span>`:''}</div></div>
           <select class="sel" data-limsel="${i}">${tOpts(it.tid)}</select></div>`; }).join('')}</div>
       <div class="bulk-add" style="padding:10px 14px"><button class="btn btn-primary btn-sm" data-act="limSalvar">Salvar limites</button><button class="btn btn-outline btn-sm" data-act="limCancelar">Cancelar</button></div></div>`:'';
-  const culturas=[...new Set(comLim.map(t=>culturaKey(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t))))];
-  const legCult=culturas.map(c=>`<span><i style="background:${CULT_COR[c]||'#90a4ae'};border-radius:3px"></i>${esc((FENO[c]||{}).nome||'Sem cultura')}</span>`).join('');
+  const stCount={late:0,soon:0,ok:0,none:0}; comLim.forEach(t=>stCount[talStatusOps(t).nivel]++);
+  const legCult=['late','soon','ok','none'].filter(k=>k!=='none'||stCount.none).map(k=>`<span><i style="background:${OPST[k].cor};border-radius:3px"></i>${OPST[k].lbl} <b>${stCount[k]}</b></span>`).join('');
   const own=(OV.limites||{});
   const lista=comLim.map(t=>{ const lm=lims[t.id], ha=lm.ha||limAreaHa(lm.coords), dif=areaDe(t)?(ha/areaDe(t)-1)*100:null;
-    return `<div class="lim-row"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
+    const so=talStatusOps(t);
+    return `<div class="lim-row"><div><b>${OPST[so.nivel].ico} ${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}${so.late.length?` <span class="cp-tag late">${so.late.length} atrasada(s)</span>`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(id)}</b>${t&&t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
