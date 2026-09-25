@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-137';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-138';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3858,6 +3858,9 @@ V.mapa=function(){
       <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Limites dos talhões</h2><span class="sub">${comLim.length}/${tals.length} com contorno</span></div>
+    ${!syncUrl()?`<p class="lt-aviso">Sincronização não configurada: os limites importados ficam só neste aparelho.</p>`:
+      !limitesServerOk()?`<p class="lt-aviso">⚠️ Os limites importados ainda <b>não sincronizam</b> entre celulares: atualize o <b>Code.gs</b> da planilha (versão com a aba “LIMITES APP”) e reimplante o Web App. Depois disso eles sobem sozinhos.</p>`:
+      `<p class="lim-ok">🔄 Limites sincronizados entre os aparelhos pela planilha (aba “LIMITES APP”).</p>`}
     <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
     ${remov?`<div class="lim-sub">Removidos</div><div class="lim-list">${remov}</div>`:''}
     ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(t.id)).join(' · ')}</p>`:''}
