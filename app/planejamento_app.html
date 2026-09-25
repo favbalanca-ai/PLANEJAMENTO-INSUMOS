@@ -1113,7 +1113,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-132';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-133';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1755,19 +1755,34 @@ function plantioPrevDe(tid,seq){
   if(seq==='safrinha'){ const v=(o.plantio_safrinha!=null)?o.plantio_safrinha:(pl.plantio_safrinha||''); return _isISO(v)?String(v).slice(0,10):(_isISO(pl.plantio)?String(pl.plantio).slice(0,10):''); }
   const v=(o.plantio!=null)?o.plantio:(pl.plantio||''); return _isISO(v)?String(v).slice(0,10):'';
 }
-// a "operação de plantio" da safra = a 1ª operação que leva SEMENTE (classe) — é o dia 0 do DAE
+// produto de SEMENTE (classe do item ou do cadastro) — é o que faz uma operação/recomendação ser o PLANTIO
+function _isSemente(it){ return /semente/i.test((it&&it.classe)||'')||/semente/i.test(((it&&PROD[it.produto])||{}).classe||''); }
+function opTemSemente(tid,tagoi){ const seq=tagoi[0]==='S'?'safrinha':'principal', op=(opsOf(tid,seq)||[])[+tagoi.slice(1)];
+  return !!op && effItems(tid,tagoi,op.itens).some(it=>it.produto&&_isSemente(it)); }
+// a 1ª operação da safra que leva SEMENTE (referência do dia 0 do DAE)
 function plantingOpOf(tid,seq){
-  const tag=seq==='safrinha'?'S':'P';
-  const ops=opsOf(tid,seq)||[];
-  for(let oi=0;oi<ops.length;oi++){ const tagoi=`${tag}${oi}`;
-    if(effItems(tid,tagoi,ops[oi].itens).some(it=>/semente/i.test(it.classe||''))) return tagoi; }
+  const tag=seq==='safrinha'?'S':'P', ops=opsOf(tid,seq)||[];
+  for(let oi=0;oi<ops.length;oi++) if(opTemSemente(tid,`${tag}${oi}`)) return `${tag}${oi}`;
   return '';
 }
-// realizada AUTOMÁTICA: data em que a operação de plantio foi concluída no Campo
+// safra de uma recomendação: pela operação vinculada, senão pela cultura informada
+function recomSeq(r){ if(r.opKey){ const tg=r.opKey.split('|')[1]||''; return tg[0]==='S'?'safrinha':'principal'; }
+  const t=findTalhao(r.talhao); if(!t||!temSafrinha(t)) return 'principal';
+  const nk=x=>String(x||'').trim().toUpperCase(), c=nk(r.cultura);
+  return (c && c===nk(empSafDe(t)) && c!==nk(empDe(t)))?'safrinha':'principal'; }
+const _dISO=ts=>{ const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+// realizada AUTOMÁTICA: o plantio vira REALIZADO quando a RECOMENDAÇÃO DE SEMENTE é concluída (aprovada),
+// ou quando uma operação com semente é concluída no Campo — vale a data mais antiga (replantio não move o dia 0)
 function plantioRealAutoDe(tid,seq){
-  const tagoi=plantingOpOf(tid,seq); if(!tagoi) return '';
-  const r=OV.realizado&&OV.realizado[`${tid}|${tagoi}`];
-  return (r && r.status==='concluido' && _isISO(r.data)) ? String(r.data).slice(0,10) : '';
+  const tag=seq==='safrinha'?'S':'P', datas=[];
+  (opsOf(tid,seq)||[]).forEach((op,oi)=>{ const r=OV.realizado&&OV.realizado[`${tid}|${tag}${oi}`];
+    if(r && r.status==='concluido' && _isISO(r.data) && opTemSemente(tid,`${tag}${oi}`)) datas.push(String(r.data).slice(0,10)); });
+  (typeof RECOM!=='undefined'&&RECOM&&RECOM.registros||[]).forEach(r=>{
+    if(r.talhao!==tid || r.status!=='aprovada' || !(r.itens||[]).some(it=>it.produto&&_isSemente(it)) || recomSeq(r)!==seq) return;
+    const rl=r.opKey&&OV.realizado&&OV.realizado[r.opKey];
+    const d=(rl&&_isISO(rl.data))?rl.data:(_isISO(r.data)?r.data:(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):''));
+    if(d) datas.push(String(d).slice(0,10)); });
+  return datas.sort()[0]||'';
 }
 // realizada EFETIVA: ajuste manual (sincroniza junto com Resultados) > automática
 function plantioRealDe(tid,seq){
@@ -2347,7 +2362,7 @@ V.talhao = function(id){
     ${(()=>{ const dt=(seq,edPrev,edReal,edCiclo)=>{ const prev=plantioPrevDe(t.id,seq), man=(OV.result[`${t.id}|${seq}`]||{}).plantioReal, auto=plantioRealAutoDe(t.id,seq), real=_isISO(man)?String(man).slice(0,10):'';
         const ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq), pelaReal=!!plantioRealDe(t.id,seq);
         return `<label class="mut" style="font-size:12px">Plantio previsto <input type="date" class="cell" data-edit="${edPrev}" data-id="${t.id}" value="${esc(prev)}" title="Dia 0 do DAE — dirige as datas das operações, tarefas e recomendações" style="width:140px"></label>
-        <label class="mut" style="font-size:12px">Plantio realizado <input type="date" class="cell${real?' edited':''}" data-edit="${edReal}" data-id="${t.id}" value="${esc(real||auto)}" title="${real?'Ajustado manualmente':(auto?'Automático: data em que a operação de plantio (semente) foi concluída no Campo':'Preenche sozinho ao concluir a operação de plantio no Campo — ou informe aqui')}" style="width:140px">${(!real&&auto)?'<span class="pill pill-buy" title="veio da conclusão no Campo">auto</span>':''}</label>
+        <label class="mut" style="font-size:12px">Plantio realizado <input type="date" class="cell${real?' edited':''}" data-edit="${edReal}" data-id="${t.id}" value="${esc(real||auto)}" title="${real?'Ajustado manualmente':(auto?'Automático: data da recomendação de semente concluída (ou operação de plantio concluída no Campo)':'Preenche sozinho quando a recomendação de semente for concluída — ou informe aqui')}" style="width:140px">${(!real&&auto)?'<span class="pill pill-buy" title="veio da recomendação de semente concluída">auto</span>':''}</label>
         <label class="mut" style="font-size:12px">Ciclo <input class="cell${(OV.talhao[t.id]&&OV.talhao[t.id][seq==='safrinha'?'ciclo_safrinha':'ciclo']!=null)?' edited':''}" inputmode="numeric" data-edit="${edCiclo}" data-id="${t.id}" value="${ciclo||''}" placeholder="dias" title="Ciclo da cultura (dias do plantio à colheita)" style="width:62px"> dias</label>
         <span class="mut" style="font-size:12px">🌾 Colheita estimada: ${col?`<b>${fmtDataBR(col)}</b>${pelaReal?' <span class="pill pill-buy" title="calculada pelo plantio realizado">pelo plantio real</span>':' <span class="mut">(prevista)</span>'}`:'<span class="mut">— informe plantio e ciclo</span>'}</span>`; };
       return `<div class="bulk-add" style="margin-top:8px">
@@ -2781,13 +2796,22 @@ function reagendarTarefasSafra(tid,seq){
 // o plantio realizado (automático) e as demais tarefas da safra recalculam por DAE
 function maybePlantioConcluido(key){
   const i=key.indexOf('|'); if(i<0) return; const tid=key.slice(0,i), tagoi=key.slice(i+1), seq=tagoi[0]==='S'?'safrinha':'principal';
-  if(plantingOpOf(tid,seq)!==tagoi) return;
+  if(!opTemSemente(tid,tagoi)) return;
   const man=OV.result&&OV.result[`${tid}|${seq}`]&&OV.result[`${tid}|${seq}`].plantioReal; if(_isISO(man)) return;   // ajuste manual manda
   const real=plantioRealAutoDe(tid,seq); if(!real) return;
   const n=reagendarTarefasSafra(tid,seq);
   toast(`🌱 Plantio realizado em ${fmtDataBR(real)}${n?` — ${n} tarefa(s) recalculada(s) por DAE`:''}`);
 }
 
+// recomendação avulsa de SEMENTE aprovada → plantio realizado (se não houver ajuste manual)
+function maybePlantioRecom(r){
+  if(!(r.itens||[]).some(it=>it.produto&&_isSemente(it))) return;
+  const tid=r.talhao, seq=recomSeq(r);
+  const man=OV.result&&OV.result[`${tid}|${seq}`]&&OV.result[`${tid}|${seq}`].plantioReal; if(_isISO(man)) return;
+  const real=plantioRealAutoDe(tid,seq); if(!real) return;
+  const n=reagendarTarefasSafra(tid,seq);
+  setTimeout(()=>toast(`🌱 Plantio realizado em ${fmtDataBR(real)}${n?` — ${n} tarefa(s) recalculada(s) por DAE`:''}`),1200);
+}
 // ---- formulário compartilhado (nova/editar tarefa) ----
 function tarefaFormHtml(){
   const d=tarefaDraft||(tarefaDraft=tarefaNovoDraft());
@@ -4634,7 +4658,7 @@ V.timeline = function(arg){
     const stHoje=estadioEm(fe,hojeIso);
     const aviso=!pl?`<p class="lt-aviso">Informe a <b>data de plantio</b> no planejamento do talhão para posicionar operações e estádios na linha do tempo.</p>`:
       !fe.F?`<p class="lt-aviso">Estádios fenológicos não disponíveis para “${esc(emp||'—')}”.</p>`:
-      !plReal?`<p class="lt-aviso">🌱 Os <b>estádios</b> começam a ser informados a partir do <b>plantio realizado</b> — ao concluir a operação de plantio no Campo (ou informar a data realizada no planejamento).</p>`:
+      !plReal?`<p class="lt-aviso">🌱 Os <b>estádios</b> começam a ser informados a partir do <b>plantio realizado</b> — quando a <b>recomendação de semente</b> for concluída (ou a data realizada for informada no planejamento).</p>`:
       fe.padrao?`<p class="lt-aviso">Ciclo não informado: estádios estimados com o ciclo de referência de ${fe.F.nome} (${fe.F.ref} dias). Informe o ciclo no planejamento para ajustar.</p>`:'';
     return {seq,stHoje,fe,html:`<div class="lt-sec"><b>${seq==='safrinha'?'2ª safra':'1ª safra'} · ${esc(fe.F?fe.F.nome:(emp||'—'))}</b>
         <span>${pl?`plantio ${fmtDataBR(pl)}${plReal?'':' (previsto)'}`:'sem plantio'}${cicloDe(t.id,seq)?` · ciclo ${cicloDe(t.id,seq)} d`:''}${col?` · colheita ~${fmtDataBR(col)}`:''}</span></div>
@@ -5387,6 +5411,7 @@ document.addEventListener('click',e=>{
         toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
         pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
       } else {
+        try{ maybePlantioRecom(r); }catch(e){}
         toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
         pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
       } } }
