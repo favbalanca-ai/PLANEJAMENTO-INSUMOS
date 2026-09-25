@@ -440,6 +440,8 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 #nav .lbl-s{display:none}
 .mut{color:var(--muted)}
 /* recomendação técnica: seções do formulário (identificação, diagnóstico, calda, aplicação, segurança…) */
+.dre-rev{border-left:4px solid #e0a800}
+.dre-rev li b{color:var(--ink)}
 .rc-sec{border-top:1px dashed var(--line)}
 .rc-sec-t{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);padding:8px 12px 0}
 .icon-btn{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;
@@ -1003,7 +1005,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-126';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-127';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1600,8 +1602,11 @@ function maquinasAll(){ return (DATA.maquinas||[]).concat(OV.maqAdd); }
 function maqAttr(m,k){ const o=OV.maqAttr[m.conjunto]; return (o&&o[k]!=null)?+o[k]:(+m[k]||0); }
 function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:(+m.rs_hm||0); }
 // máquina "efetiva": aplica edições de largura/velocidade/efic/L-h e recalcula ha/h, HM/ha, L/ha, custos
+// eficiência em % (85). Se veio como fração (0,85 — célula formatada em % na planilha ou digitada assim),
+// converte: sem isso o rendimento fica 100× menor e o custo/ha 100× maior.
+function eficPct(v){ v=+v||0; return (v>0 && v<=1.5) ? v*100 : v; }
 function effMaq(m){
-  const larg=maqAttr(m,'largura'), vel=maqAttr(m,'velocidade'), efic=maqAttr(m,'eficiencia'), lh=maqAttr(m,'l_h'), rs=rsHmDe(m);
+  const larg=maqAttr(m,'largura'), vel=maqAttr(m,'velocidade'), efic=eficPct(maqAttr(m,'eficiencia')), lh=maqAttr(m,'l_h'), rs=rsHmDe(m);
   const ha_h=larg*vel*efic/1000, hm_ha=ha_h>0?1/ha_h:0, l_ha=ha_h>0?lh/ha_h:0;
   const cmaq=hm_ha*rs, cdie=l_ha*(+OV.diesel);
   return {conjunto:m.conjunto,maquina:m.maquina,implemento:m.implemento,largura:larg,velocidade:vel,
@@ -1682,6 +1687,9 @@ function opMaqDe(tid,tag,oi,op){
 }
 // custo de máquina/ha de uma operação (conjunto atribuído; senão média por passada)
 function custoOpHa(tid,tag,oi,op){
+  // posição VAZIA (sem insumo) e sem máquina escolhida não é uma passada — antes contava o custo médio
+  // por passada em cada slot vazio do modelo de 12 operações e inflava a máquina/ha da DRE
+  if(!(opMaqKey(tid,`${tag}${oi}`) in OV.opMaq) && !effItems(tid,`${tag}${oi}`,(op&&op.itens)||[]).length) return 0;
   const conj=opMaqDe(tid,tag,oi,op);
   if(conj && maqByConj[conj]) return custoMaqHa(maqByConj[conj]);
   if(conj==='') return 0;                 // explicitamente sem máquina
@@ -3284,12 +3292,17 @@ V.dre = function(){
   const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0, outrasHa=+cfg.outrasHa||0;
   const tfrac=(impostoPct+financeiroPct)/100;
   const emps={};
+  // agrupa por nome NORMALIZADO (espaços duplos/no fim, travessão, maiúsc./minúsc.) — senão "SOJA  26-27" e
+  // "SOJA 26-27" viram duas linhas; guarda as variantes p/ avisar onde corrigir o nome
+  const nkEmp=s=>String(s==null?'—':s).replace(/[‐‑‒–—−]/g,'-').replace(/\s+/g,' ').trim().toUpperCase();
   cultivos().forEach(cv=>{   // 1 linha por cultura; safrinha entra como cultivo próprio
-    const g=emps[cv.emp]||(emps[cv.emp]={area:0,prod:0,ins:0,opDefault:0,cc:{}});
-    g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area;
-    const cc=custoClasseHaSeqs(cv.t,[cv.seq]); for(const k in cc) g.cc[k]=(g.cc[k]||0)+cc[k]*cv.area;   // R$ por classe
+    const k=nkEmp(cv.emp);
+    const g=emps[k]||(emps[k]={name:String(cv.emp||'—').trim(),area:0,prod:0,ins:0,opDefault:0,cc:{},variantes:{},cvs:[]});
+    g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area; g.cvs.push(cv);
+    (g.variantes[cv.emp]=g.variantes[cv.emp]||[]).push(cv.t.id+(cv.seq==='safrinha'?' (2ª)':''));
+    const cc=custoClasseHaSeqs(cv.t,[cv.seq]); for(const k2 in cc) g.cc[k2]=(g.cc[k2]||0)+cc[k2]*cv.area;   // R$ por classe
   });
-  const list=Object.entries(emps).sort((a,b)=>b[1].area-a[1].area);
+  const list=Object.values(emps).map(g=>[g.name,g]).sort((a,b)=>b[1].area-a[1].area);
   const R=list.map(([e,g])=>{
     // unidade e produtividade/ha por cultura (estimativa da DRE; sc por padrão)
     const unit=(OV.dreUnit&&OV.dreUnit[e])||'sc';
@@ -3297,7 +3310,8 @@ V.dre = function(){
     const prodHa=(OV.dreProdHa&&e in OV.dreProdHa)?+OV.dreProdHa[e]:prodHaBase;
     const prod=prodHa*g.area;
     const preco=precoCultura(e), receita=prod*preco;
-    const opHa=(e in OV.dreOp)?+OV.dreOp[e]:(g.area>0?g.opDefault/g.area:0);
+    const opHaCalc=g.area>0?g.opDefault/g.area:0;   // calculado do planejamento (máquinas das operações)
+    const opHa=(e in OV.dreOp)?+OV.dreOp[e]:opHaCalc;
     const arrHa=(e in OV.arrend)?+OV.arrend[e]:0;
     const custoMaq=opHa*g.area, custoArr=arrHa*g.area;
     const custoVar=g.ins+custoMaq;                 // variáveis = insumos + operações
@@ -3314,8 +3328,28 @@ V.dre = function(){
     const prodEq=(preco>0&&g.area>0)?(receitaEq/preco)/g.area:0;
     const margSeg=receita>0?(receita-receitaEq)/receita*100:0;
     const resHa=g.area>0?resultLiq/g.area:0, custoSaca=prod>0?custoTot/prod:0, margLiq=receita>0?resultLiq/receita*100:0;
-    return {e,g,unit,prod,prodHa,preco,opHa,arrHa,receita,custoMaq,custoVar,custoArr,estrutura,imposto,financeiro,outras,receitaLiq,margContrib,resultOper,resultLiq,custoTot,precoEq,prodEq,margSeg,resHa,custoSaca,margLiq};
+    return {e,g,unit,prod,prodHa,preco,opHa,opHaCalc,arrHa,receita,custoMaq,custoVar,custoArr,estrutura,imposto,financeiro,outras,receitaLiq,margContrib,resultOper,resultLiq,custoTot,precoEq,prodEq,margSeg,resHa,custoSaca,margLiq};
   });
+  // ---- REVISÃO DOS DADOS: aponta o que distorce a DRE e onde corrigir ----
+  const revisao=(()=>{ const it=[];
+    R.forEach(r=>{ const vs=Object.keys(r.g.variantes); if(vs.length>1)
+      it.push(`<b>Nome de cultura escrito de formas diferentes</b> — unifiquei na linha <b>${esc(r.e)}</b>: ${vs.map(v=>`“${esc(v)}” (${esc(r.g.variantes[v].join(', '))})`).join(' · ')}. Corrija o nome nesses talhões para ficar igual.`); });
+    const fr=maquinasAll().filter(m=>{ const v=maqAttr(m,'eficiencia'); return v>0&&v<=1.5; });
+    if(fr.length) it.push(`<b>Eficiência de máquina informada como fração</b> (ex.: 0,85 em vez de 85%) — já corrigido no cálculo: ${fr.map(m=>esc(m.conjunto)).join(' · ')}. Ajuste na tela <a class="link" data-go="#/maquinas">Máquinas</a>/planilha.`);
+    const caras=maquinasAll().map(m=>({m,e:effMaq(m)})).filter(x=>x.e.custoHa>600);
+    if(caras.length) it.push(`<b>Conjunto com custo por passada muito alto</b> (&gt; R$ 600/ha) — confira largura, velocidade, eficiência, L/h e R$/HM: ${caras.map(x=>`${esc(x.m.conjunto)} = ${brl(x.e.custoHa)}/ha (${num(x.e.ha_h)} ha/h)`).join(' · ')}.`);
+    R.forEach(r=>{ if(r.e in OV.dreOp && Math.abs(r.opHa-r.opHaCalc)>0.5)
+      it.push(`<b>${esc(r.e)}</b>: Máq. R$/ha está <b>fixado à mão</b> em ${brl(r.opHa)} (o planejamento calcula ${brl(r.opHaCalc)}). Apague o campo para voltar ao calculado.`); });
+    R.forEach(r=>{ if(r.opHaCalc>1500){ const ops=[];
+        r.g.cvs.forEach(cv=>{ (opsOf(cv.t.id,cv.seq)||[]).forEach((op,oi)=>{ const c=custoOpHa(cv.t.id,cv.tag,oi,op); if(c>0) ops.push({t:cv.t.id,n:op.nome,cj:opMaqDe(cv.t.id,cv.tag,oi,op)||'média',c}); }); });
+        ops.sort((a,b)=>b.c-a.c);
+        it.push(`<b>${esc(r.e)}</b>: máquina calculada ${brl(r.opHaCalc)}/ha — maiores: ${ops.slice(0,3).map(o=>`${esc(o.t)} · ${esc(o.n)} (${esc(o.cj)}) ${brl(o.c)}/ha`).join(' · ')}.`); } });
+    R.forEach(r=>{ if(!(r.preco>0)) it.push(`<b>${esc(r.e)}</b> está <b>sem preço de venda</b> — a receita fica zerada.`); });
+    R.forEach(r=>{ if(r.unit==='sc' && r.prodHa>1000) it.push(`<b>${esc(r.e)}</b>: produtividade ${nf0.format(r.prodHa)}/ha com unidade “sc” — se não for saca, troque a unidade (ex.: pontos, kg) ao lado da produtividade.`); });
+    if(!impostoPct && !estruturaHa && !financeiroPct) it.push(`<b>Premissas zeradas</b> — impostos sobre venda (ex.: Funrural), estrutura/administrativo e custo financeiro estão em 0: o resultado fica <b>superestimado</b>. Preencha em “Premissas gerenciais”.`);
+    if(!it.length) return `<div class="panel"><div class="panel-head"><h2>Revisão dos dados</h2><span class="sub">nenhum problema encontrado</span></div></div>`;
+    return `<div class="panel dre-rev"><div class="panel-head"><h2>⚠️ Revisão dos dados</h2><span class="sub">${it.length} ponto(s) que distorcem a DRE</span></div>
+      <ul style="margin:0;padding:8px 18px 12px 34px;font-size:12.5px;line-height:1.55">${it.map(x=>`<li style="margin:3px 0">${x}</li>`).join('')}</ul></div>`; })();
   const T=(f)=>R.reduce((s,r)=>s+f(r),0);
   const tA=T(r=>r.g.area), tR=T(r=>r.receita), tOut=T(r=>r.outras), tImp=T(r=>r.imposto);
   const tIns=T(r=>r.g.ins), tMaq=T(r=>r.custoMaq), tArr=T(r=>r.custoArr), tEstr=T(r=>r.estrutura), tFin=T(r=>r.financeiro);
@@ -3374,8 +3408,8 @@ V.dre = function(){
     <td class="num" data-th="Preço (R$/un)"><input class="cell ${(r.e in OV.cultura)?'edited':''}" data-edit="cultura" data-emp="${esc(r.e)}" value="${r.preco}"></td>
     <td class="num" data-th="Receita">${brl0(r.receita)}</td>
     <td class="num" data-th="Custo insumos">${brl0(r.g.ins)}</td>
-    <td class="num" data-th="Máq. R$/ha"><input class="cell ${(r.e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(r.e)}" value="${r.opHa.toFixed(2)}"></td>
-    <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(r.e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(r.e)}" value="${r.arrHa.toFixed(2)}"></td>
+    <td class="num" data-th="Máq. R$/ha"><input class="cell ${(r.e in OV.dreOp)?'edited':''}" data-edit="dreOp" data-emp="${esc(r.e)}" data-def="${r.opHaCalc.toFixed(2)}" value="${r.opHa.toFixed(2).replace('.',',')}" title="${(r.e in OV.dreOp)?`fixado à mão — calculado: ${brl(r.opHaCalc)}/ha (apague p/ voltar)`:'calculado das máquinas das operações'}"></td>
+    <td class="num" data-th="Arrend. R$/ha"><input class="cell ${(r.e in OV.arrend)?'edited':''}" data-edit="arrend" data-emp="${esc(r.e)}" value="${r.arrHa.toFixed(2).replace('.',',')}"></td>
     <td class="num" data-th="Custo total">${brl0(r.custoTot)}</td>
     <td class="num c-res" data-th="Resultado líq.">${sgn(r.resultLiq)}</td>
     <td class="num" data-th="R$/ha">${brl0(r.resHa)}</td>
@@ -3435,6 +3469,7 @@ V.dre = function(){
       </div>
     </div>
   </div>
+  ${revisao}
   ${premissas}
   ${cascata}
   ${kpis}
@@ -4813,7 +4848,8 @@ function applyEdit(el){
   else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
   else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
   else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
-  else if(kind==='dreOp'){ const e=el.dataset.emp; if(n==null) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
+  else if(kind==='dreOp'){ const e=el.dataset.emp, def=parseFloat(el.dataset.def);   // igual ao calculado = não fixa (continua acompanhando o planejamento)
+    if(n==null || (isFinite(def) && Math.abs(n-def)<0.005)) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
   else if(kind==='arrend'){ const e=el.dataset.emp; if(n==null||n===0) delete OV.arrend[e]; else OV.arrend[e]=n; }
   else if(kind==='dreCfg'){ const f=el.dataset.field; OV.dreCfg=OV.dreCfg||{}; if(n==null||n===0) delete OV.dreCfg[f]; else OV.dreCfg[f]=n; }
   else if(kind==='dreProdHa'){ const e=el.dataset.emp; OV.dreProdHa=OV.dreProdHa||{}; if(n==null) delete OV.dreProdHa[e]; else OV.dreProdHa[e]=n; }

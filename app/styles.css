@@ -423,6 +423,8 @@ select.sel{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-s
 #nav .lbl-s{display:none}
 .mut{color:var(--muted)}
 /* recomendação técnica: seções do formulário (identificação, diagnóstico, calda, aplicação, segurança…) */
+.dre-rev{border-left:4px solid #e0a800}
+.dre-rev li b{color:var(--ink)}
 .rc-sec{border-top:1px dashed var(--line)}
 .rc-sec-t{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);padding:8px 12px 0}
 .icon-btn{border:1px solid var(--line);background:#fff;border-radius:8px;width:34px;height:34px;
