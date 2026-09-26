@@ -1033,3 +1033,6 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .lim-errs{margin:6px 14px 0;padding:7px 10px;font-size:12px;color:#8e1a14;background:#fdecea;border:1px solid #f5c2bd;border-radius:9px}
 @media (max-width:640px){ .lim-pasta{display:none} }
 .lim-ok{margin:8px 14px 0;font-size:12px;color:#1b5e20}
+.pend-list{padding:4px 18px 14px;font-size:13px}
+.pend-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)}
+.pend-row .btn{flex:none}

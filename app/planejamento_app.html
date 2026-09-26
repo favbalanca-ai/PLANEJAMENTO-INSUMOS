@@ -1050,6 +1050,9 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .lim-errs{margin:6px 14px 0;padding:7px 10px;font-size:12px;color:#8e1a14;background:#fdecea;border:1px solid #f5c2bd;border-radius:9px}
 @media (max-width:640px){ .lim-pasta{display:none} }
 .lim-ok{margin:8px 14px 0;font-size:12px;color:#1b5e20}
+.pend-list{padding:4px 18px 14px;font-size:13px}
+.pend-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)}
+.pend-row .btn{flex:none}
 
 </style>
 </head>
@@ -1140,7 +1143,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-139';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-140';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5661,6 +5664,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
+    else if(a.act==='pendDiscard'){ let e=null; try{ e=JSON.parse(decodeURIComponent(a.sig||'')); }catch(err){}
+      const cur=e&&buildFieldEdits().find(x=>JSON.stringify(x)===JSON.stringify(e));
+      if(!cur){ toast('Essa edição já não está pendente'); updateSyncBar(); }
+      else { const d=editDesc(cur); if(confirm(`Descartar esta edição?\n${d.lbl}: ${d.txt}\n\nVolta a valer o que está na planilha.`)){ if(discardEdit(cur)){ toast('Edição descartada'); updateEditBadge(); route({keepScroll:true}); } } } }
     else if(a.act==='limSalvar'){ limSalvarImport(); }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
@@ -6685,12 +6692,45 @@ function pendingGroups(eds){
     return {type:t, label:EDIT_TIPO[t]||t, n:g[t].length, items}; });
 }
 function pendingSummaryTxt(eds){ return pendingGroups(eds).map(x=>`${x.label} ×${x.n} (${x.items.slice(0,4).join(', ')}${x.n>4?'…':''})`).join(' · '); }
-// painel "Edições pendentes" da tela Sincronizar (o que ainda não foi confirmado pela planilha)
+// descrição legível de UMA edição pendente (para o usuário saber exatamente o que está travado)
+function editDesc(e){
+  const lbl=EDIT_TIPO[e.type]||e.type, t=e.talhao?findTalhao(e.talhao):null;
+  const tal=e.talhao?`${e.talhao}${t&&t.nome?' '+t.nome:''}`:'';
+  let op=''; if(e.tag!=null&&e.op!=null){ const seq=e.tag==='S'?'safrinha':'principal', o=(opsOf(e.talhao,seq)||[])[e.op]; op=(o&&o.nome?o.nome:`Operação ${e.op+1}`)+(e.tag==='S'?' (2ª)':''); }
+  const val=e.type==='dose'?`dose ${e.value}`:e.type==='dae'?`DAE ${e.value}`:e.type==='itemprod'?`${e.from} → ${e.to}`:(e.type==='additem'||e.type==='delitem')?e.produto:
+    e.type==='reorderops'?`${(e.ops||[]).length} operações`:e.type==='addopblock'?`+${e.count}`:(e.produto?`${e.produto} = ${e.value}`:(e.value!=null?String(e.value):''));
+  return {lbl, txt:[tal,op,val].filter(Boolean).join(' · ')};
+}
+// descarta a edição local (volta a valer o que está na planilha)
+function discardEdit(e){
+  const k=(e.talhao||'')+'|'+(e.tag||'')+(e.op!=null?e.op:''), seq=e.tag==='S'?'safrinha':'principal';
+  switch(e.type){
+    case 'dose': delete OV.dose[`${k}|${e.item}`]; break;
+    case 'dae': if(OV.opDae) delete OV.opDae[k]; break;
+    case 'estoque': delete OV.estoque[e.produto]; break;
+    case 'pedido': delete OV.pedido[e.produto]; break;
+    case 'itemprod': delete OV.itemProd[e.rk]; break;
+    case 'delitem': delete OV.itemRemoved[e.rk]; break;
+    case 'additem': { const arr=OV.itemAdd[k]; if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } break; }
+    case 'addopblock': if(OV.opExtra) delete OV.opExtra[`${e.talhao}|${e.tag}`]; break;
+    case 'reorderops': if(OV.opPlan) delete OV.opPlan[`${e.talhao}|${seq}`]; if(OV.opExtra) delete OV.opExtra[`${e.talhao}|${e.tag}`];
+      if(OV.opDel) for(const x in OV.opDel){ if(x.indexOf(`${e.talhao}|${e.tag}`)===0) delete OV.opDel[x]; } break;
+    case 'area': case 'produtividade': case 'empreendimento': case 'emp_safrinha': case 'prod_safrinha':
+    case 'plantio': case 'plantio_safrinha': case 'ciclo': case 'ciclo_safrinha': {
+      const o=OV.talhao[e.talhao]; if(o){ delete o[e.type]; if(!Object.keys(o).length) delete OV.talhao[e.talhao]; } break; }
+    default: return false;
+  }
+  saveOverrides(); return true;
+}
+// painel "Edições pendentes" da tela Sincronizar (o que ainda não foi confirmado pela planilha) — uma linha por edição
 function pendingPanelHtml(eds){
-  const gs=pendingGroups(eds);
-  if(!gs.length) return `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
-  return `<div style="padding:8px 18px 14px;font-size:13px">${gs.map(x=>`<div style="padding:6px 0;border-bottom:1px dashed var(--line)"><b>${esc(x.label)}</b> <span class="badge badge-muted">×${x.n}</span><div class="mut" style="font-size:12px;margin-top:2px">${esc(x.items.slice(0,12).join(' · '))}${x.n>12?' …':''}</div></div>`).join('')}
-    <p class="mut" style="font-size:11px;margin:10px 0 0">Uma edição só sai desta lista quando a planilha devolve o mesmo valor ao puxar. Se ela ficar aqui mesmo após "gravadas, 0 falhas", a planilha gravou em outro lugar/formato — me mande esta lista.</p></div>`;
+  if(!(eds||[]).length) return `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
+  const lim=40, pode=e=>!/^(addtalhao|deltalhao)$/.test(e.type);
+  return `<div class="pend-list">${eds.slice(0,lim).map(e=>{ const d=editDesc(e);
+      return `<div class="pend-row"><div><b>${esc(d.lbl)}</b><div class="mut" style="font-size:12px">${esc(d.txt)}</div></div>
+        ${pode(e)?`<button class="btn btn-outline btn-sm" data-act="pendDiscard" data-sig="${esc(encodeURIComponent(JSON.stringify(e)))}" title="Descartar esta edição e voltar ao valor da planilha">Descartar</button>`:''}</div>`; }).join('')}
+    ${eds.length>lim?`<div class="mut" style="font-size:12px;padding:6px 0">+${eds.length-lim} edição(ões)…</div>`:''}
+    <p class="mut" style="font-size:11px;margin:10px 0 0">Uma edição só sai desta lista quando a planilha devolve o mesmo valor ao puxar. Se ela continuar aqui depois de sincronizar, pode <b>Descartar</b> (volta a valer o que está na planilha) — ou me mande esta lista.</p></div>`;
 }
 // depois de gravar (0 falhas) e re-puxar: o que continua pendente é porque a planilha não devolveu o mesmo valor
 function logAindaPendentes(enviadas){
@@ -6726,6 +6766,10 @@ function pendingInfo(){
 function hasPending(){ return pendingInfo().total>0; }
 // faixa no topo: "N edições não sincronizadas — Sincronizar agora" (ou "sem internet")
 function updateSyncBar(){
+  // tela Sincronizar e selo do topo sempre com o número ATUAL (antes ficavam com o valor de quando a tela abriu)
+  try{ const eds=DATA?buildFieldEdits():[]; const bp=document.querySelector('[data-act="sync-push"]'); if(bp) bp.textContent=`⬆ Enviar agora (${eds.length})`;
+    const pd=$('#sync-pend'); if(pd){ const html=pendingPanelHtml(eds); if(pd.dataset.h!==html){ pd.innerHTML=html; pd.dataset.h=html; } }
+    const bd=$('#edit-badge'); if(bd && typeof pendingInfo==='function'){ const n=pendingInfo().total; bd.hidden=n===0; bd.textContent=n+(n===1?' pendente':' pendentes'); } }catch(e){}
   const bar=$('#sync-bar'); if(!bar) return;
   if(!syncUrl()||!DATA){ bar.hidden=true; return; }
   const pi=pendingInfo(), off=(typeof navigator!=='undefined' && navigator.onLine===false);
@@ -6734,7 +6778,8 @@ function updateSyncBar(){
   const det=pi.parts.join(' · ');
   if(off){ bar.className='sync-bar off'; bar.innerHTML=`📴 Sem internet — ${pi.total?`guardado no aparelho: ${esc(det)}; `:''}sincroniza sozinho quando a conexão voltar.`; return; }
   bar.className='sync-bar '+(lastPushOk?'warn':'err');
-  bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} Falta sincronizar: ${esc(det)}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
+  let fdet=''; try{ const fe=buildFieldEdits(); if(fe.length && fe.length<=2) fdet=' ('+fe.map(e=>{ const d=editDesc(e); return d.lbl+(d.txt?': '+d.txt:''); }).join('; ')+')'; }catch(e){}
+  bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} Falta sincronizar: ${esc(det)}${esc(fdet)}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
 }
 // portão de sincronização (modal): envia pendentes -> puxa a planilha; se falhar, deixa tentar de novo ou seguir offline
 let syncGateOpen=false;
