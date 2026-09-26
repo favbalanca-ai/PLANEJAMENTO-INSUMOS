@@ -1140,7 +1140,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-138';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-139';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2021,15 +2021,38 @@ function opDelete(tid,tag,tagoi){
 function reconcileReorder(e){
   const tid=e.talhao, tag=e.tag, seq=_seqOfTag(tag), order=e.order||[];
   const oldToNew={}; order.forEach((tg,p)=>{ oldToNew[+String(tg).slice(1)]=p; });
-  const pref=`${tid}|${tag}`;
-  if(OV.opMaq){ const nm={}; for(const k in OV.opMaq){ if(k.indexOf(pref)===0){ const oi=+k.slice(pref.length);
-    const ni=(oi in oldToNew)?oldToNew[oi]:oi; nm[`${tid}|${tag}${ni}`]=OV.opMaq[k]; } else nm[k]=OV.opMaq[k]; } OV.opMaq=nm; }
+  const pref=`${tid}|${tag}`, now=Date.now();
+  const oiOf=k=>{ if(k.indexOf(pref)!==0) return null; const n=k.slice(pref.length); return /^\d+$/.test(n)?+n:null; };
+  const novo=k=>{ const oi=oiOf(k); if(oi==null) return k; return (oi in oldToNew)?`${pref}${oldToNew[oi]}`:null; };   // null = operação saiu
+  // máquina planejada: acompanha a operação; posição que ficou vaga perde a máquina
+  if(OV.opMaq){ const nm={}; for(const k in OV.opMaq){ const nk=novo(k); if(nk) nm[nk]=OV.opMaq[k]; } OV.opMaq=nm; }
+  // execução do Campo (status, doses, máquina, horários…): acompanha a operação. Posição vaga ganha um registro
+  // "limpo" carimbado agora, para o dado antigo que está na planilha não voltar no próximo puxar.
+  if(OV.realizado){ const R=OV.realizado, moved={}, old=[];
+    Object.keys(R).forEach(k=>{ if(oiOf(k)==null) return; old.push(k); const nk=novo(k); if(nk) moved[nk]=Object.assign({},R[k],{_u:now}); delete R[k]; });
+    old.forEach(k=>{ if(!moved[k]) R[k]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{},_u:now}; });
+    Object.assign(R,moved); try{ scheduleRealizadoPush(); }catch(err){} }
+  // recomendações e tarefas ligadas à operação
+  (typeof RECOM!=='undefined'&&RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey||oiOf(r.opKey)==null) return; const nk=novo(r.opKey);
+    if(nk) r.opKey=nk; else { r.opKey=''; r.opOrfa=true; if(r.status==='aprovada') r.saidaPushed=true; } });
+  try{ saveRecom(); }catch(err){}
+  let tch=false; (typeof TAREFAS!=='undefined'&&TAREFAS&&TAREFAS.tarefas||[]).forEach(tf=>{ if(!tf.opKey||oiOf(tf.opKey)==null) return; const nk=novo(tf.opKey); tf.opKey=nk||''; tch=true; });
+  if(tch) try{ saveTarefas(); }catch(err){}
   [OV.dose,OV.itemAdd,OV.itemRemoved,OV.itemProd,OV.opDae,OV.opDel].forEach(map=>{ if(!map) return;
     for(const k in map){ if(k.indexOf(pref)===0) delete map[k]; } });
   if(OV.opPlan) delete OV.opPlan[`${tid}|${seq}`];
   if(OV.opExtra) delete OV.opExtra[`${tid}|${tag}`];   // as novas já viraram blocos na planilha
   delete revealOps[`${tid}|${tag}`];
 }
+// registros antigos: máquina gravada na execução de operação AINDA NÃO concluída (pode ter vindo de outra operação
+// que ocupava a posição antes de uma reordenação) — sai; vale a do planejamento. Carimba p/ a planilha não devolver.
+function limparMaqPendentes(){ const R=(OV&&OV.realizado)||{}, now=Date.now(); let n=0;
+  for(const k in R){ const r=R[k]; if(r && r.status!=='concluido' && r.app && r.app.maq!=null){ delete r.app.maq; r._u=now; n++; } }
+  if(n){ saveOverrides(); try{ scheduleRealizadoPush(); }catch(e){} }
+  return n; }
+// máquina mostrada no Campo: a do PLANEJAMENTO (fonte única). Depois de concluída, vale a registrada na execução.
+function opMaqCampo(t,o,r){ const plan=opMaqDe(t.id,o.tag,o.oi,o.op)||'';
+  return (r && r.status==='concluido' && r.app && r.app.maq) ? r.app.maq : plan; }
 // quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
 const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
 function opsShownCount(tid, tag){
@@ -3848,7 +3871,7 @@ function campoAppMsg(key){
   L.push(`🚿 *Aplicação* — ${t.id}${t.nome?' '+t.nome:''} (${num(area)} ha)`);
   const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
   if(l1.length) L.push(l1.join(' · '));
-  if(app.maq) L.push(`🚜 ${app.maq}`);
+  { const i=key.indexOf('|'), tg=key.slice(i+1), mq=(r.status==='concluido'&&app.maq)?app.maq:(fk.op?opMaqDe(fk.talId,tg[0],+tg.slice(1),fk.op):''); if(mq) L.push(`🚜 ${mq}`); }
   if(liq.length){
     L.push(`${app.tipo==='aereo'?'✈️ Aéreo (air tractor)':'🚿 Pulverizador'}`);
     const l2=[]; if(vazao) l2.push(`Vazão ${num(vazao)} L/ha`); if(tanque) l2.push(`Tanque ${num(tanque)} L`);
@@ -5123,7 +5146,7 @@ V.campo = function(arg){
     const st=REAL_ST[r.status]||REAL_ST.pendente;
     const sbtn=v=>`<button class="camp-st ${REAL_ST[v].cls}${r.status===v?' on':''}" data-act="realStatus" data-key="${esc(o.key)}" data-val="${v}">${REAL_ST[v].lbl}</button>`;
     const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dd=diasAte(dp);
-    const conj=(r.app&&r.app.maq)||opMaqDe(t.id,o.tag,o.oi,o.op)||'';
+    const conj=opMaqCampo(t,o,r);
     const isProx=prox&&prox.key===o.key;
     // quando: DAE · data · (atrasada N d / hoje / em N d)
     let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
@@ -5170,7 +5193,7 @@ V.campo = function(arg){
             </select></label>
             <label>Máquina/aeronave<select class="sel" data-edit="realApp" data-field="maq" data-key="${esc(o.key)}">
               <option value="">— máquina —</option>
-              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${((r.app&&r.app.maq!=null?r.app.maq:(opMaqDe(t.id,o.tag,o.oi,o.op)||''))===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
+              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${(opMaqCampo(t,o,r)===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
             </select></label>
             <label>Tanque (L) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
             <label>Vazão (L/ha) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
@@ -5377,6 +5400,12 @@ function applyEdit(el){
     if(v && !PROD[v]){ toast('Produto não encontrado na lista'); return; }
     const r=realEnsure(el.dataset.key); (r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={})).produto=v;
     realClean(el.dataset.key); stampReal(el.dataset.key); return;
+  }
+  if(kind==='realApp' && el.dataset.field==='maq'){   // máquina: não concluída = muda o PLANEJAMENTO (fonte única)
+    const key=el.dataset.key, r0=OV.realizado[key];
+    if(!(r0 && r0.status==='concluido')){ const i=key.indexOf('|'); OV.opMaq[opMaqKey(key.slice(0,i), key.slice(i+1))]=el.value;
+      if(r0 && r0.app && r0.app.maq!=null){ delete r0.app.maq; stampReal(key); }
+      saveOverrides(); toast('Máquina da operação atualizada no planejamento'); route({keepScroll:true}); return; }
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
@@ -6282,6 +6311,7 @@ function applyPulledData(d){
   try{ if(PRECOS) precosApplyPulled(d.precos_app); }catch(e){}
   try{ tarefasApplyPulled(d.tarefas_app); }catch(e){}   // equipe + tarefas sincronizam no puxar principal
   try{ realizadoApplyPulled(d.realizado_app); }catch(e){}   // status/execução das operações (merge por chave)
+  try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
 }
@@ -6800,7 +6830,7 @@ async function checkNewVersion(){
 /* ================= INIT ================= */
 function boot(d){
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
