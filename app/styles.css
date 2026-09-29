@@ -1078,3 +1078,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .dm-foot{font-size:9px;color:#667;margin:4px 0 16px}
   #print-area .dm-sign{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;font-size:10px;color:#333;margin-top:22px;break-inside:avoid}
 }
+/* ===== Cotação: solicitação por fornecedor ===== */
+@media print{
+  #print-area .cq-pb{page-break-before:always}
+  #print-area .cq-id{display:grid;grid-template-columns:repeat(3,auto);gap:4px 12px;text-align:right}
+  #print-area .cq-id small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#5c6f75;font-weight:700}
+  #print-area .cq-id b{font-size:11.5px;color:#16323a;white-space:nowrap}
+  #print-area .cq-kpis .dm-kpi b.cq-blank{border-bottom:1px solid #9fb3b8;min-height:18px;font-size:12px;color:#556}
+  #print-area .cq-t td{height:22px}
+  #print-area .cq-t tr.cq-grp td{background:#e9f1f3!important;border-left:4px solid #1f4a55;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#16323a;height:auto}
+  #print-area .cq-t tbody tr:not(.cq-grp){break-inside:avoid;page-break-inside:avoid}
+  #print-area .cq-t td.cq-fill,#print-area .cq-t th.cq-fill{border-left:1px dashed #b9c9cd;background:#fff!important}
+  #print-area .cq-at{font-size:9px;color:#607078;margin-top:1px}
+  #print-area .cq-n{color:#7a8a8f}
+  #print-area .cq-cond{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0 8px}
+  #print-area .cq-cond small,#print-area .cq-obs small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#5c6f75;font-weight:700}
+  #print-area .cq-cond span{display:block;border-bottom:1px solid #9fb3b8;height:20px;font-size:11px;padding-top:4px}
+  #print-area .cq-obs{margin:6px 0 4px}
+  #print-area .cq-obs span{display:block;border-bottom:1px solid #9fb3b8;height:20px}
+}
