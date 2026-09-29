@@ -85,7 +85,7 @@ function readData(){
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
     result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
-    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+    limites_app:readMapApp('LIMITES APP'), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -289,6 +289,22 @@ function writeEntrada(ent){
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
     logMovimentacao('ENTRADA', it.produto, it.un, it.qtd, origem, S(ent.obs), when); n++; }
   return { rows:n };
+}
+// Lista "Compras registradas" do app, compartilhada entre aparelhos: aba COMPRAS APP (KEY|JSON|ATUALIZADO,
+// merge pelo _u). Grava a entrada no razão E guarda o registro inteiro. del:true = compra excluída:
+// tira as linhas [#id] do razão e deixa uma "lápide" {id,del,_u} para os outros aparelhos apagarem também.
+function writeCompraApp(ent){
+  ent = ent || {}; var id = S(ent.id), u = +ent._u || Date.now(), r = { rows:0 };
+  var cur = id ? readMapApp('COMPRAS APP')[id] : null;
+  if (cur && (+cur._u || 0) > u) return { rows:0, velho:true };   // já existe versão mais nova (ex.: excluída em outro aparelho)
+  if (ent.del){ if (id) movDeleteBySource(id); }
+  else r = writeEntrada(ent);
+  if (id){ var m = {};
+    m[id] = ent.del ? { id:id, del:true, _u:u }
+      : { id:id, fornecedor:S(ent.fornecedor), data:S(ent.data), nf:S(ent.nf), obs:S(ent.obs), itens:ent.itens || [],
+          nfe:ent.nfe || null, ts:ent.ts || null, _u:u };
+    writeMapApp('COMPRAS APP', m); }
+  return r;
 }
 // ---- NF-e (fase 1): memória de-para de produtos da nota -> produto do app ----
 // Aba "DE-PARA NFE" (criada se faltar). Uma linha por CNPJ do emitente + código do produto na nota (cProd).
@@ -1274,7 +1290,7 @@ function doPost(e){
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
       var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
     } else if (payload && payload.__entrada){        // compra do app -> entrada no razão de estoque
-      var en = writeEntrada(payload.__entrada); out.ok = en.rows;
+      var en = writeCompraApp(payload.__entrada); out.ok = en.rows;
     } else if (payload && payload.__saida){          // recomendação aprovada -> saída no razão (sincroniza entre aparelhos)
       var sr = writeSaida(payload.__saida); out.ok = sr.rows;
     } else if (payload && payload.__tarefas){        // módulo Tarefas: equipe + tarefas (regrava as abas)

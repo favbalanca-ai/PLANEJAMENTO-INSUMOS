@@ -71,6 +71,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     **dose (I)** na primeira linha vazia do bloco da operação (`emptyItemRow`).
   - `delitem` (insumo removido) → limpa **B/C/I** da linha do insumo naquele
     bloco da operação (`itemRowByName`); as demais colunas (fórmulas) se ajustam.
+- **Compras registradas (entre aparelhos)** — `{__entrada:{id, fornecedor, data, nf, obs, itens, nfe, ts, _u}}`
+  grava a ENTRADA na `MOVIMENTAÇÃO ESTOQUE` (etiqueta `[#id]`, reenviar não duplica) **e** o registro
+  inteiro na aba **`COMPRAS APP`** (KEY|JSON|ATUALIZADO, criada se faltar; mais novo `_u` vence).
+  `{__entrada:{id, del:true, itens:[], _u}}` = compra excluída: apaga as linhas `[#id]` do razão e
+  deixa uma "lápide" `{id, del:true}` para os outros aparelhos apagarem também. O `doGet` devolve
+  a aba em `compras_app`; o app junta com a lista local ao puxar.
 - **NF-e (fase 1)** — ver `docs/NFE_RECEBIMENTO.md`:
   - `{__entrada:{id:<chave de 44 dígitos>, …}}` → a nota importada do XML vira uma
     ENTRADA comum na `MOVIMENTAÇÃO ESTOQUE`, com ORIGEM `NF-e 1234/1 · Fornecedor [#chave]`
