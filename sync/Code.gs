@@ -85,7 +85,7 @@ function readData(){
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
     result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
-    limites_app:readMapApp('LIMITES APP') };
+    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe() };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -254,17 +254,20 @@ function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
 // soma ENTRADA e SAÍDA por produto no razão (fonte COMPARTILHADA entre aparelhos: todo
 // aparelho puxa isto e vê o mesmo saldo, não importa quem registrou a compra/aprovou a recom).
 function readMovimentacao(){
-  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {};
-  if (!s) return { entradas:ent, saidas:sai };
-  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai };
-  var v = s.getRange(2, 1, last - 1, 5).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD
+  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {}, nfe = {};
+  if (!s) return { entradas:ent, saidas:sai, nfe:nfe };
+  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai, nfe:nfe };
+  var v = s.getRange(2, 1, last - 1, 6).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM
   for (var i = 0; i < v.length; i++){
     var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]);
+    // NF-e que já deu entrada: etiqueta [#chave de 44 dígitos] no ORIGEM (o app bloqueia importar de novo)
+    var mk = S(v[i][5]).match(/\[#(\d{44})\]/);
+    if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (!prod || !qtd) continue;
     if (tipo.indexOf('ENTRADA') === 0) ent[prod] = (ent[prod] || 0) + qtd;
     else if (tipo.indexOf('SA') === 0) sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
   }
-  return { entradas:ent, saidas:sai };
+  return { entradas:ent, saidas:sai, nfe:nfe };
 }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){
@@ -281,9 +284,56 @@ function writeEntrada(ent){
   var when = new Date();
   if (ent && ent.data && /^\d{4}-\d{2}-\d{2}/.test(String(ent.data))) when = new Date(String(ent.data).slice(0,10) + 'T12:00:00');
   if (ent && ent.id) movDeleteBySource(ent.id);
-  var origem = 'Compra' + (ent.nf ? ' NF ' + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
+  var ehNfe = /^\d{44}$/.test(S(ent && ent.id));
+  var origem = (ehNfe ? 'NF-e' : 'Compra') + (ent.nf ? (ehNfe ? ' ' : ' NF ') + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
     logMovimentacao('ENTRADA', it.produto, it.un, it.qtd, origem, S(ent.obs), when); n++; }
+  return { rows:n };
+}
+// ---- NF-e (fase 1): memória de-para de produtos da nota -> produto do app ----
+// Aba "DE-PARA NFE" (criada se faltar). Uma linha por CNPJ do emitente + código do produto na nota (cProd).
+// Colunas localizadas PELO CABEÇALHO (pode reordenar/adicionar colunas na planilha sem quebrar).
+var DEPARA_SHEET = 'DE-PARA NFE';
+var DEPARA_COLS = ['CNPJ EMITENTE','CPROD','XPROD','PRODUTO APP','FATOR','IGNORAR','ÚLTIMO CUSTO','CONFIRMADO POR','DATA'];
+function _hkey(t){ return S(t).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]/g,''); }
+function deParaSheet_(){
+  var s = sh(DEPARA_SHEET);
+  if (!s){ s = ss().insertSheet(DEPARA_SHEET); s.getRange(1,1,1,DEPARA_COLS.length).setValues([DEPARA_COLS]); s.setFrozenRows(1);
+    s.getRange('A:B').setNumberFormat('@'); }   // CNPJ e código como TEXTO (não perde zero à esquerda)
+  var lastC = Math.max(1, s.getLastColumn()), head = s.getRange(1,1,1,lastC).getValues()[0], idx = {};
+  for (var c = 0; c < head.length; c++){ var k = _hkey(head[c]); if (k && !(k in idx)) idx[k] = c; }
+  DEPARA_COLS.forEach(function(h){ var k = _hkey(h); if (!(k in idx)){ lastC++; s.getRange(1,lastC).setValue(h); idx[k] = lastC - 1; } });
+  return { s:s, idx:idx, ncol:lastC };
+}
+function readDeParaNfe(){
+  var out = {}, s = sh(DEPARA_SHEET); if (!s) return out;
+  var last = s.getLastRow(); if (last < 2) return out;
+  var d = deParaSheet_(), ix = d.idx, v = s.getRange(2,1,last-1,d.ncol).getValues();
+  var g = function(r,h){ return r[ix[_hkey(h)]]; };
+  for (var i = 0; i < v.length; i++){ var r = v[i], cnpj = S(g(r,'CNPJ EMITENTE')).replace(/\D/g,''), cprod = S(g(r,'CPROD'));
+    if (!cnpj || !cprod) continue;
+    var ig = S(g(r,'IGNORAR')).toUpperCase();
+    out[cnpj + '|' + cprod] = { cnpj:cnpj, cprod:cprod, xprod:S(g(r,'XPROD')), produto:S(g(r,'PRODUTO APP')), fator:N(g(r,'FATOR')) || 1,
+      ignorar:(ig === 'SIM' || ig === 'TRUE' || ig === 'X' || ig === '1'), custo:N(g(r,'ÚLTIMO CUSTO')), por:S(g(r,'CONFIRMADO POR')),
+      data:(g(r,'DATA') instanceof Date) ? Utilities.formatDate(g(r,'DATA'), Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(g(r,'DATA')).slice(0,10) }; }
+  return out;
+}
+// grava/atualiza o de-para (chave CNPJ + CPROD): atualiza a linha existente ou acrescenta no fim
+function writeDeParaNfe(itens){
+  itens = itens || []; if (!itens.length) return { rows:0 };
+  var d = deParaSheet_(), s = d.s, ix = d.idx, last = s.getLastRow(), rows = {}, n = 0;
+  if (last >= 2){ var v = s.getRange(2,1,last-1,d.ncol).getValues();
+    for (var i = 0; i < v.length; i++){ var k = S(v[i][ix[_hkey('CNPJ EMITENTE')]]).replace(/\D/g,'') + '|' + S(v[i][ix[_hkey('CPROD')]]); if (k !== '|') rows[k] = i + 2; } }
+  var hoje = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  itens.forEach(function(it){
+    var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
+    var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = S(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : S(it.produto);
+    vals['FATOR'] = N(it.fator) || 1; vals['IGNORAR'] = it.ignorar ? 'SIM' : ''; vals['ÚLTIMO CUSTO'] = N(it.custo) || '';
+    vals['CONFIRMADO POR'] = S(it.por) || 'app'; vals['DATA'] = hoje;
+    var row = rows[cnpj + '|' + cprod];
+    if (!row){ row = s.getLastRow() + 1; rows[cnpj + '|' + cprod] = row; s.getRange(row, ix[_hkey('CNPJ EMITENTE')] + 1).setNumberFormat('@'); s.getRange(row, ix[_hkey('CPROD')] + 1).setNumberFormat('@'); }
+    Object.keys(vals).forEach(function(h){ s.getRange(row, ix[_hkey(h)] + 1).setValue(vals[h]); });
+    n++; });
   return { rows:n };
 }
 // SAÍDA de estoque por recomendação APROVADA (o app envia na aprovação). Idempotente pelo id:
@@ -862,6 +912,8 @@ function doPost(e){
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
+    } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)
+      var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
       var lim = writeMapApp('LIMITES APP', payload.__limites); out.ok = lim.rows;
     } else if (payload && payload.__opplan){          // ordem + nomes das operações (merge por chave)
