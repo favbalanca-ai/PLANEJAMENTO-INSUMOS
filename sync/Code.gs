@@ -85,7 +85,7 @@ function readData(){
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
     result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
-    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_() };
+    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -365,12 +365,13 @@ function _fmtDT(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session
 
 // ---- configuração (aba CONFIG NFE: CHAVE | VALOR | OBS) ----
 function nfeConfig_(){
-  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[] }; if (!s) return cfg;
+  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30 }; if (!s) return cfg;
   var last = s.getLastRow(); if (last < 2) return cfg;
   var v = s.getRange(2,1,last-1,2).getValues();
   v.forEach(function(r){ var k = _hkey(r[0]), val = S(r[1]);
     if (k === 'TOKEN') cfg.token = val; else if (k === 'PASTANFE') cfg.pasta = val;
-    else if (k === 'PRODUTOR' && val) cfg.produtores.push(val.replace(/\D/g,'')); });
+    else if (k === 'PRODUTOR' && val) cfg.produtores.push(val.replace(/\D/g,''));
+    else if (k === 'DIASCONTRATOPARADO' && val !== '') cfg.diasParado = N(val); });
   return cfg;
 }
 function nfeTokenOk_(tk){ var t = nfeConfig_().token; return !!t && S(tk) === t; }
@@ -387,6 +388,8 @@ function setupNfe(){
   var pasta = null; try { if (cfg.pasta) pasta = DriveApp.getFolderById(cfg.pasta); } catch (e) { pasta = null; }
   if (!pasta){ pasta = _pasta(DriveApp.getRootFolder(), 'NFe'); add('PASTA NFE', pasta.getId(), 'Pasta NFe no Drive (Entrada / XML / Rejeitados). Jogue XML manual em NFe/Entrada.'); }
   var temProd = s.getLastRow() >= 2 && s.getRange(2,1,s.getLastRow()-1,1).getValues().some(function(r){ return _hkey(r[0]) === 'PRODUTOR'; });
+  var temDias = s.getLastRow() >= 2 && s.getRange(2,1,s.getLastRow()-1,1).getValues().some(function(r){ return _hkey(r[0]) === 'DIASCONTRATOPARADO'; });
+  if (!temDias) add('DIAS CONTRATO PARADO', 30, 'Alerta quando um contrato de entrega futura fica esse nº de dias sem remessa.');
   if (!temProd) add('PRODUTOR', '', 'Coloque aqui o CPF ou CNPJ de cada produtor (uma linha PRODUTOR por produtor). Só notas para eles entram.');
   nfePastas_(nfeConfig_());
   sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS); sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS);
@@ -455,6 +458,7 @@ function processarXmlNfe(txt, origem){
     if (st === 'CANCELADA') return { status:'duplicada', chave:n.chave };
     var obs = st === 'RECEBIDA' ? '⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE — conferir com o fornecedor e ajustar o estoque' : 'cancelada pelo emitente em ' + n.data;
     _setCells_(t, rc, { 'STATUS':'CANCELADA', 'OBS':obs });
+    var refC = S(t.s.getRange(rc, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (refC) _atualizaContrato_(refC);   // remessa cancelada devolve o saldo ao contrato
     return { status:'cancelada', chave:n.chave, alerta:st === 'RECEBIDA' };
   }
   if (!n.temProt) return { status:'rejeitada', chave:n.chave, motivo:'XML sem protocolo de autorização' };
@@ -512,8 +516,12 @@ function nfeUma_(chave){
 // classifica/recebe (RECEBIDA) ou ignora (IGNORADA) uma nota: status + NFE ITENS + de-para
 function nfeClassifica_(c){
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(c.chave)); if (!row) return { rows:0, erro:'nota não encontrada' };
+  var atual = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
+  if (atual === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
+  // fase 3: EM TRÂNSITO (venda/remessa) · A ENTREGAR (faturamento = contrato) · RECEBIDA (entrada direta) · IGNORADA
   var st = S(c.status || 'RECEBIDA').toUpperCase(), agora = new Date(), vals = { 'STATUS':st, 'CLASSIFICADA EM':agora };
   if (st === 'RECEBIDA'){ vals['RECEBIDA EM'] = c.data ? new Date(S(c.data).slice(0,10) + 'T12:00:00') : agora; vals['RECEBIDA POR'] = S(c.por) || 'app'; }
+  if (c.ref != null) vals['CHAVE REFERENCIADA'] = S(c.ref);            // remessa → contrato (faturamento)
   if (c.obs) vals['OBS'] = S(c.obs);
   _setCells_(t, row, vals);
   var n = 0;
@@ -523,16 +531,67 @@ function nfeClassifica_(c){
     c.itens.forEach(function(it){ s.appendRow(NFE_ITENS_COLS.map(function(){ return ''; })); var r = s.getLastRow();
       _setCells_(ti, r, { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
         'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
-        'QTD RECEBIDA':it.ignorar ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }); n++; });
+        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }); n++; });
   }
   if (c.depara && c.depara.length) writeDeParaNfe(c.depara);
+  // contrato afetado: o próprio (faturamento) ou o da remessa
+  var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue());
+  if (st === 'A ENTREGAR') _atualizaContrato_(S(c.chave)); else if (ref) _atualizaContrato_(ref);
   return { rows:n + 1 };
+}
+// ---- FASE 3: entrega futura (contratos = notas de FATURAMENTO) ----
+function _ler_(name, cols){ var t = sheetCols_(name, cols), s = t.s, last = s.getLastRow(), out = [];
+  if (last < 2) return out;
+  s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r, i){ var o = { __r:i + 2 }; cols.forEach(function(h){ o[h] = r[t.col(h)]; }); if (S(o[cols[0]])) out.push(o); });
+  return out; }
+var NFE_ATIVAS = ['EM TRÂNSITO','RECEBIDA','RECEBIDA SEM XML'];   // remessas que já abatem o contrato
+// contratos de entrega futura: faturado × entregue (remessas vinculadas) × saldo por produto
+function nfeContratos_(){
+  var idx = _ler_(NFE_IDX_SHEET, NFE_IDX_COLS), itens = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS), porChave = {}, cfg = nfeConfig_(), hoje = new Date();
+  itens.forEach(function(i){ (porChave[S(i['CHAVE'])] = porChave[S(i['CHAVE'])] || []).push(i); });
+  var out = [];
+  idx.forEach(function(n){
+    var st = S(n['STATUS']).toUpperCase(); if (S(n['TIPO']) !== 'FATURAMENTO' || ['A ENTREGAR','ENTREGUE'].indexOf(st) < 0) return;
+    var ch = S(n['CHAVE']), its = {}, ult = n['CLASSIFICADA EM'] instanceof Date ? n['CLASSIFICADA EM'] : null;
+    (porChave[ch] || []).forEach(function(i){ var p = S(i['PRODUTO APP']); if (S(i['IGNORAR']) || !p) return;
+      var x = its[p] || (its[p] = { produto:p, un:S(i['UN APP']), faturado:0, entregue:0, custo:N(i['CUSTO UNIT. REAL']) }); x.faturado += N(i['QTD APP']); });
+    var rem = idx.filter(function(r){ return S(r['CHAVE REFERENCIADA']) === ch && NFE_ATIVAS.indexOf(S(r['STATUS']).toUpperCase()) >= 0; });
+    rem.forEach(function(r){ (porChave[S(r['CHAVE'])] || []).forEach(function(i){ var p = S(i['PRODUTO APP']); if (S(i['IGNORAR']) || !its[p]) return; its[p].entregue += N(i['QTD APP']); });
+      var d = r['CLASSIFICADA EM']; if (d instanceof Date && (!ult || d > ult)) ult = d; });
+    var lista = Object.keys(its).map(function(p){ var x = its[p]; x.saldo = Math.max(0, Math.round((x.faturado - x.entregue) * 1e4) / 1e4); x.valorSaldo = x.saldo * x.custo; x.excesso = Math.max(0, x.entregue - x.faturado); return x; });
+    var saldo = lista.reduce(function(a, x){ return a + x.saldo; }, 0), dias = ult ? Math.floor((hoje - ult) / 86400000) : null;
+    out.push({ chave:ch, fornecedor:S(n['FORNECEDOR']), cnpj:S(n['CNPJ EMITENTE']), nNF:S(n['Nº']), serie:S(n['SÉRIE']), emissao:_fmtD(n['EMISSÃO']), valor:N(n['VALOR']),
+      status:st, itens:lista, remessas:rem.map(function(r){ return { chave:S(r['CHAVE']), nNF:S(r['Nº']), status:S(r['STATUS']) }; }),
+      saldoTotal:saldo, valorSaldo:lista.reduce(function(a, x){ return a + x.valorSaldo; }, 0), diasParado:dias, parado:saldo > 0 && dias != null && dias >= cfg.diasParado });
+  });
+  return out;
+}
+// contrato totalmente entregue vira ENTREGUE (e volta para A ENTREGAR se uma remessa for cancelada)
+function _atualizaContrato_(chave){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return;
+  var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase(); if (['A ENTREGAR','ENTREGUE'].indexOf(st) < 0) return;
+  var c = nfeContratos_().filter(function(x){ return x.chave === chave; })[0]; if (!c) return;
+  var novo = (c.itens.length && c.saldoTotal <= 0.0001) ? 'ENTREGUE' : 'A ENTREGAR';
+  if (novo !== st) t.s.getRange(row, t.col('STATUS') + 1).setValue(novo);
+}
+// estados por PRODUTO (sem dados da nota) para a conta do "a comprar": a entregar · em trânsito · pendências · avariado
+function nfeEstados_(){
+  var out = { aEntregar:{}, emTransito:{}, pendencias:{}, avariado:{} };
+  if (!sh(NFE_IDX_SHEET)) return out;
+  var add = function(m, p, q){ if (p && q) m[p] = Math.round(((m[p] || 0) + q) * 1e4) / 1e4; };
+  nfeContratos_().forEach(function(c){ if (c.status === 'A ENTREGAR') c.itens.forEach(function(x){ add(out.aEntregar, x.produto, x.saldo); }); });
+  var idx = _ler_(NFE_IDX_SHEET, NFE_IDX_COLS), trans = {};
+  idx.forEach(function(n){ if (S(n['STATUS']).toUpperCase() === 'EM TRÂNSITO') trans[S(n['CHAVE'])] = 1; });
+  _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).forEach(function(i){ if (trans[S(i['CHAVE'])] && !S(i['IGNORAR'])) add(out.emTransito, S(i['PRODUTO APP']), N(i['QTD APP'])); });
+  if (typeof nfePendEstados_ === 'function') nfePendEstados_(out, add);   // fase 5
+  return out;
 }
 // resumo SEM dados da nota (só contagens) — vai no puxar normal, para o contador do app
 function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0 }; if (!s) return out;
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), last = s.getLastRow(); if (last < 2) return out;
   s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase();
     if (st === 'A CLASSIFICAR') out.aClassificar++; if (S(r[t.col('OBS')]).indexOf('⚠') === 0) out.alertas++; });
+  out.contratosParados = nfeContratos_().filter(function(c){ return c.parado; }).length;
   return out; }
 
 // SAÍDA de estoque por recomendação APROVADA (o app envia na aprovação). Idempotente pelo id:
@@ -1087,6 +1146,7 @@ function doGet(e){
     if (!nfeTokenOk_(p.token)) return json({ ok:false, erro:'token da NF-e inválido ou NF-e não configurada' });
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
+    if (p.acao === 'contratos') return json({ ok:true, contratos:nfeContratos_() });
     return json({ ok:false, erro:'ação desconhecida' });
   }
   var str = currentJson();

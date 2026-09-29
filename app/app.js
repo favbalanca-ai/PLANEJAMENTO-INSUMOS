@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-146';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-147';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -409,7 +409,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
-  entradas:'admin', fluxocaixa:'admin',
+  entradas:'admin', fluxocaixa:'admin', contratos:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
@@ -754,6 +754,9 @@ function areaUsoProduto(empSet, talSet){
   return areaOcc;
 }
 // lista de compras a partir da demanda (considerando o SALDO de estoque)
+// estados da NF-e por produto (planilha): a entregar (contratos) · em trânsito · pendências abertas · avariado
+function nfeEstadosDe(p){ const e=(DATA&&DATA.nfe_estados)||{}, g=k=>+((e[k]||{})[p]||0);
+  return {aEntregar:g('aEntregar'), emTransito:g('emTransito'), pendencias:g('pendencias'), avariado:g('avariado')}; }
 function calcCompras(empSet, talSet){
   const dem = calcDemanda(empSet, talSet);
   const saidas = estoqueSaidas();            // já aplicado por produto (recom. aprovadas)
@@ -762,12 +765,13 @@ function calcCompras(empSet, talSet){
   for(const p of DATA.produtos){
     const nome=p.produto, d=dem[nome]||0, est=estoqueDe(nome), ped=pedidoDe(nome);
     const sai=saidas[nome]||0, ent=entradas[nome]||0, saldo=est+ent-sai, restante=Math.max(0,d-sai);
-    if(d<=0 && est<=0 && ped<=0 && sai<=0 && ent<=0) continue;
+    const ne=nfeEstadosDe(nome), caminho=ne.aEntregar+ne.emTransito+ne.pendencias;
+    if(d<=0 && est<=0 && ped<=0 && sai<=0 && ent<=0 && caminho<=0) continue;
     if((p.classe||'').toUpperCase().startsWith('MÁQUINA')) continue;
-    // a comprar = demanda restante − saldo em estoque − em pedido
-    const comprar=Math.max(0, restante - saldo - ped), preco=precoDe(nome), valor=comprar*preco;
-    let status = comprar>0 ? (preco>0?'COMPRAR':'SEM_PRECO') : (d>0?'ESTOQUE':'SEM_DEMANDA');
-    rows.push({...p, demanda:d, estoque:est, entrada:ent, saida:sai, saldo, pedido:ped, comprar, preco, valor, status});
+    // a comprar = máx(0; demanda restante − saldo − em pedido − a entregar − em trânsito − pendências abertas) (NF-e fase 3)
+    const comprar=Math.max(0, restante - saldo - ped - caminho), preco=precoDe(nome), valor=comprar*preco;
+    let status = comprar>0 ? (preco>0?'COMPRAR':'SEM_PRECO') : (d>0?(caminho>0&&saldo+ped<restante?'CAMINHO':'ESTOQUE'):'SEM_DEMANDA');
+    rows.push({...p, demanda:d, estoque:est, entrada:ent, saida:sai, saldo, pedido:ped, aEntregar:ne.aEntregar, emTransito:ne.emTransito, pendencias:ne.pendencias, avariado:ne.avariado, caminho, comprar, preco, valor, status});
   }
   return rows;
 }
@@ -994,7 +998,7 @@ function updateEditBadge(){
   if(typeof updateSyncBar==='function') updateSyncBar();
 }
 const PILL={COMPRAR:['pill-buy','Comprar'],SEM_PRECO:['pill-noprice','Sem preço'],
-  ESTOQUE:['pill-stock','Em estoque'],SEM_DEMANDA:['pill-none','Sem demanda']};
+  ESTOQUE:['pill-stock','Em estoque'],SEM_DEMANDA:['pill-none','Sem demanda'],CAMINHO:['pill-stock','A caminho']};
 const pill=st=>`<span class="pill ${PILL[st][0]}">${PILL[st][1]}</span>`;
 
 /* ================= VIEWS ================= */
@@ -1473,7 +1477,7 @@ function nfeLerXml(txt){
       vipi:_nn(_nx(im,'IPI'),'vIPI'), vst:_nn(_nx(im,'ICMS'),'vICMSST') }; });
   return { chave:(prot&&_nt(prot,'chNFe'))||String(inf.getAttribute('Id')||'').replace(/^NFe/,''), temProt:!!prot, cstat:prot?_nt(prot,'cStat'):'',
     nNF:_nt(ide,'nNF'), serie:_nt(ide,'serie'), emissao:(_nt(ide,'dhEmi')||_nt(ide,'dEmi')).slice(0,10),
-    cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), itens };
+    cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), ref:_nt(ide,'refNFe'), itens };
 }
 // chave de acesso: 44 dígitos, modelo 55, DV por módulo 11 (pesos 2..9 da direita p/ a esquerda)
 function nfeChaveOk(ch){ if(!/^\d{44}$/.test(ch||'')||ch.slice(20,22)!=='55') return false; let s=0,w=2;
@@ -1547,6 +1551,10 @@ function nfeAbrirXml(txt, nome, origem){
     nfeImport={nota, arquivo:nome, origem, data:_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
     // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
     if(origem==='arquivo' && nfeServerOk()){ nfeImport.xml=txt; nfeImport.uploadP=nfePost({__nfeUpload:{xml:txt}}).catch(()=>null); }
+    if(nota.tipo==='REMESSA' && nfeServerOk()){ const imp=nfeImport; nfeContratosCarregar(true).then(()=>{ if(nfeImport!==imp) return;
+      if(nota.ref && nfeContratosDoFornecedor(nota.cnpj).some(c=>c.chave===nota.ref)) imp.ref=nota.ref;
+      else { const cs=nfeContratosDoFornecedor(nota.cnpj); const prods=new Set(imp.itens.map(i=>i.produto)); const m=cs.filter(c=>c.itens.some(x=>prods.has(x.produto)&&x.saldo>0)); if(m.length===1) imp.ref=m[0].chave; }
+      route({keepScroll:true}); }); }
     route(); window.scrollTo(0,0);
     const nAuto=nfeImport.itens.filter(i=>i.fonte==='auto').length;
     toast(`NF-e ${nota.nNF} lida: ${nota.itens.length} item(ns)${nAuto?` · ${nAuto} automático(s)`:''} — confira e confirme`);
@@ -1599,7 +1607,7 @@ function nfeIgnorar(chave){
 }
 // contador no menu (Compras): notas a classificar + alertas de cancelamento
 function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entradas"]'); if(!a) return;
-  const r=(DATA&&DATA.nfe_resumo)||{}, n=(+r.aClassificar||0)+(+r.alertas||0); let b=a.querySelector('.nav-badge');
+  const r=(DATA&&DATA.nfe_resumo)||{}, n=(+r.aClassificar||0)+(+r.alertas||0)+(+r.contratosParados||0); let b=a.querySelector('.nav-badge');
   if(!n){ if(b) b.remove(); return; } if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
   b.textContent=n; b.title=`${r.aClassificar||0} nota(s) a classificar${r.alertas?` · ${r.alertas} alerta(s)`:''}`; b.classList.toggle('alert', !!r.alertas); }
 function nfeListaHtml(){
@@ -1618,44 +1626,96 @@ function nfeListaHtml(){
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}</div>`;
 }
-function nfeConfirmar(){
-  const imp=nfeImport; if(!imp) return; const n=imp.nota;
-  if(n.tipo==='FATURAMENTO'){ toast('Nota de faturamento (entrega futura) não entra no estoque. Importe a nota de remessa quando a mercadoria sair.'); return; }
+// itens da nota no formato da planilha (NFE ITENS)
+// custo do item: o da própria nota; na REMESSA (valor simbólico) vale o custo do contrato de faturamento
+function nfeCustoItem(imp,i){ if(imp.nota.tipo==='REMESSA'){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref), it=c&&c.itens.find(x=>x.produto===i.produto);
+    if(it && it.custo>0) return it.custo; }
+  return nfeCustoReal(i,i.fator); }
+function nfeItensPayload(imp){ return imp.itens.map(i=>({n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:i.ignorar?'':i.produto, fator:+i.fator||1,
+  qtd:i.ignorar?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:(PROD[i.produto]||{}).un||'', custo:i.ignorar?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar})); }
+function nfeSalvarDePara(imp){ if(!imp.lembrar) return; const n=imp.nota, L=deparaLocal(), now=Date.now();
+  imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
+    custo:(i.ignorar||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:now}; });   // remessa não mexe no último custo
+  saveDeParaLocal(); }
+// modo: 'entrada' (já chegou: entrada direta, RECEBIDA) · 'transito' (venda/remessa: EM TRÂNSITO, entra ao receber na fazenda)
+//       'contrato' (faturamento de entrega futura: A ENTREGAR)
+function nfeConfirmar(modo){
+  const imp=nfeImport; if(!imp) return; const n=imp.nota, srv=nfeServerOk();
+  modo = modo || 'entrada';
+  if(n.tipo==='FATURAMENTO' && modo!=='contrato'){ toast(srv?'Nota de faturamento: use "Registrar contrato".':'Nota de faturamento (entrega futura) não entra no estoque. Importe a nota de remessa quando a mercadoria sair.'); return; }
+  if(modo!=='entrada' && !srv){ toast('Em trânsito e contratos precisam da NF-e ligada (token + Code.gs novo)'); return; }
   if(!imp.itens.every(nfeResolvido)){ toast('Resolva todos os itens (produto do app e fator, ou Ignorar)'); return; }
   const ja=nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
-  if(n.tipo==='OUTRA' && !confirm(`Esta nota não é de venda nem de remessa (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}).\nEx.: bonificação, devolução, remessa para conserto.\n\nDar entrada no estoque mesmo assim?`)) return;
-  const itens=imp.itens.filter(i=>!i.ignorar).map(i=>({produto:i.produto, un:(PROD[i.produto]||{}).un||'', qtd:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), preco:+nfeCustoReal(i,i.fator).toFixed(4)}));
-  if(!itens.length){ toast('Todos os itens estão marcados como Ignorar — nada para dar entrada'); return; }
-  const rec={ id:n.chave, fornecedor:n.fornecedor, data:imp.data||_hojeISO(), nf:`${n.nNF}/${n.serie}`,
-    obs:`NF-e emitida em ${fmtDataBR(n.emissao)}${n.tipo!=='VENDA'?' · '+NFE_TIPO[n.tipo]:''}`, itens, pushed:false, ts:Date.now(),
-    nfe:{chave:n.chave, cnpj:n.cnpj, emissao:n.emissao, tipo:n.tipo, vNF:n.vNF} };
-  COMPRAS.registros.push(rec); saveCompras();
-  if(imp.lembrar){ const L=deparaLocal(), now=Date.now();
-    imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
-      custo:i.ignorar?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:now}; });
-    saveDeParaLocal(); }
-  if(nfeServerOk()){
-    const cl={chave:n.chave, status:'RECEBIDA', data:rec.data, por:'app', xml:imp.origem==='arquivo'?imp.xml:'',
-      itens:imp.itens.map(i=>({n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:i.ignorar?'':i.produto, fator:+i.fator||1,
-        qtd:i.ignorar?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:(PROD[i.produto]||{}).un||'', custo:i.ignorar?0:+nfeCustoReal(i,i.fator).toFixed(4), ignorar:!!i.ignorar}))};
-    (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl));
+  if(n.tipo==='OUTRA' && !confirm(`Esta nota não é de venda nem de remessa (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}).\nEx.: bonificação, devolução, remessa para conserto.\n\nContinuar mesmo assim?`)) return;
+  const itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&i.produto);
+  if(!usados.length){ toast('Todos os itens estão marcados como Ignorar — nada a registrar'); return; }
+  if(n.tipo==='REMESSA' && modo!=='entrada' && !imp.ref && !confirm('Esta remessa não está ligada a nenhum contrato (faturamento).\nO saldo "a entregar" do contrato não vai baixar.\n\nContinuar sem vincular?')) return;
+  if(n.tipo==='REMESSA' && imp.ref){ const exc=nfeRemessaExcesso(imp); if(exc.length && !confirm('⚠ Remessa maior que o saldo do contrato:\n'+exc.join('\n')+'\n\nContinuar mesmo assim?')) return; }
+  // faturamento: produto com EM PEDIDO manual → abater (o contrato passa a contar como "a entregar")
+  if(modo==='contrato'){ const ped=usados.filter(i=>pedidoDe(i.produto)>0);
+    if(ped.length && confirm('Estes produtos têm "EM PEDIDO" informado à mão:\n'+ped.map(i=>`• ${i.produto}: em pedido ${num(pedidoDe(i.produto))} · contrato ${num(i.qtd)} ${i.un}`).join('\n')+'\n\nO contrato vai contar como "a entregar". Abater do EM PEDIDO para não contar em dobro?')){
+      ped.forEach(i=>{ const v=Math.max(0, pedidoDe(i.produto)-i.qtd); if(v>0) OV.pedido[i.produto]=+v.toFixed(4); else OV.pedido[i.produto]=0; });
+      saveOverrides(); try{ scheduleAutoPush(); }catch(e){} } }
+  let rec=null;
+  if(modo==='entrada'){
+    const itens=usados.map(i=>({produto:i.produto, un:i.un, qtd:i.qtd, preco:i.custo}));
+    rec={ id:n.chave, fornecedor:n.fornecedor, data:imp.data||_hojeISO(), nf:`${n.nNF}/${n.serie}`,
+      obs:`NF-e emitida em ${fmtDataBR(n.emissao)}${n.tipo!=='VENDA'?' · '+NFE_TIPO[n.tipo]:''}`, itens, pushed:false, ts:Date.now(),
+      nfe:{chave:n.chave, cnpj:n.cnpj, emissao:n.emissao, tipo:n.tipo, vNF:n.vNF} };
+    COMPRAS.registros.push(rec); saveCompras();
+  }
+  nfeSalvarDePara(imp);
+  if(srv){
+    const cl={chave:n.chave, status:modo==='entrada'?'RECEBIDA':(modo==='contrato'?'A ENTREGAR':'EM TRÂNSITO'), data:imp.data||_hojeISO(), por:'app',
+      xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP};
+    if(n.tipo==='REMESSA') cl.ref=imp.ref||'';
+    (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
     if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
+    NFE_CONTRATOS=null;
   }
   nfeImport=null; route(); updateEditBadge();
-  toast(`Entrada da NF-e ${n.nNF} registrada: ${itens.length} produto(s)`+(syncUrl()?' — enviando à planilha…':''));
-  pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
+  toast(modo==='entrada'?`Entrada da NF-e ${n.nNF} registrada: ${usados.length} produto(s)`:modo==='contrato'?`Contrato da NF-e ${n.nNF} registrado — ${usados.length} produto(s) a entregar`:`NF-e ${n.nNF} em trânsito — dá entrada ao receber na fazenda`);
+  if(rec) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
   pushDeParaNfe();
+}
+// ---- contratos (fase 3) ----
+let NFE_CONTRATOS=null;   // {ts, lista:[…], erro}
+function nfeContratosCarregar(force){
+  if(!nfeServerOk()) return Promise.resolve(null);
+  if(!force && NFE_CONTRATOS && Date.now()-NFE_CONTRATOS.ts<30000) return Promise.resolve(NFE_CONTRATOS);
+  return nfeGet({acao:'contratos'}).then(d=>{ NFE_CONTRATOS={ts:Date.now(), lista:(d&&d.ok&&d.contratos)||[], erro:(d&&!d.ok)?(d.erro||'erro'):''}; return NFE_CONTRATOS; })
+    .catch(()=>{ NFE_CONTRATOS={ts:Date.now(), lista:[], erro:'sem conexão com a planilha'}; return NFE_CONTRATOS; });
+}
+// contratos em aberto do mesmo fornecedor (para vincular a remessa)
+function nfeContratosDoFornecedor(cnpj){ return ((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).filter(c=>c.cnpj===cnpj && c.status==='A ENTREGAR'); }
+function nfeRemessaExcesso(imp){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref); if(!c) return [];
+  const q={}; nfeItensPayload(imp).forEach(i=>{ if(!i.ignorar&&i.produto) q[i.produto]=(q[i.produto]||0)+i.qtd; });
+  return Object.keys(q).map(p=>{ const it=c.itens.find(x=>x.produto===p); const saldo=it?it.saldo:0;
+    return q[p]>saldo+1e-6?`• ${p}: remessa ${num(q[p])} > saldo ${num(saldo)}${it?'':' (produto não está no contrato)'}`:''; }).filter(Boolean); }
+function nfeRemessaHtml(imp){
+  const n=imp.nota, L=NFE_CONTRATOS; if(!L) return `<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — carregando contratos…</div>`;
+  const cs=nfeContratosDoFornecedor(n.cnpj), c=cs.find(x=>x.chave===imp.ref), exc=imp.ref?nfeRemessaExcesso(imp):[];
+  const refFora=n.ref && !cs.some(x=>x.chave===n.ref);
+  return `<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — baixa o saldo "a entregar" do contrato e vai para "em trânsito".
+    <label class="nfe-ctr">Contrato (faturamento)<select class="sel" data-nff="ref"><option value="">— sem contrato —</option>
+      ${cs.map(x=>`<option value="${esc(x.chave)}"${x.chave===imp.ref?' selected':''}>NF ${esc(x.nNF)} · ${esc(fmtDataBR(x.emissao))} · saldo ${x.itens.map(i=>`${esc(i.produto)} ${num(i.saldo)} ${esc(i.un)}`).join(', ')}</option>`).join('')}</select></label>
+    ${n.ref&&imp.ref===n.ref?'<div class="mut" style="font-size:11.5px">✔ vinculado pela nota referenciada no XML</div>':''}
+    ${refFora?`<div class="nfe-warn-t">⚠ O XML referencia a NF-e ${esc(n.ref.slice(25,34).replace(/^0+/,''))} que não está entre os contratos abertos — registre o faturamento primeiro ou escolha outro.</div>`:''}
+    ${!cs.length?'<div class="nfe-warn-t">Nenhum contrato aberto deste fornecedor.</div>':''}
+    ${exc.length?`<div class="nfe-warn-t">⚠ Remessa maior que o saldo:<br>${exc.map(esc).join('<br>')}</div>`:''}</div>`;
 }
 function nfeConferirHtml(){
   const imp=nfeImport, n=imp.nota, un=it=>(PROD[it.produto]||{}).un||'';
   const pend=imp.itens.filter(i=>!nfeResolvido(i)).length, nSug=imp.itens.filter(i=>nfeItemStatus(i)==='sug').length;
   const cfops=[...new Set(n.itens.map(i=>i.cfop))].join(', ');
-  const fat=n.tipo==='FATURAMENTO';
-  const aviso = fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
+  const srv=nfeServerOk(), fat=n.tipo==='FATURAMENTO' && !srv;
+  const aviso = (n.tipo==='FATURAMENTO' && srv)?`<div class="nfe-aviso info">📑 <b>Faturamento de entrega futura</b> — CFOP ${esc(cfops)}. Vira um <b>contrato</b>: os produtos ficam "a entregar" e baixam conforme chegam as notas de <b>remessa</b>. Não entra no estoque agora.</div>`
+    : n.tipo==='REMESSA' && srv ? nfeRemessaHtml(imp)
+    : fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
     : n.tipo==='OUTRA'?`<div class="nfe-aviso warn">⚠️ <b>Outra operação</b> (CFOP ${esc(cfops)}) — não é venda nem remessa (ex.: bonificação, devolução, conserto). Confira se deve mesmo entrar no estoque.</div>`
-    : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (O vínculo com o contrato de faturamento vem na fase 3.)</div>`:'';
+    : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`:'';
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
-  const cards=imp.itens.map((it,i)=>{ const st=nfeItemStatus(it), [lbl,ico]=NFE_ST[st], q=(+it.qcom||0)*(+it.fator||0), c=nfeCustoReal(it,it.fator), ref=precoDe(it.produto);
+  const cards=imp.itens.map((it,i)=>{ const st=nfeItemStatus(it), [lbl,ico]=NFE_ST[st], q=(+it.qcom||0)*(+it.fator||0), c=nfeCustoItem(imp,it), ref=precoDe(it.produto);
     const dif=(ref>0&&c>0)?(c/ref-1)*100:null;
     const extras=[it.vdesc?`desc. −${brl(it.vdesc)}`:'', it.vfrete?`frete ${brl(it.vfrete)}`:'', it.voutro?`outras ${brl(it.voutro)}`:'', it.vipi?`IPI ${brl(it.vipi)}`:'', it.vst?`ICMS-ST ${brl(it.vst)}`:''].filter(Boolean).join(' · ');
     return `<div class="nfe-it st-${st}">
@@ -1686,11 +1746,39 @@ function nfeConferirHtml(){
       <span class="spacer"></span>
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
-      <button class="btn btn-primary btn-sm" data-act="nfeConfirmar"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>
+      ${!srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>`
+        : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' disabled':''}>📑 Registrar contrato (a entregar)</button>`
+        : `<button class="btn btn-outline btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''} title="A mercadoria já está na fazenda: dá entrada no estoque agora">📦 Já chegou — dar entrada</button>
+           <button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="transito"${pend?' disabled':''} title="Fica EM TRÂNSITO até o operador receber na fazenda (Receber nota)">🚚 Confirmar e pôr em trânsito</button>`}
     </div>
-    <p class="mut nfe-hint">${fat?'Nota de faturamento: nada a confirmar.':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
+    <p class="mut nfe-hint">${fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
   </div>`;
 }
+// ---- TELA: Contratos a entregar (NF-e fase 3) ----
+V.contratos=function(){
+  if(!nfeServerOk()) return `<div class="nfe-aviso info" style="margin:0">📑 Contratos de entrega futura vêm das notas de <b>faturamento</b> (CFOP 5922/6922). Para ligar: cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> e implante o <b>Code.gs</b> novo.</div>`;
+  const L=NFE_CONTRATOS; if(!L) return `<div class="panel"><div class="panel-head"><h2>📑 Contratos a entregar</h2><span class="sub">carregando…</span></div></div>`;
+  const cs=(L.lista||[]).slice().sort((a,b)=>(a.status==='ENTREGUE')-(b.status==='ENTREGUE')||(b.valorSaldo-a.valorSaldo));
+  const abertos=cs.filter(c=>c.status==='A ENTREGAR'), parados=abertos.filter(c=>c.parado);
+  const vSaldo=abertos.reduce((a,c)=>a+c.valorSaldo,0);
+  const card=c=>`<div class="panel ctr-card${c.status==='ENTREGUE'?' ctr-ok':''}${c.parado?' ctr-parado':''}">
+    <div class="panel-head"><h2>${esc(c.fornecedor||'—')}</h2><span class="sub">NF ${esc(c.nNF)}/${esc(c.serie)} · emissão ${esc(fmtDataBR(c.emissao))} · ${brl(c.valor)}</span>
+      <div class="spacer"></div><span class="nfe-chip ${c.status==='ENTREGUE'?'st-ok':'st-sug'}">${c.status==='ENTREGUE'?'✅ Entregue':'⏳ A entregar'}</span></div>
+    ${c.parado?`<div class="nfe-aviso warn">⏰ <b>${c.diasParado} dias sem remessa</b> e ainda há saldo a entregar — cobre o fornecedor.</div>`:''}
+    <div class="table-wrap"><table><thead><tr><th>Produto</th><th class="num">Faturado</th><th class="num">Entregue</th><th class="num">Saldo</th><th>Un</th><th class="num">Valor do saldo</th></tr></thead><tbody>
+      ${c.itens.map(i=>`<tr><td class="c-full"><b>${esc(i.produto)}</b>${i.excesso>0?` <span class="cp-tag late">+${num(i.excesso)} além do contrato</span>`:''}</td><td class="num">${num(i.faturado)}</td><td class="num">${num(i.entregue)}</td>
+        <td class="num"><b>${num(i.saldo)}</b></td><td>${esc(i.un)}</td><td class="num">${i.valorSaldo>0?brl0(i.valorSaldo):'—'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="mut" style="font-size:12px;padding:6px 14px 12px">${c.remessas.length?`Remessas: ${c.remessas.map(r=>`NF ${esc(r.nNF)} (${esc(r.status.toLowerCase())})`).join(' · ')}`:'Nenhuma remessa ainda.'}${c.diasParado!=null&&!c.parado&&c.status!=='ENTREGUE'?` · ${c.diasParado} dia(s) desde a última movimentação`:''}</p></div>`;
+  return `<div class="kpi-grid">
+      <div class="kpi accent"><div class="k-label">Saldo a entregar</div><div class="k-value">${brl0(vSaldo)}</div><div class="k-sub">${abertos.length} contrato(s) em aberto</div></div>
+      <div class="kpi"><div class="k-label">Parados</div><div class="k-value" style="color:${parados.length?'var(--red)':'var(--green)'}">${parados.length}</div><div class="k-sub">sem remessa há muito tempo</div></div>
+      <div class="kpi"><div class="k-label">Entregues</div><div class="k-value">${cs.length-abertos.length}</div><div class="k-sub">contratos concluídos</div></div></div>
+    <div class="toolbar"><span class="badge badge-muted">Faturamento (entrega futura) vira contrato; cada remessa baixa o saldo e vai para "em trânsito". O saldo conta como "a caminho" na Demanda.</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="ctrAtualizar">🔄 Atualizar</button></div>
+    ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
+    ${cs.map(card).join('')||'<div class="panel"><p class="mut" style="padding:14px">Nenhum contrato. Quando chegar uma nota de faturamento (entrega futura), classifique em Compras → "Registrar contrato".</p></div>'}`;
+};
 /* ================= CONTROLE DE ESTOQUE (portfólio: entradas × saídas × saldo) ================= */
 // saídas = soma do volume utilizado nas recomendações APROVADAS (por produto).
 // Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE). Soma as aprovações deste aparelho
@@ -1721,7 +1809,8 @@ V.estoque=function(){
   Object.keys(saidas).forEach(n=>nomes.add(n)); Object.keys(entradas).forEach(n=>nomes.add(n));
   const rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
     const ini=estoqueDe(n), ent=entradas[n]||0, sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
-    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, ped, preco}; })
+    const ne=nfeEstadosDe(n);
+    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, ped, preco, aEnt:ne.aEntregar, trans:ne.emTransito, avar:ne.avariado}; })
     .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
   const comMov=rows.filter(r=>r.ini||r.ent||r.sai||r.ped);
   const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
@@ -1734,7 +1823,7 @@ V.estoque=function(){
     classes.map(c=>`<button class="chip-f${estoqueClasse===c?' on':''}" data-estf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('');
   const body=rows.map(r=>{
     const cls=r.saldo<-0.0001?'neg':(r.saldo>0?'ok':'');
-    const mov=(r.ini||r.ent||r.sai||r.ped)?1:0;
+    const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0;
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}">
       <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
@@ -1743,6 +1832,9 @@ V.estoque=function(){
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
       <td data-th="Un">${esc(r.un||'')}</td>
       <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0"></td>
+      <td class="num c-more" data-th="A entregar" title="contratos de entrega futura (NF-e de faturamento)">${r.aEnt?num(r.aEnt):'·'}</td>
+      <td class="num c-more" data-th="Em trânsito" title="NF-e de mercadoria ainda não recebida na fazenda">${r.trans?num(r.trans):'·'}</td>
+      <td class="num c-more" data-th="Avariado" title="recebido com avaria, fora do saldo disponível (a resolver)">${r.avar?`<span style="color:var(--red)">${num(r.avar)}</span>`:'·'}</td>
       <td class="num c-more" data-th="Valor saldo">${r.preco>0?brl0(Math.max(0,r.saldo)*r.preco):'—'}</td></tr>`;
   }).join('');
   return `
@@ -1756,8 +1848,8 @@ V.estoque=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
-    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
-      <tbody>${body||'<tr><td colspan="8" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
+    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more">Valor saldo</th></tr></thead>
+      <tbody>${body||'<tr><td colspan="11" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.</p>`;
 };
 // RELATÓRIO DE ESTOQUE (PDF): indicadores, resumo por classe e posição por produto (inicial, entradas, saídas,
@@ -2311,12 +2403,13 @@ V.compras = function(){
   const groups={};
   all.forEach(r=>{ const k=labels[classeKey(r.classe)]||r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
-  const th=`<thead><tr><th>Produto</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
+  const th=`<thead><tr><th>Produto</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">A caminho</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
   const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-dem="${r.demanda}" data-val="${r.demanda*r.preco}" data-buy="${r.valor}" data-un="${esc(r.un||'')}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
     <td class="num c-more" data-th="Estoque" title="${r.saida>0?('Estoque '+num(r.estoque)+' − aplicado '+num(r.saida)+' = saldo '+num(r.saldo)):'saldo '+num(r.saldo)}">${num(r.saldo)}</td>
     <td class="num c-more" data-th="Em pedido">${r.pedido>0?num(r.pedido):'—'}</td>
+    <td class="num c-more" data-th="A caminho" title="${r.caminho>0?`a entregar ${num(r.aEntregar)} · em trânsito ${num(r.emTransito)} · pendências ${num(r.pendencias)}`:'NF-e: contratos a entregar + notas em trânsito + pendências de recebimento'}">${r.caminho>0?num(r.caminho):'—'}</td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
     <td class="c-more" data-th="Un">${esc(r.un)}</td>
     <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
@@ -2366,7 +2459,7 @@ V.compras = function(){
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
     <button class="btn btn-primary btn-sm" id="btn-dem-emp-pdf" title="Relatório em PDF da demanda com os filtros atuais (empreendimento, talhão, classe)">🖨 Relatório PDF${filtro?' (filtro)':''}</button>
-    <div class="spacer"></div><span class="badge badge-muted">${filtro?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido). A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
+    <div class="spacer"></div><span class="badge badge-muted">${filtro?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido − A caminho). A caminho = NF-e a entregar + em trânsito + pendências de recebimento. A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
@@ -4475,7 +4568,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -4501,6 +4594,7 @@ function route(opts){
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
   if(view==='entradas'){ setTimeout(()=>nfeListaCarregar(), 60); }
+  if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
   try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
   _lastView=view;
 }
@@ -4727,7 +4821,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
-  if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar') route({keepScroll:true}); return; }
+  if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') route({keepScroll:true}); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
     else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
@@ -4942,9 +5036,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
+    else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ toast('Atualizando notas…'); nfeListaCarregar(true); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
-    else if(a.act==='nfeConfirmar'){ nfeConfirmar(); }
+    else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
     else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
     else if(a.act==='fluxoAdd'){ const d=fluxoDraft; if(!d||!(+d.valor>0)){ toast('Informe um valor maior que zero'); return; }
@@ -5274,13 +5369,13 @@ function exportDemandaEmpPDF(){
     const rs=c.rs.slice().sort((a,b)=>b.demanda*b.preco-a.demanda*a.preco||a.produto.localeCompare(b.produto,'pt'));
     h+=`<div class="dm-cls"><div class="dm-cls-h"><b>${esc(c.k)}</b><span>${rs.length} ${rs.length===1?'item':'itens'} · demanda ${brl0(c.dem)} · a comprar ${brl0(c.buy)}</span></div>
       <table class="dm-t dm-det"><colgroup><col style="width:25%"><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:5%"><col style="width:9%"><col style="width:11%"></colgroup>
-      <thead><tr><th>Insumo</th><th>Fornecedor</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Pedido</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead><tbody>
-      ${rs.map(r=>`<tr class="${r.comprar>0?'buy':''}"><td><b>${esc(r.produto)}</b></td><td class="mut">${esc(r.empresa||'—')}</td><td class="num">${num(r.demanda)}</td><td class="num">${num(r.saldo)}</td><td class="num">${r.pedido>0?num(r.pedido):'—'}</td>
+      <thead><tr><th>Insumo</th><th>Fornecedor</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Ped.+cam.</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead><tbody>
+      ${rs.map(r=>`<tr class="${r.comprar>0?'buy':''}"><td><b>${esc(r.produto)}</b></td><td class="mut">${esc(r.empresa||'—')}</td><td class="num">${num(r.demanda)}</td><td class="num">${num(r.saldo)}</td><td class="num">${(r.pedido+(r.caminho||0))>0?num(r.pedido+(r.caminho||0)):'—'}</td>
         <td class="num"><b>${r.comprar>0?num(r.comprar):'—'}</b></td><td>${esc(r.un||'')}</td><td class="num">${r.preco>0?brl(r.preco):'<span class="dm-np">s/ preço</span>'}</td><td class="num">${r.valor>0?brl0(r.valor):'—'}</td></tr>`).join('')}
       </tbody><tfoot><tr><th colspan="8">Subtotal ${esc(c.k)}</th><th class="num">${brl0(c.buy)}</th></tr></tfoot></table></div>`;
   });
   h+=`<div class="dm-total"><span>TOTAL A COMPRAR</span><b>${brl0(vBuy)}</b></div>
-  <div class="dm-foot">A comprar = máx(0; demanda ainda não aplicada − saldo em estoque − em pedido). Estoque = saldo real (inicial + compras − aplicado). Valores pelo preço de referência do app.</div>
+  <div class="dm-foot">A comprar = máx(0; demanda ainda não aplicada − saldo em estoque − em pedido − a caminho). A caminho = NF-e a entregar + em trânsito + pendências de recebimento. Estoque = saldo real (inicial + compras − aplicado). Valores pelo preço de referência do app.</div>
   <div class="dm-sign"><div>Responsável<br>_______________________</div><div>Aprovação<br>_______________________</div><div>Data<br>____/____/______</div></div></div>`;
   printDoc(h);
   toast('Gerando relatório de demanda — escolha "Salvar como PDF"');
