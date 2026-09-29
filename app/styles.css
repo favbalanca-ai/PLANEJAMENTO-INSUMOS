@@ -1208,3 +1208,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pend-act{margin-top:10px}
 .pend-card.st-aberta{border-left:5px solid #e53935}.pend-card.st-cobrada{border-left:5px solid #fbc02d}.pend-card.st-resolvida{border-left:5px solid #43a047;opacity:.8}
 @media (max-width:640px){ .pend-g{grid-template-columns:1fr 1fr} .pend-g .pend-obs{grid-column:1/-1} }
+/* leitor v2: mira = faixa que é lida; zoom; foto */
+.rec-mira{left:2%;right:2%;top:27%;height:46%}
+.rec-bts{display:flex;flex-direction:column;gap:8px;padding:14px 14px 4px}
+.rec-bts .rec-big{justify-content:center;text-align:center}
+.rec-dica{font-size:12px;padding:0 14px 8px;margin:0}
+.rec-zoom{display:inline-flex;align-items:center;gap:4px;color:#fff;font-size:13px}
+.rec-zoom input{width:90px}

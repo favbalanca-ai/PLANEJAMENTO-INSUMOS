@@ -317,6 +317,12 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 - **Câmera:** `getUserMedia` (câmera traseira) + `BarcodeDetector` (`code_128`) quando existe;
   senão **ZXing** `@zxing/library@0.21.3` (UMD, jsdelivr), carregado só na hora. Aceita a chave
   só com **2 leituras iguais seguidas**; vibra ao aceitar; botão 🔦 lanterna quando o aparelho suporta.
+- **Leitor v2** (o 1º não lia no campo): pede 1080p + foco contínuo + zoom (1,8× quando o aparelho
+  permite; controle na tela); lê só a **faixa da mira**, recortada e ampliada; alterna leitor nativo e
+  ZXing (`Code128Reader` com binarização híbrida e global) e tenta o código na vertical; aceita com
+  **2 leituras iguais** (não precisam ser seguidas) e DV conferido.
+- **📸 Tirar foto do código:** usa a câmera nativa (foco/resolução melhores) e procura o código em
+  vários recortes e na vertical — uma leitura com DV válido basta (foto parada).
 - **Validação:** 44 dígitos, modelo 55 e DV (módulo 11). Chave inválida é recusada com o motivo.
 - **Alternativas:** nº da nota (procura nas notas EM TRÂNSITO); os 44 dígitos (com validação ao
   vivo; abre sozinho ao completar); leitor USB/Bluetooth no mesmo campo (Enter).
