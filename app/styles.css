@@ -1215,3 +1215,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rec-dica{font-size:12px;padding:0 14px 8px;margin:0}
 .rec-zoom{display:inline-flex;align-items:center;gap:4px;color:#fff;font-size:13px}
 .rec-zoom input{width:90px}
+.rec-alt-d{margin:0 14px 12px;border:1px solid var(--line);border-radius:10px;background:#fafcfc}
+.rec-alt-d summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ink2)}
+.rec-alt-d .rec-alt{padding:4px 12px 12px}
+.rec-big.is-busy{opacity:.6;pointer-events:none}
