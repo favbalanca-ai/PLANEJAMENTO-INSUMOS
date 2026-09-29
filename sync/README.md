@@ -115,6 +115,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   - `{__nfeProdutor:{doc}, token}` → nova linha PRODUTOR na CONFIG NFE ("Cadastrar como produtor") e as
     notas IGNORADAS desse destinatário voltam para A CLASSIFICAR (a captura também faz isso a cada busca);
   - CONFIG NFE: CPF/CNPJ na linha logo abaixo de um PRODUTOR, com a coluna A vazia, também conta como produtor;
+  - linha nova nas abas da NF-e = `_novaLinha_` (última linha + 1). **Não** usar `appendRow` de linha vazia +
+    `getLastRow`: no Google a linha vazia não conta e a gravação caía por cima da última linha (ou do cabeçalho).
+    Aba com o cabeçalho estragado por isso vira "… (COM ERRO dd/mm)" e é refeita (`nfeRepararAbas_`; a
+    NFE RECEBIDAS é reconstruída relendo os XML de NFe/XML);
   - chave, CPF/CNPJ e códigos são gravados sempre como **texto** (`_setCells_`); linhas antigas em que a
     chave virou número são consertadas pelo XML guardado (`nfeRepararChaves_`, roda em toda busca);
     `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
