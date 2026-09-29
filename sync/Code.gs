@@ -510,10 +510,14 @@ function nfeRepararChaves_(){
     if (!id || (ch === '' || ch == null)) return;
     try { var x = nfeLerGs_(_blobTxt(DriveApp.getFileById(id).getBlob())); if (!/^\d{44}$/.test(S(x.chave))) return;
       _setCells_(t, i + 2, { 'CHAVE':x.chave, 'CNPJ EMITENTE':x.cnpj, 'PRODUTOR':x.dest }); v[i][t.col('CHAVE')] = x.chave; n++; } catch (e) {} });
-  if (n){ var visto = {}, apagar = [];
+  if (n){   // linhas repetidas da mesma nota: fica a MAIS ADIANTADA (recebida/em trânsito… > a classificar > ignorada)
+    var peso = function(st){ return st === 'IGNORADA' ? 0 : st === '' ? 1 : st === 'A CLASSIFICAR' ? 2 : 3; };
+    var fica = {}, apagar = [];
     v.forEach(function(r, i){ var ch = S(r[t.col('CHAVE')]), st = S(r[t.col('STATUS')]).toUpperCase(); if (!/^\d{44}$/.test(ch)) return;
-      if (visto[ch] && (st === 'IGNORADA' || st === 'A CLASSIFICAR' || st === '')) apagar.push(i + 2); else if (!visto[ch]) visto[ch] = 1; });
-    for (var k = apagar.length - 1; k >= 0; k--) s.deleteRow(apagar[k]); }
+      var f = fica[ch]; if (!f){ fica[ch] = { i:i, p:peso(st) }; return; }
+      if (peso(st) > f.p && f.p < 3){ apagar.push(f.i + 2); fica[ch] = { i:i, p:peso(st) }; }       // esta é mais adiantada: troca
+      else if (peso(st) < 3) apagar.push(i + 2); });                                                  // só apaga as que não andaram
+    apagar.sort(function(a, b){ return b - a; }).forEach(function(r){ s.deleteRow(r); }); }
   return n;
 }
 // "Cadastrar como produtor" (app): nova linha PRODUTOR na CONFIG NFE + reabre as notas IGNORADAS desse destinatário
@@ -638,6 +642,7 @@ function nfeReabrir_(r){
 }
 // ---- endpoints (todos exigem o token da CONFIG NFE) ----
 function nfeLista_(status){
+  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {}
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {}, ign = [];
   var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
   if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
@@ -734,6 +739,7 @@ function nfeEstados_(){
 // ---- FASE 4: recebimento na fazenda (tela Receber nota) ----
 // consulta pela chave lida na câmera: status + itens já classificados (NFE ITENS)
 function nfeChave_(chave){
+  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {}
   chave = S(chave); var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave);
   if (!row) return { ok:true, encontrada:false };
   var o = {}; var r = t.s.getRange(row,1,1,t.ncol).getValues()[0]; NFE_IDX_COLS.forEach(function(h){ o[h] = r[t.col(h)]; });

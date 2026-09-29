@@ -1334,7 +1334,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-156';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-157';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2972,7 +2972,7 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[]};
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null};
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
@@ -3075,6 +3075,7 @@ function nfeListaHtml(){
       <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(L.captura)}
+    ${L.contagem&&Object.keys(L.contagem).length?`<div class="mut" style="padding:4px 14px 0;font-size:12px">Na planilha (NFE RECEBIDAS): ${Object.keys(L.contagem).map(k=>`${esc(k.toLowerCase()||'sem status')} ${L.contagem[k]}`).join(' · ')}</div>`:''}
     ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}
     ${nfeHistoricoHtml(L)}</div>`;
 }
