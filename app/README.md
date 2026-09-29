@@ -52,6 +52,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   **estoque** (editável): `A comprar = máx(0; Demanda − Estoque)`. Itens sem
   preço podem ter o preço preenchido ali.
 - **Cotação** — itens a comprar agrupados por fornecedor, com exportação CSV.
+- **Compras (entradas)** — compras registradas à mão, por XML de NF-e ou pelo
+  Receber nota. A lista **sincroniza entre aparelhos** pela aba `COMPRAS APP` da
+  planilha; excluir uma compra tira as entradas dela do estoque em todos os aparelhos.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.

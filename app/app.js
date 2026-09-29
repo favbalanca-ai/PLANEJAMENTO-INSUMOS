@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-151';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-152';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1332,11 +1332,56 @@ const COMPRAS_KEY='planejamento_compras';
 let COMPRAS=null, compraDraft=null;
 function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
 function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(COMPRAS)); }catch(e){} }
-// envia a compra para a planilha (aba MOVIMENTAÇÃO ESTOQUE, como ENTRADA)
+// envia a compra para a planilha: ENTRADA na aba MOVIMENTAÇÃO ESTOQUE + o registro inteiro na aba COMPRAS APP
+// (é de lá que os OUTROS aparelhos puxam a lista "Compras registradas")
 function pushEntrada(c){
   const url=syncUrl(); if(!url||!c||c.pushed) return Promise.resolve(false);
-  return syncPost(url, JSON.stringify({__entrada:{id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens}}))
+  if(!c._u) c._u=c.ts||Date.now();
+  return syncPost(url, JSON.stringify({__entrada:{id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens, nfe:c.nfe||null, ts:c.ts||null, _u:c._u}}))
     .then(()=>{ c.pushed=true; saveCompras(); try{ updateEditBadge(); }catch(e){} return true; }).catch(()=>false);
+}
+// compras EXCLUÍDAS neste aparelho: ficam numa lista (COMPRAS.excluidas) até a planilha confirmar.
+// A planilha apaga as linhas [#id] do razão e guarda uma "lápide" — os outros aparelhos apagam também.
+function comprasExcluidas(){ if(!COMPRAS.excluidas) COMPRAS.excluidas=[]; return COMPRAS.excluidas; }
+function excluirCompra(id){
+  const c=(COMPRAS.registros||[]).find(x=>x.id===id); if(!c) return;
+  COMPRAS.registros=COMPRAS.registros.filter(x=>x.id!==id);
+  const ex=comprasExcluidas().filter(e=>e.id!==id);
+  // srv = já estava na planilha: guarda os itens p/ tirar do saldo até o próximo puxar trazer o razão novo
+  ex.push({id, _u:Date.now(), srv:!!c.pushed, itens:c.pushed?(c.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null});
+  COMPRAS.excluidas=ex.slice(-300); saveCompras();
+  pushExclusoesCompras().then(n=>{ if(n) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+}
+function pushExclusoesCompras(){
+  const url=syncUrl(), pend=comprasExcluidas().filter(e=>!e.ok); if(!url||!pend.length) return Promise.resolve(0);
+  return Promise.all(pend.map(e=>syncPost(url, JSON.stringify({__entrada:{id:e.id, del:true, itens:[], _u:e._u}}))
+    .then(()=>{ e.ok=true; return 1; }).catch(()=>0)))
+    .then(r=>{ saveCompras(); try{ updateEditBadge(); }catch(e){} return r.reduce((a,b)=>a+b,0); });
+}
+// puxar: a lista do servidor (aba COMPRAS APP) entra neste aparelho. Mais novo (_u) vence.
+// Planilha antiga (sem compras_app) → não mexe em nada.
+function comprasApplyPulled(map){
+  if(!map || typeof map!=='object' || !COMPRAS) return false;
+  const regs=COMPRAS.registros||(COMPRAS.registros=[]), exIdx={}; let changed=false;
+  comprasExcluidas().forEach(e=>exIdx[e.id]=e);
+  for(const id in map){ const r=map[id]; if(!r || typeof r!=='object') continue;
+    const su=+r._u||0, ex=exIdx[id];
+    if(ex){ if(r.del && ex.ok && ex.itens){ ex.itens=null; changed=true; }     // planilha já tirou do razão
+      if(su<=ex._u) continue;                                                     // excluída aqui depois disso
+      if(ex.itens){ ex.itens=null; changed=true; } }                              // recriada depois (outro aparelho)
+    const i=regs.findIndex(c=>c.id===id), loc=i>=0?regs[i]:null, lu=loc?(+loc._u||+loc.ts||0):0;
+    if(r.del){ if(loc && (loc.pushed || lu<=su)){ regs.splice(i,1); changed=true; } continue; }
+    if(loc && !loc.pushed && lu>su) continue;                                     // edição local mais nova ainda não enviada
+    if(loc && loc.pushed && lu===su) continue;                                    // igual
+    const rec={id, fornecedor:r.fornecedor||'', data:r.data||'', nf:r.nf||'', obs:r.obs||'', itens:r.itens||[], pushed:true, ts:r.ts||su, _u:su};
+    if(r.nfe) rec.nfe=r.nfe;
+    if(loc) regs[i]=rec; else regs.push(rec); changed=true; }
+  // migração: compra que subiu ANTES desta versão (está no razão mas não na aba COMPRAS APP) → reenvia (não duplica)
+  const falta=regs.filter(c=>c.pushed && !map[c.id]);
+  if(falta.length && syncUrl()){ falta.forEach(c=>{ c.pushed=false; }); changed=true;
+    setTimeout(()=>{ Promise.all(falta.map(pushEntrada)).then(()=>{ try{ if(location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }catch(e){} }); }, 0); }
+  if(changed) saveCompras();
+  return changed;
 }
 function pushEntradasPendentes(){
   const url=syncUrl(); if(!url){ toast('Configure a Sincronização primeiro'); return; }
@@ -1384,6 +1429,8 @@ function estoqueEntradas(){
     for(const k in mov.entradas) m[k]=(m[k]||0)+(+mov.entradas[k]||0);        // planilha (todos os aparelhos)
     (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ if(c.pushed) return;         // só as pendentes deste aparelho
       (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
+    (COMPRAS&&COMPRAS.excluidas||[]).forEach(e=>{ if(!e.srv||!e.itens) return;   // excluídas aqui, razão ainda não atualizado
+      e.itens.forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)-(+it.qtd||0); }); });
   } else {                                                                     // sem sincronização: só o local
     (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
   }
@@ -1435,7 +1482,7 @@ V.entradas=function(){
   <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
       <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
     <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">${syncUrl()?'Sincroniza com a planilha (aba <b>COMPRAS APP</b>): todos os aparelhos veem a mesma lista.':'Salvo <b>no aparelho</b>.'} Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
 /* ================= NF-e (fase 1): importar o XML → conferir (de-para) → entrada no estoque =================
    Ver docs/NFE_RECEBIMENTO.md. Tudo acontece no navegador (DOMParser); a entrada usa a compra comum
@@ -5343,7 +5390,7 @@ document.addEventListener('click',e=>{
       COMPRAS.registros.push(rec); saveCompras(); compraDraft=null; route();
       toast(syncUrl()?'Entrada registrada — enviando à planilha…':'Entrada registrada no estoque');
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
-    else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
+    else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
@@ -6016,6 +6063,7 @@ function applyPulledData(d){
   try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
+  try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
   try{ setTimeout(nfeNavBadge, 50); }catch(e){}
 }
@@ -6138,7 +6186,7 @@ async function syncPost(url, body){
 async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
-  try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushSaidasPendentes(); }catch(e){}
+  try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushExclusoesCompras(); await pushSaidasPendentes(); }catch(e){}
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
@@ -6452,6 +6500,7 @@ function pendingInfo(){
     if(!DATA||!OV) return {total:0, parts:[]};
     add(buildFieldEdits().length, 'edição(ões) de campo');
     if(COMPRAS) add((COMPRAS.registros||[]).filter(c=>!c.pushed).length, 'compra(s)');
+    if(COMPRAS) add((COMPRAS.excluidas||[]).filter(e=>!e.ok).length, 'exclusão(ões) de compra');
     let bx=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey && r.status==='aprovada' && !r.saidaPushed) bx++; });
     const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) bx++; }
     add(bx, 'baixa(s) de estoque');
