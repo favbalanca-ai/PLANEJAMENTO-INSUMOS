@@ -639,12 +639,61 @@ function nfeRecebimento_(r){
   var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (ref) _atualizaContrato_(ref);
   return { rows:n + 1 };
 }
+// ---- FASE 5: divergências na conferência (aba PENDÊNCIAS RECEBIMENTO) ----
+var NFE_PEND_SHEET = 'PENDÊNCIAS RECEBIMENTO';
+var NFE_PEND_COLS = ['ID','CHAVE','Nº','FORNECEDOR','PRODUTO','TIPO','QTD','UN','FICOU NA FAZENDA','FOTO','CONFERIDO POR','DATA','STATUS','SOLUÇÃO','OBS'];
+// grava as divergências de um recebimento (reenviar o mesmo recebimento troca as ABERTAS, não duplica)
+function nfeGravaPendencias_(chave, r, t, row){
+  var lista = r.pendencias || []; var ps = sheetCols_(NFE_PEND_SHEET, NFE_PEND_COLS), s = ps.s, last = s.getLastRow();
+  if (last >= 2){ var v = s.getRange(2,1,last-1,ps.ncol).getValues();
+    for (var i = v.length - 1; i >= 0; i--) if (S(v[i][ps.col('CHAVE')]) === chave && S(v[i][ps.col('STATUS')]).toUpperCase() === 'ABERTA') s.deleteRow(i + 2); }
+  if (!lista.length) return 0;
+  var nNF = S(t.s.getRange(row, t.col('Nº') + 1).getValue()), forn = S(t.s.getRange(row, t.col('FORNECEDOR') + 1).getValue()), hoje = new Date();
+  lista.forEach(function(pd){ s.appendRow(NFE_PEND_COLS.map(function(){ return ''; })); var rr = s.getLastRow();
+    _setCells_(ps, rr, { 'ID':chave + '-' + S(pd.n) + '-' + S(pd.tipo).toUpperCase(), 'CHAVE':chave, 'Nº':nNF, 'FORNECEDOR':forn, 'PRODUTO':S(pd.produto),
+      'TIPO':S(pd.tipo).toUpperCase(), 'QTD':N(pd.qtd), 'UN':S(pd.un), 'FICOU NA FAZENDA':pd.ficou ? 'SIM' : '', 'FOTO':S(pd.foto),
+      'CONFERIDO POR':S(r.por) || 'app', 'DATA':hoje, 'STATUS':'ABERTA', 'OBS':S(pd.obs) }); });
+  return lista.length;
+}
+// pendência aberta/cobrada continua abatendo o "a comprar" (falta, avaria, troca); avaria que ficou = saldo avariado
+function nfePendEstados_(out, add){
+  if (!sh(NFE_PEND_SHEET)) return;
+  _ler_(NFE_PEND_SHEET, NFE_PEND_COLS).forEach(function(p){ var st = S(p['STATUS']).toUpperCase(), tp = S(p['TIPO']).toUpperCase();
+    if (st === 'RESOLVIDA') return;
+    if (['FALTA','AVARIA','TROCADO'].indexOf(tp) >= 0) add(out.pendencias, S(p['PRODUTO']), N(p['QTD']));
+    if (tp === 'AVARIA' && S(p['FICOU NA FAZENDA'])) add(out.avariado, S(p['PRODUTO']), N(p['QTD'])); });
+}
+function nfePendenciasLista_(status){
+  var quer = S(status || 'ABERTA,COBRADA').toUpperCase().split(',').map(S), out = [];
+  if (!sh(NFE_PEND_SHEET)) return { ok:true, pendencias:[] };
+  _ler_(NFE_PEND_SHEET, NFE_PEND_COLS).forEach(function(p){ var st = S(p['STATUS']).toUpperCase();
+    if (quer.indexOf(st) < 0 && quer.indexOf('TODAS') < 0) return;
+    out.push({ id:S(p['ID']), chave:S(p['CHAVE']), nNF:S(p['Nº']), fornecedor:S(p['FORNECEDOR']), produto:S(p['PRODUTO']), tipo:S(p['TIPO']), qtd:N(p['QTD']), un:S(p['UN']),
+      ficou:!!S(p['FICOU NA FAZENDA']), foto:S(p['FOTO']), por:S(p['CONFERIDO POR']), data:_fmtD(p['DATA']), status:st, solucao:S(p['SOLUÇÃO']), obs:S(p['OBS']) }); });
+  return { ok:true, pendencias:out };
+}
+// escritório acompanha a pendência: ABERTA → COBRADA → RESOLVIDA (solução: REPOSIÇÃO / DESCONTO / DEVOLUÇÃO)
+function nfePendencia_(u){
+  var ps = sheetCols_(NFE_PEND_SHEET, NFE_PEND_COLS), row = 0, last = ps.s.getLastRow();
+  if (last >= 2){ var v = ps.s.getRange(2, ps.col('ID') + 1, last - 1, 1).getValues(); for (var i = 0; i < v.length; i++) if (S(v[i][0]) === S(u.id)){ row = i + 2; break; } }
+  if (!row) return { rows:0, erro:'pendência não encontrada' };
+  var vals = {}; if (u.status) vals['STATUS'] = S(u.status).toUpperCase(); if (u.solucao != null) vals['SOLUÇÃO'] = S(u.solucao).toUpperCase(); if (u.obs != null) vals['OBS'] = S(u.obs);
+  _setCells_(ps, row, vals); return { rows:1 };
+}
+// foto da divergência/canhoto → pasta NFe/Fotos (link fica na pendência)
+function nfeFoto_(f){
+  var cfg = nfeConfig_(); if (!cfg.pasta || !f || !f.b64) return { url:'' };
+  var pasta = _pasta(DriveApp.getFolderById(cfg.pasta), 'Fotos');
+  var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || 'image/jpeg', S(f.nome) || ('foto-' + Date.now() + '.jpg'));
+  var file = pasta.createFile(blob); return { url:file.getUrl(), id:file.getId() };
+}
 // resumo SEM dados da nota (só contagens) — vai no puxar normal, para o contador do app
-function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0 }; if (!s) return out;
+function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0, pendAbertas:0 }; if (!s) return out;
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), last = s.getLastRow(); if (last < 2) return out;
   s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase();
     if (st === 'A CLASSIFICAR') out.aClassificar++; if (S(r[t.col('OBS')]).indexOf('⚠') === 0) out.alertas++; });
   out.contratosParados = nfeContratos_().filter(function(c){ return c.parado; }).length;
+  if (sh(NFE_PEND_SHEET)) out.pendAbertas = _ler_(NFE_PEND_SHEET, NFE_PEND_COLS).filter(function(p){ return S(p['STATUS']).toUpperCase() === 'ABERTA'; }).length;
   return out; }
 
 // SAÍDA de estoque por recomendação APROVADA (o app envia na aprovação). Idempotente pelo id:
@@ -1201,6 +1250,7 @@ function doGet(e){
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
     if (p.acao === 'contratos') return json({ ok:true, contratos:nfeContratos_() });
     if (p.acao === 'nfe_chave') return json(nfeChave_(p.chave));
+    if (p.acao === 'pendencias') return json(nfePendenciasLista_(p.status));
     return json({ ok:false, erro:'ação desconhecida' });
   }
   var str = currentJson();
