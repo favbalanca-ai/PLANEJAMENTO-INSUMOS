@@ -498,11 +498,36 @@ function _nfeLinha_(t, chave){ var s = t.s, last = s.getLastRow(); if (last < 2)
 // os 44 dígitos da chave em número (5,2E+43), perde dígitos e a nota não é mais achada (duplica, não reabre…).
 function _setCells_(t, row, vals){ Object.keys(vals).forEach(function(h){ var rg = t.s.getRange(row, t.col(h) + 1);
   if (NFE_TEXTO.indexOf(h) >= 0 || h === 'ID'){ rg.setNumberFormat('@'); rg.setValue(S(vals[h])); } else rg.setValue(vals[h]); }); }
+// linha NOVA no fim da aba. ATENÇÃO: appendRow de uma linha VAZIA não conta para o getLastRow do Google —
+// o jeito antigo (appendRow vazio + getLastRow) escrevia POR CIMA da última linha (e, na 1ª nota, do cabeçalho).
+function _novaLinha_(s){ var r = s.getLastRow() + 1, mx = s.getMaxRows(); if (r > mx) s.insertRowsAfter(mx, r - mx); return r; }
+// CONSERTO das abas que o erro acima estragou: se a linha 1 (cabeçalho) tem DADOS (chave de 44 dígitos),
+// a aba é renomeada para "… (COM ERRO dd/mm)" (fica guardada) e nasce uma nova, limpa, na próxima leitura.
+// A NFE RECEBIDAS é refeita relendo os XML já guardados em NFe/XML (nada se perde).
+function _cabecalhoEstragado_(s){
+  if (!s || s.getLastRow() < 1) return false;
+  return s.getRange(1, 1, 1, Math.max(1, s.getLastColumn())).getValues()[0].some(function(v){
+    return (typeof v === 'number' && Math.abs(v) > 1e30) || /\d{44}/.test(S(v)); });
+}
+function nfeRepararAbas_(){
+  var feito = [];
+  [[NFE_IDX_SHEET, NFE_IDX_COLS], [NFE_ITENS_SHEET, NFE_ITENS_COLS], [NFE_PEND_SHEET, NFE_PEND_COLS]].forEach(function(a){
+    var s = sh(a[0]); if (!_cabecalhoEstragado_(s)) return;
+    s.setName(a[0] + ' (COM ERRO ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm') + ')');
+    sheetCols_(a[0], a[1]); feito.push(a[0]); });
+  if (feito.indexOf(NFE_IDX_SHEET) >= 0){   // refaz o índice das notas a partir dos XML guardados (notas antes, cancelamentos depois)
+    var cfg = nfeConfig_(); if (cfg.pasta){ var xml = nfePastas_(cfg).xml, arqs = [], it = xml.getFolders();
+      while (it.hasNext()){ var fi = it.next().getFiles(); while (fi.hasNext()) arqs.push(fi.next()); }
+      arqs.sort(function(a, b){ return (/-canc\.xml$/.test(a.getName()) ? 1 : 0) - (/-canc\.xml$/.test(b.getName()) ? 1 : 0); });
+      arqs.forEach(function(f){ try { processarXmlNfe(_blobTxt(f.getBlob()), 'refeita (conserto)'); } catch (e) {} }); } }
+  return feito;
+}
 // CPF/CNPJ só com dígitos; se a planilha guardou como número e comeu o zero da frente, devolve (11 = CPF, 14 = CNPJ)
 function _doc_(v){ var d = S(v).replace(/\D/g, ''); if (typeof v === 'number' && d){ while (d.length < 11) d = '0' + d; if (d.length > 11 && d.length < 14) while (d.length < 14) d = '0' + d; } return d; }
 // CONSERTO: linhas da NFE RECEBIDAS cuja CHAVE virou número. Relê a chave (e CNPJ/destinatário) do XML guardado
 // (FILE ID) e regrava como texto; depois tira as linhas repetidas da mesma nota que ainda não andaram.
 function nfeRepararChaves_(){
+  try { nfeRepararAbas_(); } catch (e) {}
   var s = sh(NFE_IDX_SHEET); if (!s || s.getLastRow() < 2) return 0;
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), v = s.getRange(2, 1, s.getLastRow() - 1, t.ncol).getValues(), n = 0;
   v.forEach(function(r, i){ var ch = r[t.col('CHAVE')], id = S(r[t.col('FILE ID')]);
@@ -524,7 +549,7 @@ function nfeRepararChaves_(){
 function nfeAddProdutor_(p){
   var doc = _doc_(p && p.doc); if (!/^(\d{11}|\d{14})$/.test(doc)) return { rows:0, erro:'CPF/CNPJ inválido' };
   var c = sheetCols_(NFE_CONFIG_SHEET, NFE_CONFIG_COLS);
-  if (nfeConfig_().produtores.indexOf(doc) < 0){ c.s.appendRow(['', '', '']); var r = c.s.getLastRow();
+  if (nfeConfig_().produtores.indexOf(doc) < 0){ var r = _novaLinha_(c.s);
     _setCells_(c, r, { 'CHAVE':'PRODUTOR', 'OBS':'cadastrado pelo app' }); var vr = c.s.getRange(r, c.col('VALOR') + 1); vr.setNumberFormat('@'); vr.setValue(doc); }
   nfeRepararChaves_();
   return { rows:nfeReavaliarIgnoradas_() };
@@ -554,7 +579,7 @@ function processarXmlNfe(txt, origem){
     if (['135','136','155'].indexOf(n.cstat) < 0) return { status:'rejeitada', chave:n.chave, motivo:'cancelamento não homologado (cStat ' + n.cstat + ')' };
     _salvaXml_(pastas, n.chave, n.data, txt, 'canc');
     var rc = _nfeLinha_(t, n.chave);
-    if (!rc){ t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); rc = t.s.getLastRow();
+    if (!rc){ rc = _novaLinha_(t.s);
       _setCells_(t, rc, { 'CHAVE':n.chave, 'STATUS':'CANCELADA', 'ORIGEM':origem, 'OBS':'cancelamento chegou antes da nota', 'CAPTURADA EM':agora }); return { status:'cancelada', chave:n.chave }; }
     var st = S(t.s.getRange(rc, t.col('STATUS') + 1).getValue()).toUpperCase();
     if (st === 'CANCELADA') return { status:'duplicada', chave:n.chave };
@@ -581,7 +606,7 @@ function processarXmlNfe(txt, origem){
   if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
   else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
     vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
-    t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); row = t.s.getLastRow(); }
+    row = _novaLinha_(t.s); }
   _setCells_(t, row, vals);
   return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '', dest:fora ? n.dest : '' };
 }
@@ -676,7 +701,7 @@ function nfeClassifica_(c){
   if (c.itens && c.itens.length){
     var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, last = s.getLastRow();
     if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === S(c.chave)) s.deleteRow(i + 2); }
-    c.itens.forEach(function(it){ s.appendRow(NFE_ITENS_COLS.map(function(){ return ''; })); var r = s.getLastRow();
+    c.itens.forEach(function(it){ var r = _novaLinha_(s);
       _setCells_(ti, r, { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
         'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
         'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }); n++; });
@@ -759,7 +784,7 @@ function nfeRecebimento_(r){
   var quando = r.data ? new Date(S(r.data).slice(0,10) + 'T12:00:00') : agora;
   if (!row){
     if (!r.semXml) return { rows:0, erro:'nota não encontrada' };
-    t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); row = t.s.getLastRow();
+    row = _novaLinha_(t.s);
     _setCells_(t, row, { 'CHAVE':chave, 'CNPJ EMITENTE':chave.slice(6,20), 'Nº':String(+chave.slice(25,34)), 'SÉRIE':String(+chave.slice(22,25)),
       'FORNECEDOR':S(r.semXml.fornecedor), 'STATUS':'RECEBIDA SEM XML', 'ORIGEM':'recebimento', 'CAPTURADA EM':agora,
       'OBS':'recebida antes do XML — o XML casa sozinho quando chegar' });
@@ -774,7 +799,7 @@ function nfeRecebimento_(r){
   var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, n = 0, itens = r.itens || [];
   if (r.semXml){   // itens informados na fazenda
     var last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === chave) s.deleteRow(i + 2); }
-    itens.forEach(function(it, k){ s.appendRow(NFE_ITENS_COLS.map(function(){ return ''; })); var rr = s.getLastRow();
+    itens.forEach(function(it, k){ var rr = _novaLinha_(s);
       _setCells_(ti, rr, { 'CHAVE':chave, 'Nº ITEM':S(it.n || k + 1), 'PRODUTO APP':S(it.produto), 'QTD APP':N(it.qtdRecebida), 'UN APP':S(it.un), 'QTD RECEBIDA':N(it.qtdRecebida), 'FATOR':1 }); n++; });
   } else {
     var lin = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; });
@@ -795,7 +820,7 @@ function nfeGravaPendencias_(chave, r, t, row){
     for (var i = v.length - 1; i >= 0; i--) if (S(v[i][ps.col('CHAVE')]) === chave && S(v[i][ps.col('STATUS')]).toUpperCase() === 'ABERTA') s.deleteRow(i + 2); }
   if (!lista.length) return 0;
   var nNF = S(t.s.getRange(row, t.col('Nº') + 1).getValue()), forn = S(t.s.getRange(row, t.col('FORNECEDOR') + 1).getValue()), hoje = new Date();
-  lista.forEach(function(pd){ s.appendRow(NFE_PEND_COLS.map(function(){ return ''; })); var rr = s.getLastRow();
+  lista.forEach(function(pd){ var rr = _novaLinha_(s);
     _setCells_(ps, rr, { 'ID':chave + '-' + S(pd.n) + '-' + S(pd.tipo).toUpperCase(), 'CHAVE':chave, 'Nº':nNF, 'FORNECEDOR':forn, 'PRODUTO':S(pd.produto),
       'TIPO':S(pd.tipo).toUpperCase(), 'QTD':N(pd.qtd), 'UN':S(pd.un), 'FICOU NA FAZENDA':pd.ficou ? 'SIM' : '', 'FOTO':S(pd.foto),
       'CONFERIDO POR':S(r.por) || 'app', 'DATA':hoje, 'STATUS':'ABERTA', 'OBS':S(pd.obs) }); });
