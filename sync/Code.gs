@@ -344,7 +344,7 @@ function writeDeParaNfe(itens){
 var NFE_CONFIG_SHEET = 'CONFIG NFE', NFE_IDX_SHEET = 'NFE RECEBIDAS', NFE_ITENS_SHEET = 'NFE ITENS', NFE_LABEL = 'NFE-OK';
 var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
 var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
-  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM'];
+  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
 var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP'];   // colunas guardadas como texto
 
@@ -456,10 +456,10 @@ function processarXmlNfe(txt, origem){
       _setCells_(t, rc, { 'CHAVE':n.chave, 'STATUS':'CANCELADA', 'ORIGEM':origem, 'OBS':'cancelamento chegou antes da nota', 'CAPTURADA EM':agora }); return { status:'cancelada', chave:n.chave }; }
     var st = S(t.s.getRange(rc, t.col('STATUS') + 1).getValue()).toUpperCase();
     if (st === 'CANCELADA') return { status:'duplicada', chave:n.chave };
-    var obs = st === 'RECEBIDA' ? '⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE — conferir com o fornecedor e ajustar o estoque' : 'cancelada pelo emitente em ' + n.data;
+    var obs = (st === 'RECEBIDA' || st === 'RECEBIDA SEM XML') ? '⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE — conferir com o fornecedor e ajustar o estoque' : 'cancelada pelo emitente em ' + n.data;
     _setCells_(t, rc, { 'STATUS':'CANCELADA', 'OBS':obs });
     var refC = S(t.s.getRange(rc, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (refC) _atualizaContrato_(refC);   // remessa cancelada devolve o saldo ao contrato
-    return { status:'cancelada', chave:n.chave, alerta:st === 'RECEBIDA' };
+    return { status:'cancelada', chave:n.chave, alerta:(st === 'RECEBIDA' || st === 'RECEBIDA SEM XML') };
   }
   if (!n.temProt) return { status:'rejeitada', chave:n.chave, motivo:'XML sem protocolo de autorização' };
   if (n.cstat !== '100') return { status:'rejeitada', chave:n.chave, motivo:'nota não autorizada (cStat ' + n.cstat + ')' };
@@ -470,6 +470,11 @@ function processarXmlNfe(txt, origem){
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
     'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora };
+  var stRow = row ? S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase() : '';
+  if (row && stRow === 'RECEBIDA SEM XML'){            // caminhão chegou antes do XML: a nota casa sozinha com o recebimento
+    vals['STATUS'] = 'RECEBIDA'; vals['OBS'] = 'XML chegou depois do recebimento na fazenda — conferir de-para e custo';
+    _setCells_(t, row, vals); if (n.ref) _atualizaContrato_(n.ref);
+    return { status:'casada', chave:n.chave, motivo:vals['OBS'] }; }
   if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
   else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
     vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
@@ -585,6 +590,54 @@ function nfeEstados_(){
   _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).forEach(function(i){ if (trans[S(i['CHAVE'])] && !S(i['IGNORAR'])) add(out.emTransito, S(i['PRODUTO APP']), N(i['QTD APP'])); });
   if (typeof nfePendEstados_ === 'function') nfePendEstados_(out, add);   // fase 5
   return out;
+}
+// ---- FASE 4: recebimento na fazenda (tela Receber nota) ----
+// consulta pela chave lida na câmera: status + itens já classificados (NFE ITENS)
+function nfeChave_(chave){
+  chave = S(chave); var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave);
+  if (!row) return { ok:true, encontrada:false };
+  var o = {}; var r = t.s.getRange(row,1,1,t.ncol).getValues()[0]; NFE_IDX_COLS.forEach(function(h){ o[h] = r[t.col(h)]; });
+  var itens = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; }).map(function(i){
+    return { n:S(i['Nº ITEM']), cprod:S(i['CPROD']), xprod:S(i['XPROD']), ucom:S(i['UCOM']), qcom:N(i['QCOM']), produto:S(i['PRODUTO APP']), fator:N(i['FATOR']) || 1,
+      qtd:N(i['QTD APP']), un:S(i['UN APP']), custo:N(i['CUSTO UNIT. REAL']), ignorar:!!S(i['IGNORAR']), recebida:S(i['QTD RECEBIDA']) === '' ? null : N(i['QTD RECEBIDA']) }; });
+  return { ok:true, encontrada:true, nota:{ chave:chave, status:S(o['STATUS']).toUpperCase(), tipo:S(o['TIPO']), fornecedor:S(o['FORNECEDOR']), cnpj:S(o['CNPJ EMITENTE']),
+    nNF:S(o['Nº']), serie:S(o['SÉRIE']), emissao:_fmtD(o['EMISSÃO']), valor:N(o['VALOR']), ref:S(o['CHAVE REFERENCIADA']), obs:S(o['OBS']),
+    recebida:_fmtD(o['RECEBIDA EM']), recebidaPor:S(o['RECEBIDA POR']), temXml:!!S(o['FILE ID']) }, itens:itens };
+}
+// recebimento conferido: status RECEBIDA, QTD RECEBIDA por item e (fase 5) pendências. Sem XML: cria a nota
+// "RECEBIDA SEM XML" com os dados da própria chave e os itens informados; quando o XML chegar, casa sozinho.
+// A ENTRADA no estoque vai pelo __entrada normal do app (id = chave) — reenviar não duplica.
+function nfeRecebimento_(r){
+  var chave = S(r.chave); if (!/^\d{44}$/.test(chave)) return { rows:0, erro:'chave inválida' };
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave), agora = new Date();
+  var quando = r.data ? new Date(S(r.data).slice(0,10) + 'T12:00:00') : agora;
+  if (!row){
+    if (!r.semXml) return { rows:0, erro:'nota não encontrada' };
+    t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); row = t.s.getLastRow();
+    _setCells_(t, row, { 'CHAVE':chave, 'CNPJ EMITENTE':chave.slice(6,20), 'Nº':String(+chave.slice(25,34)), 'SÉRIE':String(+chave.slice(22,25)),
+      'FORNECEDOR':S(r.semXml.fornecedor), 'STATUS':'RECEBIDA SEM XML', 'ORIGEM':'recebimento', 'CAPTURADA EM':agora,
+      'OBS':'recebida antes do XML — o XML casa sozinho quando chegar' });
+  } else {
+    var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
+    if (st === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
+    if (['EM TRÂNSITO','RECEBIDA','RECEBIDA SEM XML'].indexOf(st) < 0) return { rows:0, erro:'nota ' + st.toLowerCase() + ' — não pode ser recebida' };
+    if (st === 'EM TRÂNSITO') t.s.getRange(row, t.col('STATUS') + 1).setValue('RECEBIDA');
+  }
+  _setCells_(t, row, { 'RECEBIDA EM':quando, 'RECEBIDA POR':S(r.por) || 'app' });
+  if (r.canhoto) _setCells_(t, row, { 'FOTO CANHOTO':S(r.canhoto) });
+  var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, n = 0, itens = r.itens || [];
+  if (r.semXml){   // itens informados na fazenda
+    var last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === chave) s.deleteRow(i + 2); }
+    itens.forEach(function(it, k){ s.appendRow(NFE_ITENS_COLS.map(function(){ return ''; })); var rr = s.getLastRow();
+      _setCells_(ti, rr, { 'CHAVE':chave, 'Nº ITEM':S(it.n || k + 1), 'PRODUTO APP':S(it.produto), 'QTD APP':N(it.qtdRecebida), 'UN APP':S(it.un), 'QTD RECEBIDA':N(it.qtdRecebida), 'FATOR':1 }); n++; });
+  } else {
+    var lin = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; });
+    itens.forEach(function(it){ var m = lin.filter(function(i){ return S(i['Nº ITEM']) === S(it.n); })[0];
+      if (m){ s.getRange(m.__r, ti.col('QTD RECEBIDA') + 1).setValue(N(it.qtdRecebida)); n++; } });
+  }
+  if (typeof nfeGravaPendencias_ === 'function') nfeGravaPendencias_(chave, r, t, row);   // fase 5
+  var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (ref) _atualizaContrato_(ref);
+  return { rows:n + 1 };
 }
 // resumo SEM dados da nota (só contagens) — vai no puxar normal, para o contador do app
 function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0 }; if (!s) return out;
@@ -1147,6 +1200,7 @@ function doGet(e){
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
     if (p.acao === 'contratos') return json({ ok:true, contratos:nfeContratos_() });
+    if (p.acao === 'nfe_chave') return json(nfeChave_(p.chave));
     return json({ ok:false, erro:'ação desconhecida' });
   }
   var str = currentJson();
@@ -1179,10 +1233,13 @@ function doPost(e){
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
-    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload)){   // NF-e: exigem o token da CONFIG NFE
+    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto)){   // NF-e: exigem o token
       if (!nfeTokenOk_(payload.token)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
+      else if (payload.__recebimento){ var rb = nfeRecebimento_(payload.__recebimento); out.ok = rb.rows; if (rb.erro){ out.fail = 1; out.msgs.push(rb.erro); } }
+      else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
+      else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
       else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
-      else { var lk = LockService.getScriptLock(); lk.tryLock(20000);
+      else if (payload.__nfeUpload){ var lk = LockService.getScriptLock(); lk.tryLock(20000);
         try { out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; } finally { lk.releaseLock(); } }
     } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)
       var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
