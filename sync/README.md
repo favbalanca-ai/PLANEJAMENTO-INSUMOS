@@ -71,6 +71,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     **dose (I)** na primeira linha vazia do bloco da operação (`emptyItemRow`).
   - `delitem` (insumo removido) → limpa **B/C/I** da linha do insumo naquele
     bloco da operação (`itemRowByName`); as demais colunas (fórmulas) se ajustam.
+- **NF-e (fase 1)** — ver `docs/NFE_RECEBIMENTO.md`:
+  - `{__entrada:{id:<chave de 44 dígitos>, …}}` → a nota importada do XML vira uma
+    ENTRADA comum na `MOVIMENTAÇÃO ESTOQUE`, com ORIGEM `NF-e 1234/1 · Fornecedor [#chave]`
+    (reenviar não duplica; o `doGet` devolve em `movimentacao.nfe` as chaves que já
+    deram entrada, e o app bloqueia importar a mesma nota de novo).
+  - `{__nfeDepara:{itens:[{cnpj, cprod, xprod, produto, fator, ignorar, custo, por}]}}`
+    → aba **`DE-PARA NFE`** (criada se faltar; colunas achadas pelo cabeçalho),
+    uma linha por CNPJ do emitente + código do produto na nota. O `doGet` devolve
+    em `depara_nfe`. Assim a 2ª nota do mesmo fornecedor já vem "automática".
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações

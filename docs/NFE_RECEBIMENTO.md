@@ -236,6 +236,32 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
    antes de expor dados de nota.
 6. **Lote e validade:** ligar para quais classes?
 
+## 12.1 Decisões da fase 1 (tomadas)
+
+- **Onde:** botão "📄 Importar XML da NF-e" na tela `#/entradas` (Compras → Entradas).
+  Tudo roda no navegador (`DOMParser`); não precisa de Drive.
+- **Validação:** só aceita `nfeProc` com `cStat = 100` e chave com DV correto;
+  recusa nota que já deu entrada (etiqueta `[#chave]` no razão ou compra local).
+  Destinatário (`CONFIG NFE`) fica para a fase 2.
+- **Faturamento (5922/6922):** avisa e **não** dá entrada (contratos: fase 3).
+  **Remessa (5116/5117):** entra no estoque normalmente (vínculo: fase 3).
+  **Outra operação:** avisa e só dá entrada se o usuário confirmar.
+- **Entrada:** vira uma compra comum (`pushEntrada` → `writeEntrada`) com
+  **id = chave**; quantidade = `qCom × fator`; preço = **custo unitário real**.
+  Data da entrada = hoje (editável); a data de emissão vai na observação.
+- **Preço de referência:** **não é alterado** (vem de fórmula na planilha, regra 7).
+  A tela só mostra a diferença do custo real para a referência; o último custo
+  fica no `DE-PARA NFE`.
+- **Item "Novo":** escolher da lista do portfólio ou marcar "Ignorar".
+  Cadastrar produto novo no portfólio fica para depois.
+- **"Sugerido"** só conta como resolvido depois de "Aceitar sugestão" (ou de
+  escolher o produto). "Automático" já vem resolvido.
+- **Token:** não usado na fase 1 (o de-para só tem nomes de produto); entra na fase 2.
+- **Payload novo:** `{__nfeDepara:{itens:[…]}}` → aba `DE-PARA NFE`
+  (CNPJ EMITENTE · CPROD · XPROD · PRODUTO APP · FATOR · IGNORAR · ÚLTIMO CUSTO ·
+  CONFIRMADO POR · DATA). O app só envia depois que o `doGet` passa a devolver
+  `depara_nfe` (Code.gs novo implantado); antes disso o de-para fica no aparelho.
+
 ## 13. Fases e critérios de aceite
 
 | Fase | Entrega | Pronto quando… |
