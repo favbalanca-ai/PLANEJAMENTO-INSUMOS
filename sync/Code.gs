@@ -520,7 +520,8 @@ function processarXmlNfe(txt, origem){
   if (n.cstat !== '100') return { status:'rejeitada', chave:n.chave, motivo:'nota não autorizada (cStat ' + n.cstat + ')' };
   if (!/^\d{44}$/.test(n.chave)) return { status:'rejeitada', motivo:'chave inválida' };
   var row = _nfeLinha_(t, n.chave);
-  if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue())) return { status:'duplicada', chave:n.chave };   // mesma nota 2× não duplica
+  if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()))   // mesma nota 2× não duplica
+    return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' };
   var fora = cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
@@ -571,13 +572,28 @@ function _nfeCapturaSalva_(res, erros){
     res.forEach(function(r){ if (r.status === 'nova' || r.status === 'casada') c.novas++; else if (r.status === 'duplicada') c.repetidas++;
       else if (r.status === 'ignorada') c.ignoradas++; else if (r.status === 'rejeitada') c.rejeitadas.push((r.arq ? r.arq + ': ' : '') + (r.motivo || '')); });
     c.rejeitadas = c.rejeitadas.slice(0,10);
-    PropertiesService.getScriptProperties().setProperty('NFE_CAPTURA', JSON.stringify(c));
+    var pr = PropertiesService.getScriptProperties();
+    pr.setProperty('NFE_CAPTURA', JSON.stringify(c));
+    // histórico dos últimos 30 arquivos lidos (não some quando a busca seguinte não acha nada)
+    if (res.length){ var h = nfeCapturaHist_();
+      h = res.map(function(r){ return { em:c.em, arq:S(r.arq).slice(0,120), status:r.status, motivo:S(r.motivo).slice(0,200), chave:S(r.chave) }; }).concat(h).slice(0,30);
+      pr.setProperty('NFE_CAPTURA_HIST', JSON.stringify(h)); }
   } catch (e) {}
 }
 function nfeCapturaInfo_(){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_CAPTURA') || 'null'); } catch (e) { return null; } }
+function nfeCapturaHist_(){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_CAPTURA_HIST') || '[]'); } catch (e) { return []; } }
+// nota IGNORADA (ex.: destinatário fora da lista PRODUTOR) volta para "A CLASSIFICAR" pelo app
+function nfeReabrir_(r){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(r && r.chave)); if (!row) return { rows:0, erro:'nota não encontrada' };
+  var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
+  if (st !== 'IGNORADA') return { rows:0, erro:'a nota está ' + (st || 'sem status') + ', não IGNORADA' };
+  var obs = S(t.s.getRange(row, t.col('OBS') + 1).getValue());
+  _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'OBS':'reaberta no app' + (obs ? ' (antes: ' + obs + ')' : '') });
+  return { rows:1 };
+}
 // ---- endpoints (todos exigem o token da CONFIG NFE) ----
 function nfeLista_(status){
-  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {};
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {}, ign = [];
   var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
   if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
     if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
@@ -585,8 +601,9 @@ function nfeLista_(status){
       emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
       capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]) };
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
+    if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
-  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_() };
+  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign };
 }
 function nfeUma_(chave){
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(chave)); if (!row) return { ok:false, erro:'nota não encontrada' };
@@ -1377,11 +1394,12 @@ function doPost(e){
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
-    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto)){   // NF-e: exigem o token
+    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto || payload.__nfeReabrir)){   // NF-e: exigem o token
       if (!nfeTokenOk_(payload.token)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
       else if (payload.__recebimento){ var rb = nfeRecebimento_(payload.__recebimento); out.ok = rb.rows; if (rb.erro){ out.fail = 1; out.msgs.push(rb.erro); } }
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
       else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
+      else if (payload.__nfeReabrir){ var ra = nfeReabrir_(payload.__nfeReabrir); out.ok = ra.rows; if (ra.erro){ out.fail = 1; out.msgs.push(ra.erro); } }
       else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
       else if (payload.__nfeUpload){ out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; }   // (a trava do doPost já protege)
     } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)
