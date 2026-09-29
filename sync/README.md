@@ -13,6 +13,16 @@ Com a URL salva e a chave **Sincronização automática** ligada (tela
   aba está visível. Se nada mudou na planilha, ele **não** re-renderiza (não
   pisca a tela).
 
+**Velocidade (cache em duas partes).** O `doGet` guarda os dados no cache do Apps Script
+(`CacheService`) por até 5 min, em duas partes: **BASE** (portfólio, talhões/planos — lê as
+abas de talhão —, DRE, máquinas, preços, equipe) e **APP** (compras, saídas, tarefas,
+execução, resultados, limites, NF-e). Gravação do app que só mexe na parte APP limpa só
+ela, então o próximo puxar não relê as abas de talhão. Edições de campo (dose, estoque,
+área…) e preços limpam as duas. **Editar a planilha à mão** também limpa as duas (gatilho
+simples `onEdit`, não precisa instalar). Todo `doPost` usa uma **trava** (`LockService`):
+duas gravações ao mesmo tempo esperam a vez em vez de se atropelar (se passar de 45 s,
+responde "planilha ocupada" e o app tenta de novo depois).
+
 Um indicador no topo mostra o estado: 🟢 *Sincronizado*, 🟡 *Sincronizando…*,
 🔴 *Erro* ou ⚪ *Auto desligado*. Os botões **Puxar agora / Enviar agora**
 forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
@@ -74,7 +84,8 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **Compras registradas (entre aparelhos)** — `{__entrada:{id, fornecedor, data, nf, obs, itens, nfe, ts, _u}}`
   grava a ENTRADA na `MOVIMENTAÇÃO ESTOQUE` (etiqueta `[#id]`, reenviar não duplica) **e** o registro
   inteiro na aba **`COMPRAS APP`** (KEY|JSON|ATUALIZADO, criada se faltar; mais novo `_u` vence).
-  `{__entrada:{id, del:true, itens:[], _u}}` = compra excluída: apaga as linhas `[#id]` do razão e
+  `{__entradas:[…]}` = várias compras/exclusões numa requisição só (o app usa este; responde
+  `ids` confirmados). `{__entrada:{id, del:true, itens:[], _u}}` = compra excluída: apaga as linhas `[#id]` do razão e
   deixa uma "lápide" `{id, del:true}` para os outros aparelhos apagarem também. O `doGet` devolve
   a aba em `compras_app`; o app junta com a lista local ao puxar.
 - **NF-e (fase 1)** — ver `docs/NFE_RECEBIMENTO.md`:

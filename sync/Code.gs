@@ -21,7 +21,16 @@ function N(v){
 }
 
 /* ----------------------------- LEITURA ----------------------------- */
+// Os dados saem em DUAS partes, cada uma com seu cache (ver currentJson):
+//  BASE = portfólio, talhões e planos (lê as ~20 abas de talhão), DRE, máquinas, preços, equipe (planilhas externas)
+//         -> pesada; só muda quando alguém edita a planilha ou o app grava dose/estoque/preço etc.
+//  APP  = compras, saídas, tarefas, execução, resultados, limites, NF-e... -> leve; muda a toda hora pelo app.
 function readData(){
+  var b = readBase_(), a = readAppPart_();
+  for (var k in a) b[k] = a[k];
+  return b;
+}
+function readBase_(){
   var produtos = [], P = sh('PORTIFÓLIO');
   if (P){
     var pcol = pedidoColOf(P);                       // coluna "EM PEDIDO" (acha pelo cabeçalho; cria se não existir)
@@ -82,10 +91,15 @@ function readData(){
   }
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
-    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
-    movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
-    result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
-    limites_app:readMapApp('LIMITES APP'), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), equipe_sst:readEquipeSST() };
+}
+function readAppPart_(){
+  try {
+    if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
+    return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
+      result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
+      limites_app:readMapApp('LIMITES APP'), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+  } finally { _CTR_MEMO_ = null; }
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -245,11 +259,34 @@ function writeTarefasApp(obj){
 var RETORNOS_SHEET = 'RETORNOS APP';
 var MOV_SHEET = 'MOVIMENTAÇÃO ESTOQUE';   // razão de estoque: entradas (módulo futuro) e saídas (recomendações)
 // registra 1 linha no razão de estoque (cria a aba se faltar). "when" opcional (data do movimento)
-function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
+function movSheet_(){
   var s = ss().getSheetByName(MOV_SHEET);
   if (!s){ s = ss().insertSheet(MOV_SHEET);
     s.appendRow(['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']); s.setFrozenRows(1); }
-  s.appendRow([when || new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+  return s;
+}
+function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
+  movSheet_().appendRow([when || new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+}
+// grava VÁRIAS linhas no razão de uma vez (1 escrita em vez de 1 por linha — bem mais rápido)
+function movAppendRows_(rows){
+  if (!rows.length) return 0;
+  var s = movSheet_(), last = s.getLastRow(), falta = last + rows.length - s.getMaxRows();
+  if (falta > 0) s.insertRowsAfter(s.getMaxRows(), falta);
+  s.getRange(last + 1, 1, rows.length, 7).setValues(rows);
+  return rows.length;
+}
+// apaga do razão as linhas de VÁRIOS ids [#id] numa passada (linhas seguidas saem juntas)
+function movDeleteBySources_(ids){
+  var s = ss().getSheetByName(MOV_SHEET); if (!s || !ids.length) return;
+  var last = s.getLastRow(); if (last < 2) return;
+  var set = {}; ids.forEach(function(id){ set[S(id)] = 1; });
+  var org = s.getRange(2, 6, last - 1, 1).getValues(), fim = -1;
+  for (var i = org.length - 1; i >= -1; i--){
+    var mt = i >= 0 ? S(org[i][0]).match(/\[#([^\]]+)\]/) : null, del = !!(mt && set[mt[1]]);
+    if (del && fim < 0) fim = i;
+    if (!del && fim >= 0){ s.deleteRows(i + 3, fim - i); fim = -1; }   // bloco i+1..fim (0-based) = linhas i+3..fim+2
+  }
 }
 // soma ENTRADA e SAÍDA por produto no razão (fonte COMPARTILHADA entre aparelhos: todo
 // aparelho puxa isto e vê o mesmo saldo, não importa quem registrou a compra/aprovou a recom).
@@ -270,42 +307,44 @@ function readMovimentacao(){
   return { entradas:ent, saidas:sai, nfe:nfe };
 }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
-function movDeleteBySource(id){
-  var s = ss().getSheetByName(MOV_SHEET); if (!s) return;
-  var last = s.getLastRow(); if (last < 2) return;
-  var tag = '[#' + S(id) + ']';
-  var org = s.getRange(2, 6, last - 1, 1).getValues();   // coluna ORIGEM (6)
-  for (var i = org.length - 1; i >= 0; i--){ if (S(org[i][0]).indexOf(tag) >= 0) s.deleteRow(i + 2); }
-}
+function movDeleteBySource(id){ movDeleteBySources_([id]); }
 // ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE.
 // Idempotente pelo id da compra (etiqueta [#id] no ORIGEM): reenviar a mesma compra não duplica.
 function writeEntrada(ent){
-  var itens = (ent && ent.itens) || [], n = 0;
+  if (ent && ent.id) movDeleteBySources_([ent.id]);
+  return { rows:movAppendRows_(entradaRows_(ent)) };
+}
+// linhas de ENTRADA de uma compra (sem gravar)
+function entradaRows_(ent){
+  var itens = (ent && ent.itens) || [], rows = [];
   var when = new Date();
   if (ent && ent.data && /^\d{4}-\d{2}-\d{2}/.test(String(ent.data))) when = new Date(String(ent.data).slice(0,10) + 'T12:00:00');
-  if (ent && ent.id) movDeleteBySource(ent.id);
   var ehNfe = /^\d{44}$/.test(S(ent && ent.id));
   var origem = (ehNfe ? 'NF-e' : 'Compra') + (ent.nf ? (ehNfe ? ' ' : ' NF ') + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
-    logMovimentacao('ENTRADA', it.produto, it.un, it.qtd, origem, S(ent.obs), when); n++; }
-  return { rows:n };
+    rows.push([when, 'ENTRADA', S(it.produto), S(it.un), N(it.qtd), origem, S(ent.obs)]); }
+  return rows;
 }
 // Lista "Compras registradas" do app, compartilhada entre aparelhos: aba COMPRAS APP (KEY|JSON|ATUALIZADO,
 // merge pelo _u). Grava a entrada no razão E guarda o registro inteiro. del:true = compra excluída:
 // tira as linhas [#id] do razão e deixa uma "lápide" {id,del,_u} para os outros aparelhos apagarem também.
-function writeCompraApp(ent){
-  ent = ent || {}; var id = S(ent.id), u = +ent._u || Date.now(), r = { rows:0 };
-  var cur = id ? readMapApp('COMPRAS APP')[id] : null;
-  if (cur && (+cur._u || 0) > u) return { rows:0, velho:true };   // já existe versão mais nova (ex.: excluída em outro aparelho)
-  if (ent.del){ if (id) movDeleteBySource(id); }
-  else r = writeEntrada(ent);
-  if (id){ var m = {};
+// Várias compras numa requisição só ({__entradas:[…]}): 1 leitura/escrita do razão e da COMPRAS APP.
+function writeComprasApp(lista){
+  lista = lista || []; var cur = readMapApp('COMPRAS APP'), m = {}, del = [], rows = [], ids = [];
+  lista.forEach(function(ent){ ent = ent || {}; var id = S(ent.id), u = +ent._u || Date.now(); if (!id) return;
+    ids.push(id);                                                        // confirmado (gravado ou já tinha mais novo)
+    if (cur[id] && (+cur[id]._u || 0) > u) return;                       // já existe versão mais nova (ex.: excluída em outro aparelho)
+    del.push(id);
+    if (!ent.del) rows = rows.concat(entradaRows_(ent));
     m[id] = ent.del ? { id:id, del:true, _u:u }
       : { id:id, fornecedor:S(ent.fornecedor), data:S(ent.data), nf:S(ent.nf), obs:S(ent.obs), itens:ent.itens || [],
-          nfe:ent.nfe || null, ts:ent.ts || null, _u:u };
-    writeMapApp('COMPRAS APP', m); }
-  return r;
+          nfe:ent.nfe || null, ts:ent.ts || null, _u:u }; });
+  movDeleteBySources_(del);
+  var n = movAppendRows_(rows);
+  if (Object.keys(m).length) writeMapApp('COMPRAS APP', m);
+  return { rows:n, ids:ids };
 }
+function writeCompraApp(ent){ return writeComprasApp([ent || {}]); }
 // ---- NF-e (fase 1): memória de-para de produtos da nota -> produto do app ----
 // Aba "DE-PARA NFE" (criada se faltar). Uma linha por CNPJ do emitente + código do produto na nota (cProd).
 // Colunas localizadas PELO CABEÇALHO (pode reordenar/adicionar colunas na planilha sem quebrar).
@@ -512,7 +551,7 @@ function capturarNfe(){
     while (it.hasNext()){ var f = it.next(), bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
       bs.forEach(function(b){ var r = processarXmlNfe(_blobTxt(b), 'pasta'); res.push(r); if (r.status === 'rejeitada') ok = false; });
       if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados); }   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
-  } finally { lock.releaseLock(); cacheClear(); }
+  } finally { lock.releaseLock(); cacheClearApp_(); }   // NF-e: só a parte APP do cache
   return res;
 }
 // ---- endpoints (todos exigem o token da CONFIG NFE) ----
@@ -567,7 +606,9 @@ function _ler_(name, cols){ var t = sheetCols_(name, cols), s = t.s, last = s.ge
   return out; }
 var NFE_ATIVAS = ['EM TRÂNSITO','RECEBIDA','RECEBIDA SEM XML'];   // remessas que já abatem o contrato
 // contratos de entrega futura: faturado × entregue (remessas vinculadas) × saldo por produto
+var _CTR_MEMO_ = null;
 function nfeContratos_(){
+  if (_CTR_MEMO_) return _CTR_MEMO_;
   var idx = _ler_(NFE_IDX_SHEET, NFE_IDX_COLS), itens = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS), porChave = {}, cfg = nfeConfig_(), hoje = new Date();
   itens.forEach(function(i){ (porChave[S(i['CHAVE'])] = porChave[S(i['CHAVE'])] || []).push(i); });
   var out = [];
@@ -1229,32 +1270,41 @@ function pedidoColOf(P){
 function json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function jsonStr(s){ return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.JSON); }
 
-/* Cache dos dados (CacheService) — a leitura pesada roda no máx. 1x a cada CACHE_TTL s;
-   os demais celulares recebem instantâneo. Como o valor pode passar de 100KB, é fatiado. */
-var CACHE_TTL = 45;
-function cacheGet(){
-  var c = CacheService.getScriptCache(), meta = c.get('pd_meta');
+/* Cache dos dados (CacheService), em DUAS partes (ver readData):
+   'pb_' = BASE (pesada: abas de talhão, portfólio, preços, equipe) e 'pa_' = APP (leve).
+   - gravação do app que só mexe em compras/tarefas/execução/NF-e… limpa só a parte APP (a BASE segue no cache);
+   - edição feita À MÃO na planilha limpa as duas (gatilho simples onEdit, abaixo);
+   - de qualquer jeito, cada parte vence em CACHE_TTL s (pega fórmulas/IMPORTRANGE que mudam sozinhas).
+   Como o valor pode passar de 100KB, é fatiado. */
+var CACHE_TTL = 300;
+function cacheGetK_(pfx){
+  var c = CacheService.getScriptCache(), meta = c.get(pfx + 'meta');
   if (!meta) return null;
   var n = parseInt(meta, 10), keys = [];
-  for (var i = 0; i < n; i++) keys.push('pd_' + i);
+  for (var i = 0; i < n; i++) keys.push(pfx + i);
   var got = c.getAll(keys), parts = [];
-  for (var j = 0; j < n; j++){ var v = got['pd_' + j]; if (v == null) return null; parts.push(v); }
+  for (var j = 0; j < n; j++){ var v = got[pfx + j]; if (v == null) return null; parts.push(v); }
   return parts.join('');
 }
-function cachePut(str){
-  var c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(str.length / size), obj = {};
-  for (var i = 0; i < n; i++) obj['pd_' + i] = str.substr(i * size, size);
-  obj['pd_meta'] = String(n);
-  c.putAll(obj, CACHE_TTL);
+function cachePutK_(pfx, str){
+  try {
+    var c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(str.length / size), obj = {};
+    for (var i = 0; i < n; i++) obj[pfx + i] = str.substr(i * size, size);
+    obj[pfx + 'meta'] = String(n);
+    c.putAll(obj, CACHE_TTL);
+  } catch (e) {}
 }
-function cacheClear(){ try { CacheService.getScriptCache().remove('pd_meta'); } catch (e) {} }
-// JSON atual dos dados (do cache; senão lê a planilha e cacheia)
+function cacheClear(){ try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta']); } catch (e) {} }
+function cacheClearApp_(){ try { CacheService.getScriptCache().remove('pa_meta'); } catch (e) {} }
+// edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
+function onEdit(e){ cacheClear(); }
+// JSON atual dos dados (cada parte do cache; senão lê a planilha e cacheia)
 function currentJson(){
-  var cached = cacheGet();
-  if (cached) return cached;
-  var str = JSON.stringify(readData());
-  cachePut(str);
-  return str;
+  var b = cacheGetK_('pb_');
+  if (b == null){ b = JSON.stringify(readBase_()); cachePutK_('pb_', b); }
+  var a = cacheGetK_('pa_');
+  if (a == null){ a = JSON.stringify(readAppPart_()); cachePutK_('pa_', a); }
+  return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }
 
 function doGet(e){
@@ -1280,17 +1330,23 @@ function doGet(e){
 }
 
 function doPost(e){
-  var out = { ok:0, fail:0, msgs:[] };
+  var out = { ok:0, fail:0, msgs:[] }, base = false;
+  // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
+  // apagar a linha errada do razão ou perder uma compra na COMPRAS APP. Quem chega depois espera.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(45000)){ out.fail = 1; out.msgs.push('planilha ocupada — tente de novo'); return json(out); }
   try {
     var payload = JSON.parse(e.postData.contents);
     if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
-      var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows;
+      var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows; base = true;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
-      var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows;
+      var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows; base = true;
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
       var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
+    } else if (payload && payload.__entradas){       // VÁRIAS compras (e exclusões) numa requisição só
+      var ens = writeComprasApp(payload.__entradas); out.ok = ens.rows; out.ids = ens.ids;
     } else if (payload && payload.__entrada){        // compra do app -> entrada no razão de estoque
-      var en = writeCompraApp(payload.__entrada); out.ok = en.rows;
+      var en = writeCompraApp(payload.__entrada); out.ok = en.rows; out.ids = en.ids;
     } else if (payload && payload.__saida){          // recomendação aprovada -> saída no razão (sincroniza entre aparelhos)
       var sr = writeSaida(payload.__saida); out.ok = sr.rows;
     } else if (payload && payload.__tarefas){        // módulo Tarefas: equipe + tarefas (regrava as abas)
@@ -1305,8 +1361,7 @@ function doPost(e){
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
       else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
       else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
-      else if (payload.__nfeUpload){ var lk = LockService.getScriptLock(); lk.tryLock(20000);
-        try { out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; } finally { lk.releaseLock(); } }
+      else if (payload.__nfeUpload){ out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; }   // (a trava do doPost já protege)
     } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)
       var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
@@ -1314,10 +1369,14 @@ function doPost(e){
     } else if (payload && payload.__opplan){          // ordem + nomes das operações (merge por chave)
       var opl = writeMapApp('PLANO OPS APP', payload.__opplan); out.ok = opl.rows;
     } else {
-      applyEditsBatch(payload, out);           // grava em lote (rápido)
+      applyEditsBatch(payload, out); base = true;   // edições de campo (dose, estoque, área…): mexem na BASE
     }
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
-  cacheClear();                       // invalida o cache: o próximo puxar traz o dado fresco
+  finally {
+    // invalida o cache: o próximo puxar traz o dado fresco. Só a parte APP, a não ser que mexeu na BASE.
+    if (base) cacheClear(); else cacheClearApp_();
+    lock.releaseLock();
+  }
   return json(out);
 }
 
