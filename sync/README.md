@@ -96,6 +96,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **NF-e (fase 4)** — recebimento: `?acao=nfe_chave&chave=…&token=…` (status + itens da nota);
   `{token, __recebimento:{chave, data, por, itens:[{n, qtdRecebida}], semXml?}}` → RECEBIDA /
   RECEBIDA SEM XML (o XML casa sozinho quando chegar). Coluna nova `FOTO CANHOTO` na `NFE RECEBIDAS`.
+- **NF-e (fase 5)** — divergências: `__recebimento.pendencias[]` → aba `PENDÊNCIAS RECEBIMENTO`;
+  `?acao=pendencias&status=…`; `{token, __pendencia:{id, status, solucao, obs}}`;
+  `{token, __nfeFoto:{nome, mime, b64}}` → pasta `NFe/Fotos` (devolve o link).
+  `nfe_estados` passa a levar `pendencias` (abatem o "a comprar") e `avariado`.
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações

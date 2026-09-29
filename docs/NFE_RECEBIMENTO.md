@@ -329,6 +329,27 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 - **Offline (decisão 12.1):** o app exige internet para abrir (sw sem cache, como hoje); se a
   conexão cair no meio, o recebimento fica na fila e sobe no próximo ENVIAR.
 
+## 12.5 Decisões da fase 5 (tomadas)
+
+- **Conferência** (tela Receber nota): cada item já vem com a quantidade da nota; "✅ Conferido,
+  tudo ok" num toque. Botão **⚠️ Divergência** por item: tipo (**Falta / Avaria / Produto trocado /
+  Sobra**), quantidade **na unidade da nota** (ex.: 2 GL, convertida pelo fator), "a avaria ficou na
+  fazenda", **foto** (reduzida no celular: máx. 1280 px, JPEG 70%) e observação.
+- **Estoque:** entra só o que está em condição de uso = nota − falta − avaria − troca + sobra.
+  Avaria que ficou na fazenda = saldo **Avariado** (coluna no Estoque, fora do disponível).
+- **Pendências** (`PENDÊNCIAS RECEBIMENTO`: ID · CHAVE · Nº · FORNECEDOR · PRODUTO · TIPO · QTD · UN ·
+  FICOU NA FAZENDA · FOTO · CONFERIDO POR · DATA · STATUS · SOLUÇÃO · OBS). Falta/avaria/troca
+  ABERTA ou COBRADA **continuam abatendo o "a comprar"** (como "a caminho"); RESOLVIDA sai da conta.
+  Reenviar o mesmo recebimento troca as pendências ABERTAS da nota (não duplica).
+- **Canhoto:** com divergência, a tela mostra o aviso "Anote a falta/avaria no canhoto… antes de
+  assinar", pede confirmação e permite **foto do canhoto** (coluna `FOTO CANHOTO`).
+- **Fotos** vão para `NFe/Fotos` no Drive (`__nfeFoto`); o link fica na pendência. Sem internet, a
+  pendência é registrada sem a foto (aviso na tela).
+- **WhatsApp:** depois de confirmar, "📲 Avisar pelo WhatsApp" com a mensagem pronta; na tela
+  **Pendências** (Administrativo), status ABERTA → COBRADA → RESOLVIDA, solução REPOSIÇÃO /
+  DESCONTO / DEVOLUÇÃO, observação e "📲 Cobrar pelo WhatsApp".
+- **Lote e validade:** continuam **desligados** (decisão 12.6 em aberto).
+
 ## 13. Fases e critérios de aceite
 
 | Fase | Entrega | Pronto quando… |
