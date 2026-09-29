@@ -289,6 +289,28 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 - **Sem internet** ao confirmar: a classificação fica numa fila no aparelho e sobe
   no próximo ENVIAR (aparece em "Falta sincronizar").
 
+## 12.3 Decisões da fase 3 (tomadas)
+
+- **Na conferência (escritório)**, com a NF-e ligada:
+  - **Venda / remessa / outra:** "🚚 Confirmar e pôr em trânsito" (status EM TRÂNSITO; entra no
+    estoque só quando o operador receber — fases 4/5) ou "📦 Já chegou — dar entrada" (entrada
+    direta, status RECEBIDA — para quando a mercadoria chegou antes da classificação).
+  - **Faturamento:** "📑 Registrar contrato" (status A ENTREGAR). Se o produto tem EM PEDIDO
+    manual, o app pergunta se abate (para não contar em dobro).
+- **Contrato** = a própria nota de faturamento (sem aba nova): faturado = `NFE ITENS` dela;
+  entregue = soma das remessas vinculadas (`CHAVE REFERENCIADA`) EM TRÂNSITO/RECEBIDA;
+  saldo = faturado − entregue. Tudo entregue → status ENTREGUE; remessa cancelada devolve o saldo.
+- **Vínculo da remessa:** pelo `refNFe` do XML; sem referência, o app escolhe sozinho quando há
+  um único contrato aberto do fornecedor com o produto, senão o escritório escolhe na lista.
+  Remessa maior que o saldo → aviso antes de confirmar.
+- **Custo da remessa:** remessa costuma ter valor simbólico — vale o custo do contrato.
+- **Contrato parado:** `DIAS CONTRATO PARADO` na `CONFIG NFE` (padrão 30) → alerta na tela
+  Contratos e no contador do menu.
+- **A comprar** = máx(0; demanda restante − saldo − em pedido − **a caminho**), onde a caminho =
+  a entregar + em trânsito + pendências abertas (fase 5). Vem da planilha em `nfe_estados`
+  (só totais por produto). Estoque ganha as colunas A entregar / Em trânsito / Avariado.
+- **Tela** `#/contratos` (Administrativo → Contratos).
+
 ## 13. Fases e critérios de aceite
 
 | Fase | Entrega | Pronto quando… |

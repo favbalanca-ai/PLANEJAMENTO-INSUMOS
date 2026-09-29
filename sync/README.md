@@ -89,6 +89,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     salva em `NFe/XML/AAAA-MM/` e grava a `NFE RECEBIDAS` (status A CLASSIFICAR).
   - `doGet ?acao=nfe_lista&status=…&token=…` e `?acao=nfe&chave=…&token=…`;
     `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
+- **NF-e (fase 3)** — entrega futura: `__nfeClassifica` aceita `status` EM TRÂNSITO / A ENTREGAR /
+  RECEBIDA / IGNORADA e `ref` (contrato da remessa). `nfeContratos_()` calcula faturado × entregue ×
+  saldo; `?acao=contratos&token=…`; `readData` leva `nfe_estados` (a entregar, em trânsito,
+  pendências e avariado por produto) para a conta do "a comprar".
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações
