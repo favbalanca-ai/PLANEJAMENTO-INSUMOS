@@ -1,3 +1,7 @@
 node_modules/
 package.json
 package-lock.json
+# NF-e: XMLs de teste e certificados NUNCA vão para o git (repositório público)
+testes/xml/
+*.pfx
+*.p12
