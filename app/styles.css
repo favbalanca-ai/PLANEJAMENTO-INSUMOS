@@ -1150,3 +1150,14 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .nfe-it-map .nfe-prod{grid-column:1/-1}
   .nfe-foot .spacer{display:none}
 }
+/* ===== NF-e (fase 2): notas a classificar + contador no menu ===== */
+.nfe-lista .nfe-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line)}
+.nfe-lista .nfe-row:first-of-type{border-top:0}
+.nfe-row-main{min-width:0}
+.nfe-row-main b{font-size:13.5px;margin-right:8px}
+.nfe-row-main .nfe-tipo{font-size:11px;font-weight:800}
+.nfe-row-main .mut{font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+.nfe-row-act{display:flex;gap:6px;flex:none}
+#nav a .nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fbc02d;color:#3a2c00;font-size:11px;font-weight:800;display:inline-grid;place-items:center}
+#nav a .nav-badge.alert{background:#e53935;color:#fff}
+@media (max-width:640px){ .nfe-lista .nfe-row{flex-direction:column;align-items:stretch} .nfe-row-act{justify-content:flex-end} }
