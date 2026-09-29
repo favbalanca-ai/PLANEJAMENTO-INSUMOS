@@ -311,6 +311,24 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   (só totais por produto). Estoque ganha as colunas A entregar / Em trânsito / Avariado.
 - **Tela** `#/contratos` (Administrativo → Contratos).
 
+## 12.4 Decisões da fase 4 (tomadas)
+
+- **Tela** `#/receber` ("📷 Receber nota") nos módulos Administrativo **e** Campo.
+- **Câmera:** `getUserMedia` (câmera traseira) + `BarcodeDetector` (`code_128`) quando existe;
+  senão **ZXing** `@zxing/library@0.21.3` (UMD, jsdelivr), carregado só na hora. Aceita a chave
+  só com **2 leituras iguais seguidas**; vibra ao aceitar; botão 🔦 lanterna quando o aparelho suporta.
+- **Validação:** 44 dígitos, modelo 55 e DV (módulo 11). Chave inválida é recusada com o motivo.
+- **Alternativas:** nº da nota (procura nas notas EM TRÂNSITO); os 44 dígitos (com validação ao
+  vivo; abre sozinho ao completar); leitor USB/Bluetooth no mesmo campo (Enter).
+- **Resultado da leitura (9.3):** em trânsito → conferência; faturamento → aviso "leia a remessa";
+  já recebida → data e quem recebeu; cancelada → bloqueia; a classificar → pede ao escritório;
+  **não encontrada** → "recebimento sem XML" (dados da chave + produtos e quantidades); quando o
+  XML chega, `processarXmlNfe` **casa sozinho** (status RECEBIDA, OBS para conferir de-para/custo).
+- **Entrada no estoque** do recebimento: compra comum com id = chave (`__entrada`, sem duplicar);
+  `__recebimento` grava status, `RECEBIDA EM/POR`, `QTD RECEBIDA` e (fase 5) pendências.
+- **Offline (decisão 12.1):** o app exige internet para abrir (sw sem cache, como hoje); se a
+  conexão cair no meio, o recebimento fica na fila e sobe no próximo ENVIAR.
+
 ## 13. Fases e critérios de aceite
 
 | Fase | Entrega | Pronto quando… |
