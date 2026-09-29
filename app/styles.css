@@ -1097,3 +1097,14 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .cq-obs{margin:6px 0 4px}
   #print-area .cq-obs span{display:block;border-bottom:1px solid #9fb3b8;height:20px}
 }
+/* ===== Estoque: relatório PDF ===== */
+@media print{
+  #print-area .es-t td{font-size:10px}
+  #print-area .es-neg{color:#b3261e}
+  #print-area .es-sit{display:inline-block;font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap}
+  #print-area .es-sit.ok{background:#e3f2e5;color:#1b5e20}
+  #print-area .es-sit.buy{background:#fff4d6;color:#7a5600}
+  #print-area .es-sit.neg{background:#fde3e3;color:#a61b1b}
+  #print-area .es-sit.idle{background:#eef2f4;color:#5c6f75}
+}
+@media print{ #print-area .es-t thead th{font-size:8.5px;letter-spacing:.02em;padding:4px 4px} }

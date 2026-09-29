@@ -1114,6 +1114,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .cq-obs{margin:6px 0 4px}
   #print-area .cq-obs span{display:block;border-bottom:1px solid #9fb3b8;height:20px}
 }
+/* ===== Estoque: relatório PDF ===== */
+@media print{
+  #print-area .es-t td{font-size:10px}
+  #print-area .es-neg{color:#b3261e}
+  #print-area .es-sit{display:inline-block;font-size:8.5px;font-weight:700;padding:1px 6px;border-radius:8px;white-space:nowrap}
+  #print-area .es-sit.ok{background:#e3f2e5;color:#1b5e20}
+  #print-area .es-sit.buy{background:#fff4d6;color:#7a5600}
+  #print-area .es-sit.neg{background:#fde3e3;color:#a61b1b}
+  #print-area .es-sit.idle{background:#eef2f4;color:#5c6f75}
+}
+@media print{ #print-area .es-t thead th{font-size:8.5px;letter-spacing:.02em;padding:4px 4px} }
 
 </style>
 </head>
@@ -1204,7 +1215,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-142';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-143';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2695,13 +2706,66 @@ V.estoque=function(){
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
     <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||'<tr><td colspan="8" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.</p>`;
 };
+// RELATÓRIO DE ESTOQUE (PDF): indicadores, resumo por classe e posição por produto (inicial, entradas, saídas,
+// saldo, pedido, demanda restante, valor e situação) + coluna em branco p/ contagem física. Respeita os filtros da tela.
+function exportEstoquePDF(){
+  const saidas=estoqueSaidas(), entradas=estoqueEntradas(), comp={}; calcCompras(null,null).forEach(r=>comp[r.produto]=r);
+  const nomes=new Set(); (DATA.produtos||[]).forEach(p=>{ if(p.produto) nomes.add(String(p.produto).trim()); });
+  Object.keys(saidas).forEach(n=>nomes.add(n)); Object.keys(entradas).forEach(n=>nomes.add(n));
+  const q=(estoqueQ||'').toLowerCase().trim();
+  let rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
+    const ini=estoqueDe(n), ent=entradas[n]||0, sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n), c=comp[n];
+    const rest=c?Math.max(0,(c.demanda||0)-(c.saida||0)):0, saldo=ini+ent-sai;
+    return {produto:n, classe:(p.classe||'').trim()||'—', ativos:p.ativos||'', un:p.un||'', ini, ent, sai, saldo, ped, preco, rest, comprar:c?c.comprar:0}; })
+    .filter(r=>!/^MÁQUINA/i.test(r.classe));
+  rows=rows.filter(r=>(!q||(r.produto+' '+r.classe).toLowerCase().includes(q)) && (!estoqueClasse||r.classe===estoqueClasse) && (!estoqueSoMov||r.ini||r.ent||r.sai||r.ped));
+  rows=rows.filter(r=>r.ini||r.ent||r.sai||r.ped||r.rest>0);   // no PDF: sem produto parado sem uso
+  if(!rows.length){ toast('Nada para o filtro atual'); return; }
+  const labels=classeLabels(rows), lbl=r=>labels[classeKey(r.classe)]||r.classe;
+  const val=r=>Math.max(0,r.saldo)*r.preco;
+  const sit=r=>r.saldo<-0.0001?['neg','Negativo']:r.comprar>0.0001?['buy','Comprar '+num(r.comprar)]:(r.rest>0?['ok','Atende']:(r.saldo>0?['idle','Sem uso previsto']:['idle','—']));
+  const vSaldo=rows.reduce((a,r)=>a+val(r),0), vEnt=rows.reduce((a,r)=>a+r.ent*r.preco,0), vSai=rows.reduce((a,r)=>a+r.sai*r.preco,0);
+  const nNeg=rows.filter(r=>r.saldo<-0.0001).length, nBuy=rows.filter(r=>r.comprar>0.0001).length, nSaldo=rows.filter(r=>r.saldo>0.0001).length;
+  const g={}; rows.forEach(r=>{ const k=lbl(r); (g[k]=g[k]||[]).push(r); });
+  const cls=Object.keys(g).map(k=>({k, rs:g[k], v:g[k].reduce((a,r)=>a+val(r),0), neg:g[k].filter(r=>r.saldo<-0.0001).length, buy:g[k].filter(r=>r.comprar>0.0001).length})).sort((a,b)=>b.v-a.v||a.k.localeCompare(b.k,'pt'));
+  const maxV=Math.max(1,...cls.map(c=>c.v)), hoje=fmtDataBR(_hojeISO());
+  const filtros=[estoqueClasse?`Classe: ${estoqueClasse}`:'Todas as classes', q?`Busca: “${estoqueQ}”`:'', estoqueSoMov?'Só com movimento':'Com movimento ou demanda'].filter(Boolean);
+  let h=`<div class="dm">
+  <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027</div><h1>Posição de estoque</h1><div class="dm-sub">posição em ${hoje}</div></div>
+    <div class="dm-filt">${filtros.map(f=>`<span>${esc(f)}</span>`).join('')}</div></div>
+  <div class="dm-kpis">
+    <div class="dm-kpi k1"><small>Valor em estoque</small><b>${brl0(vSaldo)}</b><i>${nSaldo} produto(s) com saldo</i></div>
+    <div class="dm-kpi k2"><small>Entradas (compras)</small><b>${brl0(vEnt)}</b><i>pelo preço de referência</i></div>
+    <div class="dm-kpi k3"><small>Saídas (aplicado)</small><b>${brl0(vSai)}</b><i>recomendações/operações</i></div>
+    <div class="dm-kpi ${nNeg?'k4':'k3'}"><small>Atenção</small><b>${nNeg} negativo(s)</b><i>${nBuy} item(ns) a comprar</i></div>
+  </div>
+  <h2 class="dm-h2">Resumo por classe</h2>
+  <table class="dm-t dm-sum"><thead><tr><th>Classe</th><th class="num">Produtos</th><th style="width:34%">Participação no valor</th><th class="num">Valor em estoque</th><th class="num">A comprar</th><th class="num">Negativos</th></tr></thead><tbody>
+    ${cls.map(c=>`<tr><td><b>${esc(c.k)}</b></td><td class="num">${c.rs.length}</td><td><div class="dm-bar"><span style="width:${Math.max(2,c.v/maxV*100).toFixed(1)}%"></span></div><em>${vSaldo>0&&c.v>0?nf1.format(c.v/vSaldo*100)+'%':''}</em></td><td class="num">${c.v>0?brl0(c.v):'—'}</td><td class="num">${c.buy||'—'}</td><td class="num">${c.neg?`<span class="dm-np">${c.neg}</span>`:'—'}</td></tr>`).join('')}
+  </tbody><tfoot><tr><th>Total</th><th class="num">${rows.length}</th><th></th><th class="num">${brl0(vSaldo)}</th><th class="num">${nBuy||'—'}</th><th class="num">${nNeg||'—'}</th></tr></tfoot></table>
+  <h2 class="dm-h2 dm-pb">Posição por produto</h2>`;
+  cls.forEach(c=>{
+    const rs=c.rs.slice().sort((a,b)=>val(b)-val(a)||a.produto.localeCompare(b.produto,'pt'));
+    h+=`<div class="dm-cls"><div class="dm-cls-h"><b>${esc(c.k)}</b><span>${rs.length} produto(s) · ${brl0(c.v)} em estoque${c.buy?` · ${c.buy} a comprar`:''}${c.neg?` · ${c.neg} negativo(s)`:''}</span></div>
+      <table class="dm-t dm-det es-t"><colgroup><col style="width:22%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col style="width:4%"><col style="width:7%"><col style="width:8%"><col style="width:9%"><col style="width:12%"><col style="width:9%"></colgroup>
+      <thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entr.</th><th class="num">Saídas</th><th class="num">Saldo</th><th>Un</th><th class="num">Ped.</th><th class="num">Dem. rest.</th><th class="num">Valor</th><th>Situação</th><th>Contagem</th></tr></thead><tbody>
+      ${rs.map(r=>{ const [sc,st]=sit(r); return `<tr><td><b>${esc(r.produto)}</b>${r.ativos?`<div class="cq-at">${esc(r.ativos)}</div>`:''}</td><td class="num">${r.ini?num(r.ini):'·'}</td><td class="num">${r.ent?num(r.ent):'·'}</td><td class="num">${r.sai?num(r.sai):'·'}</td>
+        <td class="num"><b class="${r.saldo<-0.0001?'es-neg':''}">${num(r.saldo)}</b></td><td>${esc(r.un)}</td><td class="num">${r.ped>0?num(r.ped):'·'}</td><td class="num">${r.rest>0?num(r.rest):'·'}</td>
+        <td class="num">${val(r)>0?brl0(val(r)):(r.preco<=0&&r.saldo>0?'<span class="dm-np">s/ preço</span>':'—')}</td><td><span class="es-sit ${sc}">${esc(st)}</span></td><td class="cq-fill"></td></tr>`; }).join('')}
+      </tbody><tfoot><tr><th colspan="8">Subtotal ${esc(c.k)}</th><th class="num">${brl0(c.v)}</th><th colspan="2"></th></tr></tfoot></table></div>`;
+  });
+  h+=`<div class="dm-total"><span>VALOR TOTAL EM ESTOQUE</span><b>${brl0(vSaldo)}</b></div>
+  <div class="dm-foot">Saldo = inicial + entradas (compras) − saídas (aplicações aprovadas/operações concluídas). Dem. rest. = demanda planejada ainda não aplicada. Situação: <b>Atende</b> = saldo + pedido cobrem a demanda; <b>Comprar</b> = quanto falta; <b>Negativo</b> = saídas maiores que o estoque (conferir lançamentos). Use a coluna <b>Contagem</b> para o inventário físico.</div>
+  <div class="dm-sign"><div>Conferido por<br>_______________________</div><div>Responsável<br>_______________________</div><div>Data<br>____/____/______</div></div></div>`;
+  printDoc(h); toast('Gerando relatório de estoque — escolha "Salvar como PDF"');
+}
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
   document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
@@ -5753,6 +5817,7 @@ document.addEventListener('click',e=>{
       const cur=e&&buildFieldEdits().find(x=>JSON.stringify(x)===JSON.stringify(e));
       if(!cur){ toast('Essa edição já não está pendente'); updateSyncBar(); }
       else { const d=editDesc(cur); if(confirm(`Descartar esta edição?\n${d.lbl}: ${d.txt}\n\nVolta a valer o que está na planilha.`)){ if(discardEdit(cur)){ toast('Edição descartada'); updateEditBadge(); route({keepScroll:true}); } } } }
+    else if(a.act==='estPDF'){ exportEstoquePDF(); }
     else if(a.act==='limSalvar'){ limSalvarImport(); }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
