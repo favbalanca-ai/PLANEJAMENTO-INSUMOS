@@ -1209,6 +1209,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rec-sx{display:flex;flex-direction:column;gap:8px;padding:8px 14px}
 .rec-sx-row{display:grid;grid-template-columns:1fr 90px 36px 36px;gap:6px;align-items:center}
 @media (max-width:640px){ .rec-alt{grid-template-columns:1fr} }
+/* ===== NF-e (fase 5): divergências e pendências ===== */
+.rec-div-act{margin-top:8px}
+.rec-div{margin-top:10px;padding:10px;border:1px dashed #e8a3a3;border-radius:10px;background:#fff6f6;display:flex;flex-direction:column;gap:8px}
+.rec-div-g{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.rec-div-g label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.rec-div-g .mut{font-size:11px;text-transform:none;letter-spacing:0;font-weight:500}
+.rec-chk{flex-direction:row!important;align-items:center;text-transform:none!important;letter-spacing:0!important;font-size:12.5px!important}
+.rec-foto{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;font-weight:700;color:var(--ink2);border:1px solid var(--line);border-radius:9px;padding:7px 12px;background:#fff;width:max-content}
+.rec-foto-min{max-width:140px;max-height:100px;border-radius:8px;border:1px solid var(--line);object-fit:cover}
+.pend-body{padding:10px 14px;font-size:13px}
+.pend-g{display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-top:8px}
+.pend-g label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.04em}
+.pend-g .txt,.pend-g .sel{text-transform:none;letter-spacing:0;font-weight:500}
+.pend-act{margin-top:10px}
+.pend-card.st-aberta{border-left:5px solid #e53935}.pend-card.st-cobrada{border-left:5px solid #fbc02d}.pend-card.st-resolvida{border-left:5px solid #43a047;opacity:.8}
+@media (max-width:640px){ .pend-g{grid-template-columns:1fr 1fr} .pend-g .pend-obs{grid-column:1/-1} }
 
 </style>
 </head>
@@ -1231,6 +1247,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/entradas" data-view="entradas" data-mod="admin"><span class="ico">🧾</span><span class="lbl">Compras</span><span class="lbl-s">Compras</span></a>
       <a href="#/receber" data-view="receber" data-mod="admin campo"><span class="ico">📷</span><span class="lbl">Receber nota</span><span class="lbl-s">Receber</span></a>
       <a href="#/contratos" data-view="contratos" data-mod="admin"><span class="ico">📑</span><span class="lbl">Contratos</span><span class="lbl-s">Contratos</span></a>
+      <a href="#/pendencias" data-view="pendencias" data-mod="admin"><span class="ico">⚠️</span><span class="lbl">Pendências</span><span class="lbl-s">Pendências</span></a>
       <a href="#/fluxocaixa" data-view="fluxocaixa" data-mod="admin"><span class="ico">💵</span><span class="lbl">Fluxo de Caixa</span><span class="lbl-s">Caixa</span></a>
       <a href="#/calendario" data-view="calendario" data-mod="tarefas"><span class="ico">🗓️</span><span class="lbl">Calendário</span><span class="lbl-s">Calend.</span></a>
       <a href="#/tarefas" data-view="tarefas" data-mod="tarefas"><span class="ico">🗂️</span><span class="lbl">Quadro</span><span class="lbl-s">Quadro</span></a>
@@ -1301,7 +1318,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-148';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-149';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1708,7 +1725,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
-  entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'both',
+  entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'both', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
@@ -2635,7 +2652,7 @@ function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(CO
 function pushEntrada(c){
   const url=syncUrl(); if(!url||!c||c.pushed) return Promise.resolve(false);
   return syncPost(url, JSON.stringify({__entrada:{id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens}}))
-    .then(()=>{ c.pushed=true; saveCompras(); return true; }).catch(()=>false);
+    .then(()=>{ c.pushed=true; saveCompras(); try{ updateEditBadge(); }catch(e){} return true; }).catch(()=>false);
 }
 function pushEntradasPendentes(){
   const url=syncUrl(); if(!url){ toast('Configure a Sincronização primeiro'); return; }
@@ -2906,7 +2923,9 @@ function nfeIgnorar(chave){
   nfeNavBadge(); route({keepScroll:true}); toast('Nota ignorada');
 }
 // contador no menu (Compras): notas a classificar + alertas de cancelamento
-function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entradas"]'); if(!a) return;
+function nfePendBadge(){ const a=document.querySelector('#nav a[data-view="pendencias"]'); if(!a) return; const n=+(((DATA&&DATA.nfe_resumo)||{}).pendAbertas||0);
+  let b=a.querySelector('.nav-badge'); if(!n){ if(b) b.remove(); return; } if(!b){ b=document.createElement('span'); b.className='nav-badge alert'; a.appendChild(b); } b.textContent=n; b.title=n+' pendência(s) aberta(s)'; }
+function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entradas"]'); try{ nfePendBadge(); }catch(e){} if(!a) return;
   const r=(DATA&&DATA.nfe_resumo)||{}, n=(+r.aClassificar||0)+(+r.alertas||0)+(+r.contratosParados||0); let b=a.querySelector('.nav-badge');
   if(!n){ if(b) b.remove(); return; } if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
   b.textContent=n; b.title=`${r.aClassificar||0} nota(s) a classificar${r.alertas?` · ${r.alertas} alerta(s)`:''}`; b.classList.toggle('alert', !!r.alertas); }
@@ -3059,8 +3078,10 @@ function nfeConferirHtml(){
    Aceita a chave só depois de 2 LEITURAS IGUAIS seguidas e confere o DV. Alternativas: nº da nota, 44 dígitos
    digitados ou leitor USB/Bluetooth (funciona como teclado no mesmo campo). */
 const REC_POR_KEY='planejamento_nfe_recebedor';
-let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:''};
-function recReset(){ recCameraParar(); REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:''}; }
+let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:'', canhoto:''};
+function recReset(){ recCameraParar(); REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:'', canhoto:''}; }
+// redesenha a tela DEPOIS do evento (redesenhar dentro do 'change' que veio de um blur quebra o innerHTML)
+let _recRr=0; function recRerender(){ clearTimeout(_recRr); _recRr=setTimeout(()=>route({keepScroll:true}), 0); }
 function recPor(){ try{ return localStorage.getItem(REC_POR_KEY)||''; }catch(e){ return ''; } }
 // partes da chave: cUF(2) AAMM(4) CNPJ/CPF(14) modelo(2) série(3) nNF(9) tpEmis(1) cNF(8) DV(1)
 function nfeChavePartes(ch){ return {uf:ch.slice(0,2), aamm:ch.slice(2,6), doc:ch.slice(6,20), mod:ch.slice(20,22), serie:String(+ch.slice(22,25)), nNF:String(+ch.slice(25,34))}; }
@@ -3240,6 +3261,80 @@ V.receber=function(){
     ${lista.map(x=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(x.fornecedor||'—')}</b><div class="mut">Nº ${esc(x.nNF)}/${esc(x.serie)} · emissão ${esc(fmtDataBR(x.emissao))} · ${brl(x.valor)}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="recAbrir" data-chave="${esc(x.chave)}">Receber</button></div></div>`).join('')||(T?'<p class="mut" style="padding:12px 14px">Nenhuma nota em trânsito.</p>':'')}</div>`;
 };
+/* ================= NF-e (fase 5): divergências na conferência + pendências ================= */
+const REC_DIV={FALTA:'Falta',AVARIA:'Avaria',TROCADO:'Produto trocado',SOBRA:'Sobra'};
+// bloco de divergência de UM item (quantidade na unidade da NOTA — ex.: 2 GL — convertida pelo fator)
+function recDivHtml(i,k){
+  const d=i.div;
+  if(!d) return `<div class="rec-div-act"><button class="btn btn-outline btn-sm" data-act="recDiv" data-i="${k}">⚠️ Divergência</button></div>`;
+  const conv=(+d.qtdNota||0)*(+i.fator||1);
+  return `<div class="rec-div">
+    <div class="rec-div-g">
+      <label>Tipo<select class="sel" data-recd="tipo" data-i="${k}">${Object.keys(REC_DIV).map(t=>`<option value="${t}"${d.tipo===t?' selected':''}>${REC_DIV[t]}</option>`).join('')}</select></label>
+      <label>Quantidade (${esc(i.ucom||i.un)})<input class="cell" inputmode="decimal" data-recd="qtdNota" data-i="${k}" value="${d.qtdNota||''}" placeholder="ex.: 2"><span class="mut">= ${num(conv)} ${esc(i.un)}</span></label>
+      ${d.tipo==='AVARIA'?`<label class="rec-chk"><input type="checkbox" data-recd="ficou" data-i="${k}"${d.ficou?' checked':''}> a avaria ficou na fazenda</label>`:''}
+    </div>
+    <label class="rec-foto">📷 Foto${d.foto?' ✔':''}<input type="file" accept="image/*" capture="environment" data-recd="foto" data-i="${k}" hidden></label>
+    ${d.foto?`<img class="rec-foto-min" src="${d.foto}" alt="foto">`:''}
+    <input class="txt" data-recd="obs" data-i="${k}" value="${esc(d.obs||'')}" placeholder="observação (ex.: 2 galões furados)">
+    <button class="btn btn-ghost btn-sm" data-act="recDivDel" data-i="${k}">remover divergência</button></div>`;
+}
+function recCanhotoHtml(){
+  return `<div class="nfe-aviso err" style="margin:6px 14px">✍️ <b>Anote a falta/avaria no CANHOTO do DANFE</b> (ou no conhecimento do transportador) <b>antes de assinar</b>. Tire uma foto do canhoto anotado:
+    <label class="rec-foto" style="margin-top:6px">📷 Foto do canhoto${REC.canhoto?' ✔':''}<input type="file" accept="image/*" capture="environment" id="rec-canhoto" hidden></label>
+    ${REC.canhoto?`<img class="rec-foto-min" src="${REC.canhoto}" alt="canhoto">`:''}</div>`;
+}
+// reduz a foto (máx. 1280 px, JPEG 70%) antes de mandar — cabe no celular com sinal fraco
+function recFotoReduzir(file){ return new Promise((res,rej)=>{ const img=new Image(), url=URL.createObjectURL(file);
+  img.onload=()=>{ const k=Math.min(1,1280/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',0.7)); };
+  img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('não consegui ler a foto')); }; img.src=url; }); }
+async function recFotoEnviar(dataUrl, nome){ if(!dataUrl) return '';
+  try{ const r=await nfePost({__nfeFoto:{nome, mime:'image/jpeg', b64:String(dataUrl).split(',')[1]||''}}); return (r&&r.foto&&r.foto.url)||''; }catch(e){ return ''; } }
+async function recPendenciasPayload(nota){
+  const ch=REC.chave, out=[];
+  for(const i of REC.itens){ const d=i.div; if(!d||!d.tipo||!(+d.qtdNota>0)) continue;
+    const foto=await recFotoEnviar(d.foto, `${ch}-${i.n}-${d.tipo}.jpg`);
+    out.push({n:i.n, produto:i.produto, tipo:d.tipo, qtd:+((+d.qtdNota)*(+i.fator||1)).toFixed(4), un:i.un, ficou:!!d.ficou, foto,
+      obs:[`${num(d.qtdNota)} ${i.ucom||i.un}`, d.obs||''].filter(Boolean).join(' · '), qtdNota:+d.qtdNota, ucom:i.ucom}); }
+  const canhoto=await recFotoEnviar(REC.canhoto, `${ch}-canhoto.jpg`);
+  if(out.some(p=>p.qtd>0) && (out.some(p=>REC.itens.find(i=>i.n===p.n&&i.div&&i.div.foto)&&!p.foto) || (REC.canhoto&&!canhoto))) toast('Algumas fotos não subiram (sem internet?) — a pendência foi registrada mesmo assim');
+  return {pendencias:out, canhoto};
+}
+// WhatsApp com a divergência pronta (mesmo padrão do módulo Campo: escolhe o contato no WhatsApp)
+function recWhatsTexto(f){ const L=[`Olá! Recebemos a NF-e nº ${f.nNF}${f.fornecedor?` (${f.fornecedor})`:''} com divergência:`];
+  (f.pendencias||[]).forEach(p=>L.push(`• ${REC_DIV[p.tipo]||p.tipo}: ${num(p.qtdNota||p.qtd)} ${p.ucom||p.un} de ${p.produto}${p.obs&&p.obs.indexOf('·')>0?' — '+p.obs.split('·').slice(1).join('·').trim():''}${p.foto?`\n  foto: ${p.foto}`:''}`));
+  L.push('Anotado no canhoto. Aguardamos a solução (reposição, desconto ou devolução).'); return L.join('\n'); }
+function recWhatsHtml(f){ return `<a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(recWhatsTexto(f))}">📲 Avisar pelo WhatsApp</a>`; }
+// ---- TELA: Pendências de recebimento (escritório) ----
+let PEND={filtro:'ABERTA,COBRADA', lista:null, erro:''};
+function pendCarregar(){ if(!nfeServerOk()) return Promise.resolve();
+  return nfeGet({acao:'pendencias', status:PEND.filtro}).then(d=>{ PEND.lista=(d&&d.ok&&d.pendencias)||[]; PEND.erro=(d&&!d.ok)?(d.erro||'erro'):''; })
+    .catch(()=>{ PEND.lista=PEND.lista||[]; PEND.erro='sem conexão com a planilha'; }).then(()=>{ if(/#\/pendencias/.test(location.hash)) route({keepScroll:true}); }); }
+V.pendencias=function(){
+  if(!nfeServerOk()) return `<div class="nfe-aviso info" style="margin:0">⚠️ As pendências (falta, avaria, troca, sobra) vêm da conferência na tela <b>Receber nota</b>. Para ligar: Token da NF-e em <a class="link" data-go="#/sync">Sincronizar</a> + Code.gs novo.</div>`;
+  const F=[['ABERTA,COBRADA','Em aberto'],['ABERTA','Abertas'],['COBRADA','Cobradas'],['RESOLVIDA','Resolvidas'],['TODAS','Todas']];
+  const chips=`<div class="classe-filter" id="pend-f" style="margin:2px 0 10px">${F.map(([v,l])=>`<button class="chip-f${PEND.filtro===v?' on':''}" data-pendf="${v}">${l}</button>`).join('')}</div>`;
+  if(!PEND.lista) return chips+`<div class="panel"><p class="mut" style="padding:14px">carregando…</p></div>`;
+  const card=p=>`<div class="panel pend-card st-${esc(p.status.toLowerCase())}"><div class="panel-head"><h2>${esc(REC_DIV[p.tipo]||p.tipo)} · ${esc(p.produto)}</h2>
+      <span class="sub">${num(p.qtd)} ${esc(p.un)} · NF ${esc(p.nNF)} · ${esc(p.fornecedor||'—')} · ${esc(fmtDataBR(p.data))}${p.por?` · conferido por ${esc(p.por)}`:''}</span></div>
+    <div class="pend-body">${p.foto?`<a class="link" href="${esc(p.foto)}" target="_blank" rel="noopener">📷 ver foto</a>`:'<span class="mut">sem foto</span>'}${p.ficou?' · <b>avaria ficou na fazenda</b>':''}
+      <div class="pend-g"><label>Status<select class="sel" data-pend="status" data-id="${esc(p.id)}">${['ABERTA','COBRADA','RESOLVIDA'].map(s=>`<option${p.status===s?' selected':''}>${s}</option>`).join('')}</select></label>
+        <label>Solução<select class="sel" data-pend="solucao" data-id="${esc(p.id)}"><option value="">—</option>${['REPOSIÇÃO','DESCONTO','DEVOLUÇÃO'].map(s=>`<option${p.solucao===s?' selected':''}>${s}</option>`).join('')}</select></label>
+        <label class="pend-obs">Observação<input class="txt" data-pend="obs" data-id="${esc(p.id)}" value="${esc(p.obs||'')}"></label></div>
+      <div class="pend-act"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(`Olá! Sobre a NF-e nº ${p.nNF}${p.fornecedor?` (${p.fornecedor})`:''}: recebemos com ${(REC_DIV[p.tipo]||p.tipo).toLowerCase()} de ${num(p.qtd)} ${p.un} de ${p.produto}.${p.foto?`\nFoto: ${p.foto}`:''}\nQual a solução (reposição, desconto ou devolução)?`)}">📲 Cobrar pelo WhatsApp</a></div></div></div>`;
+  const ab=(PEND.lista||[]).filter(p=>p.status!=='RESOLVIDA').length;
+  return `<div class="toolbar"><span class="badge badge-muted">Falta, avaria e troca em aberto continuam abatendo o "a comprar" até serem resolvidas. Avaria que ficou na fazenda aparece como "Avariado" no Estoque.</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="pendAtualizar">🔄 Atualizar</button></div>
+    ${chips}${PEND.erro?`<div class="nfe-aviso err">${esc(PEND.erro)}</div>`:''}
+    ${(PEND.lista||[]).map(card).join('')||`<div class="panel"><p class="mut" style="padding:14px">✔ Nenhuma pendência ${PEND.filtro==='TODAS'?'':'neste filtro'}.</p></div>`}
+    <p class="mut" style="font-size:11px;text-align:center">${ab} em aberto neste filtro</p>`;
+};
+async function pendSalvar(id, campo, valor){
+  const it=(PEND.lista||[]).find(p=>p.id===id); if(it) it[campo]=valor;
+  try{ const r=await nfePost({__pendencia:Object.assign({id},{[campo]:valor})}); if(r&&!r.fail){ toast('Pendência atualizada'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 300); return; } }catch(e){}
+  toast('Não consegui salvar (sem internet?) — tente de novo');
+}
 // ---- TELA: Contratos a entregar (NF-e fase 3) ----
 V.contratos=function(){
   if(!nfeServerOk()) return `<div class="nfe-aviso info" style="margin:0">📑 Contratos de entrega futura vêm das notas de <b>faturamento</b> (CFOP 5922/6922). Para ligar: cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> e implante o <b>Code.gs</b> novo.</div>`;
@@ -6054,7 +6149,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -6087,6 +6182,7 @@ function route(opts){
       if(REC.cam.modo==='nativo'){ v.srcObject=REC.cam.stream; v.play().catch(()=>{}); const st=document.getElementById('rec-cam-st'); if(st) st.textContent='Lendo… (leitor do aparelho)'; const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=REC.cam.torch?'':'none'; }
       else { recCameraParar(); setTimeout(recCameraIniciar, 50); } } }
   if(view!=='receber' && REC.cam) recCameraParar();
+  if(view==='pendencias' && !PEND.lista){ pendCarregar(); }
   if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
   try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
   _lastView=view;
@@ -6314,17 +6410,23 @@ document.addEventListener('change',e=>{
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
   if(e.target.dataset && e.target.dataset.reci!=null){ const it=REC.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.reci;
-    if(f==='qtd') it.qtd=_mmC(e.target.value); else { const v=e.target.value.trim(); if(v&&!PROD[v]) toast('Produto não encontrado — escolha da lista'); it.produto=PROD[v]?v:''; } route({keepScroll:true}); } return; }
+    if(f==='qtd') it.qtd=_mmC(e.target.value); else { const v=e.target.value.trim(); if(v&&!PROD[v]) toast('Produto não encontrado — escolha da lista'); it.produto=PROD[v]?v:''; } recRerender(); } return; }
   if(e.target.dataset && e.target.dataset.recf!=null){ REC[e.target.dataset.recf]=e.target.value; return; }
+  if(e.target.dataset && e.target.dataset.recd!=null){ const it=REC.itens[+e.target.dataset.i]; if(!it||!it.div) return; const f=e.target.dataset.recd;
+    if(f==='foto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ it.div.foto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
+    if(f==='ficou') it.div.ficou=e.target.checked; else if(f==='qtdNota') it.div.qtdNota=_mmC(e.target.value); else it.div[f]=e.target.value;
+    if(f!=='obs') recRerender(); return; }
+  if(e.target.id==='rec-canhoto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ REC.canhoto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
+  if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
-  if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') route({keepScroll:true}); return; }
+  if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') recRerender(); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
     else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
     else if(f==='produto'){ const v=e.target.value.trim(); if(v && !PROD[v]){ toast('Produto não encontrado no portfólio — escolha da lista'); }
       it.produto=PROD[v]?v:''; it.ok=!!PROD[v]; if(it.fonte==='auto') it.fonte='manual';
       if(PROD[v] && !it.fatorEdit) it.fator=nfeFatorDe(it.xprod,it.ucom,PROD[v].un); }
-    route({keepScroll:true}); return; }
+    recRerender(); return; }
   if(e.target.id==='compras-socomprar'){ comprasSoComprar=!!e.target.checked; route({keepScroll:true}); return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
@@ -6361,6 +6463,8 @@ document.addEventListener('click',e=>{
   if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
   const ecf=e.target.closest('#est-clsf .chip-f');
   if(ecf){ estoqueClasse=ecf.dataset.estf||''; ecf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); ecf.classList.add('on'); filterEstoque(); return; }
+  const pf=e.target.closest('#pend-f .chip-f');   // Pendências: filtro por status
+  if(pf){ PEND.filtro=pf.dataset.pendf; PEND.lista=null; route({keepScroll:true}); pendCarregar(); return; }
   const cls=e.target.closest('#compras-clsf .chip-f');   // Demanda: filtro por classe
   if(cls){ const v=cls.dataset.clsf; if(v===''){ comprasClsSel.clear(); } else if(comprasClsSel.has(v)){ comprasClsSel.delete(v); } else { comprasClsSel.add(v); } route({keepScroll:true}); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
@@ -6539,6 +6643,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
     else if(a.act==='recCam'){ recCameraIniciar(); }
+    else if(a.act==='recDiv'){ const it=REC.itens[+a.i]; if(it){ it.div={tipo:'FALTA', qtdNota:'', ficou:false, foto:'', obs:''}; route({keepScroll:true}); } }
+    else if(a.act==='recDivDel'){ const it=REC.itens[+a.i]; if(it){ it.div=null; route({keepScroll:true}); } }
+    else if(a.act==='pendAtualizar'){ PEND.lista=null; route({keepScroll:true}); pendCarregar(); }
     else if(a.act==='recCamParar'){ recCameraParar(); REC.msg=''; route({keepScroll:true}); }
     else if(a.act==='recTorch'){ recLanterna(); }
     else if(a.act==='recNum'){ recBuscarNumero(($('#rec-num')||{}).value); }
