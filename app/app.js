@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-153';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-154';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1483,7 +1483,7 @@ V.entradas=function(){
   }).join('');
   return `${prodDatalist()}
   ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
-    <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. <b>Não é pela câmera</b> — a leitura do código de barras do DANFE vem numa próxima etapa.</span></div>`}
+    <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. Para conferir o caminhão chegando, use <b>Receber nota</b>.</span></div>`}
   <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">digitada à mão — ou use “Importar XML da NF-e”</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Fornecedor<input class="txt" data-cmpf="fornecedor" value="${esc(d.fornecedor)}" placeholder="fornecedor"></label>
@@ -1640,10 +1640,33 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):''};
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null};
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
+}
+// botão "Atualizar": busca AGORA no e-mail e na pasta NFe/Entrada (sem esperar os 15 min) e recarrega a lista
+async function nfeCapturarAgora(){
+  if(!nfeServerOk()) return;
+  toast('Buscando notas no e-mail e na pasta NFe/Entrada…');
+  let d=null; try{ d=await nfeGet({acao:'capturar'}); }catch(e){}
+  await nfeListaCarregar(true);
+  const c=d&&d.captura;
+  if(d && d.ok && c) toast(c.lidas?`${c.lidas} arquivo(s) lido(s): ${c.novas} nova(s)${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.rejeitadas.length?` · ${c.rejeitadas.length} rejeitado(s)`:''}${c.erros.length?' · com erro — veja no painel':''}`:(c.erros.length?'Busca com erro — veja no painel':'Nenhum XML novo no e-mail nem na pasta'));
+  else if(d && d.erro==='ocupado') toast('A planilha está ocupada — tente de novo em instantes');
+  else if(d && /desconhecida/.test(d.erro||'')) toast('Lista atualizada (para buscar na hora, cole o Code.gs novo)');
+  else if(!d) toast('Sem conexão com a planilha');
+}
+// resumo da última busca automática (vem da planilha): quando foi, o que achou, erros/rejeitados
+function nfeCapturaHtml(c){
+  if(!c) return '';
+  const quando=new Date(String(c.em).replace(' ','T')), min=(Date.now()-quando.getTime())/60000;
+  const hora=isNaN(min)?esc(c.em):quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  const parado=!isNaN(min) && min>45;
+  return `<div class="mut" style="padding:8px 14px 0;font-size:12px">Última busca: <b>${hora}</b> · ${c.lidas} arquivo(s)${c.novas?` · ${c.novas} nova(s)`:''}${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}</div>
+    ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
+    ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
+    ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
 }
 async function nfeConferirServidor(chave){
   toast('Buscando o XML da nota…');
@@ -1693,6 +1716,7 @@ function nfeListaHtml(){
   return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">${(L.notas||[]).length} nota(s) · chegam por e-mail e pela pasta NFe/Entrada (a cada 15 min)</span>
       <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
+    ${nfeCapturaHtml(L.captura)}
     ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}</div>`;
 }
 // itens da nota no formato da planilha (NFE ITENS)
@@ -5425,7 +5449,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recSxAdd'){ REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='recSxDel'){ REC.itens.splice(+a.i,1); if(!REC.itens.length) REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
-    else if(a.act==='nfeListaAtualizar'){ toast('Atualizando notas…'); nfeListaCarregar(true); }
+    else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }

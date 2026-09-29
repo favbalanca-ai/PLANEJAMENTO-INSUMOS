@@ -214,6 +214,7 @@ Seguir o padrão existente (`__nome` no `doPost`). Nomes propostos:
 | Chamada | O que faz |
 |---|---|
 | `doGet ?acao=nfe_lista&status=...` | Lista notas da `NFE RECEBIDAS` por status, com itens |
+| `doGet ?acao=capturar` | Roda a captura (Gmail + pasta) na hora e devolve o resumo da busca |
 | `doGet ?acao=nfe&chave=...` | Devolve uma nota (cabeçalho + itens do XML + de-para aplicado) |
 | `doPost {__nfeClassifica:{chave, itens[]}}` | Grava o de-para, `NFE ITENS` e muda o status |
 | `doPost {__recebimento:{chave, itens[], por, data}}` | Entrada no razão (id = chave), status RECEBIDA |
