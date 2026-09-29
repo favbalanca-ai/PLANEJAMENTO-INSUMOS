@@ -1161,3 +1161,9 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 #nav a .nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fbc02d;color:#3a2c00;font-size:11px;font-weight:800;display:inline-grid;place-items:center}
 #nav a .nav-badge.alert{background:#e53935;color:#fff}
 @media (max-width:640px){ .nfe-lista .nfe-row{flex-direction:column;align-items:stretch} .nfe-row-act{justify-content:flex-end} }
+/* ===== NF-e (fase 3): contratos de entrega futura ===== */
+.nfe-ctr{display:flex;flex-direction:column;gap:3px;margin-top:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--ink2)}
+.nfe-ctr .sel{text-transform:none;letter-spacing:0;font-weight:500;max-width:100%}
+.nfe-warn-t{margin-top:6px;color:#8e1a14;font-weight:700;font-size:12px}
+.ctr-card.ctr-ok{opacity:.75}
+.ctr-card.ctr-parado{border:2px solid #f2c94c}
