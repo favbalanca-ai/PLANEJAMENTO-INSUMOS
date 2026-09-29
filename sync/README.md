@@ -105,6 +105,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     e a pasta `NFe/Entrada`; `processarXmlNfe()` valida, evita duplicar pela chave,
     salva em `NFe/XML/AAAA-MM/` e grava a `NFE RECEBIDAS` (status A CLASSIFICAR).
   - `doGet ?acao=nfe_lista&status=…&token=…` e `?acao=nfe&chave=…&token=…`;
+  - `doGet ?acao=capturar&token=…` → roda `capturarNfe` na hora (botão **Atualizar** do app).
+    Cada e-mail/arquivo é tratado à parte: um com erro não trava os outros (fica na Entrada e é
+    tentado de novo). O resumo da última busca (hora, lidas, novas, repetidas, rejeitadas com o
+    motivo, erros) fica na propriedade do script `NFE_CAPTURA` e vai em `nfe_lista.captura`;
     `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
 - **NF-e (fase 3)** — entrega futura: `__nfeClassifica` aceita `status` EM TRÂNSITO / A ENTREGAR /
   RECEBIDA / IGNORADA e `ref` (contrato da remessa). `nfeContratos_()` calcula faturado × entregue ×
