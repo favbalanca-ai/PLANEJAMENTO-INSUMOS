@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-154';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-155';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1640,7 +1640,7 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null};
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[]};
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
@@ -1652,7 +1652,7 @@ async function nfeCapturarAgora(){
   let d=null; try{ d=await nfeGet({acao:'capturar'}); }catch(e){}
   await nfeListaCarregar(true);
   const c=d&&d.captura;
-  if(d && d.ok && c) toast(c.lidas?`${c.lidas} arquivo(s) lido(s): ${c.novas} nova(s)${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.rejeitadas.length?` · ${c.rejeitadas.length} rejeitado(s)`:''}${c.erros.length?' · com erro — veja no painel':''}`:(c.erros.length?'Busca com erro — veja no painel':'Nenhum XML novo no e-mail nem na pasta'));
+  if(d && d.ok && c) toast(c.lidas?`${c.lidas} arquivo(s) lido(s): ${c.novas} nova(s)${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}${c.rejeitadas.length?` · ${c.rejeitadas.length} rejeitado(s)`:''}${(c.erros.length||c.ignoradas||c.rejeitadas.length)?' — veja o motivo no painel':''}`:(c.erros.length?'Busca com erro — veja no painel':'Nenhum XML novo no e-mail nem na pasta'));
   else if(d && d.erro==='ocupado') toast('A planilha está ocupada — tente de novo em instantes');
   else if(d && /desconhecida/.test(d.erro||'')) toast('Lista atualizada (para buscar na hora, cole o Code.gs novo)');
   else if(!d) toast('Sem conexão com a planilha');
@@ -1667,6 +1667,24 @@ function nfeCapturaHtml(c){
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
     ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
     ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
+}
+// o que aconteceu com cada arquivo lido (últimos 30): nova, repetida, ignorada (com botão p/ reabrir) ou rejeitada — com o motivo
+const NFE_HIST_ST={nova:['✅','entrou para classificar'],casada:['✅','casou com o recebimento'],duplicada:['🔁','repetida'],ignorada:['🚫','ignorada'],rejeitada:['❌','rejeitada'],cancelada:['⛔','cancelamento']};
+function nfeHistoricoHtml(L){
+  const h=L.historico||[]; if(!h.length) return '';
+  const ign={}; (L.ignoradas||[]).forEach(c=>ign[c]=1);
+  const quando=em=>{ const d=new Date(String(em).replace(' ','T')); return isNaN(d)?esc(em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
+  const it=h.map(x=>{ const st=NFE_HIST_ST[x.status]||['•',x.status], p=x.chave&&/^\d{44}$/.test(x.chave)?nfeChavePartes(x.chave):null;
+    return `<div class="nfe-hist-it"><span>${st[0]}</span><div><b>${esc(st[1])}</b> · <span class="mut">${quando(x.em)}</span>${p?` · NF ${esc(p.nNF)} · ${esc(nfeCnpjFmt(p.doc))}`:''}
+      <div class="mut" style="font-size:11px;word-break:break-all">${esc(x.arq||'')}${x.motivo?` — ${esc(x.motivo)}`:''}</div>
+      ${ign[x.chave]?`<button class="btn btn-outline btn-sm" style="margin-top:4px" data-act="nfeReabrir" data-chave="${esc(x.chave)}">Classificar mesmo assim</button>`:''}</div></div>`; }).join('');
+  const abre=!(L.notas||[]).length;   // lista vazia: já abre, p/ ver o porquê
+  return `<details class="nfe-hist"${abre?' open':''}><summary>Últimos arquivos lidos (${h.length})</summary>${it}</details>`;
+}
+async function nfeReabrir(chave){
+  try{ const r=await nfePost({__nfeReabrir:{chave}}); if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')||'falha');
+    toast('Nota voltou para "a classificar"'); await nfeListaCarregar(true); }
+  catch(e){ toast('Não deu para reabrir: '+(e.message||e)); }
 }
 async function nfeConferirServidor(chave){
   toast('Buscando o XML da nota…');
@@ -1717,7 +1735,8 @@ function nfeListaHtml(){
       <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(L.captura)}
-    ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}</div>`;
+    ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}
+    ${nfeHistoricoHtml(L)}</div>`;
 }
 // itens da nota no formato da planilha (NFE ITENS)
 // custo do item: o da própria nota; na REMESSA (valor simbólico) vale o custo do contrato de faturamento
@@ -5450,6 +5469,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recSxDel'){ REC.itens.splice(+a.i,1); if(!REC.itens.length) REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
+    else if(a.act==='nfeReabrir'){ nfeReabrir(a.chave); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }

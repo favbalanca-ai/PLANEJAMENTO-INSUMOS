@@ -109,6 +109,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     Cada e-mail/arquivo é tratado à parte: um com erro não trava os outros (fica na Entrada e é
     tentado de novo). O resumo da última busca (hora, lidas, novas, repetidas, rejeitadas com o
     motivo, erros) fica na propriedade do script `NFE_CAPTURA` e vai em `nfe_lista.captura`;
+    os últimos 30 arquivos lidos (nova/repetida/ignorada/rejeitada + motivo) ficam em
+    `NFE_CAPTURA_HIST` → `nfe_lista.historico` (e `nfe_lista.ignoradas` = chaves IGNORADA);
+  - `{__nfeReabrir:{chave}, token}` → nota IGNORADA volta para A CLASSIFICAR ("Classificar mesmo assim");
     `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
 - **NF-e (fase 3)** — entrega futura: `__nfeClassifica` aceita `status` EM TRÂNSITO / A ENTREGAR /
   RECEBIDA / IGNORADA e `ref` (contrato da remessa). `nfeContratos_()` calcula faturado × entregue ×

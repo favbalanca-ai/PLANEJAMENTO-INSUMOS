@@ -1219,3 +1219,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rec-alt-d summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ink2)}
 .rec-alt-d .rec-alt{padding:4px 12px 12px}
 .rec-big.is-busy{opacity:.6;pointer-events:none}
+/* NF-e: últimos arquivos lidos (o que aconteceu com cada um) */
+.nfe-hist{margin:8px 14px 12px;font-size:13px}
+.nfe-hist summary{cursor:pointer;color:var(--muted,#667);font-size:12px;padding:4px 0}
+.nfe-hist-it{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line,#e5e8ec)}
+.nfe-hist-it>span{flex:0 0 auto}
