@@ -1257,7 +1257,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-144';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-145';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2668,7 +2668,7 @@ V.entradas=function(){
   }).join('');
   return `${prodDatalist()}
   ${nfeImport?nfeConferirHtml():`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
-    <span class="mut">Escolha o XML da nota: o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real.</span></div>`}
+    <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. <b>Não é pela câmera</b> — a leitura do código de barras do DANFE vem numa próxima etapa.</span></div>`}
   <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">digitada à mão — ou use “Importar XML da NF-e”</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Fornecedor<input class="txt" data-cmpf="fornecedor" value="${esc(d.fornecedor)}" placeholder="fornecedor"></label>
@@ -2780,6 +2780,13 @@ function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(it.ok && PROD[it
 function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || ((s==='auto'||s==='ok') && +it.fator>0); }
 const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫']};
 async function nfeImportarArquivo(file){
+  // foto/câmera: nesta fase o app lê o ARQUIVO XML da nota, não o código de barras do DANFE (leitura pela câmera = fase 4)
+  if(/^image\//i.test(file.type||'') || /\.(jpe?g|png|heic|heif|webp|gif|bmp)$/i.test(file.name||'')){
+    alert('Isso é uma foto, não o XML da nota.\n\nPor enquanto o app lê o ARQUIVO XML da NF-e (o .xml que o fornecedor manda por e-mail ou que se baixa da SEFAZ). Salve o .xml no celular e escolha ele aqui.\n\nA leitura do código de barras do DANFE pela câmera vem numa próxima etapa.');
+    return; }
+  if(/\.pdf$/i.test(file.name||'') || /pdf/i.test(file.type||'')){
+    alert('Isso é o PDF (DANFE) da nota, não o XML.\n\nPeça ao fornecedor o arquivo .xml da NF-e (vem junto no e-mail) ou baixe na SEFAZ, e escolha o .xml aqui.');
+    return; }
   try{
     const nota=nfeLerXml(await file.text());
     if(!nota.temProt) throw new Error('XML sem protocolo de autorização. Use o XML autorizado (com nfeProc/protNFe).');
