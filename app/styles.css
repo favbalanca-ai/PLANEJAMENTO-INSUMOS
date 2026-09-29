@@ -1036,3 +1036,45 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .pend-list{padding:4px 18px 14px;font-size:13px}
 .pend-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--line)}
 .pend-row .btn{flex:none}
+/* ===== Demanda: filtro por classe + relatório PDF ===== */
+.dem-only{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink2);font-weight:600;cursor:pointer}
+#print-area .dm{font:11px/1.4 Arial,Helvetica,sans-serif;color:#1d2a30;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+@media print{
+  #print-area .dm-head{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;padding:0 0 10px;border-bottom:3px solid #1f4a55;margin-bottom:12px}
+  #print-area .dm-kicker{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:#4d7a86;font-weight:700}
+  #print-area .dm h1{font-size:22px;margin:2px 0 0;color:#16323a}
+  #print-area .dm-sub{font-size:10px;color:#667}
+  #print-area .dm-filt{display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:55%}
+  #print-area .dm-filt span{font-size:9.5px;border:1px solid #b9cdd3;border-radius:10px;padding:1px 8px;color:#2d4a52;background:#f2f7f8;text-align:right}
+  #print-area .dm-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 14px}
+  #print-area .dm-kpi{border:1px solid #cfdcdf;border-top:4px solid #1f4a55;border-radius:6px;padding:7px 9px;background:#fbfdfd}
+  #print-area .dm-kpi.k2{border-top-color:#2e7d32}#print-area .dm-kpi.k3{border-top-color:#7aa3ad}#print-area .dm-kpi.k4{border-top-color:#c62828}
+  #print-area .dm-kpi small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#5c6f75;font-weight:700}
+  #print-area .dm-kpi b{display:block;font-size:16px;margin:2px 0 1px;color:#16323a}
+  #print-area .dm-kpi i{font-style:normal;font-size:9px;color:#7a8a8f}
+  #print-area .dm-h2{font-size:12.5px;margin:12px 0 6px;padding:0 0 3px;border-bottom:1.5px solid #1f4a55;color:#16323a;text-transform:uppercase;letter-spacing:.05em}
+  #print-area .dm-pb{page-break-before:always}
+  #print-area .dm-t{width:100%;border-collapse:collapse;margin:0 0 8px;font-size:10.5px}
+  #print-area .dm-t th,#print-area .dm-t td{border:0;border-bottom:1px solid #dde6e8;padding:4px 6px;vertical-align:middle}
+  #print-area .dm-t thead th{background:#1f4a55;color:#fff;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+  #print-area .dm-t thead{display:table-header-group}
+  #print-area .dm-t tbody tr:nth-child(even) td{background:#f5f8f9}
+  #print-area .dm-t tfoot th{background:#e6eef0;color:#16323a;border-top:1.5px solid #1f4a55}
+  #print-area .dm-t td.mut{color:#667}
+  #print-area .dm-bar{display:inline-block;width:72%;height:8px;background:#e7eef0;border-radius:4px;vertical-align:middle;overflow:hidden}
+  #print-area .dm-bar span{display:block;height:100%;background:#2f7d8c;border-radius:4px}
+  #print-area .dm-sum em{font-style:normal;font-size:9.5px;color:#456;margin-left:6px}
+  #print-area .dm-cls{margin:0 0 10px;break-inside:auto}
+  #print-area .dm-cls-h{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 8px;background:#e9f1f3;border-left:4px solid #1f4a55;margin:10px 0 0;break-after:avoid;page-break-after:avoid}
+  #print-area .dm-cls-h b{font-size:12px;color:#16323a;text-transform:uppercase;letter-spacing:.03em}
+  #print-area .dm-cls-h span{font-size:9.5px;color:#456}
+  #print-area .dm-det{table-layout:fixed}
+  #print-area .dm-det td{overflow-wrap:anywhere}
+  #print-area .dm-det tr.buy td:nth-child(6){color:#1b5e20}
+  #print-area .dm-det tr{break-inside:avoid;page-break-inside:avoid}
+  #print-area .dm-np{font-size:9px;color:#b3261e;font-weight:700}
+  #print-area .dm-total{display:flex;justify-content:space-between;align-items:center;margin:12px 0 6px;padding:8px 12px;background:#1f4a55;color:#fff;border-radius:6px;font-weight:700;letter-spacing:.04em}
+  #print-area .dm-total b{font-size:15px}
+  #print-area .dm-foot{font-size:9px;color:#667;margin:4px 0 16px}
+  #print-area .dm-sign{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;font-size:10px;color:#333;margin-top:22px;break-inside:avoid}
+}
