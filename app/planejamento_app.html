@@ -1329,7 +1329,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-152';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-153';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2664,8 +2664,27 @@ function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(CO
 function pushEntrada(c){
   const url=syncUrl(); if(!url||!c||c.pushed) return Promise.resolve(false);
   if(!c._u) c._u=c.ts||Date.now();
-  return syncPost(url, JSON.stringify({__entrada:{id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens, nfe:c.nfe||null, ts:c.ts||null, _u:c._u}}))
-    .then(()=>{ c.pushed=true; saveCompras(); try{ updateEditBadge(); }catch(e){} return true; }).catch(()=>false);
+  return syncPost(url, JSON.stringify({__entrada:compraPayload(c)}))
+    .then(r=>{ if(r && r.fail>0) return false;   // planilha ocupada: fica pendente e vai no próximo envio
+      c.pushed=true; saveCompras(); try{ updateEditBadge(); }catch(e){} return true; }).catch(()=>false);
+}
+function compraPayload(c){ if(!c._u) c._u=c.ts||Date.now();
+  return {id:c.id, fornecedor:c.fornecedor, data:c.data, nf:c.nf, obs:c.obs, itens:c.itens, nfe:c.nfe||null, ts:c.ts||null, _u:c._u}; }
+// TODAS as compras pendentes + exclusões numa requisição só ({__entradas:[…]}) — bem mais rápido que 1 por compra.
+// Planilha com Code.gs antigo (não devolve "ids") → cai no envio de 1 em 1, como antes.
+async function pushComprasLote(){
+  const url=syncUrl(); if(!url||!COMPRAS) return 0;
+  const novas=(COMPRAS.registros||[]).filter(c=>!c.pushed), exc=comprasExcluidas().filter(e=>!e.ok);
+  if(!novas.length && !exc.length) return 0;
+  const lote=novas.map(compraPayload).concat(exc.map(e=>({id:e.id, del:true, itens:[], _u:e._u})));
+  let r=null; try{ r=await syncPost(url, JSON.stringify({__entradas:lote})); }catch(e){ return 0; }
+  if(r && Array.isArray(r.ids)){
+    const ok={}; r.ids.forEach(id=>ok[id]=1);
+    novas.forEach(c=>{ if(ok[c.id]) c.pushed=true; }); exc.forEach(e=>{ if(ok[e.id]) e.ok=true; });
+    saveCompras(); try{ updateEditBadge(); }catch(e){} return r.ids.length; }
+  if(r && r.fail>0) return 0;                                             // ocupada: tenta no próximo envio
+  for(const c of novas) await pushEntrada(c);                             // Code.gs antigo: 1 por vez
+  return (await pushExclusoesCompras())+novas.length;
 }
 // compras EXCLUÍDAS neste aparelho: ficam numa lista (COMPRAS.excluidas) até a planilha confirmar.
 // A planilha apaga as linhas [#id] do razão e guarda uma "lápide" — os outros aparelhos apagam também.
@@ -2677,12 +2696,12 @@ function excluirCompra(id){
   // srv = já estava na planilha: guarda os itens p/ tirar do saldo até o próximo puxar trazer o razão novo
   ex.push({id, _u:Date.now(), srv:!!c.pushed, itens:c.pushed?(c.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null});
   COMPRAS.excluidas=ex.slice(-300); saveCompras();
-  pushExclusoesCompras().then(n=>{ if(n) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+  pushComprasLote().then(n=>{ if(n) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
 }
 function pushExclusoesCompras(){
   const url=syncUrl(), pend=comprasExcluidas().filter(e=>!e.ok); if(!url||!pend.length) return Promise.resolve(0);
   return Promise.all(pend.map(e=>syncPost(url, JSON.stringify({__entrada:{id:e.id, del:true, itens:[], _u:e._u}}))
-    .then(()=>{ e.ok=true; return 1; }).catch(()=>0)))
+    .then(r=>{ if(r && r.fail>0) return 0; e.ok=true; return 1; }).catch(()=>0)))
     .then(r=>{ saveCompras(); try{ updateEditBadge(); }catch(e){} return r.reduce((a,b)=>a+b,0); });
 }
 // puxar: a lista do servidor (aba COMPRAS APP) entra neste aparelho. Mais novo (_u) vence.
@@ -2706,7 +2725,7 @@ function comprasApplyPulled(map){
   // migração: compra que subiu ANTES desta versão (está no razão mas não na aba COMPRAS APP) → reenvia (não duplica)
   const falta=regs.filter(c=>c.pushed && !map[c.id]);
   if(falta.length && syncUrl()){ falta.forEach(c=>{ c.pushed=false; }); changed=true;
-    setTimeout(()=>{ Promise.all(falta.map(pushEntrada)).then(()=>{ try{ if(location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }catch(e){} }); }, 0); }
+    setTimeout(()=>{ pushComprasLote().then(()=>{ try{ if(location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }catch(e){} }); }, 0); }
   if(changed) saveCompras();
   return changed;
 }
@@ -2715,7 +2734,7 @@ function pushEntradasPendentes(){
   const pend=(COMPRAS.registros||[]).filter(c=>!c.pushed);
   if(!pend.length){ toast('Nenhuma compra pendente'); return; }
   toast('Enviando '+pend.length+' compra(s)…');
-  Promise.all(pend.map(pushEntrada)).then(()=>{ route({keepScroll:true}); toast('Compras enviadas à planilha'); });
+  pushComprasLote().then(()=>{ route({keepScroll:true}); toast('Compras enviadas à planilha'); });
 }
 // envia a SAÍDA de uma recomendação APROVADA para a planilha (razão de estoque, idempotente pelo id).
 // Assim a baixa aparece no estoque de TODOS os aparelhos, não só onde foi aprovada.
@@ -7467,6 +7486,7 @@ async function syncPull(opts){
     if(h && h===lastServerHash){ syncBusy=false; setSyncStatus('ok'); markSynced(); return true; }
   }
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
+  const t0=Date.now(), seg=()=>((Date.now()-t0)/1000).toFixed(1).replace('.',',')+' s';
   try{
     const d=await syncGet(url,opts);
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
@@ -7474,12 +7494,12 @@ async function syncPull(opts){
     const raw=JSON.stringify(d);
     markSynced();
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
-      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças).'); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças'); }
+      if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças) · '+seg()); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças · '+seg()); }
       syncBusy=false; setSyncStatus('ok'); return true;
     }
     lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
-    addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões`);
-    if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões.`);
+    addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões · ${seg()}`);
+    if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões · ${seg()}.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
     syncBusy=false; setSyncStatus('ok');
     // re-render: manual = normal; automático = só se você NÃO estiver mexendo, e sem rolar a tela
@@ -7513,7 +7533,7 @@ async function syncPost(url, body){
 async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
-  try{ await Promise.all((COMPRAS.registros||[]).filter(c=>!c.pushed).map(pushEntrada)); await pushExclusoesCompras(); await pushSaidasPendentes(); }catch(e){}
+  try{ await pushComprasLote(); await pushSaidasPendentes(); }catch(e){}
   try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
