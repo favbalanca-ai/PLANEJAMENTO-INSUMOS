@@ -1167,6 +1167,17 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .nfe-it-map .nfe-prod{grid-column:1/-1}
   .nfe-foot .spacer{display:none}
 }
+/* ===== NF-e (fase 2): notas a classificar + contador no menu ===== */
+.nfe-lista .nfe-row{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line)}
+.nfe-lista .nfe-row:first-of-type{border-top:0}
+.nfe-row-main{min-width:0}
+.nfe-row-main b{font-size:13.5px;margin-right:8px}
+.nfe-row-main .nfe-tipo{font-size:11px;font-weight:800}
+.nfe-row-main .mut{font-size:12px;margin-top:2px;overflow-wrap:anywhere}
+.nfe-row-act{display:flex;gap:6px;flex:none}
+#nav a .nav-badge{margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#fbc02d;color:#3a2c00;font-size:11px;font-weight:800;display:inline-grid;place-items:center}
+#nav a .nav-badge.alert{background:#e53935;color:#fff}
+@media (max-width:640px){ .nfe-lista .nfe-row{flex-direction:column;align-items:stretch} .nfe-row-act{justify-content:flex-end} }
 
 </style>
 </head>
@@ -1257,7 +1268,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-145';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-146';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2667,7 +2678,7 @@ V.entradas=function(){
       ${c.obs?`<div class="rc-obs mut">${esc(c.obs)}</div>`:''}</div>`;
   }).join('');
   return `${prodDatalist()}
-  ${nfeImport?nfeConferirHtml():`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
+  ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
     <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. <b>Não é pela câmera</b> — a leitura do código de barras do DANFE vem numa próxima etapa.</span></div>`}
   <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">digitada à mão — ou use “Importar XML da NF-e”</span></div>
     <div class="app-grid" style="padding:12px 14px">
@@ -2787,19 +2798,91 @@ async function nfeImportarArquivo(file){
   if(/\.pdf$/i.test(file.name||'') || /pdf/i.test(file.type||'')){
     alert('Isso é o PDF (DANFE) da nota, não o XML.\n\nPeça ao fornecedor o arquivo .xml da NF-e (vem junto no e-mail) ou baixe na SEFAZ, e escolha o .xml aqui.');
     return; }
+  try{ const txt=await file.text(); nfeAbrirXml(txt, file.name||'', 'arquivo'); }catch(e){ toast('NF-e: '+e.message); }
+}
+// abre a conferência de um XML (arquivo escolhido no aparelho OU nota capturada pela planilha — fase 2)
+function nfeAbrirXml(txt, nome, origem){
   try{
-    const nota=nfeLerXml(await file.text());
+    const nota=nfeLerXml(txt);
     if(!nota.temProt) throw new Error('XML sem protocolo de autorização. Use o XML autorizado (com nfeProc/protNFe).');
     if(nota.cstat!=='100') throw new Error(`nota não autorizada pela SEFAZ (cStat ${nota.cstat||'—'})`);
     if(!nfeChaveOk(nota.chave)) throw new Error('chave de acesso inválida (dígito verificador não confere)');
     const ja=nfeJaEntrou(nota.chave); if(ja) throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)})`);
     if(!nota.itens.length) throw new Error('a nota não tem itens');
     nota.tipo=nfeTipoNota(nota.itens);
-    nfeImport={nota, arquivo:file.name||'', data:_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
+    nfeImport={nota, arquivo:nome, origem, data:_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
+    // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
+    if(origem==='arquivo' && nfeServerOk()){ nfeImport.xml=txt; nfeImport.uploadP=nfePost({__nfeUpload:{xml:txt}}).catch(()=>null); }
     route(); window.scrollTo(0,0);
     const nAuto=nfeImport.itens.filter(i=>i.fonte==='auto').length;
     toast(`NF-e ${nota.nNF} lida: ${nota.itens.length} item(ns)${nAuto?` · ${nAuto} automático(s)`:''} — confira e confirme`);
+    return true;
+  }catch(e){ toast('NF-e: '+e.message); return false; }
+}
+// ---------- FASE 2: notas capturadas pela planilha (Gmail + pasta do Drive) ----------
+const NFE_TOKEN_KEY='planejamento_nfe_token', NFE_PEND_KEY='planejamento_nfe_pend';
+let NFE_LISTA=null;   // {ts, notas:[…], alertas:[…], erro}
+function nfeToken(){ try{ return localStorage.getItem(NFE_TOKEN_KEY)||''; }catch(e){ return ''; } }
+// a planilha tem a fase 2 (Code.gs novo implantado) e este aparelho tem o token
+function nfeServerOk(){ return !!(syncUrl() && nfeToken() && DATA && DATA.nfe_resumo); }
+function nfeGet(params){ const url=syncUrl(); const q=new URLSearchParams(Object.assign({}, params, {token:nfeToken(), t:Date.now()})).toString();
+  return syncFetch(url+(url.indexOf('?')<0?'?':'&')+q, {method:'GET', cache:'no-store', redirect:'follow'}, 60000).then(r=>r.json()); }
+function nfePost(body){ return syncPost(syncUrl(), JSON.stringify(Object.assign({token:nfeToken()}, body))); }
+function nfeListaCarregar(force){
+  if(!nfeServerOk()) return Promise.resolve(null);
+  if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
+  return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):''};
+    if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
+    nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
+  }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
+}
+async function nfeConferirServidor(chave){
+  toast('Buscando o XML da nota…');
+  try{ const d=await nfeGet({acao:'nfe', chave}); if(!d||!d.ok) throw new Error((d&&d.erro)||'falha');
+    const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
+    nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha');
   }catch(e){ toast('NF-e: '+e.message); }
+}
+// classificação que não conseguiu subir (sem internet) fica na fila e vai no próximo ENVIAR
+function nfePend(){ try{ return JSON.parse(localStorage.getItem(NFE_PEND_KEY))||[]; }catch(e){ return []; } }
+function nfePendSave(a){ try{ localStorage.setItem(NFE_PEND_KEY, JSON.stringify(a)); }catch(e){} }
+async function nfeEnviarClassif(cl){
+  const envio=Object.assign({}, cl); delete envio.xml;
+  try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.chave!==cl.chave)); updateEditBadge(); return true; } }catch(e){}
+  nfePendSave(nfePend().filter(x=>x.chave!==cl.chave).concat([cl])); updateEditBadge(); return false;
+}
+async function nfeFlushPend(){ if(!nfeServerOk()) return; const a=nfePend(); if(!a.length) return;
+  for(const cl of a){ if(cl.xml){ try{ await nfePost({__nfeUpload:{xml:cl.xml}}); }catch(e){} } await nfeEnviarClassif(cl); }
+  updateEditBadge(); try{ updateSyncBar(); }catch(e){} }
+function nfeIgnorar(chave){
+  const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
+  const mot=prompt(`Ignorar a NF-e ${nt.nNF||''} de ${nt.fornecedor||''}?\nEla sai da lista e NÃO entra no estoque.\n\nMotivo (opcional):`,'não é compra de insumo');
+  if(mot===null) return;
+  nfeEnviarClassif({chave, status:'IGNORADA', obs:mot||'ignorada no app', itens:[]});
+  if(NFE_LISTA) NFE_LISTA.notas=NFE_LISTA.notas.filter(x=>x.chave!==chave);
+  nfeNavBadge(); route({keepScroll:true}); toast('Nota ignorada');
+}
+// contador no menu (Compras): notas a classificar + alertas de cancelamento
+function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entradas"]'); if(!a) return;
+  const r=(DATA&&DATA.nfe_resumo)||{}, n=(+r.aClassificar||0)+(+r.alertas||0); let b=a.querySelector('.nav-badge');
+  if(!n){ if(b) b.remove(); return; } if(!b){ b=document.createElement('span'); b.className='nav-badge'; a.appendChild(b); }
+  b.textContent=n; b.title=`${r.aClassificar||0} nota(s) a classificar${r.alertas?` · ${r.alertas} alerta(s)`:''}`; b.classList.toggle('alert', !!r.alertas); }
+function nfeListaHtml(){
+  if(!syncUrl()) return '';
+  if(!nfeToken()) return `<div class="nfe-aviso info" style="margin:0 0 14px">📥 As notas que chegam <b>por e-mail</b> ou pela pasta <b>NFe/Entrada</b> do Drive aparecem aqui. Para ligar, cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> (está na aba CONFIG NFE da planilha).</div>`;
+  if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
+  const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
+  const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
+  const rows=(L.notas||[]).map(nt=>`<div class="nfe-row">
+      <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(nt.tipo)}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span>
+        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
+      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Conferir</button>
+        <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
+  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">${(L.notas||[]).length} nota(s) · chegam por e-mail e pela pasta NFe/Entrada (a cada 15 min)</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
+    ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
+    ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}</div>`;
 }
 function nfeConfirmar(){
   const imp=nfeImport; if(!imp) return; const n=imp.nota;
@@ -2817,6 +2900,13 @@ function nfeConfirmar(){
     imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
       custo:i.ignorar?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:now}; });
     saveDeParaLocal(); }
+  if(nfeServerOk()){
+    const cl={chave:n.chave, status:'RECEBIDA', data:rec.data, por:'app', xml:imp.origem==='arquivo'?imp.xml:'',
+      itens:imp.itens.map(i=>({n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:i.ignorar?'':i.produto, fator:+i.fator||1,
+        qtd:i.ignorar?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:(PROD[i.produto]||{}).un||'', custo:i.ignorar?0:+nfeCustoReal(i,i.fator).toFixed(4), ignorar:!!i.ignorar}))};
+    (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl));
+    if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
+  }
   nfeImport=null; route(); updateEditBadge();
   toast(`Entrada da NF-e ${n.nNF} registrada: ${itens.length} produto(s)`+(syncUrl()?' — enviando à planilha…':''));
   pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
@@ -5610,6 +5700,12 @@ V.sync = function(){
         <input class="txt" id="sync-url" value="${esc(url)}" placeholder="https://script.google.com/macros/s/…/exec" style="flex:1;min-width:260px">
         <button class="btn btn-outline btn-sm" data-act="sync-save">Salvar URL</button>
       </div>
+      <label class="mut" style="font-size:12px;font-weight:700;display:block;margin-top:14px">Token da NF-e <span style="font-weight:500">(aba CONFIG NFE da planilha · uma vez por aparelho)</span></label>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
+        <input class="txt" id="nfe-token" type="password" autocomplete="off" value="${esc(nfeToken())}" placeholder="cole aqui o TOKEN" style="flex:1;min-width:220px">
+        <button class="btn btn-outline btn-sm" data-act="nfeTokenSave">Salvar token</button>
+        <span class="mut" style="font-size:12px;align-self:center">${nfeToken()?(DATA&&DATA.nfe_resumo?'✔ NF-e ligada':'token salvo — falta o Code.gs novo'):'sem token: a lista de notas por e-mail fica desligada'}</span>
+      </div>
       <label class="switch" style="margin-top:16px">
         <input type="checkbox" id="sync-auto" ${on?'checked':''} data-edit="autoSync">
         <span class="track"></span>
@@ -5669,7 +5765,9 @@ function route(opts){
   if(view==='timeline' && (timelineTipo || timelineQ)) filterTimeline();
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
-  if(view==='mapa'){ setTimeout(mapaInit, 40); }   // inicializa o Leaflet após o HTML entrar no DOM
+  if(view==='mapa'){ setTimeout(mapaInit, 40); }
+  if(view==='entradas'){ setTimeout(()=>nfeListaCarregar(), 60); }
+  try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
   _lastView=view;
 }
 let _lastView=null;
@@ -6108,6 +6206,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
+    else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
+    else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
+    else if(a.act==='nfeListaAtualizar'){ toast('Atualizando notas…'); nfeListaCarregar(true); }
+    else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
     else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
@@ -6764,6 +6866,7 @@ function applyPulledData(d){
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
+  try{ setTimeout(nfeNavBadge, 50); }catch(e){}
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -6890,6 +6993,7 @@ async function syncPush(opts){
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
+  try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
@@ -7205,6 +7309,7 @@ function pendingInfo(){
     if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
     if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
     if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
+    add(nfePend().length, 'nota(s) NF-e a enviar');
   }catch(e){}
   return {total, parts};
 }

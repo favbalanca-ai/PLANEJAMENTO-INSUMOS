@@ -85,7 +85,7 @@ function readData(){
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), retornos:readRetornos(),
     movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
     result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'), equipe_sst:readEquipeSST(),
-    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe() };
+    limites_app:readMapApp('LIMITES APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_() };
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -336,6 +336,205 @@ function writeDeParaNfe(itens){
     n++; });
   return { rows:n };
 }
+/* =====================================================================================
+   NF-e — FASE 2: captura automática dos XMLs (Gmail + pasta do Drive), índice das notas,
+   endpoints com token e cancelamento. Ver docs/NFE_RECEBIMENTO.md (seções 4, 5 e 11).
+   ► Rode setupNfe() UMA vez pelo editor (autoriza Gmail/Drive, cria pastas/abas/token/gatilho).
+   ===================================================================================== */
+var NFE_CONFIG_SHEET = 'CONFIG NFE', NFE_IDX_SHEET = 'NFE RECEBIDAS', NFE_ITENS_SHEET = 'NFE ITENS', NFE_LABEL = 'NFE-OK';
+var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
+var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
+  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM'];
+var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
+var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP'];   // colunas guardadas como texto
+
+// aba com colunas achadas PELO CABEÇALHO (cria a aba/colunas que faltarem; colunas de texto não perdem zero à esquerda)
+function sheetCols_(name, cols){
+  var s = sh(name), novas = [];
+  if (!s){ s = ss().insertSheet(name); s.getRange(1,1,1,cols.length).setValues([cols]); s.setFrozenRows(1); novas = cols.slice(); }
+  var lastC = Math.max(1, s.getLastColumn()), head = s.getRange(1,1,1,lastC).getValues()[0], idx = {};
+  for (var c = 0; c < head.length; c++){ var k = _hkey(head[c]); if (k && !(k in idx)) idx[k] = c; }
+  cols.forEach(function(h){ var k = _hkey(h); if (!(k in idx)){ lastC++; s.getRange(1,lastC).setValue(h); idx[k] = lastC - 1; novas.push(h); } });
+  // colunas de texto (chave, CNPJ, código): formato texto só quando a coluna é criada (não perde zero à esquerda)
+  novas.forEach(function(h){ if (NFE_TEXTO.indexOf(h) >= 0) s.getRange(1, idx[_hkey(h)] + 1, s.getMaxRows(), 1).setNumberFormat('@'); });
+  return { s:s, idx:idx, ncol:lastC, col:function(h){ return idx[_hkey(h)]; } };
+}
+function _rowObj(t, r){ var o = {}; Object.keys(t.idx).forEach(function(k){ o[k] = r[t.idx[k]]; }); return o; }
+function _fmtD(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(v).slice(0,10); }
+function _fmtDT(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : S(v); }
+
+// ---- configuração (aba CONFIG NFE: CHAVE | VALOR | OBS) ----
+function nfeConfig_(){
+  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[] }; if (!s) return cfg;
+  var last = s.getLastRow(); if (last < 2) return cfg;
+  var v = s.getRange(2,1,last-1,2).getValues();
+  v.forEach(function(r){ var k = _hkey(r[0]), val = S(r[1]);
+    if (k === 'TOKEN') cfg.token = val; else if (k === 'PASTANFE') cfg.pasta = val;
+    else if (k === 'PRODUTOR' && val) cfg.produtores.push(val.replace(/\D/g,'')); });
+  return cfg;
+}
+function nfeTokenOk_(tk){ var t = nfeConfig_().token; return !!t && S(tk) === t; }
+function _pasta(parent, nome){ var it = parent.getFoldersByName(nome); return it.hasNext() ? it.next() : parent.createFolder(nome); }
+function nfePastas_(cfg){
+  var raiz = DriveApp.getFolderById(cfg.pasta);
+  return { raiz:raiz, entrada:_pasta(raiz,'Entrada'), xml:_pasta(raiz,'XML'), rejeitados:_pasta(raiz,'Rejeitados') };
+}
+// Rode UMA vez pelo editor do Apps Script (menu de funções → setupNfe → Executar). Pode rodar de novo sem problema.
+function setupNfe(){
+  var t = sheetCols_(NFE_CONFIG_SHEET, NFE_CONFIG_COLS), cfg = nfeConfig_(), s = t.s;
+  var add = function(k, v, obs){ s.appendRow([k, v, obs]); };
+  if (!cfg.token){ add('TOKEN', Utilities.getUuid().replace(/-/g,''), 'Cole este token no app: Sincronizar → Token da NF-e (uma vez por aparelho). Não compartilhe.'); }
+  var pasta = null; try { if (cfg.pasta) pasta = DriveApp.getFolderById(cfg.pasta); } catch (e) { pasta = null; }
+  if (!pasta){ pasta = _pasta(DriveApp.getRootFolder(), 'NFe'); add('PASTA NFE', pasta.getId(), 'Pasta NFe no Drive (Entrada / XML / Rejeitados). Jogue XML manual em NFe/Entrada.'); }
+  var temProd = s.getLastRow() >= 2 && s.getRange(2,1,s.getLastRow()-1,1).getValues().some(function(r){ return _hkey(r[0]) === 'PRODUTOR'; });
+  if (!temProd) add('PRODUTOR', '', 'Coloque aqui o CPF ou CNPJ de cada produtor (uma linha PRODUTOR por produtor). Só notas para eles entram.');
+  nfePastas_(nfeConfig_());
+  sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS); sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS);
+  var tem = ScriptApp.getProjectTriggers().some(function(g){ return g.getHandlerFunction() === 'capturarNfe'; });
+  if (!tem) ScriptApp.newTrigger('capturarNfe').timeBased().everyMinutes(15).create();
+  (GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL));
+  return 'NF-e configurada: pastas, abas, token e gatilho de 15 min.';
+}
+
+// ---- leitura do XML (XmlService; procura pelo NOME local, com ou sem namespace) ----
+function _xfirst(el, name){ if (!el) return null; var k = el.getChildren();
+  for (var i = 0; i < k.length; i++) if (k[i].getName() === name) return k[i];
+  for (var j = 0; j < k.length; j++){ var r = _xfirst(k[j], name); if (r) return r; } return null; }
+function _xall(el, name, out){ out = out || []; if (!el) return out; el.getChildren().forEach(function(c){ if (c.getName() === name) out.push(c); else _xall(c, name, out); }); return out; }
+function _xt(el, name){ var x = _xfirst(el, name); return x ? S(x.getText()) : ''; }
+function nfeTipoCfopGs_(cfop){ var c = S(cfop).replace(/\D/g,''), f = c.slice(1);
+  if (/^[567]\d{3}$/.test(c)){ if (f === '922') return 'FATURAMENTO'; if (f === '116' || f === '117') return 'REMESSA'; if (/^1(0[1-9]|1[0-9]|2[0-4])$/.test(f)) return 'VENDA'; }
+  return 'OUTRA'; }
+function nfeLerGs_(txt){
+  var root = XmlService.parse(txt).getRootElement();
+  var ev = _xfirst(root, 'infEvento') || (root.getName() === 'infEvento' ? root : null);
+  if (ev && !_xfirst(root, 'infNFe')){
+    var ret = _xfirst(root, 'retEvento');
+    return { evento:true, tp:_xt(ev,'tpEvento'), chave:_xt(ev,'chNFe'), cstat:ret ? _xt(ret,'cStat') : '', data:_xt(ev,'dhEvento').slice(0,10) };
+  }
+  var inf = _xfirst(root, 'infNFe'); if (!inf) return { erro:'não é XML de NF-e' };
+  var prot = _xfirst(root, 'infProt'), ide = _xfirst(inf,'ide'), emit = _xfirst(inf,'emit'), dest = _xfirst(inf,'dest');
+  var tipos = _xall(inf,'det').map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
+  var tipo = tipos.indexOf('FATURAMENTO')>=0 ? 'FATURAMENTO' : tipos.indexOf('REMESSA')>=0 ? 'REMESSA' : tipos.indexOf('VENDA')>=0 ? 'VENDA' : 'OUTRA';
+  var idAttr = inf.getAttribute('Id');
+  return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
+    nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
+    cnpj:(_xt(emit,'CNPJ') || _xt(emit,'CPF')).replace(/\D/g,''), fornecedor:_xt(emit,'xNome'),
+    dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
+    ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length };
+}
+// texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
+function _blobTxt(b){ var t = b.getDataAsString('UTF-8'); if (/encoding=["']ISO-8859-1["']/i.test(t.slice(0,120))) t = b.getDataAsString('ISO-8859-1'); return t.replace(/^﻿/,''); }
+// arquivos XML dentro de um anexo/arquivo (abre .zip)
+function _nfeBlobs(b){ var n = S(b.getName()).toLowerCase(), ct = S(b.getContentType()).toLowerCase();
+  if (/\.zip$/.test(n) || ct.indexOf('zip') >= 0){ try { return Utilities.unzip(b).filter(function(x){ return /\.xml$/i.test(x.getName()); }); } catch (e) { return []; } }
+  if (/\.xml$/.test(n) || ct.indexOf('xml') >= 0) return [b];
+  return []; }
+function _nfeLinha_(t, chave){ var s = t.s, last = s.getLastRow(); if (last < 2) return 0;
+  var v = s.getRange(2, t.col('CHAVE') + 1, last - 1, 1).getValues();
+  for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) return i + 2; return 0; }
+function _setCells_(t, row, vals){ Object.keys(vals).forEach(function(h){ t.s.getRange(row, t.col(h) + 1).setValue(vals[h]); }); }
+function _salvaXml_(pastas, chave, emissao, txt, sufixo){
+  var mes = _pasta(pastas.xml, S(emissao).slice(0,7) || 'sem-data'), nome = chave + '-' + (sufixo || 'nfe') + '.xml', it = mes.getFilesByName(nome);
+  return it.hasNext() ? it.next().getId() : mes.createFile(nome, txt, MimeType.XML).getId(); }
+// PROCESSA 1 XML: valida → (cancelamento) → sem duplicar → salva no Drive → linha na NFE RECEBIDAS
+// devolve {status:'nova'|'duplicada'|'ignorada'|'cancelada'|'rejeitada', chave, motivo}
+function processarXmlNfe(txt, origem){
+  var cfg = nfeConfig_(); if (!cfg.pasta) return { status:'rejeitada', motivo:'NF-e não configurada (rode setupNfe)' };
+  var n; try { n = nfeLerGs_(txt); } catch (e) { return { status:'rejeitada', motivo:'XML inválido' }; }
+  if (n.erro) return { status:'rejeitada', motivo:n.erro };
+  var pastas = nfePastas_(cfg), t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), agora = new Date();
+  if (n.evento){   // eventos: só o CANCELAMENTO (110111) muda algo
+    if (n.tp !== '110111') return { status:'rejeitada', chave:n.chave, motivo:'evento ' + n.tp + ' não tratado' };
+    if (['135','136','155'].indexOf(n.cstat) < 0) return { status:'rejeitada', chave:n.chave, motivo:'cancelamento não homologado (cStat ' + n.cstat + ')' };
+    _salvaXml_(pastas, n.chave, n.data, txt, 'canc');
+    var rc = _nfeLinha_(t, n.chave);
+    if (!rc){ t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); rc = t.s.getLastRow();
+      _setCells_(t, rc, { 'CHAVE':n.chave, 'STATUS':'CANCELADA', 'ORIGEM':origem, 'OBS':'cancelamento chegou antes da nota', 'CAPTURADA EM':agora }); return { status:'cancelada', chave:n.chave }; }
+    var st = S(t.s.getRange(rc, t.col('STATUS') + 1).getValue()).toUpperCase();
+    if (st === 'CANCELADA') return { status:'duplicada', chave:n.chave };
+    var obs = st === 'RECEBIDA' ? '⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE — conferir com o fornecedor e ajustar o estoque' : 'cancelada pelo emitente em ' + n.data;
+    _setCells_(t, rc, { 'STATUS':'CANCELADA', 'OBS':obs });
+    return { status:'cancelada', chave:n.chave, alerta:st === 'RECEBIDA' };
+  }
+  if (!n.temProt) return { status:'rejeitada', chave:n.chave, motivo:'XML sem protocolo de autorização' };
+  if (n.cstat !== '100') return { status:'rejeitada', chave:n.chave, motivo:'nota não autorizada (cStat ' + n.cstat + ')' };
+  if (!/^\d{44}$/.test(n.chave)) return { status:'rejeitada', motivo:'chave inválida' };
+  var row = _nfeLinha_(t, n.chave);
+  if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue())) return { status:'duplicada', chave:n.chave };   // mesma nota 2× não duplica
+  var fora = cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
+  var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
+  var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
+    'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora };
+  if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
+  else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
+    vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
+    t.s.appendRow(NFE_IDX_COLS.map(function(){ return ''; })); row = t.s.getLastRow(); }
+  _setCells_(t, row, vals);
+  return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '' };
+}
+// GATILHO (a cada 15 min): Gmail + pasta NFe/Entrada
+function capturarNfe(){
+  var lock = LockService.getScriptLock(); if (!lock.tryLock(20000)) return 'ocupado';
+  var res = [];
+  try {
+    var cfg = nfeConfig_(); if (!cfg.pasta) return 'NF-e não configurada (rode setupNfe)';
+    var label = GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL);
+    GmailApp.search('has:attachment (filename:xml OR filename:zip) newer_than:7d -label:' + NFE_LABEL, 0, 50).forEach(function(th){
+      th.getMessages().forEach(function(m){ m.getAttachments().forEach(function(a){ _nfeBlobs(a).forEach(function(b){ res.push(processarXmlNfe(_blobTxt(b), 'e-mail')); }); }); });
+      th.addLabel(label); });
+    var p = nfePastas_(cfg), it = p.entrada.getFiles();
+    while (it.hasNext()){ var f = it.next(), bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
+      bs.forEach(function(b){ var r = processarXmlNfe(_blobTxt(b), 'pasta'); res.push(r); if (r.status === 'rejeitada') ok = false; });
+      if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados); }   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
+  } finally { lock.releaseLock(); cacheClear(); }
+  return res;
+}
+// ---- endpoints (todos exigem o token da CONFIG NFE) ----
+function nfeLista_(status){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {};
+  var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
+  if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
+    if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
+    var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),
+      emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
+      capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]) };
+    if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
+    if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
+  return { ok:true, notas:out, alertas:alertas, contagem:cont };
+}
+function nfeUma_(chave){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(chave)); if (!row) return { ok:false, erro:'nota não encontrada' };
+  var o = _rowObj(t, t.s.getRange(row,1,1,t.ncol).getValues()[0]), id = S(o[_hkey('FILE ID')]);
+  if (!id) return { ok:false, erro:'XML da nota ainda não chegou' };
+  return { ok:true, status:S(o[_hkey('STATUS')]), xml:_blobTxt(DriveApp.getFileById(id).getBlob()) };
+}
+// classifica/recebe (RECEBIDA) ou ignora (IGNORADA) uma nota: status + NFE ITENS + de-para
+function nfeClassifica_(c){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(c.chave)); if (!row) return { rows:0, erro:'nota não encontrada' };
+  var st = S(c.status || 'RECEBIDA').toUpperCase(), agora = new Date(), vals = { 'STATUS':st, 'CLASSIFICADA EM':agora };
+  if (st === 'RECEBIDA'){ vals['RECEBIDA EM'] = c.data ? new Date(S(c.data).slice(0,10) + 'T12:00:00') : agora; vals['RECEBIDA POR'] = S(c.por) || 'app'; }
+  if (c.obs) vals['OBS'] = S(c.obs);
+  _setCells_(t, row, vals);
+  var n = 0;
+  if (c.itens && c.itens.length){
+    var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, last = s.getLastRow();
+    if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === S(c.chave)) s.deleteRow(i + 2); }
+    c.itens.forEach(function(it){ s.appendRow(NFE_ITENS_COLS.map(function(){ return ''; })); var r = s.getLastRow();
+      _setCells_(ti, r, { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
+        'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
+        'QTD RECEBIDA':it.ignorar ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }); n++; });
+  }
+  if (c.depara && c.depara.length) writeDeParaNfe(c.depara);
+  return { rows:n + 1 };
+}
+// resumo SEM dados da nota (só contagens) — vai no puxar normal, para o contador do app
+function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0 }; if (!s) return out;
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), last = s.getLastRow(); if (last < 2) return out;
+  s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase();
+    if (st === 'A CLASSIFICAR') out.aClassificar++; if (S(r[t.col('OBS')]).indexOf('⚠') === 0) out.alertas++; });
+  return out; }
+
 // SAÍDA de estoque por recomendação APROVADA (o app envia na aprovação). Idempotente pelo id:
 // reprovar/reabrir envia itens vazio e limpa as linhas dessa recom, sem afetar as outras.
 function writeSaida(sd){
@@ -882,6 +1081,14 @@ function currentJson(){
 }
 
 function doGet(e){
+  // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE)
+  if (e && e.parameter && e.parameter.acao){
+    var p = e.parameter;
+    if (!nfeTokenOk_(p.token)) return json({ ok:false, erro:'token da NF-e inválido ou NF-e não configurada' });
+    if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
+    if (p.acao === 'nfe') return json(nfeUma_(p.chave));
+    return json({ ok:false, erro:'ação desconhecida' });
+  }
   var str = currentJson();
   // ?h=1 -> devolve só o "hash" (resposta minúscula) para o app checar se mudou antes de baixar tudo
   if (e && e.parameter && e.parameter.h){
@@ -912,6 +1119,11 @@ function doPost(e){
       var rz = writeRealizadoApp(payload.__realizado); out.ok = rz.rows;
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
+    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload)){   // NF-e: exigem o token da CONFIG NFE
+      if (!nfeTokenOk_(payload.token)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
+      else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
+      else { var lk = LockService.getScriptLock(); lk.tryLock(20000);
+        try { out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; } finally { lk.releaseLock(); } }
     } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)
       var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
