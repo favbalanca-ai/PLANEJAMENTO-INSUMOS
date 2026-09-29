@@ -1125,6 +1125,48 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .es-sit.idle{background:#eef2f4;color:#5c6f75}
 }
 @media print{ #print-area .es-t thead th{font-size:8.5px;letter-spacing:.02em;padding:4px 4px} }
+/* ===== NF-e (fase 1): importar XML e conferir o de-para ===== */
+.nfe-import{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px dashed #9fc3cc;border-radius:12px;background:#f3f9fa}
+.nfe-import .mut{font-size:12px;flex:1;min-width:200px}
+.nfe-panel{border:2px solid #9fc3cc}
+.nfe-head{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 14px}
+.nfe-head>div{background:#f6f9fa;border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.nfe-head small,.nfe-kv small,.nfe-chave small{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.nfe-head b{display:block;font-size:14px;overflow-wrap:anywhere}
+.nfe-head span{display:block;font-size:11.5px;color:var(--muted)}
+.nfe-tipo.t-VENDA{color:#1b5e20}.nfe-tipo.t-REMESSA{color:#1f4a55}.nfe-tipo.t-FATURAMENTO{color:#b3261e}.nfe-tipo.t-OUTRA{color:#8a6d00}
+.nfe-chave{padding:0 14px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;letter-spacing:.02em;overflow-wrap:anywhere}
+.nfe-aviso{margin:6px 14px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.45}
+.nfe-aviso.err{background:#fdecea;color:#8e1a14;border:1px solid #f5c2bd}
+.nfe-aviso.warn{background:#fff8e1;color:#6b5400;border:1px solid #f2dfa0}
+.nfe-aviso.info{background:#e8f4f6;color:#1f4a55;border:1px solid #bcdde3}
+.nfe-itens{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
+.nfe-it{border:1px solid var(--line);border-left:5px solid #b0bec5;border-radius:11px;padding:10px 12px;background:#fff}
+.nfe-it.st-auto{border-left-color:#43a047}.nfe-it.st-ok{border-left-color:#2e7d32}.nfe-it.st-sug{border-left-color:#fbc02d;background:#fffdf5}
+.nfe-it.st-novo{border-left-color:#90a4ae;background:#fafbfc}.nfe-it.st-ignorar{border-left-color:#bdbdbd;opacity:.7}
+.nfe-it-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.nfe-it-top b{font-size:13.5px}
+.nfe-chip{font-size:11px;font-weight:800;padding:2px 8px;border-radius:9px;background:#eef2f4;color:#46565c;white-space:nowrap}
+.nfe-chip.st-auto,.nfe-chip.st-ok{background:#e3f2e5;color:#1b5e20}.nfe-chip.st-sug{background:#fff1c2;color:#7a5600}.nfe-chip.st-ignorar{background:#eee;color:#666}
+.nfe-it-sub{font-size:12px;color:var(--muted);margin:4px 0 8px;overflow-wrap:anywhere}
+.nfe-it-map{display:grid;grid-template-columns:2.2fr .7fr 1fr 1.3fr;gap:10px;align-items:end}
+.nfe-it-map label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.nfe-it-map .txt,.nfe-it-map .cell{width:100%;text-transform:none;letter-spacing:0;font-weight:500}
+.nfe-kv b{display:block;font-size:13.5px}
+.nfe-kv span{display:block;font-size:11px;color:var(--muted)}
+.nfe-kv span.up{color:#b3261e;font-weight:700}.nfe-kv span.down{color:#1b5e20;font-weight:700}
+.nfe-it-act{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.nfe-ign{font-size:12px;color:var(--ink2);display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+.nfe-foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
+.nfe-foot label{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink2);font-weight:600}
+.nfe-foot .btn[disabled]{opacity:.45;cursor:not-allowed}
+.nfe-hint{font-size:12px;padding:0 14px 12px;margin:0}
+@media (max-width:640px){
+  .nfe-head{grid-template-columns:1fr 1fr}
+  .nfe-it-map{grid-template-columns:1fr 1fr}
+  .nfe-it-map .nfe-prod{grid-column:1/-1}
+  .nfe-foot .spacer{display:none}
+}
 
 </style>
 </head>
@@ -1215,7 +1257,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-143';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-144';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2615,7 +2657,7 @@ V.entradas=function(){
     const its=(c.itens||[]).filter(x=>x.produto);
     return `<div class="recom-card rc-apr">
       <div class="rc-head"><span class="rc-badge rc-apr">📦 Entrada</span>
-        ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}
+        ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}${c.nfe?'<span class="pill pill-buy" title="importada do XML (id = chave de acesso)">NF-e XML</span>':''}
         ${syncUrl()?(c.pushed?'<span class="pill pill-buy">na planilha</span>':'<span class="pill pill-noprice">pendente</span>'):''}
         <span class="spacer"></span><span class="mut" style="font-size:11px">${esc(fmtData(c.data))}</span>
         <button class="icon-btn del" data-act="cmpDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div>
@@ -2625,7 +2667,9 @@ V.entradas=function(){
       ${c.obs?`<div class="rc-obs mut">${esc(c.obs)}</div>`:''}</div>`;
   }).join('');
   return `${prodDatalist()}
-  <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">registra a nota e dá entrada automática no estoque</span></div>
+  ${nfeImport?nfeConferirHtml():`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
+    <span class="mut">Escolha o XML da nota: o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real.</span></div>`}
+  <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">digitada à mão — ou use “Importar XML da NF-e”</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Fornecedor<input class="txt" data-cmpf="fornecedor" value="${esc(d.fornecedor)}" placeholder="fornecedor"></label>
       <label>Data<input type="date" data-cmpf="data" value="${esc(d.data)}"></label>
@@ -2644,6 +2688,178 @@ V.entradas=function(){
     <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
+/* ================= NF-e (fase 1): importar o XML → conferir (de-para) → entrada no estoque =================
+   Ver docs/NFE_RECEBIMENTO.md. Tudo acontece no navegador (DOMParser); a entrada usa a compra comum
+   (pushEntrada → writeEntrada) com id = CHAVE DE ACESSO (44 dígitos), o que impede a mesma nota entrar 2×.
+   O de-para (CNPJ do emitente + código do produto na nota → produto do app) fica na aba "DE-PARA NFE". */
+const NFE_DEPARA_KEY='planejamento_nfe_depara';   // de-para salvo neste aparelho (até a planilha confirmar)
+let NFE_DEPARA_LOCAL=null, nfeImport=null;
+function deparaLocal(){ if(!NFE_DEPARA_LOCAL){ try{ NFE_DEPARA_LOCAL=JSON.parse(localStorage.getItem(NFE_DEPARA_KEY))||{}; }catch(e){ NFE_DEPARA_LOCAL={}; } } return NFE_DEPARA_LOCAL; }
+function saveDeParaLocal(){ try{ localStorage.setItem(NFE_DEPARA_KEY, JSON.stringify(deparaLocal())); }catch(e){} }
+// de-para de um item: o salvo aqui (mais novo) > o da planilha
+function deparaDe(cnpj,cprod){ const k=cnpj+'|'+cprod; return deparaLocal()[k] || (DATA&&DATA.depara_nfe&&DATA.depara_nfe[k]) || null; }
+// a planilha só aceita o de-para depois de colar o Code.gs novo (ele devolve "depara_nfe" no puxar)
+function deparaServerOk(){ return !!(DATA && DATA.depara_nfe && typeof DATA.depara_nfe==='object'); }
+function deparaPendentes(){ const L=deparaLocal(); return Object.keys(L).filter(k=>!L[k].pushed); }
+function pushDeParaNfe(){
+  const url=syncUrl(), ks=deparaPendentes(); if(!url||!deparaServerOk()||!ks.length) return Promise.resolve(false);
+  const L=deparaLocal();
+  return syncPost(url, JSON.stringify({__nfeDepara:{itens:ks.map(k=>L[k])}}))
+    .then(r=>{ if(r && !r.fail){ ks.forEach(k=>{ if(L[k]) L[k].pushed=true; }); saveDeParaLocal(); updateEditBadge(); return true; } return false; })
+    .catch(()=>false);
+}
+// ao puxar: o que a planilha já tem igual sai da memória local
+function deparaApplyPulled(map){ if(!map||typeof map!=='object') return; const L=deparaLocal(); let ch=false;
+  Object.keys(L).forEach(k=>{ const l=L[k], r=map[k]; if(l.pushed && r && (r.produto||'')===(l.produto||'') && !!r.ignorar===!!l.ignorar && Math.abs((+r.fator||1)-(+l.fator||1))<1e-6){ delete L[k]; ch=true; } });
+  if(ch) saveDeParaLocal(); }
+// ---- leitura do XML ----
+function _nx(el,tag){ if(!el) return null; const l=el.getElementsByTagNameNS('*',tag); return l.length?l[0]:null; }
+function _nt(el,tag){ const x=_nx(el,tag); return x?String(x.textContent||'').trim():''; }
+function _nn(el,tag){ return parseFloat(_nt(el,tag))||0; }
+function nfeLerXml(txt){
+  const doc=new DOMParser().parseFromString(String(txt||'').replace(/^﻿/,''),'text/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('o arquivo não é um XML válido');
+  const inf=_nx(doc,'infNFe');
+  if(!inf) throw new Error(_nx(doc,'infEvento')?'é um XML de evento (ex.: cancelamento), não da nota':'não é um XML de NF-e');
+  const prot=_nx(doc,'infProt'), ide=_nx(inf,'ide'), emit=_nx(inf,'emit'), dest=_nx(inf,'dest');
+  const itens=[...inf.getElementsByTagNameNS('*','det')].map(det=>{ const pr=_nx(det,'prod'), im=_nx(det,'imposto');
+    return { n:+det.getAttribute('nItem')||0, cprod:_nt(pr,'cProd'), xprod:_nt(pr,'xProd'), cfop:_nt(pr,'CFOP'), ucom:_nt(pr,'uCom').toUpperCase(),
+      qcom:_nn(pr,'qCom'), vun:_nn(pr,'vUnCom'), vprod:_nn(pr,'vProd'), vdesc:_nn(pr,'vDesc'), vfrete:_nn(pr,'vFrete'), voutro:_nn(pr,'vOutro'),
+      vipi:_nn(_nx(im,'IPI'),'vIPI'), vst:_nn(_nx(im,'ICMS'),'vICMSST') }; });
+  return { chave:(prot&&_nt(prot,'chNFe'))||String(inf.getAttribute('Id')||'').replace(/^NFe/,''), temProt:!!prot, cstat:prot?_nt(prot,'cStat'):'',
+    nNF:_nt(ide,'nNF'), serie:_nt(ide,'serie'), emissao:(_nt(ide,'dhEmi')||_nt(ide,'dEmi')).slice(0,10),
+    cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), itens };
+}
+// chave de acesso: 44 dígitos, modelo 55, DV por módulo 11 (pesos 2..9 da direita p/ a esquerda)
+function nfeChaveOk(ch){ if(!/^\d{44}$/.test(ch||'')||ch.slice(20,22)!=='55') return false; let s=0,w=2;
+  for(let i=42;i>=0;i--){ s+=(+ch[i])*w; w=(w===9)?2:w+1; } const r=s%11; return (r<2?0:11-r)===+ch[43]; }
+const nfeChaveFmt=ch=>String(ch||'').replace(/(\d{4})(?=\d)/g,'$1 ');
+const nfeCnpjFmt=c=>/^\d{14}$/.test(c)?c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5'):c;
+// já deu entrada? (planilha: etiqueta [#chave] no razão · aparelho: compra com id = chave)
+function nfeJaEntrou(ch){ const m=(DATA&&DATA.movimentacao&&DATA.movimentacao.nfe)||{}; if(m[ch]) return m[ch];
+  const c=(COMPRAS&&COMPRAS.registros||[]).find(x=>x.id===ch); return c?(c.data||'?'):''; }
+// ---- classificação pelo CFOP (seção 6 da spec) ----
+function nfeTipoCfop(cfop){ const c=String(cfop||'').replace(/\D/g,''), f=c.slice(1);
+  if(/^[567]\d{3}$/.test(c)){ if(f==='922') return 'FATURAMENTO'; if(f==='116'||f==='117') return 'REMESSA'; if(/^1(0[1-9]|1[0-9]|2[0-4])$/.test(f)) return 'VENDA'; }
+  return 'OUTRA'; }
+function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop));
+  return t.includes('FATURAMENTO')?'FATURAMENTO':t.includes('REMESSA')?'REMESSA':t.includes('VENDA')?'VENDA':'OUTRA'; }
+const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',OUTRA:'Outra operação'};
+// ---- fator: quanto de 1 unidade da nota vale na unidade do app (CX 10X1KG → 10 · GL 5L → 5 · BB 20L → 20) ----
+function _unBase(u){ u=String(u||'').toUpperCase().replace(/\./g,'');
+  if(/^(KG|KGS|QUILO|QUILOS)$/.test(u)) return ['KG',1]; if(u==='G'||u==='GR') return ['KG',0.001]; if(/^(T|TN|TON)$/.test(u)) return ['KG',1000];
+  if(/^(L|LT|LTS|LITRO|LITROS)$/.test(u)) return ['L',1]; if(u==='ML') return ['L',0.001]; return null; }
+const _paraUnApp=(q,base,unApp)=>(/^(T|TN|TON)$/i.test(String(unApp||''))&&base==='KG')?q/1000:q;
+function nfeFatorDe(xprod,ucom,unApp){
+  const b=_unBase(ucom); if(b) return +_paraUnApp(b[1],b[0],unApp).toFixed(6);          // a nota já vem em kg/L (ou g/mL/t)
+  const s=String(xprod||'').toUpperCase().replace(/(\d),(\d)/g,'$1.$2');
+  let m=s.match(/(\d+)\s*X\s*(\d+(?:\.\d+)?)\s*(KG|GR|G|LTS|LT|L|ML)\b/);             // CX 10X1KG / 4 X 5 L
+  if(m){ const u=_unBase(m[3]); return +_paraUnApp((+m[1])*(+m[2])*u[1],u[0],unApp).toFixed(6); }
+  m=s.match(/(\d+(?:\.\d+)?)\s*(KG|GR|G|LTS|LT|L|ML)\b/);                             // GL 5L / BB 20L / SC 25KG
+  if(m){ const u=_unBase(m[2]); return +_paraUnApp((+m[1])*u[1],u[0],unApp).toFixed(6); }
+  return 1; }
+// ---- sugestão: produto do portfólio de nome mais parecido (palavras em comum, sem acento/embalagem/unidade) ----
+const _NFE_STOP=new Set(['CX','GL','BB','BD','FR','SC','UN','PC','KG','L','LT','ML','G','X','DE','DA','DO','E','C','COM','PARA','EMB','BALDE','SACO','GALAO','FRASCO','BOMBONA','CAIXA','HERBICIDA','FUNGICIDA','INSETICIDA','ADJ','ADJUVANTE','OLEO','PRODUTO']);
+const _nfeTok=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim().split(' ')
+  .filter(t=>t && !_NFE_STOP.has(t) && !/^\d+([.,]\d+)?(KG|L|LT|ML|G)?$/.test(t));
+function nfeSugereProduto(xprod){ const xt=new Set(_nfeTok(xprod)); if(!xt.size) return null; let best=null;
+  (DATA.produtos||[]).forEach(p=>{ if(!p.produto||/^M[ÁA]QUINA/i.test(p.classe||'')) return; const pt=_nfeTok(p.produto); if(!pt.length) return;
+    const hit=pt.filter(t=>xt.has(t)).length; if(!hit) return; const sc=hit/pt.length*0.8+hit/xt.size*0.2;
+    if(!best||sc>best.sc||(sc===best.sc&&pt.length>best.n)) best={p:p.produto,sc,n:pt.length}; });
+  return (best&&best.sc>=0.6)?best:null; }
+// custo unitário REAL (na unidade do app) = (vProd − vDesc + vFrete + vOutro + vIPI + vICMSST) ÷ quantidade convertida
+function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(it.vprod-it.vdesc+it.vfrete+it.voutro+it.vipi+it.vst)/q:0; }
+// ---- estado de cada item na conferência ----
+function nfeItemInicial(nota,it){
+  const dp=deparaDe(nota.cnpj,it.cprod);
+  if(dp && (dp.ignorar || PROD[dp.produto])) return Object.assign({},it,{fonte:'auto',produto:dp.ignorar?'':dp.produto,ignorar:!!dp.ignorar,fator:+dp.fator||1,ok:true});
+  const sug=nfeSugereProduto(it.xprod);
+  if(sug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
+  return Object.assign({},it,{fonte:'novo',produto:'',fator:nfeFatorDe(it.xprod,it.ucom,''),ignorar:false,ok:false}); }
+function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':'ok'; return it.fonte==='sug'?'sug':'novo'; }
+function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || ((s==='auto'||s==='ok') && +it.fator>0); }
+const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫']};
+async function nfeImportarArquivo(file){
+  try{
+    const nota=nfeLerXml(await file.text());
+    if(!nota.temProt) throw new Error('XML sem protocolo de autorização. Use o XML autorizado (com nfeProc/protNFe).');
+    if(nota.cstat!=='100') throw new Error(`nota não autorizada pela SEFAZ (cStat ${nota.cstat||'—'})`);
+    if(!nfeChaveOk(nota.chave)) throw new Error('chave de acesso inválida (dígito verificador não confere)');
+    const ja=nfeJaEntrou(nota.chave); if(ja) throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)})`);
+    if(!nota.itens.length) throw new Error('a nota não tem itens');
+    nota.tipo=nfeTipoNota(nota.itens);
+    nfeImport={nota, arquivo:file.name||'', data:_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
+    route(); window.scrollTo(0,0);
+    const nAuto=nfeImport.itens.filter(i=>i.fonte==='auto').length;
+    toast(`NF-e ${nota.nNF} lida: ${nota.itens.length} item(ns)${nAuto?` · ${nAuto} automático(s)`:''} — confira e confirme`);
+  }catch(e){ toast('NF-e: '+e.message); }
+}
+function nfeConfirmar(){
+  const imp=nfeImport; if(!imp) return; const n=imp.nota;
+  if(n.tipo==='FATURAMENTO'){ toast('Nota de faturamento (entrega futura) não entra no estoque. Importe a nota de remessa quando a mercadoria sair.'); return; }
+  if(!imp.itens.every(nfeResolvido)){ toast('Resolva todos os itens (produto do app e fator, ou Ignorar)'); return; }
+  const ja=nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
+  if(n.tipo==='OUTRA' && !confirm(`Esta nota não é de venda nem de remessa (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}).\nEx.: bonificação, devolução, remessa para conserto.\n\nDar entrada no estoque mesmo assim?`)) return;
+  const itens=imp.itens.filter(i=>!i.ignorar).map(i=>({produto:i.produto, un:(PROD[i.produto]||{}).un||'', qtd:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), preco:+nfeCustoReal(i,i.fator).toFixed(4)}));
+  if(!itens.length){ toast('Todos os itens estão marcados como Ignorar — nada para dar entrada'); return; }
+  const rec={ id:n.chave, fornecedor:n.fornecedor, data:imp.data||_hojeISO(), nf:`${n.nNF}/${n.serie}`,
+    obs:`NF-e emitida em ${fmtDataBR(n.emissao)}${n.tipo!=='VENDA'?' · '+NFE_TIPO[n.tipo]:''}`, itens, pushed:false, ts:Date.now(),
+    nfe:{chave:n.chave, cnpj:n.cnpj, emissao:n.emissao, tipo:n.tipo, vNF:n.vNF} };
+  COMPRAS.registros.push(rec); saveCompras();
+  if(imp.lembrar){ const L=deparaLocal(), now=Date.now();
+    imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
+      custo:i.ignorar?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:now}; });
+    saveDeParaLocal(); }
+  nfeImport=null; route(); updateEditBadge();
+  toast(`Entrada da NF-e ${n.nNF} registrada: ${itens.length} produto(s)`+(syncUrl()?' — enviando à planilha…':''));
+  pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
+  pushDeParaNfe();
+}
+function nfeConferirHtml(){
+  const imp=nfeImport, n=imp.nota, un=it=>(PROD[it.produto]||{}).un||'';
+  const pend=imp.itens.filter(i=>!nfeResolvido(i)).length, nSug=imp.itens.filter(i=>nfeItemStatus(i)==='sug').length;
+  const cfops=[...new Set(n.itens.map(i=>i.cfop))].join(', ');
+  const fat=n.tipo==='FATURAMENTO';
+  const aviso = fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
+    : n.tipo==='OUTRA'?`<div class="nfe-aviso warn">⚠️ <b>Outra operação</b> (CFOP ${esc(cfops)}) — não é venda nem remessa (ex.: bonificação, devolução, conserto). Confira se deve mesmo entrar no estoque.</div>`
+    : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (O vínculo com o contrato de faturamento vem na fase 3.)</div>`:'';
+  const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
+  const cards=imp.itens.map((it,i)=>{ const st=nfeItemStatus(it), [lbl,ico]=NFE_ST[st], q=(+it.qcom||0)*(+it.fator||0), c=nfeCustoReal(it,it.fator), ref=precoDe(it.produto);
+    const dif=(ref>0&&c>0)?(c/ref-1)*100:null;
+    const extras=[it.vdesc?`desc. −${brl(it.vdesc)}`:'', it.vfrete?`frete ${brl(it.vfrete)}`:'', it.voutro?`outras ${brl(it.voutro)}`:'', it.vipi?`IPI ${brl(it.vipi)}`:'', it.vst?`ICMS-ST ${brl(it.vst)}`:''].filter(Boolean).join(' · ');
+    return `<div class="nfe-it st-${st}">
+      <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
+      <div class="nfe-it-sub">cód. ${esc(it.cprod)} · CFOP ${esc(it.cfop)} · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
+      ${it.ignorar?'':`<div class="nfe-it-map">
+        <label class="nfe-prod">Produto do app<input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"></label>
+        <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
+        <div class="nfe-kv"><small>Entra no estoque</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
+        <div class="nfe-kv"><small>Custo real</small><b>${c>0?brl(c):'—'}${un(it)?'/'+esc(un(it)):''}</b><span class="${dif==null?'':(dif>5?'up':(dif<-5?'down':''))}">${ref>0?(dif!=null?`${dif>=0?'+':''}${nf1.format(dif)}% vs ref. ${brl(ref)}`:`ref. ${brl(ref)}`):'sem preço de referência'}</span></div>
+      </div>`}
+      <div class="nfe-it-act">${st==='sug'?`<button class="btn btn-outline btn-sm" data-act="nfeAceitar" data-i="${i}">✓ Aceitar sugestão</button>`:''}
+        <label class="nfe-ign"><input type="checkbox" data-nfi="ignorar" data-i="${i}"${it.ignorar?' checked':''}> Ignorar (não é insumo: palete, frete, peça…)</label></div>
+    </div>`; }).join('');
+  return `<div class="panel nfe-panel"><div class="panel-head"><h2>📄 Conferir NF-e</h2><span class="sub">${esc(imp.arquivo)}</span></div>
+    <div class="nfe-head">
+      <div><small>Fornecedor</small><b>${esc(n.fornecedor||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(n.cnpj))}</span></div>
+      <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
+      <div><small>Valor da nota</small><b>${brl(n.vNF)}</b><span>${n.itens.length} item(ns)</span></div>
+      <div><small>Tipo (CFOP)</small><b class="nfe-tipo t-${n.tipo}">${esc(NFE_TIPO[n.tipo])}</b><span>CFOP ${esc(cfops)}</span></div>
+    </div>
+    <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
+    ${aviso}${semSrv}
+    <div class="nfe-itens">${cards}</div>
+    <div class="nfe-foot">
+      <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>
+      <label class="dem-only"><input type="checkbox" data-nff="lembrar"${imp.lembrar?' checked':''}> Lembrar de-para para este fornecedor</label>
+      <span class="spacer"></span>
+      ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
+      <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
+      <button class="btn btn-primary btn-sm" data-act="nfeConfirmar"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>
+    </div>
+    <p class="mut nfe-hint">${fat?'Nota de faturamento: nada a confirmar.':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
+  </div>`;
+}
 /* ================= CONTROLE DE ESTOQUE (portfólio: entradas × saídas × saldo) ================= */
 // saídas = soma do volume utilizado nas recomendações APROVADAS (por produto).
 // Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE). Soma as aprovações deste aparelho
@@ -5671,6 +5887,15 @@ document.addEventListener('change',e=>{
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
+  if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
+  if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar') route({keepScroll:true}); return; }
+  if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
+    if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
+    else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
+    else if(f==='produto'){ const v=e.target.value.trim(); if(v && !PROD[v]){ toast('Produto não encontrado no portfólio — escolha da lista'); }
+      it.produto=PROD[v]?v:''; it.ok=!!PROD[v]; if(it.fonte==='auto') it.fonte='manual';
+      if(PROD[v] && !it.fatorEdit) it.fator=nfeFatorDe(it.xprod,it.ucom,PROD[v].un); }
+    route({keepScroll:true}); return; }
   if(e.target.id==='compras-socomprar'){ comprasSoComprar=!!e.target.checked; route({keepScroll:true}); return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
@@ -5875,6 +6100,10 @@ document.addEventListener('click',e=>{
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque)')){ COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==a.id); saveCompras(); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
+    else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
+    else if(a.act==='nfeConfirmar'){ nfeConfirmar(); }
+    else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
+    else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
     else if(a.act==='fluxoAdd'){ const d=fluxoDraft; if(!d||!(+d.valor>0)){ toast('Informe um valor maior que zero'); return; }
       FLUXO.lancamentos.push({ id:'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), data:d.data||new Date().toISOString().slice(0,10), tipo:(d.tipo==='entrada'?'entrada':'saida'), categoria:(d.categoria||'').trim(), descricao:(d.descricao||'').trim(), valor:+d.valor||0, ts:Date.now() });
       saveFluxo(); fluxoDraft=fluxoNovoDraft(); route(); toast('Lançamento adicionado'); }
@@ -6527,6 +6756,7 @@ function applyPulledData(d){
   try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
+  try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -6652,6 +6882,7 @@ async function syncPush(opts){
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
+  try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   const eds=buildFieldEdits(), sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
@@ -6966,6 +7197,7 @@ function pendingInfo(){
     if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) add(1, 'alteração na execução');
     if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
     if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
+    if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
   }catch(e){}
   return {total, parts};
 }
