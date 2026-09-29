@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-149';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-150';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1776,37 +1776,98 @@ function recChaveMsg(d){ d=String(d||'').replace(/\D/g,''); if(!d) return '';
 function loadZXing(){ if(window.ZXing) return Promise.resolve(window.ZXing);
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
     s.onload=()=>res(window.ZXing); s.onerror=()=>rej(new Error('sem internet para carregar o leitor')); document.head.appendChild(s); }); }
+// ---- leitor do código de barras (v2): recorta a FAIXA DA MIRA, amplia e alterna métodos ----
+// O código do DANFE (CODE-128C, 44 dígitos) é longo e fino: ler o quadro inteiro em resolução média quase nunca
+// funciona. Aqui: 1080p + foco contínuo + zoom, recorte ampliado da faixa, 2 binarizações do ZXing (ou o leitor
+// nativo), tentativa com o código na vertical, e 2 leituras iguais (não precisam ser seguidas) com DV conferido.
+function recCv(){ return REC._cv||(REC._cv=document.createElement('canvas')); }
+function recROI(src, W, H, rot){
+  const cv=recCv(), ctx=cv.getContext('2d',{willReadFrequently:true});
+  if(!rot){ const sw=W*0.96, sh=H*0.46, sx=(W-sw)/2, sy=(H-sh)/2, k=Math.min(2.4, 2000/sw);
+    cv.width=Math.round(sw*k); cv.height=Math.round(sh*k); ctx.imageSmoothingEnabled=true; ctx.drawImage(src,sx,sy,sw,sh,0,0,cv.width,cv.height); }
+  else { const sw=W*0.5, sh=H*0.96, sx=(W-sw)/2, sy=(H-sh)/2, k=Math.min(2.4, 2000/sh);   // código na vertical: gira 90°
+    cv.width=Math.round(sh*k); cv.height=Math.round(sw*k); ctx.save(); ctx.translate(cv.width,0); ctx.rotate(Math.PI/2);
+    ctx.drawImage(src,sx,sy,sw,sh,0,0,cv.height,cv.width); ctx.restore(); }
+  return cv;
+}
+function recZxing(cv, bin){ const z=REC.zx; if(!z) return null;
+  try{ const L=new z.Z.HTMLCanvasElementLuminanceSource(cv), bmp=new z.Z.BinaryBitmap(bin?new z.Z.GlobalHistogramBinarizer(L):new z.Z.HybridBinarizer(L));
+    return z.r.decode(bmp, z.hints).getText(); }catch(e){ return null; } }
+async function recPrepLeitor(){
+  if(REC.det===undefined){ REC.det=null; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('code_128')) REC.det=new BarcodeDetector({formats:['code_128']}); } }catch(e){} }
+  if(!REC.zx){ try{ const Z=await loadZXing(); const h=new Map(); h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); h.set(Z.DecodeHintType.TRY_HARDER,true);
+      REC.zx={Z, r:new Z.Code128Reader(), hints:h}; }catch(e){ if(!REC.det) throw e; } }
+}
+// tenta ler 1 imagem (canvas/vídeo): leitor nativo (se houver) e ZXing com 2 binarizações
+async function recDecodificar(cv, alt){
+  if(REC.det){ try{ const r=await REC.det.detect(cv); for(const c of r||[]){ const d=String(c.rawValue||'').replace(/\D/g,''); if(d.length===44) return d; } }catch(e){} }
+  const t=recZxing(cv, alt); return t?String(t).replace(/\D/g,''):null;
+}
 async function recCameraIniciar(){
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('Este aparelho/navegador não libera a câmera aqui — digite a chave ou o nº da nota'); return; }
-  recCameraParar(); REC.ultima=''; REC.msg='Aponte para o código de barras do DANFE (na horizontal)…';
-  REC.cam={on:true}; route({keepScroll:true});
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('Este aparelho/navegador não libera a câmera aqui — use "Tirar foto do código" ou digite a chave'); return; }
+  recCameraParar(); REC.leituras={}; REC.msg='Aproxime até o código de barras preencher a faixa · deixe reto, sem reflexo, e segure firme.';
+  REC.cam={on:true, n:0}; route({keepScroll:true});
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}});
     const video=document.getElementById('rec-video'); if(!video||!REC.cam){ stream.getTracks().forEach(t=>t.stop()); return; }
     REC.cam.stream=stream; video.srcObject=stream; video.setAttribute('playsinline',''); await video.play().catch(()=>{});
-    const track=stream.getVideoTracks()[0], caps=(track.getCapabilities&&track.getCapabilities())||{};
-    REC.cam.track=track; REC.cam.torch=!!caps.torch; const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=REC.cam.torch?'':'none';
-    let det=null; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('code_128')) det=new BarcodeDetector({formats:['code_128']}); } }catch(e){}
-    if(det){ REC.cam.modo='nativo'; REC.cam.timer=setInterval(async()=>{ const v=document.getElementById('rec-video'); if(!REC.cam||!v||v.readyState<2) return;
-        try{ const cs=await det.detect(v); cs.forEach(c=>recOnLeitura(c.rawValue)); }catch(e){} }, 220); }
-    else { const Z=await loadZXing(); if(!REC.cam) return; const hints=new Map();
-      hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); hints.set(Z.DecodeHintType.TRY_HARDER,true);
-      REC.cam.modo='zxing'; REC.cam.reader=new Z.BrowserMultiFormatReader(hints);
-      REC.cam.reader.decodeFromStream(stream, video, (res)=>{ if(res) recOnLeitura(res.getText()); }); }
-    const st=document.getElementById('rec-cam-st'); if(st) st.textContent=`Lendo… (${REC.cam.modo==='nativo'?'leitor do aparelho':'leitor ZXing'})`;
-  }catch(e){ recCameraParar(); REC.msg=/Permission|NotAllowed/i.test(e.name||e.message)?'Câmera bloqueada: libere a permissão da câmera para este site nas configurações do navegador — ou digite a chave.':'Não consegui abrir a câmera: '+(e.message||e.name)+' — digite a chave ou o nº da nota.'; route({keepScroll:true}); }
+    const track=stream.getVideoTracks()[0], caps=(track.getCapabilities&&track.getCapabilities())||{}, adv={};
+    if((caps.focusMode||[]).includes('continuous')) adv.focusMode='continuous';
+    if(caps.zoom && caps.zoom.max>1){ REC.cam.zoom={min:caps.zoom.min||1, max:caps.zoom.max, step:caps.zoom.step||0.1, val:Math.min(caps.zoom.max, 1.8)}; adv.zoom=REC.cam.zoom.val; }
+    if(Object.keys(adv).length) track.applyConstraints({advanced:[adv]}).catch(()=>{});
+    REC.cam.track=track; REC.cam.torch=!!caps.torch; recCamUI();
+    await recPrepLeitor(); if(!REC.cam) return;
+    REC.cam.modo=REC.det?'nativo':'zxing'; recTick();
+  }catch(e){ recCameraParar(); REC.msg=/Permission|NotAllowed/i.test(e.name||e.message)?'Câmera bloqueada: libere a permissão da câmera para este site nas configurações do navegador — ou use "Tirar foto do código".':'Não consegui abrir a câmera: '+(e.message||e.name)+' — use "Tirar foto do código" ou digite a chave.'; route({keepScroll:true}); }
+}
+function recCamUI(){ const c=REC.cam; if(!c) return;
+  const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=c.torch?'':'none';
+  const z=document.getElementById('rec-zoom'); if(z){ if(c.zoom){ z.min=c.zoom.min; z.max=c.zoom.max; z.step=c.zoom.step; z.value=c.zoom.val; z.parentElement.style.display=''; } else z.parentElement.style.display='none'; } }
+async function recTick(){
+  const c=REC.cam; if(!c) return;
+  const v=document.getElementById('rec-video');
+  if(v && v.readyState>=2 && v.videoWidth){
+    c.n++; const k=c.n%6, rot=(k===5);
+    const cv=(REC.det && k===4)?v:recROI(v, v.videoWidth, v.videoHeight, rot);
+    const d=await recDecodificar(cv, k%2===1);
+    if(!REC.cam) return;
+    if(d) recOnLeitura(d);
+    if(c.n%10===0){ const st=document.getElementById('rec-cam-st'); if(st && !REC.cam.lida) st.textContent=`Procurando o código… (${REC.cam.modo==='nativo'?'leitor do aparelho':'ZXing'} · ${c.n} quadros)`; }
+  }
+  if(REC.cam) REC.cam.timer=setTimeout(recTick, REC.det?90:60);
 }
 function recCameraParar(){ const c=REC.cam; if(!c) return; REC.cam=null;
-  try{ if(c.timer) clearInterval(c.timer); }catch(e){} try{ if(c.reader) c.reader.reset(); }catch(e){}
-  try{ if(c.stream) c.stream.getTracks().forEach(t=>t.stop()); }catch(e){} }
+  try{ if(c.timer) clearTimeout(c.timer); }catch(e){} try{ if(c.stream) c.stream.getTracks().forEach(t=>t.stop()); }catch(e){} }
 function recLanterna(){ const c=REC.cam; if(!c||!c.track) return; c.torchOn=!c.torchOn;
   c.track.applyConstraints({advanced:[{torch:c.torchOn}]}).catch(()=>toast('Lanterna indisponível')); }
-// 2 leituras IGUAIS seguidas → aceita (evita leitura parcial/errada)
+function recZoom(v){ const c=REC.cam; if(!c||!c.track||!c.zoom) return; c.zoom.val=+v; c.track.applyConstraints({advanced:[{zoom:+v}]}).catch(()=>{}); }
+// 2 leituras IGUAIS (não precisam ser seguidas) + DV conferido → aceita
 function recOnLeitura(txt){
   const d=String(txt||'').replace(/\D/g,''); if(d.length!==44||!REC.cam) return;
-  if(d!==REC.ultima){ REC.ultima=d; const st=document.getElementById('rec-cam-st'); if(st) st.textContent='Leitura 1 de 2 — segure firme…'; return; }
+  const st=document.getElementById('rec-cam-st');
+  if(!nfeChaveOk(d)){ REC.cam.erros=(REC.cam.erros||0)+1; if(st) st.textContent='Leitura com erro — ajuste a distância e segure firme…'; return; }
+  REC.leituras=REC.leituras||{}; REC.leituras[d]=(REC.leituras[d]||0)+1;
+  if(REC.leituras[d]<2){ REC.cam.lida=true; if(st) st.textContent='✔ Leitura 1 de 2 — segure mais um instante…'; return; }
   if(navigator.vibrate) try{ navigator.vibrate(80); }catch(e){}
   recCameraParar(); recAbrirChave(d);
+}
+// FOTO do código (câmera nativa do celular: foco e resolução melhores que o vídeo) — tenta vários recortes
+async function recLerFoto(file){
+  REC.msg='Lendo a foto…'; recRerender();
+  try{
+    await recPrepLeitor();
+    const bmp=await new Promise((res,rej)=>{ const img=new Image(), u=URL.createObjectURL(file); img.onload=()=>{ URL.revokeObjectURL(u); res(img); }; img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('imagem inválida')); }; img.src=u; });
+    const W=bmp.naturalWidth, H=bmp.naturalHeight, cv=recCv(), ctx=cv.getContext('2d',{willReadFrequently:true});
+    const tentar=async(sx,sy,sw,sh,rot)=>{ const k=Math.min(1, 2400/Math.max(sw,sh));
+      if(!rot){ cv.width=Math.round(sw*k); cv.height=Math.round(sh*k); ctx.drawImage(bmp,sx,sy,sw,sh,0,0,cv.width,cv.height); }
+      else { cv.width=Math.round(sh*k); cv.height=Math.round(sw*k); ctx.save(); ctx.translate(cv.width,0); ctx.rotate(Math.PI/2); ctx.drawImage(bmp,sx,sy,sw,sh,0,0,cv.height,cv.width); ctx.restore(); }
+      for(const alt of [false,true]){ const d=await recDecodificar(cv, alt); if(d&&nfeChaveOk(d)) return d; } return null; };
+    const rec=[[0,0,W,H,false]]; for(let i=0;i<5;i++){ const h=H*0.36, y=Math.max(0,(H-h)*i/4); rec.push([0,y,W,h,false]); }
+    rec.push([0,0,W,H,true]); for(let i=0;i<5;i++){ const w=W*0.36, x=Math.max(0,(W-w)*i/4); rec.push([x,0,w,H,true]); }
+    for(const r of rec){ const d=await tentar(...r); if(d){ REC.msg=''; return recAbrirChave(d); } }
+    REC.msg='Não consegui ler o código nesta foto. Tire de novo mais perto, com o código reto ocupando a largura da foto, sem sombra nem reflexo — ou digite a chave.';
+  }catch(e){ REC.msg='Não consegui ler a foto: '+e.message; }
+  route({keepScroll:true});
 }
 async function recAbrirChave(d){
   d=String(d||'').replace(/\D/g,'');
@@ -1934,8 +1995,10 @@ V.receber=function(){
   const cam=REC.cam;
   return `<div class="panel rec-ler"><div class="panel-head"><h2>📷 Receber nota</h2><span class="sub">leia o código de barras do DANFE</span></div>
     ${cam?`<div class="rec-cam"><video id="rec-video" autoplay muted playsinline></video><div class="rec-mira"></div>
-        <div class="rec-cam-bar"><span id="rec-cam-st">Abrindo a câmera…</span><button class="btn btn-outline btn-sm" id="rec-torch" data-act="recTorch" style="display:none">🔦 Lanterna</button><button class="btn btn-outline btn-sm" data-act="recCamParar">✕ Fechar</button></div></div>`
-      :`<div style="padding:14px"><button class="btn btn-primary rec-big" data-act="recCam">📷 Ler código de barras</button></div>`}
+        <div class="rec-cam-bar"><span id="rec-cam-st">Abrindo a câmera…</span><label class="rec-zoom" style="display:none">🔍<input type="range" id="rec-zoom"></label><button class="btn btn-outline btn-sm" id="rec-torch" data-act="recTorch" style="display:none">🔦 Lanterna</button><button class="btn btn-outline btn-sm" data-act="recCamParar">✕ Fechar</button></div></div>`
+      :`<div class="rec-bts"><button class="btn btn-primary rec-big" data-act="recCam">📷 Ler código de barras</button>
+          <label class="btn btn-outline rec-big" style="cursor:pointer">📸 Tirar foto do código<input type="file" accept="image/*" capture="environment" id="rec-foto-chave" hidden></label></div>
+        <p class="mut rec-dica">Dica: aproxime até o código de barras preencher a faixa da mira, com o papel reto e bem iluminado. Se o vídeo não pegar, use <b>Tirar foto do código</b> — a foto tem foco melhor.</p>`}
     ${REC.msg?`<div class="nfe-aviso ${/^✘|bloquead|Não consegui|Nenhuma/.test(REC.msg)?'err':'info'}" style="margin:0 14px 10px">${esc(REC.msg)}</div>`:''}
     <div class="rec-alt">
       <label>Nº da nota<div class="rec-inl"><input class="txt" id="rec-num" inputmode="numeric" placeholder="ex.: 1234"><button class="btn btn-outline btn-sm" data-act="recNum">Buscar</button></div></label>
@@ -4863,8 +4926,7 @@ function route(opts){
     const v=document.getElementById('rec-video');
     if(REC.cam && !v) recCameraParar();
     else if(REC.cam && REC.cam.stream && v && v.srcObject!==REC.cam.stream){   // tela redesenhada com a câmera aberta
-      if(REC.cam.modo==='nativo'){ v.srcObject=REC.cam.stream; v.play().catch(()=>{}); const st=document.getElementById('rec-cam-st'); if(st) st.textContent='Lendo… (leitor do aparelho)'; const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=REC.cam.torch?'':'none'; }
-      else { recCameraParar(); setTimeout(recCameraIniciar, 50); } } }
+      v.srcObject=REC.cam.stream; v.play().catch(()=>{}); recCamUI(); } }
   if(view!=='receber' && REC.cam) recCameraParar();
   if(view==='pendencias' && !PEND.lista){ pendCarregar(); }
   if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
@@ -5100,6 +5162,7 @@ document.addEventListener('change',e=>{
     if(f==='foto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ it.div.foto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
     if(f==='ficou') it.div.ficou=e.target.checked; else if(f==='qtdNota') it.div.qtdNota=_mmC(e.target.value); else it.div[f]=e.target.value;
     if(f!=='obs') recRerender(); return; }
+  if(e.target.id==='rec-foto-chave'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recLerFoto(fl); return; }
   if(e.target.id==='rec-canhoto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ REC.canhoto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
   if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
@@ -5122,6 +5185,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('stand-f')) standPreview(); });
+document.addEventListener('input',e=>{ if(e.target.id==='rec-zoom') recZoom(e.target.value); });
 document.addEventListener('input',e=>{ if(e.target.id!=='rec-44') return;
   const d=e.target.value.replace(/\D/g,'').slice(0,44); REC.digitos=d; const st=document.getElementById('rec-44-st'); if(st){ st.textContent=recChaveMsg(d); st.className='rec-44-st'+(/^✔/.test(st.textContent)?' ok':(/^✘/.test(st.textContent)?' err':'')); }
   if(d.length===44 && nfeChaveOk(d)) recAbrirChave(d); });
