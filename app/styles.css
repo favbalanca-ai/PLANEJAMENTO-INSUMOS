@@ -1167,3 +1167,28 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-warn-t{margin-top:6px;color:#8e1a14;font-weight:700;font-size:12px}
 .ctr-card.ctr-ok{opacity:.75}
 .ctr-card.ctr-parado{border:2px solid #f2c94c}
+/* ===== NF-e (fase 4): Receber nota ===== */
+.rec-big{width:100%;padding:16px;font-size:16px}
+.rec-cam{position:relative;background:#000;margin:0 0 10px}
+.rec-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
+.rec-mira{position:absolute;left:6%;right:6%;top:38%;height:24%;border:3px solid rgba(255,255,255,.85);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.25);pointer-events:none}
+.rec-mira::after{content:"";position:absolute;left:4%;right:4%;top:50%;border-top:2px solid #e53935}
+.rec-cam-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#12262d;color:#fff;font-size:12.5px}
+.rec-cam-bar span{flex:1}
+.rec-alt{display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:4px 14px 14px}
+.rec-alt label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--ink2)}
+.rec-inl{display:flex;gap:6px}
+.rec-44{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em}
+.rec-44-st{font-size:12px;font-weight:600;color:var(--muted)}.rec-44-st.ok{color:#1b5e20}.rec-44-st.err{color:#b3261e}
+.rec-itens{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
+.rec-it{border:1px solid var(--line);border-left:5px solid #43a047;border-radius:11px;padding:10px 12px;background:#fff}
+.rec-it.div{border-left-color:#e53935;background:#fffafa}
+.rec-it-top{display:flex;flex-direction:column;gap:2px}
+.rec-it-top .mut{font-size:11.5px}
+.rec-it-q{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px}
+.rec-it-q small{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.rec-it-q b{font-size:15px}.rec-it-q span{display:block;font-size:11.5px;color:var(--muted)}
+.rec-dif{color:#b3261e}
+.rec-sx{display:flex;flex-direction:column;gap:8px;padding:8px 14px}
+.rec-sx-row{display:grid;grid-template-columns:1fr 90px 36px 36px;gap:6px;align-items:center}
+@media (max-width:640px){ .rec-alt{grid-template-columns:1fr} }

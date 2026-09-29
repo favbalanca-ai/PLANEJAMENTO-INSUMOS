@@ -1184,6 +1184,31 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-warn-t{margin-top:6px;color:#8e1a14;font-weight:700;font-size:12px}
 .ctr-card.ctr-ok{opacity:.75}
 .ctr-card.ctr-parado{border:2px solid #f2c94c}
+/* ===== NF-e (fase 4): Receber nota ===== */
+.rec-big{width:100%;padding:16px;font-size:16px}
+.rec-cam{position:relative;background:#000;margin:0 0 10px}
+.rec-cam video{display:block;width:100%;max-height:55vh;object-fit:cover}
+.rec-mira{position:absolute;left:6%;right:6%;top:38%;height:24%;border:3px solid rgba(255,255,255,.85);border-radius:10px;box-shadow:0 0 0 2000px rgba(0,0,0,.25);pointer-events:none}
+.rec-mira::after{content:"";position:absolute;left:4%;right:4%;top:50%;border-top:2px solid #e53935}
+.rec-cam-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#12262d;color:#fff;font-size:12.5px}
+.rec-cam-bar span{flex:1}
+.rec-alt{display:grid;grid-template-columns:1fr 2fr;gap:12px;padding:4px 14px 14px}
+.rec-alt label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--ink2)}
+.rec-inl{display:flex;gap:6px}
+.rec-44{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.03em}
+.rec-44-st{font-size:12px;font-weight:600;color:var(--muted)}.rec-44-st.ok{color:#1b5e20}.rec-44-st.err{color:#b3261e}
+.rec-itens{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
+.rec-it{border:1px solid var(--line);border-left:5px solid #43a047;border-radius:11px;padding:10px 12px;background:#fff}
+.rec-it.div{border-left-color:#e53935;background:#fffafa}
+.rec-it-top{display:flex;flex-direction:column;gap:2px}
+.rec-it-top .mut{font-size:11.5px}
+.rec-it-q{display:flex;gap:16px;flex-wrap:wrap;margin-top:6px}
+.rec-it-q small{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+.rec-it-q b{font-size:15px}.rec-it-q span{display:block;font-size:11.5px;color:var(--muted)}
+.rec-dif{color:#b3261e}
+.rec-sx{display:flex;flex-direction:column;gap:8px;padding:8px 14px}
+.rec-sx-row{display:grid;grid-template-columns:1fr 90px 36px 36px;gap:6px;align-items:center}
+@media (max-width:640px){ .rec-alt{grid-template-columns:1fr} }
 
 </style>
 </head>
@@ -1204,6 +1229,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
       <a href="#/compras" data-view="compras" data-mod="planejamento"><span class="ico">🛒</span><span class="lbl">Demanda</span><span class="lbl-s">Demanda</span></a>
       <a href="#/estoque" data-view="estoque" data-mod="planejamento"><span class="ico">📦</span><span class="lbl">Estoque</span><span class="lbl-s">Estoque</span></a>
       <a href="#/entradas" data-view="entradas" data-mod="admin"><span class="ico">🧾</span><span class="lbl">Compras</span><span class="lbl-s">Compras</span></a>
+      <a href="#/receber" data-view="receber" data-mod="admin campo"><span class="ico">📷</span><span class="lbl">Receber nota</span><span class="lbl-s">Receber</span></a>
       <a href="#/contratos" data-view="contratos" data-mod="admin"><span class="ico">📑</span><span class="lbl">Contratos</span><span class="lbl-s">Contratos</span></a>
       <a href="#/fluxocaixa" data-view="fluxocaixa" data-mod="admin"><span class="ico">💵</span><span class="lbl">Fluxo de Caixa</span><span class="lbl-s">Caixa</span></a>
       <a href="#/calendario" data-view="calendario" data-mod="tarefas"><span class="ico">🗓️</span><span class="lbl">Calendário</span><span class="lbl-s">Calend.</span></a>
@@ -1275,7 +1301,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-147';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-148';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1682,7 +1708,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
-  entradas:'admin', fluxocaixa:'admin', contratos:'admin',
+  entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'both',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
 function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
@@ -2864,11 +2890,12 @@ function nfePend(){ try{ return JSON.parse(localStorage.getItem(NFE_PEND_KEY))||
 function nfePendSave(a){ try{ localStorage.setItem(NFE_PEND_KEY, JSON.stringify(a)); }catch(e){} }
 async function nfeEnviarClassif(cl){
   const envio=Object.assign({}, cl); delete envio.xml;
-  try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.chave!==cl.chave)); updateEditBadge(); return true; } }catch(e){}
-  nfePendSave(nfePend().filter(x=>x.chave!==cl.chave).concat([cl])); updateEditBadge(); return false;
+  try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave)); updateEditBadge(); return true; } }catch(e){}
+  nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave).concat([cl])); updateEditBadge(); return false;
 }
 async function nfeFlushPend(){ if(!nfeServerOk()) return; const a=nfePend(); if(!a.length) return;
-  for(const cl of a){ if(cl.xml){ try{ await nfePost({__nfeUpload:{xml:cl.xml}}); }catch(e){} } await nfeEnviarClassif(cl); }
+  for(const cl of a){ if(cl.kind==='rec'){ const pl=Object.assign({},cl); delete pl.kind; await nfeEnviarRecebimento(pl); continue; }
+    if(cl.xml){ try{ await nfePost({__nfeUpload:{xml:cl.xml}}); }catch(e){} } await nfeEnviarClassif(cl); }
   updateEditBadge(); try{ updateSyncBar(); }catch(e){} }
 function nfeIgnorar(chave){
   const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
@@ -3027,6 +3054,192 @@ function nfeConferirHtml(){
     <p class="mut nfe-hint">${fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
   </div>`;
 }
+/* ================= NF-e (fase 4): RECEBER NOTA na fazenda — câmera lê a chave do DANFE =================
+   BarcodeDetector nativo (Chrome/Android); onde não houver (Safari/iPhone) carrega o ZXing (jsdelivr, versão fixa).
+   Aceita a chave só depois de 2 LEITURAS IGUAIS seguidas e confere o DV. Alternativas: nº da nota, 44 dígitos
+   digitados ou leitor USB/Bluetooth (funciona como teclado no mesmo campo). */
+const REC_POR_KEY='planejamento_nfe_recebedor';
+let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:''};
+function recReset(){ recCameraParar(); REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:''}; }
+function recPor(){ try{ return localStorage.getItem(REC_POR_KEY)||''; }catch(e){ return ''; } }
+// partes da chave: cUF(2) AAMM(4) CNPJ/CPF(14) modelo(2) série(3) nNF(9) tpEmis(1) cNF(8) DV(1)
+function nfeChavePartes(ch){ return {uf:ch.slice(0,2), aamm:ch.slice(2,6), doc:ch.slice(6,20), mod:ch.slice(20,22), serie:String(+ch.slice(22,25)), nNF:String(+ch.slice(25,34))}; }
+function recChaveMsg(d){ d=String(d||'').replace(/\D/g,''); if(!d) return '';
+  if(d.length<44) return `faltam ${44-d.length} dígito(s)`; if(d.length>44) return '✘ mais de 44 dígitos';
+  if(d.slice(20,22)!=='55') return '✘ não é NF-e (modelo '+d.slice(20,22)+')';
+  return nfeChaveOk(d)?'✔ chave válida':'✘ dígito verificador não confere — confira os números'; }
+function loadZXing(){ if(window.ZXing) return Promise.resolve(window.ZXing);
+  return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+    s.onload=()=>res(window.ZXing); s.onerror=()=>rej(new Error('sem internet para carregar o leitor')); document.head.appendChild(s); }); }
+async function recCameraIniciar(){
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('Este aparelho/navegador não libera a câmera aqui — digite a chave ou o nº da nota'); return; }
+  recCameraParar(); REC.ultima=''; REC.msg='Aponte para o código de barras do DANFE (na horizontal)…';
+  REC.cam={on:true}; route({keepScroll:true});
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false});
+    const video=document.getElementById('rec-video'); if(!video||!REC.cam){ stream.getTracks().forEach(t=>t.stop()); return; }
+    REC.cam.stream=stream; video.srcObject=stream; video.setAttribute('playsinline',''); await video.play().catch(()=>{});
+    const track=stream.getVideoTracks()[0], caps=(track.getCapabilities&&track.getCapabilities())||{};
+    REC.cam.track=track; REC.cam.torch=!!caps.torch; const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=REC.cam.torch?'':'none';
+    let det=null; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('code_128')) det=new BarcodeDetector({formats:['code_128']}); } }catch(e){}
+    if(det){ REC.cam.modo='nativo'; REC.cam.timer=setInterval(async()=>{ const v=document.getElementById('rec-video'); if(!REC.cam||!v||v.readyState<2) return;
+        try{ const cs=await det.detect(v); cs.forEach(c=>recOnLeitura(c.rawValue)); }catch(e){} }, 220); }
+    else { const Z=await loadZXing(); if(!REC.cam) return; const hints=new Map();
+      hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); hints.set(Z.DecodeHintType.TRY_HARDER,true);
+      REC.cam.modo='zxing'; REC.cam.reader=new Z.BrowserMultiFormatReader(hints);
+      REC.cam.reader.decodeFromStream(stream, video, (res)=>{ if(res) recOnLeitura(res.getText()); }); }
+    const st=document.getElementById('rec-cam-st'); if(st) st.textContent=`Lendo… (${REC.cam.modo==='nativo'?'leitor do aparelho':'leitor ZXing'})`;
+  }catch(e){ recCameraParar(); REC.msg=/Permission|NotAllowed/i.test(e.name||e.message)?'Câmera bloqueada: libere a permissão da câmera para este site nas configurações do navegador — ou digite a chave.':'Não consegui abrir a câmera: '+(e.message||e.name)+' — digite a chave ou o nº da nota.'; route({keepScroll:true}); }
+}
+function recCameraParar(){ const c=REC.cam; if(!c) return; REC.cam=null;
+  try{ if(c.timer) clearInterval(c.timer); }catch(e){} try{ if(c.reader) c.reader.reset(); }catch(e){}
+  try{ if(c.stream) c.stream.getTracks().forEach(t=>t.stop()); }catch(e){} }
+function recLanterna(){ const c=REC.cam; if(!c||!c.track) return; c.torchOn=!c.torchOn;
+  c.track.applyConstraints({advanced:[{torch:c.torchOn}]}).catch(()=>toast('Lanterna indisponível')); }
+// 2 leituras IGUAIS seguidas → aceita (evita leitura parcial/errada)
+function recOnLeitura(txt){
+  const d=String(txt||'').replace(/\D/g,''); if(d.length!==44||!REC.cam) return;
+  if(d!==REC.ultima){ REC.ultima=d; const st=document.getElementById('rec-cam-st'); if(st) st.textContent='Leitura 1 de 2 — segure firme…'; return; }
+  if(navigator.vibrate) try{ navigator.vibrate(80); }catch(e){}
+  recCameraParar(); recAbrirChave(d);
+}
+async function recAbrirChave(d){
+  d=String(d||'').replace(/\D/g,'');
+  if(d.length!==44||!nfeChaveOk(d)){ REC.msg='✘ '+(recChaveMsg(d)||'chave inválida').replace(/^✘ /,''); route({keepScroll:true}); toast('Chave recusada: '+recChaveMsg(d)); return; }
+  if(!nfeServerOk()){ REC.msg='A NF-e não está ligada neste aparelho: cole o Token da NF-e em Sincronizar.'; route({keepScroll:true}); return; }
+  REC.chave=d; REC.msg='Buscando a nota…'; route({keepScroll:true});
+  try{ const r=await nfeGet({acao:'nfe_chave', chave:d}); if(!r||!r.ok) throw new Error((r&&r.erro)||'falha');
+    REC.info=r; REC.msg='';
+    if(!r.encontrada){ REC.etapa='semxml'; REC.itens=[{produto:'',qtd:'',un:''}]; }
+    else { const st=r.nota.status;
+      if(st==='EM TRÂNSITO'){ REC.etapa='conferir'; REC.itens=r.itens.filter(i=>!i.ignorar&&i.produto).map(i=>Object.assign({},i,{div:null})); }
+      else REC.etapa='aviso'; }
+  }catch(e){ REC.msg='Não consegui consultar a planilha: '+e.message; }
+  route(); window.scrollTo(0,0);
+}
+function recTransitoCarregar(force){
+  if(!nfeServerOk()) return Promise.resolve(null);
+  if(!force && REC.transito && Date.now()-REC.transito.ts<30000) return Promise.resolve(REC.transito);
+  return nfeGet({acao:'nfe_lista', status:'EM TRÂNSITO'}).then(d=>{ REC.transito={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[]};
+    if(/#\/receber/.test(location.hash) && REC.etapa==='ler' && !REC.cam) route({keepScroll:true}); return REC.transito; }).catch(()=>null);
+}
+function recBuscarNumero(v){ const n=String(v||'').replace(/\D/g,'').replace(/^0+/,''); if(!n){ toast('Digite o nº da nota'); return; }
+  const L=((REC.transito&&REC.transito.notas)||[]).filter(x=>String(x.nNF).replace(/^0+/,'')===n);
+  if(L.length===1) return recAbrirChave(L[0].chave);
+  REC.msg=L.length?`${L.length} notas em trânsito com o nº ${n} — escolha na lista abaixo.`:`Nenhuma nota EM TRÂNSITO com o nº ${n}. Leia o código de barras ou digite os 44 dígitos.`;
+  REC.filtroN=L.length?n:''; route({keepScroll:true}); }
+// quantidade que ENTRA no estoque (fase 5: desconta falta/avaria/troca, soma sobra)
+function recQtdUso(i){ const q=+i.qtd||0, d=i.div; if(!d||!d.tipo) return q; const x=(+d.qtdNota||0)*(+i.fator||1);
+  return d.tipo==='SOBRA'?q+x:Math.max(0,q-x); }
+async function recConfirmar(){
+  const r=REC.info||{}, nota=r.nota||{}, semXml=REC.etapa==='semxml', por=(document.getElementById('rec-por')||{}).value||recPor();
+  try{ localStorage.setItem(REC_POR_KEY, por); }catch(e){}
+  let itens;
+  if(semXml){ itens=REC.itens.filter(i=>i.produto&&PROD[i.produto]&&(+i.qtd>0)).map((i,k)=>({n:k+1, produto:i.produto, un:(PROD[i.produto]||{}).un||'', qtd:+i.qtd, custo:precoDe(i.produto)}));
+    if(!itens.length){ toast('Informe ao menos um produto com quantidade'); return; } }
+  else itens=REC.itens.map(i=>({n:i.n, produto:i.produto, un:i.un, qtd:recQtdUso(i), custo:i.custo, qtdNota:i.qtd}));
+  const temDiv=!semXml && REC.itens.some(i=>i.div&&i.div.tipo);
+  if(temDiv && typeof recPendenciasPayload!=='function') return;
+  if(temDiv && !confirm('⚠ Anote a falta/avaria no CANHOTO do DANFE ou no conhecimento do transportador ANTES de assinar.\n\nConfirmar o recebimento com divergência?')) return;
+  let pend=[], canhoto='';
+  if(temDiv){ toast('Enviando fotos…'); const pp=await recPendenciasPayload(nota); pend=pp.pendencias; canhoto=pp.canhoto; }
+  const ch=REC.chave, p=nfeChavePartes(ch), hoje=_hojeISO();
+  const uso=itens.filter(i=>i.qtd>0);
+  COMPRAS.registros=COMPRAS.registros.filter(c=>c.id!==ch);
+  if(uso.length){ const rec={ id:ch, fornecedor:nota.fornecedor||REC.fornecedor||nfeCnpjFmt(p.doc), data:hoje, nf:`${p.nNF}/${p.serie}`,
+      obs:`Recebida na fazenda${por?' por '+por:''}${semXml?' · sem XML':''}${temDiv?' · com divergência':''}`, itens:uso.map(i=>({produto:i.produto, un:i.un, qtd:+i.qtd.toFixed(4), preco:+(+i.custo||0).toFixed(4)})),
+      pushed:false, ts:Date.now(), nfe:{chave:ch, recebimento:true} };
+    COMPRAS.registros.push(rec); saveCompras(); pushEntrada(rec); }
+  const payload={chave:ch, data:hoje, por, itens:itens.map(i=>({n:i.n, produto:i.produto, un:i.un, qtdRecebida:+(+i.qtd).toFixed(4)})), pendencias:pend, canhoto};
+  if(semXml) payload.semXml={fornecedor:REC.fornecedor||''};
+  nfeEnviarRecebimento(payload).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+  const nPend=pend.length;
+  REC.etapa='feito'; REC.feito={nNF:p.nNF, fornecedor:nota.fornecedor||REC.fornecedor||'', itens:uso.length, pend:nPend, pendencias:pend, semXml};
+  if(REC.transito) REC.transito.notas=REC.transito.notas.filter(x=>x.chave!==ch);
+  route(); window.scrollTo(0,0); updateEditBadge();
+  toast(`Recebimento registrado: ${uso.length} produto(s) no estoque${nPend?` · ${nPend} pendência(s)`:''}`);
+}
+// recebimento que não subiu fica na mesma fila das classificações
+async function nfeEnviarRecebimento(pl){
+  try{ const r=await nfePost({__recebimento:pl}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave))); updateEditBadge(); return true; } }catch(e){}
+  nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave)).concat([Object.assign({kind:'rec'}, pl)])); updateEditBadge(); return false;
+}
+function recAvisoHtml(){
+  const n=(REC.info||{}).nota||{}, st=n.status, p=nfeChavePartes(REC.chave);
+  const cab=`<b>NF-e ${esc(n.nNF||p.nNF)}</b> · ${esc(n.fornecedor||nfeCnpjFmt(p.doc))}${n.emissao?` · emissão ${esc(fmtDataBR(n.emissao))}`:''}`;
+  let cls='warn', txt='';
+  if(st==='CANCELADA'){ cls='err'; txt='🚫 <b>Nota CANCELADA</b> pelo fornecedor — não receba esta mercadoria com esta nota.'; }
+  else if(n.tipo==='FATURAMENTO'||st==='A ENTREGAR'||st==='ENTREGUE'){ txt='📑 Essa nota <b>não é de mercadoria</b> (faturamento de entrega futura). Leia a nota de <b>remessa</b> que veio com o caminhão.'; }
+  else if(st==='RECEBIDA'||st==='RECEBIDA SEM XML'){ cls='info'; txt=`✅ Esta nota <b>já foi recebida</b>${n.recebida?` em ${esc(fmtDataBR(n.recebida))}`:''}${n.recebidaPor?` por <b>${esc(n.recebidaPor)}</b>`:''}.`; }
+  else if(st==='A CLASSIFICAR'){ txt='🗂️ O escritório <b>ainda não conferiu</b> esta nota (de-para dos produtos). Peça para classificar em Administrativo → Compras e leia de novo.'; }
+  else if(st==='IGNORADA'){ txt='Esta nota foi marcada como <b>ignorada</b> pelo escritório (não é compra de insumo).'+(n.obs?` Motivo: ${esc(n.obs)}`:''); }
+  else txt=`Status da nota: <b>${esc(st||'—')}</b>.`;
+  return `<div class="panel"><div class="panel-head"><h2>📄 ${cab}</h2></div><div class="nfe-aviso ${cls}" style="margin:12px 14px">${txt}</div>
+    <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
+    <div class="nfe-foot"><button class="btn btn-primary btn-sm" data-act="recNova">📷 Ler outra nota</button></div></div>`;
+}
+function recConferirHtml(){
+  const r=REC.info, n=r.nota, com=typeof recDivHtml==='function';
+  const cards=REC.itens.map((i,k)=>{ const uso=recQtdUso(i);
+    return `<div class="rec-it${i.div&&i.div.tipo?' div':''}"><div class="rec-it-top"><b>${esc(i.produto)}</b><span class="mut">${esc(i.xprod||'')}</span></div>
+      <div class="rec-it-q"><div><small>Na nota</small><b>${num(i.qcom)} ${esc(i.ucom)}</b><span>= ${num(i.qtd)} ${esc(i.un)}</span></div>
+        <div><small>Entra no estoque</small><b class="${uso!==i.qtd?'rec-dif':''}">${num(uso)} ${esc(i.un)}</b></div></div>
+      ${com?recDivHtml(i,k):''}</div>`; }).join('');
+  const temDiv=REC.itens.some(i=>i.div&&i.div.tipo);
+  return `<div class="panel rec-conf"><div class="panel-head"><h2>📦 Conferir recebimento</h2><span class="sub">${esc(n.fornecedor||'')}</span></div>
+    <div class="nfe-head"><div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
+      <div><small>Fornecedor</small><b>${esc(n.fornecedor||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(n.cnpj))}</span></div></div>
+    <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
+    <p class="mut" style="font-size:12.5px;padding:0 14px">Confira as quantidades que chegaram. ${com?'Se algo faltou, veio avariado, trocado ou sobrando, toque em <b>Divergência</b> no item.':''}</p>
+    <div class="rec-itens">${cards}</div>
+    ${temDiv&&typeof recCanhotoHtml==='function'?recCanhotoHtml():''}
+    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor())}" placeholder="seu nome" style="max-width:180px"></label>
+      <span class="spacer"></span><button class="btn btn-outline btn-sm" data-act="recNova">Cancelar</button>
+      <button class="btn btn-primary" data-act="recConfirmar">${temDiv?'⚠️ Confirmar com divergência':'✅ Conferido, tudo ok'}</button></div></div>`;
+}
+function recSemXmlHtml(){
+  const p=nfeChavePartes(REC.chave), [a,m]=[p.aamm.slice(0,2),p.aamm.slice(2)];
+  const rows=REC.itens.map((i,k)=>`<div class="rec-sx-row"><input list="prodlist" class="txt" data-reci="produto" data-i="${k}" value="${esc(i.produto)}" placeholder="produto do app">
+    <input class="cell" inputmode="decimal" data-reci="qtd" data-i="${k}" value="${i.qtd||''}" placeholder="qtd"><span class="mut">${esc((PROD[i.produto]||{}).un||'')}</span>
+    <button class="icon-btn del" data-act="recSxDel" data-i="${k}" title="Remover">🗑</button></div>`).join('');
+  return `${prodDatalist()}<div class="panel rec-conf"><div class="panel-head"><h2>📦 Nota ainda não chegou ao sistema</h2><span class="sub">recebimento sem XML</span></div>
+    <div class="nfe-aviso warn">O caminhão chegou antes do XML. Registre o que chegou: quando o XML chegar (e-mail/Drive), o sistema <b>casa sozinho</b> com este recebimento.</div>
+    <div class="nfe-head"><div><small>Emitente (CNPJ/CPF)</small><b>${esc(nfeCnpjFmt(p.doc))}</b><span>emissão ${esc(m)}/20${esc(a)}</span></div>
+      <div><small>Nota</small><b>Nº ${esc(p.nNF)} · série ${esc(p.serie)}</b><span>modelo ${esc(p.mod)}</span></div></div>
+    <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
+    <div style="padding:6px 14px"><label class="mut" style="font-size:12px;font-weight:700">Fornecedor (opcional)<input class="txt" data-recf="fornecedor" value="${esc(REC.fornecedor||'')}" placeholder="nome do fornecedor"></label></div>
+    <div class="rec-sx">${rows}</div>
+    <div style="padding:4px 14px"><button class="btn btn-outline btn-sm" data-act="recSxAdd">+ produto</button></div>
+    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor())}" placeholder="seu nome" style="max-width:180px"></label>
+      <span class="spacer"></span><button class="btn btn-outline btn-sm" data-act="recNova">Cancelar</button>
+      <button class="btn btn-primary" data-act="recConfirmar">✅ Registrar recebimento</button></div></div>`;
+}
+V.receber=function(){
+  if(!syncUrl()||!nfeToken()) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas pela câmera, este aparelho precisa da <b>sincronização</b> e do <b>Token da NF-e</b> (em <a class="link" data-go="#/sync">Sincronizar</a>).</div>`;
+  if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0">A planilha ainda está com o <b>Code.gs antigo</b> — implante a versão nova para receber notas.</div>`;
+  if(REC.etapa==='conferir') return recConferirHtml();
+  if(REC.etapa==='semxml') return recSemXmlHtml();
+  if(REC.etapa==='aviso') return recAvisoHtml();
+  if(REC.etapa==='feito'){ const f=REC.feito||{};
+    return `<div class="panel"><div class="panel-head"><h2>✅ Recebimento registrado</h2></div>
+      <div class="nfe-aviso ${f.pend?'warn':'info'}" style="margin:12px 14px">NF-e <b>${esc(f.nNF)}</b>${f.fornecedor?` · ${esc(f.fornecedor)}`:''}: <b>${f.itens}</b> produto(s) entraram no estoque${f.semXml?' (sem XML — casa sozinho quando o XML chegar)':''}.${f.pend?`<br>⚠️ <b>${f.pend} pendência(s)</b> aberta(s) — acompanhe em Administrativo → Pendências.`:''}</div>
+      <div class="nfe-foot">${f.pend&&typeof recWhatsHtml==='function'?recWhatsHtml(f):''}<span class="spacer"></span><button class="btn btn-primary" data-act="recNova">📷 Receber outra nota</button></div></div>`; }
+  // etapa LER
+  const T=REC.transito, lista=((T&&T.notas)||[]).filter(x=>!REC.filtroN||String(x.nNF).replace(/^0+/,'')===REC.filtroN);
+  const cam=REC.cam;
+  return `<div class="panel rec-ler"><div class="panel-head"><h2>📷 Receber nota</h2><span class="sub">leia o código de barras do DANFE</span></div>
+    ${cam?`<div class="rec-cam"><video id="rec-video" autoplay muted playsinline></video><div class="rec-mira"></div>
+        <div class="rec-cam-bar"><span id="rec-cam-st">Abrindo a câmera…</span><button class="btn btn-outline btn-sm" id="rec-torch" data-act="recTorch" style="display:none">🔦 Lanterna</button><button class="btn btn-outline btn-sm" data-act="recCamParar">✕ Fechar</button></div></div>`
+      :`<div style="padding:14px"><button class="btn btn-primary rec-big" data-act="recCam">📷 Ler código de barras</button></div>`}
+    ${REC.msg?`<div class="nfe-aviso ${/^✘|bloquead|Não consegui|Nenhuma/.test(REC.msg)?'err':'info'}" style="margin:0 14px 10px">${esc(REC.msg)}</div>`:''}
+    <div class="rec-alt">
+      <label>Nº da nota<div class="rec-inl"><input class="txt" id="rec-num" inputmode="numeric" placeholder="ex.: 1234"><button class="btn btn-outline btn-sm" data-act="recNum">Buscar</button></div></label>
+      <label>Chave (44 dígitos) — ou leitor USB/Bluetooth<input class="txt rec-44" id="rec-44" inputmode="numeric" autocomplete="off" value="${esc(nfeChaveFmt(REC.digitos))}" placeholder="0000 0000 0000 …"><span class="rec-44-st" id="rec-44-st">${esc(recChaveMsg(REC.digitos))}</span></label>
+    </div></div>
+  <div class="panel"><div class="panel-head"><h2>🚚 Em trânsito</h2><span class="sub">${T?`${lista.length} nota(s)`:'carregando…'}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="recTransAtualizar">🔄</button></div>
+    ${lista.map(x=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(x.fornecedor||'—')}</b><div class="mut">Nº ${esc(x.nNF)}/${esc(x.serie)} · emissão ${esc(fmtDataBR(x.emissao))} · ${brl(x.valor)}</div></div>
+      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="recAbrir" data-chave="${esc(x.chave)}">Receber</button></div></div>`).join('')||(T?'<p class="mut" style="padding:12px 14px">Nenhuma nota em trânsito.</p>':'')}</div>`;
+};
 // ---- TELA: Contratos a entregar (NF-e fase 3) ----
 V.contratos=function(){
   if(!nfeServerOk()) return `<div class="nfe-aviso info" style="margin:0">📑 Contratos de entrega futura vêm das notas de <b>faturamento</b> (CFOP 5922/6922). Para ligar: cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> e implante o <b>Code.gs</b> novo.</div>`;
@@ -5841,7 +6054,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -5867,6 +6080,13 @@ function route(opts){
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
   if(view==='entradas'){ setTimeout(()=>nfeListaCarregar(), 60); }
+  if(view==='receber'){ if(REC.etapa==='ler') setTimeout(()=>recTransitoCarregar(), 60);
+    const v=document.getElementById('rec-video');
+    if(REC.cam && !v) recCameraParar();
+    else if(REC.cam && REC.cam.stream && v && v.srcObject!==REC.cam.stream){   // tela redesenhada com a câmera aberta
+      if(REC.cam.modo==='nativo'){ v.srcObject=REC.cam.stream; v.play().catch(()=>{}); const st=document.getElementById('rec-cam-st'); if(st) st.textContent='Lendo… (leitor do aparelho)'; const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=REC.cam.torch?'':'none'; }
+      else { recCameraParar(); setTimeout(recCameraIniciar, 50); } } }
+  if(view!=='receber' && REC.cam) recCameraParar();
   if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
   try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
   _lastView=view;
@@ -6093,6 +6313,9 @@ document.addEventListener('change',e=>{
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
+  if(e.target.dataset && e.target.dataset.reci!=null){ const it=REC.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.reci;
+    if(f==='qtd') it.qtd=_mmC(e.target.value); else { const v=e.target.value.trim(); if(v&&!PROD[v]) toast('Produto não encontrado — escolha da lista'); it.produto=PROD[v]?v:''; } route({keepScroll:true}); } return; }
+  if(e.target.dataset && e.target.dataset.recf!=null){ REC[e.target.dataset.recf]=e.target.value; return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
   if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') route({keepScroll:true}); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
@@ -6113,6 +6336,12 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('stand-f')) standPreview(); });
+document.addEventListener('input',e=>{ if(e.target.id!=='rec-44') return;
+  const d=e.target.value.replace(/\D/g,'').slice(0,44); REC.digitos=d; const st=document.getElementById('rec-44-st'); if(st){ st.textContent=recChaveMsg(d); st.className='rec-44-st'+(/^✔/.test(st.textContent)?' ok':(/^✘/.test(st.textContent)?' err':'')); }
+  if(d.length===44 && nfeChaveOk(d)) recAbrirChave(d); });
+document.addEventListener('keydown',e=>{ if(e.key!=='Enter') return;
+  if(e.target.id==='rec-44'){ e.preventDefault(); recAbrirChave(e.target.value); }
+  else if(e.target.id==='rec-num'){ e.preventDefault(); recBuscarNumero(e.target.value); } });
 document.addEventListener('click',e=>{
   const cf=e.target.closest('#emp-cfilter .chip-f');
   if(cf){ cf.parentElement.querySelectorAll('.chip-f').forEach(bb=>bb.classList.remove('on')); cf.classList.add('on'); applyEmpFilter(); return; }
@@ -6309,6 +6538,16 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
+    else if(a.act==='recCam'){ recCameraIniciar(); }
+    else if(a.act==='recCamParar'){ recCameraParar(); REC.msg=''; route({keepScroll:true}); }
+    else if(a.act==='recTorch'){ recLanterna(); }
+    else if(a.act==='recNum'){ recBuscarNumero(($('#rec-num')||{}).value); }
+    else if(a.act==='recAbrir'){ recAbrirChave(a.chave); }
+    else if(a.act==='recNova'){ recReset(); route(); recTransitoCarregar(true); }
+    else if(a.act==='recTransAtualizar'){ REC.filtroN=''; recTransitoCarregar(true); }
+    else if(a.act==='recConfirmar'){ recConfirmar(); }
+    else if(a.act==='recSxAdd'){ REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
+    else if(a.act==='recSxDel'){ REC.itens.splice(+a.i,1); if(!REC.itens.length) REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ toast('Atualizando notas…'); nfeListaCarregar(true); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
