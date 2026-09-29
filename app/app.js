@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-140';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-141';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1969,20 +1969,34 @@ V.equipe=function(){
       <tbody>${manRows||'<tr><td colspan="6" class="mut" style="padding:14px">Nenhum integrante manual. A equipe vem do RH; adicione aqui só avulsos.</td></tr>'}</tbody></table></div></div>`;
 };
 const comprasTalSel = new Set();   // filtro de talhão da Demanda de Compras — sessão
+const comprasClsSel = new Set();   // filtro de CLASSE da Demanda (chave normalizada) — sessão
+let comprasSoComprar=false;         // só itens com "a comprar" > 0
+// classe normalizada: junta variações de grafia (BIOLÓGICO / BIOLÓGICOS / BIOLÓGICOs)
+function classeKey(c){ let k=String(c||'').trim().toUpperCase(); if(!k) return '(SEM CLASSE)'; if(k.length>3 && /S$/.test(k)) k=k.slice(0,-1); return k; }
+function classeLabels(rows){ const cnt={}; rows.forEach(r=>{ const k=classeKey(r.classe), l=String(r.classe||'').trim().toUpperCase()||'(sem classe)'; (cnt[k]=cnt[k]||{})[l]=((cnt[k]||{})[l]||0)+1; });
+  const out={}; Object.keys(cnt).forEach(k=>{ out[k]=Object.entries(cnt[k]).sort((a,b)=>b[1]-a[1])[0][0]; }); return out; }
+// linhas da Demanda com TODOS os filtros da tela (empreendimento, talhão, classe, só a comprar)
+function comprasFiltradas(){
+  const base=calcCompras(comprasEmpSel.size?comprasEmpSel:null, comprasTalSel.size?comprasTalSel:null);
+  return base.filter(r=>(!comprasClsSel.size||comprasClsSel.has(classeKey(r.classe))) && (!comprasSoComprar||r.comprar>0));
+}
 V.compras = function(){
   const sel=comprasEmpSel, tsel=comprasTalSel;
   const emps=empList().filter(e=>e&&e!=='—');
   const talhoes=talhoesAll();
-  const all=calcCompras(sel.size?sel:null, tsel.size?tsel:null);
+  const base=calcCompras(sel.size?sel:null, tsel.size?tsel:null), labels=classeLabels(base);
+  const all=comprasFiltradas();
   const totalCompra=all.reduce((a,r)=>a+r.valor,0);
   const valDemanda=all.reduce((a,r)=>a+r.demanda*r.preco,0);
-  const filtro=(sel.size||tsel.size);
+  const filtro=(sel.size||tsel.size||comprasClsSel.size||comprasSoComprar);
+  const clsCount={}, clsVal={}; base.filter(r=>!comprasSoComprar||r.comprar>0).forEach(r=>{ const k=classeKey(r.classe); clsCount[k]=(clsCount[k]||0)+1; clsVal[k]=(clsVal[k]||0)+r.demanda*r.preco; });
+  const clsKeys=Object.keys(clsCount).sort((a,b)=>(clsVal[b]||0)-(clsVal[a]||0)||a.localeCompare(b));
   const itens=all.filter(r=>r.comprar>0).length;
   const semPreco=all.filter(r=>r.comprar>0&&r.preco<=0).length;
   const valEstoque=all.reduce((a,r)=>a+r.estoque*r.preco,0);
   // agrupa por classe (grupos recolhíveis, como as operações do talhão)
   const groups={};
-  all.forEach(r=>{ const k=r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
+  all.forEach(r=>{ const k=labels[classeKey(r.classe)]||r.classe||'(sem classe)'; (groups[k]=groups[k]||[]).push(r); });
   const classes=Object.keys(groups).sort((a,b)=>a.localeCompare(b));
   const th=`<thead><tr><th>Produto</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Em pedido</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th>Fornecedor</th><th>Status</th></tr></thead>`;
   const rowHtml=r=>`<tr data-search="${esc((r.classe+' '+r.empresa+' '+r.produto).toLowerCase())}" data-dem="${r.demanda}" data-val="${r.demanda*r.preco}" data-buy="${r.valor}" data-un="${esc(r.un||'')}" data-cardkey="cp|${esc(r.produto)}"${openCards.has('cp|'+r.produto)?' class="open"':''}>
@@ -2025,14 +2039,21 @@ V.compras = function(){
       <button class="chip-f ${tsel.size===0?'on':''}" data-talf="">Todos</button>
       ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.nome||'')}">${esc(t.id)}</button>`).join('')}
     </div></div>
+  <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Filtrar por classe</h2>
+      <span class="sub">${comprasClsSel.size?`${comprasClsSel.size} classe(s)`:'todas as classes'}</span>
+      <div class="spacer"></div><label class="dem-only"><input type="checkbox" id="compras-socomprar"${comprasSoComprar?' checked':''}> só itens a comprar</label></div>
+    <div class="classe-filter" id="compras-clsf" style="margin:12px 14px">
+      <button class="chip-f ${comprasClsSel.size===0?'on':''}" data-clsf="">Todas <b>${base.filter(r=>!comprasSoComprar||r.comprar>0).length}</b></button>
+      ${clsKeys.map(k=>`<button class="chip-f ${comprasClsSel.has(k)?'on':''}" data-clsf="${esc(k)}" title="${brl0(clsVal[k]||0)} de demanda">${esc(labels[k]||k)} <b>${clsCount[k]}</b></button>`).join('')}
+    </div></div>
   <div class="dem-bar${filtro?' is-filtered':''}">
     <div class="dem-volwrap" hidden><span class="dem-lbl">Volume do insumo</span><b class="dem-vol"></b></div>
     <div><span class="dem-lbl">Valor da demanda${filtro?' (filtro)':''}</span><b class="dem-val">${brl0(valDemanda)}</b></div>
     <div class="dem-buy"><span class="dem-lbl">A comprar</span><b>${brl0(totalCompra)}</b></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-compra" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <button class="btn btn-outline btn-sm" id="btn-dem-emp-pdf" title="Relatório de demanda de insumos dos empreendimentos selecionados em 'Fracionar por empreendimento' (PDF)">🖨 Relatório dos selecionados</button>
-    <div class="spacer"></div><span class="badge badge-muted">${(sel.size||tsel.size)?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido). A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
+    <button class="btn btn-primary btn-sm" id="btn-dem-emp-pdf" title="Relatório em PDF da demanda com os filtros atuais (empreendimento, talhão, classe)">🖨 Relatório PDF${filtro?' (filtro)':''}</button>
+    <div class="spacer"></div><span class="badge badge-muted">${filtro?'Demanda só do que foi selecionado. ':''}A comprar = máx(0; Demanda − Estoque − Em pedido). A coluna Estoque mostra o saldo real (inicial + compras − aplicado). Estoque e Em pedido são editados na aba Estoque.</span></div>
   <div id="compras-groups">${groupsHtml||'<div class="empty">Sem itens para as culturas selecionadas.</div>'}</div>
   <div class="compras-total"><span>TOTAL A COMPRAR</span><b>${brl0(totalCompra)}</b></div>`;
 };
@@ -4384,6 +4405,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
+  if(e.target.id==='compras-socomprar'){ comprasSoComprar=!!e.target.checked; route({keepScroll:true}); return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
@@ -4413,6 +4435,8 @@ document.addEventListener('click',e=>{
   if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
   const ecf=e.target.closest('#est-clsf .chip-f');
   if(ecf){ estoqueClasse=ecf.dataset.estf||''; ecf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); ecf.classList.add('on'); filterEstoque(); return; }
+  const cls=e.target.closest('#compras-clsf .chip-f');   // Demanda: filtro por classe
+  if(cls){ const v=cls.dataset.clsf; if(v===''){ comprasClsSel.clear(); } else if(comprasClsSel.has(v)){ comprasClsSel.delete(v); } else { comprasClsSel.add(v); } route({keepScroll:true}); return; }
   const tf=e.target.closest('#compras-talf .chip-f');
   if(tf){ const v=tf.dataset.talf;
     if(v===''){ comprasTalSel.clear(); } else if(comprasTalSel.has(v)){ comprasTalSel.delete(v); } else { comprasTalSel.add(v); }
@@ -4832,39 +4856,64 @@ function exportCotacaoPDF(){
   printDoc(html);
   toast('Gerando PDF da cotação — escolha "Salvar como PDF"');
 }
-// DEMANDA por EMPREENDIMENTO: 1 bloco por cultura com os insumos demandados (dose × área),
-// agrupados por classe, com preço, valor e total por empreendimento. Respeita o filtro da tela.
+// RELATÓRIO DE DEMANDA (PDF): respeita os filtros da tela (empreendimento, talhão, classe, só a comprar).
+// Capa com indicadores, resumo por classe (barras), resumo por empreendimento e detalhe por classe.
 function exportDemandaEmpPDF(){
-  const sel=comprasEmpSel;
-  if(!sel.size){ toast('Selecione os empreendimentos em "Fracionar por empreendimento" para gerar o relatório'); return; }
-  const emps=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&sel.has(e)))].sort((a,b)=>a.localeCompare(b,'pt'));
-  if(!emps.length){ toast('Sem empreendimentos com demanda para a seleção'); return; }
-  let html=`<div class="pdf-head"><h1>Demanda de insumos por empreendimento — Safra 2026/2027</h1>
-    <div class="meta">${emps.length} empreendimento(s) selecionado(s) · gerado pelo app Planejamento</div></div>`;
-  let grand=0, blocos=0;
-  emps.forEach(e=>{
-    const dem=calcDemanda(new Set([e]));
-    const rows=Object.keys(dem).filter(p=>dem[p]>0.0001).map(p=>{ const pr=PROD[p]||{}, preco=precoDe(p), qtd=dem[p];
-      return {produto:p, classe:(pr.classe||'—'), un:(pr.un||''), qtd, preco, valor:qtd*preco}; })
-      .sort((a,b)=>(a.classe||'').localeCompare(b.classe||'','pt')||a.produto.localeCompare(b.produto,'pt'));
-    if(!rows.length) return;
-    const sub=rows.reduce((s,r)=>s+r.valor,0); grand+=sub;
-    let areaE=0; talhoesAll().forEach(t=>{ if((empDe(t)||'—')===e) areaE+=areaDe(t); if(temSafrinha(t)&&(empSafDe(t)||'—')===e) areaE+=areaDe(t); });
-    // linhas com subcabeçalho por classe
-    let body='', _cl=null;
-    rows.forEach(r=>{ if(r.classe!==_cl){ _cl=r.classe; body+=`<tr class="grp"><td colspan="5">${esc(r.classe)}</td></tr>`; }
-      body+=`<tr><td>${esc(r.produto)}</td><td class="num">${num(r.qtd)}</td><td>${esc(r.un)}</td><td class="num">${r.preco>0?brl(r.preco):'—'}</td><td class="num">${r.valor>0?brl0(r.valor):'—'}</td></tr>`; });
-    html+=`<section class="${blocos>0?'pb':''}"><h2>${esc(e)}</h2>
-      <div class="meta">Área ${num(areaE)} ha · ${rows.length} insumos · Total ${brl0(sub)}${areaE>0?` · ${brl(sub/areaE)}/ha`:''}</div>
-      <table><thead><tr><th>Insumo</th><th class="num">Demanda</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
-      <tbody>${body}</tbody>
-      <tfoot><tr><th colspan="4">Total ${esc(e)}</th><th class="num">${brl0(sub)}</th></tr></tfoot></table></section>`;
-    blocos++;
+  const rows=comprasFiltradas();
+  if(!rows.length){ toast('Nada para o filtro atual'); return; }
+  const base=calcCompras(comprasEmpSel.size?comprasEmpSel:null, comprasTalSel.size?comprasTalSel:null), labels=classeLabels(base);
+  const lbl=r=>labels[classeKey(r.classe)]||r.classe||'(sem classe)';
+  const hoje=fmtDataBR(_hojeISO());
+  const vDem=rows.reduce((a,r)=>a+r.demanda*r.preco,0), vBuy=rows.reduce((a,r)=>a+r.valor,0), vEst=rows.reduce((a,r)=>a+Math.min(Math.max(0,r.saldo),Math.max(0,r.demanda-(r.saida||0)))*r.preco,0);
+  const nBuy=rows.filter(r=>r.comprar>0).length, nSem=rows.filter(r=>r.comprar>0&&r.preco<=0).length;
+  const filtros=[ comprasEmpSel.size?`Empreendimento: ${[...comprasEmpSel].join(', ')}`:'Todos os empreendimentos',
+    comprasTalSel.size?`Talhão: ${[...comprasTalSel].join(', ')}`:'Todos os talhões',
+    comprasClsSel.size?`Classe: ${[...comprasClsSel].map(k=>labels[k]||k).join(', ')}`:'Todas as classes',
+    comprasSoComprar?'Só itens a comprar':'' ].filter(Boolean);
+  // grupos por classe
+  const g={}; rows.forEach(r=>{ const k=lbl(r); (g[k]=g[k]||[]).push(r); });
+  const cls=Object.keys(g).map(k=>({k, rs:g[k], dem:g[k].reduce((a,r)=>a+r.demanda*r.preco,0), buy:g[k].reduce((a,r)=>a+r.valor,0)})).sort((a,b)=>b.dem-a.dem||a.k.localeCompare(b.k));
+  const maxDem=Math.max(1,...cls.map(c=>c.dem));
+  const pct=v=>vDem>0?nf1.format(v/vDem*100)+'%':'—';
+  // resumo por empreendimento (mesmos filtros de talhão/classe)
+  const emps=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&(!comprasEmpSel.size||comprasEmpSel.has(e))))].sort((a,b)=>a.localeCompare(b,'pt'));
+  const clsOk=p=>!comprasClsSel.size||comprasClsSel.has(classeKey((PROD[p]||{}).classe));
+  const porEmp=emps.map(e=>{ const dem=calcDemanda(new Set([e]), comprasTalSel.size?comprasTalSel:null); let v=0, n=0;
+      for(const p in dem){ if(dem[p]<=0.0001||!clsOk(p)||String((PROD[p]||{}).classe||'').toUpperCase().startsWith('MÁQUINA')) continue; v+=dem[p]*precoDe(p); n++; }
+      let area=0; talhoesAll().forEach(t=>{ if(comprasTalSel.size&&!comprasTalSel.has(t.id)) return; if((empDe(t)||'—')===e) area+=areaDe(t); if(temSafrinha(t)&&(empSafDe(t)||'—')===e) area+=areaDe(t); });
+      return {e,v,n,area}; }).filter(x=>x.n);
+  let h=`<div class="dm">
+  <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027</div><h1>Demanda de insumos</h1><div class="dm-sub">gerado em ${hoje}</div></div>
+    <div class="dm-filt">${filtros.map(f=>`<span>${esc(f)}</span>`).join('')}</div></div>
+  <div class="dm-kpis">
+    <div class="dm-kpi k1"><small>Valor da demanda</small><b>${brl0(vDem)}</b><i>${rows.length} insumos</i></div>
+    <div class="dm-kpi k2"><small>A comprar</small><b>${brl0(vBuy)}</b><i>${nBuy} itens</i></div>
+    <div class="dm-kpi k3"><small>Coberto por estoque</small><b>${brl0(vEst)}</b><i>saldo que atende a demanda</i></div>
+    <div class="dm-kpi ${nSem?'k4':'k3'}"><small>Itens sem preço</small><b>${nSem}</b><i>${nSem?'valor subestimado':'tudo com preço'}</i></div>
+  </div>
+  <h2 class="dm-h2">Resumo por classe</h2>
+  <table class="dm-t dm-sum"><thead><tr><th>Classe</th><th class="num">Itens</th><th style="width:34%">Participação na demanda</th><th class="num">Demanda</th><th class="num">A comprar</th></tr></thead><tbody>
+    ${cls.map(c=>`<tr><td><b>${esc(c.k)}</b></td><td class="num">${c.rs.length}</td><td><div class="dm-bar"><span style="width:${Math.max(2,c.dem/maxDem*100).toFixed(1)}%"></span></div><em>${c.dem>0?pct(c.dem):''}</em></td><td class="num">${c.dem>0?brl0(c.dem):(c.rs.some(r=>r.preco<=0)?'<span class="dm-np">s/ preço</span>':'—')}</td><td class="num">${c.buy>0?brl0(c.buy):(c.rs.some(r=>r.comprar>0&&r.preco<=0)?'<span class="dm-np">s/ preço</span>':'—')}</td></tr>`).join('')}
+  </tbody><tfoot><tr><th>Total</th><th class="num">${rows.length}</th><th></th><th class="num">${brl0(vDem)}</th><th class="num">${brl0(vBuy)}</th></tr></tfoot></table>
+  ${porEmp.length>1?`<h2 class="dm-h2">Por empreendimento</h2>
+  <table class="dm-t dm-sum"><thead><tr><th>Empreendimento</th><th class="num">Área</th><th class="num">Insumos</th><th class="num">Demanda</th><th class="num">R$/ha</th></tr></thead><tbody>
+    ${porEmp.map(x=>`<tr><td><b>${esc(x.e)}</b></td><td class="num">${num(x.area)} ha</td><td class="num">${x.n}</td><td class="num">${brl0(x.v)}</td><td class="num">${x.area>0?brl(x.v/x.area):'—'}</td></tr>`).join('')}
+  </tbody></table>`:''}
+  <h2 class="dm-h2 dm-pb">Detalhe por classe</h2>`;
+  cls.forEach(c=>{
+    const rs=c.rs.slice().sort((a,b)=>b.demanda*b.preco-a.demanda*a.preco||a.produto.localeCompare(b.produto,'pt'));
+    h+=`<div class="dm-cls"><div class="dm-cls-h"><b>${esc(c.k)}</b><span>${rs.length} ${rs.length===1?'item':'itens'} · demanda ${brl0(c.dem)} · a comprar ${brl0(c.buy)}</span></div>
+      <table class="dm-t dm-det"><colgroup><col style="width:25%"><col style="width:15%"><col style="width:9%"><col style="width:9%"><col style="width:8%"><col style="width:9%"><col style="width:5%"><col style="width:9%"><col style="width:11%"></colgroup>
+      <thead><tr><th>Insumo</th><th>Fornecedor</th><th class="num">Demanda</th><th class="num">Estoque</th><th class="num">Pedido</th><th class="num">A comprar</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead><tbody>
+      ${rs.map(r=>`<tr class="${r.comprar>0?'buy':''}"><td><b>${esc(r.produto)}</b></td><td class="mut">${esc(r.empresa||'—')}</td><td class="num">${num(r.demanda)}</td><td class="num">${num(r.saldo)}</td><td class="num">${r.pedido>0?num(r.pedido):'—'}</td>
+        <td class="num"><b>${r.comprar>0?num(r.comprar):'—'}</b></td><td>${esc(r.un||'')}</td><td class="num">${r.preco>0?brl(r.preco):'<span class="dm-np">s/ preço</span>'}</td><td class="num">${r.valor>0?brl0(r.valor):'—'}</td></tr>`).join('')}
+      </tbody><tfoot><tr><th colspan="8">Subtotal ${esc(c.k)}</th><th class="num">${brl0(c.buy)}</th></tr></tfoot></table></div>`;
   });
-  if(!blocos){ toast('Sem demanda de insumos para o filtro atual'); return; }
-  html+=`<section><table><tfoot><tr><th colspan="4">TOTAL GERAL</th><th class="num">${brl0(grand)}</th></tr></tfoot></table></section>`;
-  printDoc(html);
-  toast('Gerando relatório por empreendimento — escolha "Salvar como PDF"');
+  h+=`<div class="dm-total"><span>TOTAL A COMPRAR</span><b>${brl0(vBuy)}</b></div>
+  <div class="dm-foot">A comprar = máx(0; demanda ainda não aplicada − saldo em estoque − em pedido). Estoque = saldo real (inicial + compras − aplicado). Valores pelo preço de referência do app.</div>
+  <div class="dm-sign"><div>Responsável<br>_______________________</div><div>Aprovação<br>_______________________</div><div>Data<br>____/____/______</div></div></div>`;
+  printDoc(h);
+  toast('Gerando relatório de demanda — escolha "Salvar como PDF"');
 }
 // TALHÃO: planejamento do talhão por safra/empreendimento (operações, insumos e doses)
 // CRONOGRAMA DE PLANEJAMENTO (leve, para orientar a execução): por safra, uma tabela em ordem de data com
