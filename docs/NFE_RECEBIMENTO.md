@@ -314,15 +314,15 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 ## 12.4 Decisões da fase 4 (tomadas)
 
 - **Tela** `#/receber` ("📷 Receber nota") nos módulos Administrativo **e** Campo.
-- **Câmera:** `getUserMedia` (câmera traseira) + `BarcodeDetector` (`code_128`) quando existe;
-  senão **ZXing** `@zxing/library@0.21.3` (UMD, jsdelivr), carregado só na hora. Aceita a chave
-  só com **2 leituras iguais seguidas**; vibra ao aceitar; botão 🔦 lanterna quando o aparelho suporta.
-- **Leitor v2** (o 1º não lia no campo): pede 1080p + foco contínuo + zoom (1,8× quando o aparelho
-  permite; controle na tela); lê só a **faixa da mira**, recortada e ampliada; alterna leitor nativo e
-  ZXing (`Code128Reader` com binarização híbrida e global) e tenta o código na vertical; aceita com
-  **2 leituras iguais** (não precisam ser seguidas) e DV conferido.
-- **📸 Tirar foto do código:** usa a câmera nativa (foco/resolução melhores) e procura o código em
-  vários recortes e na vertical — uma leitura com DV válido basta (foto parada).
+- **Bibliotecas:** `BarcodeDetector` (`code_128`) quando existe; **ZXing** `@zxing/library@0.21.3`
+  (UMD, jsdelivr), carregado só na hora.
+- **Leitor v3 — uma opção só (pedido da dona):** o vídeo ao vivo não lia nos celulares do campo e
+  foi retirado. Fica **um botão "📷 Ler código de barras"** que abre a **câmera do celular** para uma
+  foto (foco automático, resolução alta). O app procura o código na foto inteira e em faixas, em 3
+  tamanhos (1800/1200/2600 px), na horizontal, na vertical e inclinado ±5°, com **média vertical**
+  (tira o ruído sem apagar as barras), contraste reforçado, leitor nativo (quando existe) e ZXing
+  (`Code128Reader`, binarização híbrida e global). Aceita só chave com DV válido.
+  Digitar o nº da nota ou a chave fica recolhido em "Não conseguiu ler?".
 - **Validação:** 44 dígitos, modelo 55 e DV (módulo 11). Chave inválida é recusada com o motivo.
 - **Alternativas:** nº da nota (procura nas notas EM TRÂNSITO); os 44 dígitos (com validação ao
   vivo; abre sozinho ao completar); leitor USB/Bluetooth no mesmo campo (Enter).

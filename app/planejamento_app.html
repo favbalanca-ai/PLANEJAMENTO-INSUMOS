@@ -1232,6 +1232,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rec-dica{font-size:12px;padding:0 14px 8px;margin:0}
 .rec-zoom{display:inline-flex;align-items:center;gap:4px;color:#fff;font-size:13px}
 .rec-zoom input{width:90px}
+.rec-alt-d{margin:0 14px 12px;border:1px solid var(--line);border-radius:10px;background:#fafcfc}
+.rec-alt-d summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:var(--ink2)}
+.rec-alt-d .rec-alt{padding:4px 12px 12px}
+.rec-big.is-busy{opacity:.6;pointer-events:none}
 
 </style>
 </head>
@@ -1325,7 +1329,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-150';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-151';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3086,7 +3090,7 @@ function nfeConferirHtml(){
    digitados ou leitor USB/Bluetooth (funciona como teclado no mesmo campo). */
 const REC_POR_KEY='planejamento_nfe_recebedor';
 let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:'', canhoto:''};
-function recReset(){ recCameraParar(); REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:'', canhoto:''}; }
+function recReset(){ REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:'', canhoto:''}; }
 // redesenha a tela DEPOIS do evento (redesenhar dentro do 'change' que veio de um blur quebra o innerHTML)
 let _recRr=0; function recRerender(){ clearTimeout(_recRr); _recRr=setTimeout(()=>route({keepScroll:true}), 0); }
 function recPor(){ try{ return localStorage.getItem(REC_POR_KEY)||''; }catch(e){ return ''; } }
@@ -3099,98 +3103,64 @@ function recChaveMsg(d){ d=String(d||'').replace(/\D/g,''); if(!d) return '';
 function loadZXing(){ if(window.ZXing) return Promise.resolve(window.ZXing);
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
     s.onload=()=>res(window.ZXing); s.onerror=()=>rej(new Error('sem internet para carregar o leitor')); document.head.appendChild(s); }); }
-// ---- leitor do código de barras (v2): recorta a FAIXA DA MIRA, amplia e alterna métodos ----
-// O código do DANFE (CODE-128C, 44 dígitos) é longo e fino: ler o quadro inteiro em resolução média quase nunca
-// funciona. Aqui: 1080p + foco contínuo + zoom, recorte ampliado da faixa, 2 binarizações do ZXing (ou o leitor
-// nativo), tentativa com o código na vertical, e 2 leituras iguais (não precisam ser seguidas) com DV conferido.
+// ---- leitor do código de barras (v3): UMA opção — FOTO pela câmera do celular ----
+// O vídeo ao vivo não lia nos celulares do campo. A foto da câmera nativa tem foco automático e resolução
+// muito maior; aqui procuramos o código (CODE-128C, 44 dígitos) na foto inteira e em faixas, em 3 tamanhos,
+// na horizontal, na vertical e levemente inclinado, com 2 binarizações do ZXing, o leitor nativo (quando
+// existe) e uma versão com contraste reforçado. Aceita só chave com DV válido.
 function recCv(){ return REC._cv||(REC._cv=document.createElement('canvas')); }
-function recROI(src, W, H, rot){
-  const cv=recCv(), ctx=cv.getContext('2d',{willReadFrequently:true});
-  if(!rot){ const sw=W*0.96, sh=H*0.46, sx=(W-sw)/2, sy=(H-sh)/2, k=Math.min(2.4, 2000/sw);
-    cv.width=Math.round(sw*k); cv.height=Math.round(sh*k); ctx.imageSmoothingEnabled=true; ctx.drawImage(src,sx,sy,sw,sh,0,0,cv.width,cv.height); }
-  else { const sw=W*0.5, sh=H*0.96, sx=(W-sw)/2, sy=(H-sh)/2, k=Math.min(2.4, 2000/sh);   // código na vertical: gira 90°
-    cv.width=Math.round(sh*k); cv.height=Math.round(sw*k); ctx.save(); ctx.translate(cv.width,0); ctx.rotate(Math.PI/2);
-    ctx.drawImage(src,sx,sy,sw,sh,0,0,cv.height,cv.width); ctx.restore(); }
-  return cv;
-}
-function recZxing(cv, bin){ const z=REC.zx; if(!z) return null;
+function recZxing(cv, bin, rapido){ const z=REC.zx; if(!z) return null;
   try{ const L=new z.Z.HTMLCanvasElementLuminanceSource(cv), bmp=new z.Z.BinaryBitmap(bin?new z.Z.GlobalHistogramBinarizer(L):new z.Z.HybridBinarizer(L));
-    return z.r.decode(bmp, z.hints).getText(); }catch(e){ return null; } }
+    return z.r.decode(bmp, rapido?z.rapido:z.hints).getText(); }catch(e){ return null; } }
 async function recPrepLeitor(){
   if(REC.det===undefined){ REC.det=null; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('code_128')) REC.det=new BarcodeDetector({formats:['code_128']}); } }catch(e){} }
   if(!REC.zx){ try{ const Z=await loadZXing(); const h=new Map(); h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); h.set(Z.DecodeHintType.TRY_HARDER,true);
-      REC.zx={Z, r:new Z.Code128Reader(), hints:h}; }catch(e){ if(!REC.det) throw e; } }
+      const hr=new Map(); hr.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]);
+      REC.zx={Z, r:new Z.Code128Reader(), hints:h, rapido:hr}; }catch(e){ if(!REC.det) throw e; } }
 }
-// tenta ler 1 imagem (canvas/vídeo): leitor nativo (se houver) e ZXing com 2 binarizações
-async function recDecodificar(cv, alt){
-  if(REC.det){ try{ const r=await REC.det.detect(cv); for(const c of r||[]){ const d=String(c.rawValue||'').replace(/\D/g,''); if(d.length===44) return d; } }catch(e){} }
-  const t=recZxing(cv, alt); return t?String(t).replace(/\D/g,''):null;
+const _chave44=t=>{ const d=String(t||'').replace(/\D/g,''); return (d.length===44&&nfeChaveOk(d))?d:null; };
+async function recDecodificar(cv, rapido){
+  if(REC.det){ try{ const r=await REC.det.detect(cv); for(const c of r||[]){ const d=_chave44(c.rawValue); if(d) return d; } }catch(e){} }
+  return _chave44(recZxing(cv,false,rapido)) || _chave44(recZxing(cv,true,rapido));
 }
-async function recCameraIniciar(){
-  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ toast('Este aparelho/navegador não libera a câmera aqui — use "Tirar foto do código" ou digite a chave'); return; }
-  recCameraParar(); REC.leituras={}; REC.msg='Aproxime até o código de barras preencher a faixa · deixe reto, sem reflexo, e segure firme.';
-  REC.cam={on:true, n:0}; route({keepScroll:true});
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:false, video:{facingMode:{ideal:'environment'}, width:{ideal:1920}, height:{ideal:1080}}});
-    const video=document.getElementById('rec-video'); if(!video||!REC.cam){ stream.getTracks().forEach(t=>t.stop()); return; }
-    REC.cam.stream=stream; video.srcObject=stream; video.setAttribute('playsinline',''); await video.play().catch(()=>{});
-    const track=stream.getVideoTracks()[0], caps=(track.getCapabilities&&track.getCapabilities())||{}, adv={};
-    if((caps.focusMode||[]).includes('continuous')) adv.focusMode='continuous';
-    if(caps.zoom && caps.zoom.max>1){ REC.cam.zoom={min:caps.zoom.min||1, max:caps.zoom.max, step:caps.zoom.step||0.1, val:Math.min(caps.zoom.max, 1.8)}; adv.zoom=REC.cam.zoom.val; }
-    if(Object.keys(adv).length) track.applyConstraints({advanced:[adv]}).catch(()=>{});
-    REC.cam.track=track; REC.cam.torch=!!caps.torch; recCamUI();
-    await recPrepLeitor(); if(!REC.cam) return;
-    REC.cam.modo=REC.det?'nativo':'zxing'; recTick();
-  }catch(e){ recCameraParar(); REC.msg=/Permission|NotAllowed/i.test(e.name||e.message)?'Câmera bloqueada: libere a permissão da câmera para este site nas configurações do navegador — ou use "Tirar foto do código".':'Não consegui abrir a câmera: '+(e.message||e.name)+' — use "Tirar foto do código" ou digite a chave.'; route({keepScroll:true}); }
-}
-function recCamUI(){ const c=REC.cam; if(!c) return;
-  const tb=document.getElementById('rec-torch'); if(tb) tb.style.display=c.torch?'':'none';
-  const z=document.getElementById('rec-zoom'); if(z){ if(c.zoom){ z.min=c.zoom.min; z.max=c.zoom.max; z.step=c.zoom.step; z.value=c.zoom.val; z.parentElement.style.display=''; } else z.parentElement.style.display='none'; } }
-async function recTick(){
-  const c=REC.cam; if(!c) return;
-  const v=document.getElementById('rec-video');
-  if(v && v.readyState>=2 && v.videoWidth){
-    c.n++; const k=c.n%6, rot=(k===5);
-    const cv=(REC.det && k===4)?v:recROI(v, v.videoWidth, v.videoHeight, rot);
-    const d=await recDecodificar(cv, k%2===1);
-    if(!REC.cam) return;
-    if(d) recOnLeitura(d);
-    if(c.n%10===0){ const st=document.getElementById('rec-cam-st'); if(st && !REC.cam.lida) st.textContent=`Procurando o código… (${REC.cam.modo==='nativo'?'leitor do aparelho':'ZXing'} · ${c.n} quadros)`; }
-  }
-  if(REC.cam) REC.cam.timer=setTimeout(recTick, REC.det?90:60);
-}
-function recCameraParar(){ const c=REC.cam; if(!c) return; REC.cam=null;
-  try{ if(c.timer) clearTimeout(c.timer); }catch(e){} try{ if(c.stream) c.stream.getTracks().forEach(t=>t.stop()); }catch(e){} }
-function recLanterna(){ const c=REC.cam; if(!c||!c.track) return; c.torchOn=!c.torchOn;
-  c.track.applyConstraints({advanced:[{torch:c.torchOn}]}).catch(()=>toast('Lanterna indisponível')); }
-function recZoom(v){ const c=REC.cam; if(!c||!c.track||!c.zoom) return; c.zoom.val=+v; c.track.applyConstraints({advanced:[{zoom:+v}]}).catch(()=>{}); }
-// 2 leituras IGUAIS (não precisam ser seguidas) + DV conferido → aceita
-function recOnLeitura(txt){
-  const d=String(txt||'').replace(/\D/g,''); if(d.length!==44||!REC.cam) return;
-  const st=document.getElementById('rec-cam-st');
-  if(!nfeChaveOk(d)){ REC.cam.erros=(REC.cam.erros||0)+1; if(st) st.textContent='Leitura com erro — ajuste a distância e segure firme…'; return; }
-  REC.leituras=REC.leituras||{}; REC.leituras[d]=(REC.leituras[d]||0)+1;
-  if(REC.leituras[d]<2){ REC.cam.lida=true; if(st) st.textContent='✔ Leitura 1 de 2 — segure mais um instante…'; return; }
-  if(navigator.vibrate) try{ navigator.vibrate(80); }catch(e){}
-  recCameraParar(); recAbrirChave(d);
-}
-// FOTO do código (câmera nativa do celular: foco e resolução melhores que o vídeo) — tenta vários recortes
+// média na VERTICAL (as barras são verticais): tira o ruído do papel/foto sem apagar as barras
+function recSuaviza(cv, k){ const ctx=cv.getContext('2d',{willReadFrequently:true}), W=cv.width, H=cv.height, im=ctx.getImageData(0,0,W,H), d=im.data, g=new Float32Array(W*H);
+  for(let i=0,j=0;i<d.length;i+=4,j++) g[j]=(d[i]*77+d[i+1]*150+d[i+2]*29)/256;
+  const r=k>>1; for(let x=0;x<W;x++){ let acc=0,cnt=0; for(let y=0;y<Math.min(H,r);y++){ acc+=g[y*W+x]; cnt++; }
+    for(let y=0;y<H;y++){ const a=y+r, b=y-r-1; if(a<H){ acc+=g[a*W+x]; cnt++; } if(b>=0){ acc-=g[b*W+x]; cnt--; } const v=acc/cnt, o=(y*W+x)*4; d[o]=d[o+1]=d[o+2]=v; } }
+  ctx.putImageData(im,0,0); return cv; }
+// cinza + estica os níveis (papel amarelado, sombra, foto escura)
+function recContraste(cv){ const ctx=cv.getContext('2d',{willReadFrequently:true}), im=ctx.getImageData(0,0,cv.width,cv.height), d=im.data, h=new Uint32Array(256), n=d.length/4;
+  for(let i=0;i<d.length;i+=4){ const v=(d[i]*77+d[i+1]*150+d[i+2]*29)>>8; d[i]=v; h[v]++; }
+  let lo=0, hi=255, c=0; while(lo<255&&(c+=h[lo])<n*0.02) lo++; c=0; while(hi>0&&(c+=h[hi])<n*0.02) hi--;
+  const k=255/Math.max(1,hi-lo); for(let i=0;i<d.length;i+=4){ const v=Math.max(0,Math.min(255,(d[i]-lo)*k)); d[i]=d[i+1]=d[i+2]=v; }
+  ctx.putImageData(im,0,0); return cv; }
+function recDesenha(img, sx,sy,sw,sh, larg, graus){
+  const cv=recCv(), ctx=cv.getContext('2d',{willReadFrequently:true}), vert=(graus===90);
+  const k=larg/(vert?sh:sw); const w=Math.round((vert?sh:sw)*k), h=Math.round((vert?sw:sh)*k);
+  cv.width=w; cv.height=h; ctx.save(); ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h); ctx.translate(w/2,h/2); ctx.rotate(graus*Math.PI/180);
+  const dw=vert?h:w, dh=vert?w:h; ctx.drawImage(img,sx,sy,sw,sh,-dw/2,-dh/2,dw,dh); ctx.restore(); return cv; }
 async function recLerFoto(file){
-  REC.msg='Lendo a foto…'; recRerender();
+  REC.lendo=true; REC.msg='🔎 Procurando o código na foto…'; recRerender();
   try{
     await recPrepLeitor();
-    const bmp=await new Promise((res,rej)=>{ const img=new Image(), u=URL.createObjectURL(file); img.onload=()=>{ URL.revokeObjectURL(u); res(img); }; img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('imagem inválida')); }; img.src=u; });
-    const W=bmp.naturalWidth, H=bmp.naturalHeight, cv=recCv(), ctx=cv.getContext('2d',{willReadFrequently:true});
-    const tentar=async(sx,sy,sw,sh,rot)=>{ const k=Math.min(1, 2400/Math.max(sw,sh));
-      if(!rot){ cv.width=Math.round(sw*k); cv.height=Math.round(sh*k); ctx.drawImage(bmp,sx,sy,sw,sh,0,0,cv.width,cv.height); }
-      else { cv.width=Math.round(sh*k); cv.height=Math.round(sw*k); ctx.save(); ctx.translate(cv.width,0); ctx.rotate(Math.PI/2); ctx.drawImage(bmp,sx,sy,sw,sh,0,0,cv.height,cv.width); ctx.restore(); }
-      for(const alt of [false,true]){ const d=await recDecodificar(cv, alt); if(d&&nfeChaveOk(d)) return d; } return null; };
-    const rec=[[0,0,W,H,false]]; for(let i=0;i<5;i++){ const h=H*0.36, y=Math.max(0,(H-h)*i/4); rec.push([0,y,W,h,false]); }
-    rec.push([0,0,W,H,true]); for(let i=0;i<5;i++){ const w=W*0.36, x=Math.max(0,(W-w)*i/4); rec.push([x,0,w,H,true]); }
-    for(const r of rec){ const d=await tentar(...r); if(d){ REC.msg=''; return recAbrirChave(d); } }
-    REC.msg='Não consegui ler o código nesta foto. Tire de novo mais perto, com o código reto ocupando a largura da foto, sem sombra nem reflexo — ou digite a chave.';
+    const img=await new Promise((res,rej)=>{ const im=new Image(), u=URL.createObjectURL(file); im.onload=()=>{ URL.revokeObjectURL(u); res(im); }; im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('não consegui abrir a foto')); }; im.src=u; });
+    const W=img.naturalWidth, H=img.naturalHeight, tent=[];   // [sx,sy,sw,sh, largura, graus, efeito(0 nada|1 suaviza|2 contraste+suaviza), rápido]
+    const faixas=(vert)=>{ const out=[]; for(let i=0;i<6;i++){ if(!vert){ const h=H*0.3; out.push([0,(H-h)*i/5,W,h]); } else { const w=W*0.3; out.push([(W-w)*i/5,0,w,H]); } } return out; };
+    tent.push([0,0,W,H,1800,0,0,0]); faixas(false).forEach(f=>tent.push([...f,1800,0,1,1]));
+    tent.push([0,0,W,H,1200,0,1,1]); faixas(false).forEach(f=>tent.push([...f,1200,0,1,1]));        // foto tremida: menor fica mais nítida
+    tent.push([0,0,W,H,1800,90,0,0]); faixas(true).forEach(f=>tent.push([...f,1800,90,1,1]));
+    tent.push([0,0,W,H,2600,0,1,1]); faixas(false).forEach(f=>tent.push([...f,2600,0,1,1]));        // código pequeno na foto
+    faixas(false).forEach(f=>tent.push([...f,1800,0,2,1])); faixas(true).forEach(f=>tent.push([...f,1800,90,2,1]));
+    [-5,5].forEach(g=>{ tent.push([0,0,W,H,1800,g,0,0]); faixas(false).slice(1,5).forEach(f=>tent.push([...f,1800,g,1,1])); });
+    if(REC.det){ try{ const r=await REC.det.detect(img); for(const c of r||[]){ const d=_chave44(c.rawValue); if(d){ REC.lendo=false; REC.msg=''; return recAbrirChave(d); } } }catch(e){} }
+    for(let i=0;i<tent.length;i++){ const [sx,sy,sw,sh,larg,g,ef,rap]=tent[i];
+      let cv=recDesenha(img,sx,sy,sw,sh,larg,g); if(ef===2) cv=recContraste(cv); if(ef) cv=recSuaviza(cv, 9);
+      const d=await recDecodificar(cv, !!rap); if(d){ REC.lendo=false; REC.msg=''; return recAbrirChave(d); }
+      if(i%6===5){ const st=document.getElementById('rec-lendo'); if(st) st.textContent=`🔎 Procurando o código na foto… ${Math.round((i+1)/tent.length*100)}%`; await new Promise(r=>setTimeout(r,0)); } }
+    REC.msg=`Não encontrei o código de barras nesta foto. Tire de novo bem de perto, com o código reto ocupando a largura da foto, sem sombra nem reflexo. (foto ${W}×${H} · leitor ${REC.det?'do aparelho + ZXing':'ZXing'})`;
   }catch(e){ REC.msg='Não consegui ler a foto: '+e.message; }
-  route({keepScroll:true});
+  REC.lendo=false; route({keepScroll:true});
 }
 async function recAbrirChave(d){
   d=String(d||'').replace(/\D/g,'');
@@ -3210,7 +3180,7 @@ function recTransitoCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && REC.transito && Date.now()-REC.transito.ts<30000) return Promise.resolve(REC.transito);
   return nfeGet({acao:'nfe_lista', status:'EM TRÂNSITO'}).then(d=>{ REC.transito={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[]};
-    if(/#\/receber/.test(location.hash) && REC.etapa==='ler' && !REC.cam) route({keepScroll:true}); return REC.transito; }).catch(()=>null);
+    if(/#\/receber/.test(location.hash) && REC.etapa==='ler' && !REC.lendo) route({keepScroll:true}); return REC.transito; }).catch(()=>null);
 }
 function recBuscarNumero(v){ const n=String(v||'').replace(/\D/g,'').replace(/^0+/,''); if(!n){ toast('Digite o nº da nota'); return; }
   const L=((REC.transito&&REC.transito.notas)||[]).filter(x=>String(x.nNF).replace(/^0+/,'')===n);
@@ -3315,18 +3285,16 @@ V.receber=function(){
       <div class="nfe-foot">${f.pend&&typeof recWhatsHtml==='function'?recWhatsHtml(f):''}<span class="spacer"></span><button class="btn btn-primary" data-act="recNova">📷 Receber outra nota</button></div></div>`; }
   // etapa LER
   const T=REC.transito, lista=((T&&T.notas)||[]).filter(x=>!REC.filtroN||String(x.nNF).replace(/^0+/,'')===REC.filtroN);
-  const cam=REC.cam;
-  return `<div class="panel rec-ler"><div class="panel-head"><h2>📷 Receber nota</h2><span class="sub">leia o código de barras do DANFE</span></div>
-    ${cam?`<div class="rec-cam"><video id="rec-video" autoplay muted playsinline></video><div class="rec-mira"></div>
-        <div class="rec-cam-bar"><span id="rec-cam-st">Abrindo a câmera…</span><label class="rec-zoom" style="display:none">🔍<input type="range" id="rec-zoom"></label><button class="btn btn-outline btn-sm" id="rec-torch" data-act="recTorch" style="display:none">🔦 Lanterna</button><button class="btn btn-outline btn-sm" data-act="recCamParar">✕ Fechar</button></div></div>`
-      :`<div class="rec-bts"><button class="btn btn-primary rec-big" data-act="recCam">📷 Ler código de barras</button>
-          <label class="btn btn-outline rec-big" style="cursor:pointer">📸 Tirar foto do código<input type="file" accept="image/*" capture="environment" id="rec-foto-chave" hidden></label></div>
-        <p class="mut rec-dica">Dica: aproxime até o código de barras preencher a faixa da mira, com o papel reto e bem iluminado. Se o vídeo não pegar, use <b>Tirar foto do código</b> — a foto tem foco melhor.</p>`}
-    ${REC.msg?`<div class="nfe-aviso ${/^✘|bloquead|Não consegui|Nenhuma/.test(REC.msg)?'err':'info'}" style="margin:0 14px 10px">${esc(REC.msg)}</div>`:''}
+  return `<div class="panel rec-ler"><div class="panel-head"><h2>📷 Receber nota</h2><span class="sub">foto do código de barras do DANFE</span></div>
+    <div class="rec-bts"><label class="btn btn-primary rec-big${REC.lendo?' is-busy':''}" style="cursor:pointer">📷 Ler código de barras<input type="file" accept="image/*" capture="environment" id="rec-foto-chave" hidden${REC.lendo?' disabled':''}></label></div>
+    ${REC.lendo?`<div class="nfe-aviso info" style="margin:0 14px 10px" id="rec-lendo">${esc(REC.msg)}</div>`
+      :`<p class="mut rec-dica">Abre a câmera do celular. Fotografe o <b>código de barras</b> do DANFE <b>bem de perto</b>, reto, ocupando a largura da foto, sem sombra nem reflexo.</p>
+    ${REC.msg?`<div class="nfe-aviso ${/^✘|Não |Nenhuma|bloquead/.test(REC.msg)?'err':'info'}" style="margin:0 14px 10px">${esc(REC.msg)}</div>`:''}`}
+    <details class="rec-alt-d"${REC.msg&&!REC.lendo?' open':''}><summary>Não conseguiu ler? Digite o nº da nota ou a chave</summary>
     <div class="rec-alt">
       <label>Nº da nota<div class="rec-inl"><input class="txt" id="rec-num" inputmode="numeric" placeholder="ex.: 1234"><button class="btn btn-outline btn-sm" data-act="recNum">Buscar</button></div></label>
       <label>Chave (44 dígitos) — ou leitor USB/Bluetooth<input class="txt rec-44" id="rec-44" inputmode="numeric" autocomplete="off" value="${esc(nfeChaveFmt(REC.digitos))}" placeholder="0000 0000 0000 …"><span class="rec-44-st" id="rec-44-st">${esc(recChaveMsg(REC.digitos))}</span></label>
-    </div></div>
+    </div></details></div>
   <div class="panel"><div class="panel-head"><h2>🚚 Em trânsito</h2><span class="sub">${T?`${lista.length} nota(s)`:'carregando…'}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="recTransAtualizar">🔄</button></div>
     ${lista.map(x=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(x.fornecedor||'—')}</b><div class="mut">Nº ${esc(x.nNF)}/${esc(x.serie)} · emissão ${esc(fmtDataBR(x.emissao))} · ${brl(x.valor)}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="recAbrir" data-chave="${esc(x.chave)}">Receber</button></div></div>`).join('')||(T?'<p class="mut" style="padding:12px 14px">Nenhuma nota em trânsito.</p>':'')}</div>`;
@@ -6245,12 +6213,7 @@ function route(opts){
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
   if(view==='entradas'){ setTimeout(()=>nfeListaCarregar(), 60); }
-  if(view==='receber'){ if(REC.etapa==='ler') setTimeout(()=>recTransitoCarregar(), 60);
-    const v=document.getElementById('rec-video');
-    if(REC.cam && !v) recCameraParar();
-    else if(REC.cam && REC.cam.stream && v && v.srcObject!==REC.cam.stream){   // tela redesenhada com a câmera aberta
-      v.srcObject=REC.cam.stream; v.play().catch(()=>{}); recCamUI(); } }
-  if(view!=='receber' && REC.cam) recCameraParar();
+  if(view==='receber'){ if(REC.etapa==='ler') setTimeout(()=>recTransitoCarregar(), 60); }
   if(view==='pendencias' && !PEND.lista){ pendCarregar(); }
   if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
   try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
@@ -6508,7 +6471,6 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
 document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('stand-f')) standPreview(); });
-document.addEventListener('input',e=>{ if(e.target.id==='rec-zoom') recZoom(e.target.value); });
 document.addEventListener('input',e=>{ if(e.target.id!=='rec-44') return;
   const d=e.target.value.replace(/\D/g,'').slice(0,44); REC.digitos=d; const st=document.getElementById('rec-44-st'); if(st){ st.textContent=recChaveMsg(d); st.className='rec-44-st'+(/^✔/.test(st.textContent)?' ok':(/^✘/.test(st.textContent)?' err':'')); }
   if(d.length===44 && nfeChaveOk(d)) recAbrirChave(d); });
@@ -6713,12 +6675,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
-    else if(a.act==='recCam'){ recCameraIniciar(); }
     else if(a.act==='recDiv'){ const it=REC.itens[+a.i]; if(it){ it.div={tipo:'FALTA', qtdNota:'', ficou:false, foto:'', obs:''}; route({keepScroll:true}); } }
     else if(a.act==='recDivDel'){ const it=REC.itens[+a.i]; if(it){ it.div=null; route({keepScroll:true}); } }
     else if(a.act==='pendAtualizar'){ PEND.lista=null; route({keepScroll:true}); pendCarregar(); }
-    else if(a.act==='recCamParar'){ recCameraParar(); REC.msg=''; route({keepScroll:true}); }
-    else if(a.act==='recTorch'){ recLanterna(); }
     else if(a.act==='recNum'){ recBuscarNumero(($('#rec-num')||{}).value); }
     else if(a.act==='recAbrir'){ recAbrirChave(a.chave); }
     else if(a.act==='recNova'){ recReset(); route(); recTransitoCarregar(true); }
