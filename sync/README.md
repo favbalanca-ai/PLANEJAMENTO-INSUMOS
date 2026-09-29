@@ -93,6 +93,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   RECEBIDA / IGNORADA e `ref` (contrato da remessa). `nfeContratos_()` calcula faturado × entregue ×
   saldo; `?acao=contratos&token=…`; `readData` leva `nfe_estados` (a entregar, em trânsito,
   pendências e avariado por produto) para a conta do "a comprar".
+- **NF-e (fase 4)** — recebimento: `?acao=nfe_chave&chave=…&token=…` (status + itens da nota);
+  `{token, __recebimento:{chave, data, por, itens:[{n, qtdRecebida}], semXml?}}` → RECEBIDA /
+  RECEBIDA SEM XML (o XML casa sozinho quando chegar). Coluna nova `FOTO CANHOTO` na `NFE RECEBIDAS`.
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações
