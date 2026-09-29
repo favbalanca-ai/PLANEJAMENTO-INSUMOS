@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-155';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-156';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1677,9 +1677,17 @@ function nfeHistoricoHtml(L){
   const it=h.map(x=>{ const st=NFE_HIST_ST[x.status]||['•',x.status], p=x.chave&&/^\d{44}$/.test(x.chave)?nfeChavePartes(x.chave):null;
     return `<div class="nfe-hist-it"><span>${st[0]}</span><div><b>${esc(st[1])}</b> · <span class="mut">${quando(x.em)}</span>${p?` · NF ${esc(p.nNF)} · ${esc(nfeCnpjFmt(p.doc))}`:''}
       <div class="mut" style="font-size:11px;word-break:break-all">${esc(x.arq||'')}${x.motivo?` — ${esc(x.motivo)}`:''}</div>
-      ${ign[x.chave]?`<button class="btn btn-outline btn-sm" style="margin-top:4px" data-act="nfeReabrir" data-chave="${esc(x.chave)}">Classificar mesmo assim</button>`:''}</div></div>`; }).join('');
+      ${(ign[x.chave]&&x.status==='ignorada')?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${x.dest?`<button class="btn btn-primary btn-sm" data-act="nfeProdutor" data-doc="${esc(x.dest)}" title="Coloca este CPF/CNPJ na lista PRODUTOR (aba CONFIG NFE): as notas dele passam a entrar">➕ Cadastrar ${esc(nfeDocFmt(x.dest))} como produtor</button>`:''}
+        <button class="btn btn-outline btn-sm" data-act="nfeReabrir" data-chave="${esc(x.chave)}">Classificar mesmo assim</button></div>`:''}</div></div>`; }).join('');
   const abre=!(L.notas||[]).length;   // lista vazia: já abre, p/ ver o porquê
   return `<details class="nfe-hist"${abre?' open':''}><summary>Últimos arquivos lidos (${h.length})</summary>${it}</details>`;
+}
+const nfeDocFmt=d=>/^\d{11}$/.test(d)?d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,'$1.$2.$3-$4'):nfeCnpjFmt(d);
+async function nfeAddProdutor(doc){
+  if(!confirm(`Cadastrar ${nfeDocFmt(doc)} como PRODUTOR?\n\nAs notas para este CPF/CNPJ passam a entrar em "Notas a classificar" (as já ignoradas voltam agora).`)) return;
+  try{ const r=await nfePost({__nfeProdutor:{doc}}); if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')||'falha');
+    toast(`Produtor cadastrado${r&&r.ok?` — ${r.ok} nota(s) voltaram para classificar`:''}`); await nfeListaCarregar(true); }
+  catch(e){ toast('Não deu para cadastrar: '+(e.message||e)+' (confira se colou o Code.gs novo)'); }
 }
 async function nfeReabrir(chave){
   try{ const r=await nfePost({__nfeReabrir:{chave}}); if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')||'falha');
@@ -5470,6 +5478,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
     else if(a.act==='nfeReabrir'){ nfeReabrir(a.chave); }
+    else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }

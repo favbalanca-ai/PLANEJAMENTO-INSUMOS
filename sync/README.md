@@ -112,6 +112,11 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     os últimos 30 arquivos lidos (nova/repetida/ignorada/rejeitada + motivo) ficam em
     `NFE_CAPTURA_HIST` → `nfe_lista.historico` (e `nfe_lista.ignoradas` = chaves IGNORADA);
   - `{__nfeReabrir:{chave}, token}` → nota IGNORADA volta para A CLASSIFICAR ("Classificar mesmo assim");
+  - `{__nfeProdutor:{doc}, token}` → nova linha PRODUTOR na CONFIG NFE ("Cadastrar como produtor") e as
+    notas IGNORADAS desse destinatário voltam para A CLASSIFICAR (a captura também faz isso a cada busca);
+  - CONFIG NFE: CPF/CNPJ na linha logo abaixo de um PRODUTOR, com a coluna A vazia, também conta como produtor;
+  - chave, CPF/CNPJ e códigos são gravados sempre como **texto** (`_setCells_`); linhas antigas em que a
+    chave virou número são consertadas pelo XML guardado (`nfeRepararChaves_`, roda em toda busca);
     `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
 - **NF-e (fase 3)** — entrega futura: `__nfeClassifica` aceita `status` EM TRÂNSITO / A ENTREGAR /
   RECEBIDA / IGNORADA e `ref` (contrato da remessa). `nfeContratos_()` calcula faturado × entregue ×
