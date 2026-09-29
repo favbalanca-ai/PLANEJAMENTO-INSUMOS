@@ -80,6 +80,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     → aba **`DE-PARA NFE`** (criada se faltar; colunas achadas pelo cabeçalho),
     uma linha por CNPJ do emitente + código do produto na nota. O `doGet` devolve
     em `depara_nfe`. Assim a 2ª nota do mesmo fornecedor já vem "automática".
+- **NF-e (fase 2)** — captura automática. Rode **`setupNfe()` uma vez** pelo editor
+  (autoriza Gmail e Drive; cria pastas `NFe/…`, abas `CONFIG NFE`, `NFE RECEBIDAS`,
+  `NFE ITENS`, o token e o gatilho de 15 min `capturarNfe`). Depois preencha os
+  CPF/CNPJ dos produtores na `CONFIG NFE` e cole o TOKEN no app (Sincronizar).
+  - `capturarNfe()` lê o Gmail (`has:attachment (filename:xml OR filename:zip) newer_than:7d -label:NFE-OK`)
+    e a pasta `NFe/Entrada`; `processarXmlNfe()` valida, evita duplicar pela chave,
+    salva em `NFe/XML/AAAA-MM/` e grava a `NFE RECEBIDAS` (status A CLASSIFICAR).
+  - `doGet ?acao=nfe_lista&status=…&token=…` e `?acao=nfe&chave=…&token=…`;
+    `doPost {token, __nfeClassifica:{chave, status, itens[], obs}}` e `{token, __nfeUpload:{xml}}`.
 - O POST usa `Content-Type: text/plain` para evitar *preflight* de CORS.
 
 ## Observações

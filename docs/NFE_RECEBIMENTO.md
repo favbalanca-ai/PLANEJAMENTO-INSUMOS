@@ -262,6 +262,33 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   CONFIRMADO POR · DATA). O app só envia depois que o `doGet` passa a devolver
   `depara_nfe` (Code.gs novo implantado); antes disso o de-para fica no aparelho.
 
+## 12.2 Decisões da fase 2 (tomadas)
+
+- **Configuração:** função `setupNfe()` no `Code.gs`, rodada **uma vez** pelo editor
+  do Apps Script. Cria as pastas `NFe/Entrada`, `NFe/XML`, `NFe/Rejeitados`, as abas
+  `CONFIG NFE`, `NFE RECEBIDAS`, `NFE ITENS`, gera o **token** e liga o gatilho de
+  15 min (`capturarNfe`). Pode rodar de novo sem duplicar nada.
+- **`CONFIG NFE`** (CHAVE · VALOR · OBS): `TOKEN`, `PASTA NFE` (ID) e uma linha
+  `PRODUTOR` por CPF/CNPJ. Lista de produtores vazia = aceita todas, com aviso na OBS.
+- **Destinatário fora da lista:** registrada como **IGNORADA** com o motivo na OBS.
+- **Arquivo inválido em `NFe/Entrada`** (PDF, XML sem protocolo…): vai para
+  `NFe/Rejeitados`. Processado com sucesso: o original vai para a lixeira do Drive
+  (a cópia padronizada fica em `NFe/XML/AAAA-MM/{chave}-nfe.xml`).
+- **Gmail:** o da conta dona da planilha (a que roda o script). E-mails lidos ganham
+  a etiqueta `NFE-OK` (não são lidos de novo).
+- **Confirmar no app = entrada direta no estoque** (como na fase 1) e a nota vira
+  **RECEBIDA** (+ linhas na `NFE ITENS`). "A entregar/em trânsito" fica para a fase 3.
+- **Cancelamento** (evento 110111 homologado): nota vira **CANCELADA**; se já tinha
+  dado entrada, a OBS recebe o alerta "⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE"
+  (o estoque **não** é ajustado sozinho). Cancelamento que chega antes da nota cria a
+  linha CANCELADA; quando a nota chega, completa os dados e continua CANCELADA.
+- **Token:** o app guarda no aparelho (Sincronizar → Token da NF-e). Exigido em
+  `?acao=nfe_lista`, `?acao=nfe`, `__nfeClassifica` e `__nfeUpload`. O puxar normal
+  só leva `nfe_resumo` (contagens, sem dados da nota).
+- **XML escolhido no aparelho** também sobe (`__nfeUpload`) para o Drive + índice.
+- **Sem internet** ao confirmar: a classificação fica numa fila no aparelho e sobe
+  no próximo ENVIAR (aparece em "Falta sincronizar").
+
 ## 13. Fases e critérios de aceite
 
 | Fase | Entrega | Pronto quando… |
