@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-141';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-142';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4836,25 +4836,56 @@ function printDoc(html){
   el.innerHTML=html;
   setTimeout(()=>window.print(), 60);
 }
-// COTAÇÃO: um bloco por fornecedor (quebra de página), lista de insumo + volume
+// COTAÇÃO (PDF): uma SOLICITAÇÃO DE COTAÇÃO por fornecedor (página própria, para enviar a ele) — insumos agrupados
+// por classe com princípio ativo e volume; colunas em branco para o fornecedor preencher preço/total/marca;
+// condições comerciais e assinaturas. Sem preço de referência (não vaza o preço interno).
 function exportCotacaoPDF(){
   const rows=cotaFiltraForClasse(calcCompras(cotaEmpSel.size?cotaEmpSel:null).filter(r=>r.comprar>0));
   if(!rows.length){ toast('Nada a cotar para o filtro atual'); return; }
   const groups={}; rows.forEach(r=>{const k=r.empresa||'(sem fornecedor)';(groups[k]=groups[k]||[]).push(r);});
-  const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
-  const filtroTxt=[cotaFornSel.size?[...cotaFornSel].join(', '):'', cotaClasseSel.size?[...cotaClasseSel].map(c=>c==='—'?'(sem classe)':c).join(', '):''].filter(Boolean).join(' · ');
-  let html=`<div class="pdf-head"><h1>Cotação de insumos — Safra 2026/2027</h1>
-    <div class="meta">${order.length} fornecedor(es) · gerado pelo app Planejamento${filtroTxt?` · filtro: ${esc(filtroTxt)}`:''}</div></div>`;
+  const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b,'pt'));
+  const hojeIso=_hojeISO(), hoje=fmtDataBR(hojeIso), base='COT-'+hojeIso.replace(/-/g,'').slice(2);
+  const emps=cotaEmpSel.size?[...cotaEmpSel].join(', '):'todos os empreendimentos';
+  let h='<div class="dm">';
+  if(order.length>1){
+    h+=`<div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027</div><h1>Cotação de insumos</h1><div class="dm-sub">gerado em ${hoje} · ${esc(emps)}</div></div>
+      <div class="dm-filt"><span>${order.length} fornecedores</span><span>${rows.length} itens</span></div></div>
+      <h2 class="dm-h2">Índice — uma solicitação por página</h2>
+      <table class="dm-t dm-sum"><thead><tr><th>Nº</th><th>Fornecedor</th><th class="num">Itens</th><th>Classes</th></tr></thead><tbody>
+      ${order.map((f,i)=>{ const cl=[...new Set(groups[f].map(r=>r.classe||'—'))].sort((a,b)=>a.localeCompare(b,'pt'));
+        return `<tr><td>${base}-${String(i+1).padStart(2,'0')}</td><td><b>${esc(f)}</b></td><td class="num">${groups[f].length}</td><td>${esc(cl.join(', '))}</td></tr>`; }).join('')}
+      </tbody></table>
+      <div class="dm-foot">Envie a cada fornecedor apenas a página dele. As colunas de preço, total e marca ficam em branco para o fornecedor preencher.</div>`;
+  }
   order.forEach((forn,i)=>{
-    const its=groups[forn].slice().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'')||a.produto.localeCompare(b.produto));
-    html+=`<section class="${i>0?'pb':''}"><h2>${esc(forn)}</h2>
-      <table><thead><tr><th>Insumo</th><th>Classe</th><th class="num">Volume</th><th>Un</th></tr></thead><tbody>`;
-    its.forEach(r=>{ html+=`<tr><td>${esc(r.produto)}</td><td>${esc(r.classe||'—')}</td><td class="num">${num(r.comprar)}</td><td>${esc(r.un)}</td></tr>`; });
-    html+=`</tbody></table>
-      <div class="foot">Assinatura / condições: ______________________________________</div></section>`;
+    const its=groups[forn].slice().sort((a,b)=>(a.classe||'').localeCompare(b.classe||'','pt')||a.produto.localeCompare(b.produto,'pt'));
+    const ncl=new Set(its.map(r=>r.classe||'—')).size, num_=`${base}-${String(i+1).padStart(2,'0')}`;
+    let body='', cl=null, n=0;
+    its.forEach(r=>{ if((r.classe||'—')!==cl){ cl=r.classe||'—'; body+=`<tr class="cq-grp"><td colspan="8">${esc(cl==='—'?'Sem classe':cl)}</td></tr>`; }
+      n++; body+=`<tr><td class="num cq-n">${n}</td><td><b>${esc(r.produto)}</b>${r.ativos?`<div class="cq-at">${esc(r.ativos)}</div>`:''}</td>
+        <td class="num"><b>${num(r.comprar)}</b></td><td>${esc(r.un||'')}</td><td class="cq-fill"></td><td class="cq-fill"></td><td class="cq-fill"></td><td class="cq-fill"></td></tr>`; });
+    h+=`<section class="cq${(i>0||order.length>1)?' cq-pb':''}">
+      <div class="dm-head"><div><div class="dm-kicker">Solicitação de cotação · Safra 2026/2027</div><h1>${esc(forn)}</h1><div class="dm-sub">${esc(emps)}</div></div>
+        <div class="cq-id"><div><small>Nº</small><b>${num_}</b></div><div><small>Emissão</small><b>${hoje}</b></div><div><small>Responder até</small><b>___/___/______</b></div></div></div>
+      <div class="dm-kpis cq-kpis">
+        <div class="dm-kpi"><small>Itens</small><b>${its.length}</b><i>${ncl} classe(s)</i></div>
+        <div class="dm-kpi k3"><small>Local de entrega</small><b class="cq-blank">&nbsp;</b><i>fazenda / armazém</i></div>
+        <div class="dm-kpi k3"><small>Entrega desejada</small><b class="cq-blank">&nbsp;</b><i>data ou prazo</i></div>
+        <div class="dm-kpi k2"><small>Total da proposta</small><b class="cq-blank">R$</b><i>preencher</i></div></div>
+      <table class="dm-t cq-t"><colgroup><col style="width:4%"><col style="width:34%"><col style="width:10%"><col style="width:5%"><col style="width:12%"><col style="width:13%"><col style="width:11%"><col style="width:11%"></colgroup>
+        <thead><tr><th class="num">#</th><th>Insumo · princípio ativo</th><th class="num">Quantidade</th><th>Un</th><th>Preço unit. (R$)</th><th>Total (R$)</th><th>Marca / embal.</th><th>Prazo entrega</th></tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr><th colspan="5">Total da proposta</th><th class="cq-fill"></th><th colspan="2"></th></tr></tfoot></table>
+      <div class="cq-cond">
+        <div><small>Forma de pagamento</small><span></span></div><div><small>Prazo de pagamento</small><span></span></div>
+        <div><small>Frete</small><span class="cq-chk">☐ CIF &nbsp; ☐ FOB</span></div><div><small>Validade da proposta</small><span></span></div></div>
+      <div class="cq-obs"><small>Observações</small><span></span><span></span></div>
+      <div class="dm-sign"><div>Comprador<br>_______________________</div><div>Fornecedor (carimbo e assinatura)<br>_______________________</div><div>Data<br>____/____/______</div></div>
+    </section>`;
   });
-  printDoc(html);
-  toast('Gerando PDF da cotação — escolha "Salvar como PDF"');
+  h+='</div>';
+  printDoc(h);
+  toast('Gerando solicitações de cotação — escolha "Salvar como PDF"');
 }
 // RELATÓRIO DE DEMANDA (PDF): respeita os filtros da tela (empreendimento, talhão, classe, só a comprar).
 // Capa com indicadores, resumo por classe (barras), resumo por empreendimento e detalhe por classe.
