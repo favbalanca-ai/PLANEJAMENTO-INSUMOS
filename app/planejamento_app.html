@@ -1347,7 +1347,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-159';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-160';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2996,14 +2996,14 @@ function nfeListaCarregar(force){
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
 }
-// botão "Atualizar": busca AGORA no e-mail e na pasta NFe/Entrada (sem esperar os 15 min) e recarrega a lista
+// botão "Atualizar": lê AGORA a pasta NFe/Entrada do Drive (sem esperar os 15 min) e recarrega a lista
 async function nfeCapturarAgora(){
   if(!nfeServerOk()) return;
-  toast('Buscando notas no e-mail e na pasta NFe/Entrada…');
+  toast('Lendo a pasta NFe/Entrada do Drive…');
   let d=null; try{ d=await nfeGet({acao:'capturar'}); }catch(e){}
   await nfeListaCarregar(true);
   const c=d&&d.captura;
-  if(d && d.ok && c) toast(c.lidas?`${c.lidas} arquivo(s) lido(s): ${c.novas} nova(s)${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}${c.rejeitadas.length?` · ${c.rejeitadas.length} rejeitado(s)`:''}${(c.erros.length||c.ignoradas||c.rejeitadas.length)?' — veja o motivo no painel':''}`:(c.erros.length?'Busca com erro — veja no painel':'Nenhum XML novo no e-mail nem na pasta'));
+  if(d && d.ok && c) toast(c.lidas?`${c.lidas} arquivo(s) lido(s): ${c.novas} nova(s)${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}${c.rejeitadas.length?` · ${c.rejeitadas.length} rejeitado(s)`:''}${(c.erros.length||c.ignoradas||c.rejeitadas.length)?' — veja o motivo no painel':''}`:(c.erros.length?'Busca com erro — veja no painel':'Nenhum XML novo na pasta NFe/Entrada'));
   else if(d && d.erro==='ocupado') toast('A planilha está ocupada — tente de novo em instantes');
   else if(d && /desconhecida/.test(d.erro||'')) toast('Lista atualizada (para buscar na hora, cole o Code.gs novo)');
   else if(!d) toast('Sem conexão com a planilha');
@@ -3015,7 +3015,7 @@ function nfeCapturaHtml(c){
   const hora=isNaN(min)?esc(c.em):quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   const parado=!isNaN(min) && min>45;
   return `<div class="mut" style="padding:8px 14px 0;font-size:12px">Última busca: <b>${hora}</b> · ${c.lidas} arquivo(s)${c.novas?` · ${c.novas} nova(s)`:''}${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}</div>
-    ${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há e-mails/arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
+    ${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
     ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
     ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
@@ -3082,7 +3082,7 @@ function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entrad
   b.textContent=n; b.title=`${r.aClassificar||0} nota(s) a classificar${r.alertas?` · ${r.alertas} alerta(s)`:''}`; b.classList.toggle('alert', !!r.alertas); }
 function nfeListaHtml(){
   if(!syncUrl()) return '';
-  if(!nfeToken()) return `<div class="nfe-aviso info" style="margin:0 0 14px">📥 As notas que chegam <b>por e-mail</b> ou pela pasta <b>NFe/Entrada</b> do Drive aparecem aqui. Para ligar, cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> (está na aba CONFIG NFE da planilha).</div>`;
+  if(!nfeToken()) return `<div class="nfe-aviso info" style="margin:0 0 14px">📥 Os XML que você coloca na pasta <b>NFe/Entrada</b> do Drive aparecem aqui. Para ligar, cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> (está na aba CONFIG NFE da planilha).</div>`;
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
@@ -3091,7 +3091,7 @@ function nfeListaHtml(){
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Conferir</button>
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
-  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">${(L.notas||[]).length} nota(s) · chegam por e-mail e pela pasta NFe/Entrada (a cada 15 min)</span>
+  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">${(L.notas||[]).length} nota(s) · coloque os XML na pasta NFe/Entrada do Drive (lida a cada 15 min ou no Atualizar)</span>
       <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(L.captura)}
@@ -3405,7 +3405,7 @@ function recSemXmlHtml(){
     <input class="cell" inputmode="decimal" data-reci="qtd" data-i="${k}" value="${i.qtd||''}" placeholder="qtd"><span class="mut">${esc((PROD[i.produto]||{}).un||'')}</span>
     <button class="icon-btn del" data-act="recSxDel" data-i="${k}" title="Remover">🗑</button></div>`).join('');
   return `${prodDatalist()}<div class="panel rec-conf"><div class="panel-head"><h2>📦 Nota ainda não chegou ao sistema</h2><span class="sub">recebimento sem XML</span></div>
-    <div class="nfe-aviso warn">O caminhão chegou antes do XML. Registre o que chegou: quando o XML chegar (e-mail/Drive), o sistema <b>casa sozinho</b> com este recebimento.</div>
+    <div class="nfe-aviso warn">O caminhão chegou antes do XML. Registre o que chegou: quando o XML for colocado na pasta NFe/Entrada do Drive, o sistema <b>casa sozinho</b> com este recebimento.</div>
     <div class="nfe-head"><div><small>Emitente (CNPJ/CPF)</small><b>${esc(nfeCnpjFmt(p.doc))}</b><span>emissão ${esc(m)}/20${esc(a)}</span></div>
       <div><small>Nota</small><b>Nº ${esc(p.nNF)} · série ${esc(p.serie)}</b><span>modelo ${esc(p.mod)}</span></div></div>
     <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
@@ -6293,7 +6293,7 @@ V.sync = function(){
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:6px">
         <input class="txt" id="nfe-token" type="password" autocomplete="off" value="${esc(nfeToken())}" placeholder="cole aqui o TOKEN" style="flex:1;min-width:220px">
         <button class="btn btn-outline btn-sm" data-act="nfeTokenSave">Salvar token</button>
-        <span class="mut" style="font-size:12px;align-self:center">${nfeToken()?(DATA&&DATA.nfe_resumo?'✔ NF-e ligada':'token salvo — falta o Code.gs novo'):'sem token: a lista de notas por e-mail fica desligada'}</span>
+        <span class="mut" style="font-size:12px;align-self:center">${nfeToken()?(DATA&&DATA.nfe_resumo?'✔ NF-e ligada':'token salvo — falta o Code.gs novo'):'sem token: a lista de notas da pasta NFe/Entrada fica desligada'}</span>
       </div>
       <label class="switch" style="margin-top:16px">
         <input type="checkbox" id="sync-auto" ${on?'checked':''} data-edit="autoSync">

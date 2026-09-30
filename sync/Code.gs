@@ -426,7 +426,7 @@ function nfeConfig_(){
   var cfg = nfeConfigLer_(); if (_NFE_MEMO_) _NFE_MEMO_.cfg = cfg; return cfg;
 }
 function nfeConfigLer_(){
-  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30 }; if (!s) return cfg;
+  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30, email:false }; if (!s) return cfg;
   var last = s.getLastRow(); if (last < 2) return cfg;
   var v = s.getRange(2,1,last-1,2).getValues();
   var ant = '';
@@ -435,7 +435,8 @@ function nfeConfigLer_(){
     ant = k;
     if (k === 'TOKEN') cfg.token = val; else if (k === 'PASTANFE') cfg.pasta = val;
     else if (k === 'PRODUTOR' && val) cfg.produtores.push(_doc_(r[1]));
-    else if (k === 'DIASCONTRATOPARADO' && val !== '') cfg.diasParado = N(val); });
+    else if (k === 'DIASCONTRATOPARADO' && val !== '') cfg.diasParado = N(val);
+    else if (k === 'LEREMAIL') cfg.email = /^(SIM|S|1|TRUE|X)$/i.test(val); });
   return cfg;
 }
 function nfeTokenOk_(tk){ var t = nfeConfig_().token; return !!t && S(tk) === t; }
@@ -461,8 +462,9 @@ function setupNfe(){
   sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS); sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS);
   var tem = ScriptApp.getProjectTriggers().some(function(g){ return g.getHandlerFunction() === 'capturarNfe'; });
   if (!tem) ScriptApp.newTrigger('capturarNfe').timeBased().everyMinutes(15).create();
-  (GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL));
-  return 'NF-e configurada: pastas, abas, token e gatilho de 15 min.';
+  var temEmail = s.getLastRow() >= 2 && s.getRange(2,1,s.getLastRow()-1,1).getValues().some(function(r){ return _hkey(r[0]) === 'LEREMAIL'; });
+  if (!temEmail) add('LER E-MAIL', 'NÃO', 'SIM = também busca os XML no Gmail. NÃO = só a pasta NFe/Entrada do Drive (você coloca os XML lá).');
+  return 'NF-e configurada: pastas, abas, token e gatilho de 15 min (lê a pasta NFe/Entrada).';
 }
 
 // ---- leitura do XML (XmlService; procura pelo NOME local, com ou sem namespace) ----
@@ -648,7 +650,9 @@ function capturarNfe(maxMs){
         bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = S(f.getName()); res.push(r); if (r.status === 'rejeitada') ok = false; });
         if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados);   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
       } catch (e){ erros.push('arquivo "' + f.getName() + '": ' + e); } }   // fica na Entrada: tenta de novo na próxima
-    if (!fimTempo()) try {
+    // e-mail DESLIGADO por padrão: as notas entram só pela pasta NFe/Entrada (a pessoa alimenta à mão).
+    // Para voltar a ler o Gmail: na CONFIG NFE, linha "LER E-MAIL" = SIM.
+    if (cfg.email && !fimTempo()) try {
       var label = GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL);
       var ths = GmailApp.search('has:attachment (filename:xml OR filename:zip) newer_than:7d -label:' + NFE_LABEL, 0, 50);
       for (var i = 0; i < ths.length; i++){ var th = ths[i]; if (fimTempo()) break;

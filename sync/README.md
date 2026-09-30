@@ -105,6 +105,8 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     e a pasta `NFe/Entrada`; `processarXmlNfe()` valida, evita duplicar pela chave,
     salva em `NFe/XML/AAAA-MM/` e grava a `NFE RECEBIDAS` (status A CLASSIFICAR).
   - `doGet ?acao=nfe_lista&status=…&token=…` e `?acao=nfe&chave=…&token=…`;
+  - **E-mail desligado:** a captura lê só a pasta `NFe/Entrada` do Drive. Para voltar a ler o Gmail,
+    `CONFIG NFE` → linha `LER E-MAIL` = `SIM`;
   - `doGet ?acao=capturar&token=…` → roda `capturarNfe` na hora (botão **Atualizar** do app, limite ~25 s).
     A captura pega a trava da planilha **por arquivo** (não pela busca inteira), então as gravações do app
     passam no meio; tem limite de tempo (gatilho ~4 min) e o que faltar fica para a próxima (`captura.parcial`);
