@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-157';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-158';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1664,6 +1664,7 @@ function nfeCapturaHtml(c){
   const hora=isNaN(min)?esc(c.em):quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   const parado=!isNaN(min) && min>45;
   return `<div class="mut" style="padding:8px 14px 0;font-size:12px">Última busca: <b>${hora}</b> · ${c.lidas} arquivo(s)${c.novas?` · ${c.novas} nova(s)`:''}${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}</div>
+    ${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há e-mails/arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
     ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
     ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
