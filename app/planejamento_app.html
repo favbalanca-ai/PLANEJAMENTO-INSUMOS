@@ -1281,6 +1281,62 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .slog-row.is-err{background:#fde3e3}
 .slog-row.is-err .slog-det{color:#7a1f1f;font-weight:600}
 .slog-row.is-slow{background:#fff6d6}
+/* Compras registradas: 1 linha por produto (ou por nota), toque abre o detalhe */
+.cr-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line,#e5e8ec)}
+.cr-bar #cr-busca{flex:1;min-width:180px;max-width:360px}
+.cr-seg{display:inline-flex;border:1px solid #cfd8dc;border-radius:9px;overflow:hidden}
+.cr-seg button{border:0;background:#fff;padding:6px 12px;font:inherit;font-size:12.5px;font-weight:600;color:#546e7a;cursor:pointer}
+.cr-seg button+button{border-left:1px solid #cfd8dc}
+.cr-seg button.on{background:#2e7d8a;color:#fff}
+.cr-head,.cr-row,.cr-sub-row{display:grid;align-items:center;gap:4px 12px}
+.cr-prod{grid-template-columns:minmax(0,1fr) 130px 120px 130px}
+.cr-nota{grid-template-columns:86px minmax(0,1fr) 50px 120px 70px}
+.cr-head{padding:8px 34px 6px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted,#667);background:#f7f9fa;border-bottom:1px solid var(--line,#e5e8ec)}
+.cr-item{border-bottom:1px solid #eef1f3}
+.cr-item>summary{list-style:none;cursor:pointer;padding:9px 14px;position:relative;padding-right:34px}
+.cr-item>summary::-webkit-details-marker{display:none}
+.cr-item>summary::after{content:'▸';position:absolute;right:14px;top:50%;transform:translateY(-50%);color:#90a4ae;transition:transform .15s}
+.cr-item[open]>summary::after{transform:translateY(-50%) rotate(90deg)}
+.cr-item>summary:hover{background:#f7fafb}
+.cr-item[open]>summary{background:#f1f7f8}
+.cr-row{font-size:13px}
+.cr-row .num,.cr-head .num,.cr-sub-row .num{text-align:right;font-variant-numeric:tabular-nums}
+.cr-nome{min-width:0}
+.cr-nome b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-nome small,.cr-row .num small{display:block;font-size:11px;color:var(--muted,#667);font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-when{color:var(--muted,#667);font-size:12px;font-variant-numeric:tabular-nums}
+.cr-sub{background:#fafcfc;padding:4px 14px 8px 28px;border-top:1px dashed #e3e8eb}
+.cr-sub-row{grid-template-columns:78px minmax(0,1fr) 110px 90px 90px 64px;font-size:12px;padding:5px 0;border-top:1px solid #f0f3f4}
+.cr-sub-row:first-child{border-top:0}
+.cr-sub-it{grid-template-columns:minmax(0,1fr) 110px 90px 90px}
+.cr-forn{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cr-xml{font-size:10px;font-weight:800;color:#1f5f69;background:#e3f1f3;border-radius:4px;padding:0 4px}
+.cr-st{font-size:11px;font-weight:700;justify-self:end}
+.cr-st.ok{color:#2e7d32}
+.cr-st.pend{color:#8a6d00;background:#fff3cd;border-radius:6px;padding:1px 6px}
+.cr-obs{font-size:12px;padding:6px 0 0}
+.cr-foot{display:flex;justify-content:flex-end;padding-top:6px}
+.cr-foot .del{color:#b3261e}
+@media (max-width:640px){
+  .cr-head{display:none}
+  .cr-item>summary{padding:9px 30px 9px 12px}
+  /* por produto: [nome | valor] / [quantidade | nº compras] */
+  .cr-row.cr-prod{grid-template-columns:minmax(0,1fr) auto;gap:2px 10px}
+  .cr-row.cr-prod>span:nth-child(1){grid-column:1;grid-row:1}
+  .cr-row.cr-prod>span:nth-child(2){grid-column:1;grid-row:2;text-align:left;font-size:12px}
+  .cr-row.cr-prod>span:nth-child(3){display:none}
+  .cr-row.cr-prod>span:nth-child(4){grid-column:2;grid-row:1/3}
+  .cr-row.cr-prod .cr-nome small{display:none}
+  /* por nota: data em cima; [fornecedor | total | situação] */
+  .cr-row.cr-nota{grid-template-columns:minmax(0,1fr) auto auto;gap:2px 8px}
+  .cr-row.cr-nota .cr-when{grid-column:1/-1;font-size:11px}
+  .cr-row.cr-nota>span:nth-child(3){display:none}
+  .cr-sub{padding:4px 12px 8px}
+  .cr-sub-row{grid-template-columns:minmax(0,1fr) auto auto auto;gap:2px 8px}
+  .cr-sub-row .cr-when{grid-column:1/-1;font-size:11px}
+  .cr-sub-row>span.mut.num{display:none}
+  .cr-sub-it{grid-template-columns:minmax(0,1fr) auto auto}
+}
 
 </style>
 </head>
@@ -1374,7 +1430,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-161';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-162';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2827,6 +2883,47 @@ function estoqueEntradas(){
   }
   return m;
 }
+/* ---- Compras registradas: resumo POR PRODUTO (padrão) ou POR NOTA, uma linha cada; toque abre o detalhe ---- */
+let cmpVisao='produto', cmpBusca='';
+const _crNorm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function _crStatus(c){ return syncUrl()?(c.pushed?'<span class="cr-st ok" title="já está na planilha">✔</span>':'<span class="cr-st pend" title="ainda não foi para a planilha">pendente</span>'):''; }
+function _crEsc(c){ return c.fornecedor||'—'; }
+function comprasPorProdutoHtml(regs){
+  const g={};
+  regs.forEach(c=>(c.itens||[]).forEach(it=>{ if(!it.produto) return;
+    const x=g[it.produto]||(g[it.produto]={produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:0, valor:0, qPreco:0, linhas:[]});
+    const q=+it.qtd||0, pr=+it.preco||0; x.qtd+=q; x.valor+=q*pr; if(pr>0) x.qPreco+=q;
+    x.linhas.push({c, q, pr}); }));
+  const lista=Object.values(g).sort((a,b)=>b.valor-a.valor||a.produto.localeCompare(b.produto));
+  const q=_crNorm(cmpBusca);
+  return `<div class="cr-head cr-prod"><span>Produto</span><span class="num">Quantidade</span><span class="num">Preço médio</span><span class="num">Valor</span></div>`+
+    lista.map(x=>{ const busca=_crNorm([x.produto, ...x.linhas.map(l=>_crEsc(l.c)+' '+(l.c.nf||''))].join(' '));
+      const pm=x.qPreco>0?x.valor/x.qPreco:0, cl=(PROD[x.produto]&&PROD[x.produto].classe)||'';
+      const sub=x.linhas.sort((a,b)=>String(b.c.data||'').localeCompare(String(a.c.data||''))).map(l=>`<div class="cr-sub-row">
+          <span class="cr-when">${esc(fmtData(l.c.data))}</span><span class="cr-forn">${esc(_crEsc(l.c))}${l.c.nf?` <span class="mut">· NF ${esc(l.c.nf)}</span>`:''}${l.c.nfe?' <span class="cr-xml" title="importada do XML da NF-e">XML</span>':''}</span>
+          <span class="num">${num(l.q)} ${esc(x.un)}</span><span class="num mut">${l.pr>0?brl(l.pr):'—'}</span><span class="num">${brl0(l.q*l.pr)}</span>${_crStatus(l.c)}</div>`).join('');
+      return `<details class="cr-item" data-busca="${esc(busca)}"${q&&!busca.includes(q)?' hidden':''}><summary class="cr-row cr-prod">
+          <span class="cr-nome"><b>${esc(x.produto)}</b>${cl?`<small>${esc(cl)}</small>`:''}</span>
+          <span class="num"><b>${num(x.qtd)}</b> ${esc(x.un)}</span>
+          <span class="num mut">${pm>0?brl(pm)+(x.un?'/'+esc(x.un):''):'—'}</span>
+          <span class="num"><b>${brl0(x.valor)}</b><small>${x.linhas.length} compra${x.linhas.length>1?'s':''}</small></span></summary>
+        <div class="cr-sub">${sub}</div></details>`; }).join('');
+}
+function comprasPorNotaHtml(regs){
+  const q=_crNorm(cmpBusca);
+  return `<div class="cr-head cr-nota"><span>Data</span><span>Fornecedor / nota</span><span class="num">Itens</span><span class="num">Total</span><span></span></div>`+
+    regs.map(c=>{ const its=(c.itens||[]).filter(x=>x.produto);
+      const busca=_crNorm([_crEsc(c), c.nf, ...its.map(x=>x.produto)].join(' '));
+      return `<details class="cr-item" data-busca="${esc(busca)}"${q&&!busca.includes(q)?' hidden':''}><summary class="cr-row cr-nota">
+          <span class="cr-when">${esc(fmtData(c.data))}</span>
+          <span class="cr-nome"><b>${esc(_crEsc(c))}</b><small>${c.nf?'NF '+esc(c.nf):'sem NF'}${c.nfe?' · <span class="cr-xml">XML</span>':''}${its.length?' · '+esc(its.slice(0,2).map(x=>x.produto).join(', '))+(its.length>2?'…':''):''}</small></span>
+          <span class="num mut">${its.length}</span><span class="num"><b>${brl0(compraTotal(c))}</b></span>${_crStatus(c)||'<span></span>'}</summary>
+        <div class="cr-sub">${its.map(x=>`<div class="cr-sub-row cr-sub-it"><span class="cr-forn">${esc(x.produto)}</span><span class="num">${num(x.qtd)} ${esc(x.un||'')}</span><span class="num mut">${x.preco>0?brl(x.preco):'—'}</span><span class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</span></div>`).join('')}
+          ${c.obs?`<div class="cr-obs mut">${esc(c.obs)}</div>`:''}
+          <div class="cr-foot"><button class="btn btn-ghost btn-sm del" data-act="cmpDel" data-id="${esc(c.id)}">🗑 Excluir esta compra</button></div></div></details>`; }).join('');
+}
+function filterComprasReg(){ const q=_crNorm(cmpBusca); document.querySelectorAll('#cr-list .cr-item').forEach(d=>{ d.hidden=!!q && !(d.getAttribute('data-busca')||'').includes(q); }); }
+document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
   const d=compraDraft;
@@ -2840,19 +2937,7 @@ V.entradas=function(){
   const total=compraTotal(d);
   const regs=(COMPRAS.registros||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
   const totGeral=regs.reduce((a,c)=>a+compraTotal(c),0);
-  const cards=regs.map(c=>{
-    const its=(c.itens||[]).filter(x=>x.produto);
-    return `<div class="recom-card rc-apr">
-      <div class="rc-head"><span class="rc-badge rc-apr">📦 Entrada</span>
-        ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}${c.nfe?'<span class="pill pill-buy" title="importada do XML (id = chave de acesso)">NF-e XML</span>':''}
-        ${syncUrl()?(c.pushed?'<span class="pill pill-buy">na planilha</span>':'<span class="pill pill-noprice">pendente</span>'):''}
-        <span class="spacer"></span><span class="mut" style="font-size:11px">${esc(fmtData(c.data))}</span>
-        <button class="icon-btn del" data-act="cmpDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div>
-      <div class="table-wrap"><table class="camp-ins"><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
-        <tbody>${its.map(x=>`<tr><td class="c-full">${esc(x.produto)}</td><td class="num">${num(x.qtd)}</td><td>${esc(x.un||'')}</td><td class="num">${x.preco>0?brl(x.preco):'—'}</td><td class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</td></tr>`).join('')}</tbody>
-        <tfoot class="tfoot"><tr><td colspan="4">Total</td><td class="num">${brl0(compraTotal(c))}</td></tr></tfoot></table></div>
-      ${c.obs?`<div class="rc-obs mut">${esc(c.obs)}</div>`:''}</div>`;
-  }).join('');
+  const cards=regs.length?(cmpVisao==='nota'?comprasPorNotaHtml(regs):comprasPorProdutoHtml(regs)):'';
   return `${prodDatalist()}
   ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
     <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. Para conferir o caminhão chegando, use <b>Receber nota</b>.</span></div>`}
@@ -2870,9 +2955,11 @@ V.entradas=function(){
       <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
       <button class="btn btn-primary btn-sm" data-act="cmpSave">✅ Registrar entrada</button>
     </div></div>
-  <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
+  <div class="panel cr-panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
       <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
-    <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
+    ${regs.length?`<div class="cr-bar"><div class="cr-seg"><button class="${cmpVisao!=='nota'?'on':''}" data-act="cmpVisao" data-v="produto">Por produto</button><button class="${cmpVisao==='nota'?'on':''}" data-act="cmpVisao" data-v="nota">Por nota</button></div>
+      <input id="cr-busca" class="txt" type="search" placeholder="🔎 Buscar produto, fornecedor ou NF" value="${esc(cmpBusca)}"></div>`:''}
+    <div class="cr-list" id="cr-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">${syncUrl()?'Sincroniza com a planilha (aba <b>COMPRAS APP</b>): todos os aparelhos veem a mesma lista.':'Salvo <b>no aparelho</b>.'} Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
 /* ================= NF-e (fase 1): importar o XML → conferir (de-para) → entrada no estoque =================
@@ -6862,6 +6949,7 @@ document.addEventListener('click',e=>{
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
+    else if(a.act==='cmpVisao'){ cmpVisao=a.v==='nota'?'nota':'produto'; route({keepScroll:true}); }
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
