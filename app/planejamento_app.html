@@ -1430,7 +1430,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-162';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-163';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3366,10 +3366,26 @@ function recChaveMsg(d){ d=String(d||'').replace(/\D/g,''); if(!d) return '';
   if(d.length<44) return `faltam ${44-d.length} dígito(s)`; if(d.length>44) return '✘ mais de 44 dígitos';
   if(d.slice(20,22)!=='55') return '✘ não é NF-e (modelo '+d.slice(20,22)+')';
   return nfeChaveOk(d)?'✔ chave válida':'✘ dígito verificador não confere — confira os números'; }
+// leitor v4: zxing-cpp (WebAssembly) — MUITO mais forte que o ZXing em JavaScript para foto de celular
+// (longe, desfocada, torta, escura). jsdelivr, versão fixa. O .wasm (~930 KB) só baixa na 1ª leitura.
+const ZW_VER='3.1.4', ZW_URL=`https://cdn.jsdelivr.net/npm/zxing-wasm@${ZW_VER}/dist`;
+let _zwP=null;
+function loadZXingWasm(){
+  if(_zwP) return _zwP;
+  _zwP=new Promise((res,rej)=>{ const fim=async()=>{ try{ const Z=window.ZXingWASM;
+        await Z.prepareZXingModule({ overrides:{ locateFile:(f,pre)=>/\.wasm$/.test(f)?`${ZW_URL}/reader/${f}`:pre+f }, fireImmediately:true }); res(Z); }catch(e){ rej(e); } };
+      if(window.ZXingWASM) return fim();
+      const sc=document.createElement('script'); sc.src=`${ZW_URL}/iife/reader/index.js`; sc.onload=fim; sc.onerror=()=>rej(new Error('sem internet para carregar o leitor')); document.head.appendChild(sc); })
+    .catch(e=>{ _zwP=null; throw e; });
+  return _zwP;
+}
 function loadZXing(){ if(window.ZXing) return Promise.resolve(window.ZXing);
   return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
     s.onload=()=>res(window.ZXing); s.onerror=()=>rej(new Error('sem internet para carregar o leitor')); document.head.appendChild(s); }); }
-// ---- leitor do código de barras (v3): UMA opção — FOTO pela câmera do celular ----
+// ---- leitor do código de barras (v4): UMA opção — FOTO pela câmera do celular ----
+// v4: 1) leitor do aparelho (Android) 2) zxing-cpp/WebAssembly na foto inteira 3) ACHA o código (ângulo das barras
+// pelo gradiente + região mais "listrada"), endireita, recorta em tamanho real/2×/½ 4) nitidez horizontal p/ foto
+// desfocada 5) as tentativas antigas (faixas/rotações). Banco de 13 fotos difíceis: v3 lia 4, v4 lê 12.
 // O vídeo ao vivo não lia nos celulares do campo. A foto da câmera nativa tem foco automático e resolução
 // muito maior; aqui procuramos o código (CODE-128C, 44 dígitos) na foto inteira e em faixas, em 3 tamanhos,
 // na horizontal, na vertical e levemente inclinado, com 2 binarizações do ZXing, o leitor nativo (quando
@@ -3380,13 +3396,82 @@ function recZxing(cv, bin, rapido){ const z=REC.zx; if(!z) return null;
     return z.r.decode(bmp, rapido?z.rapido:z.hints).getText(); }catch(e){ return null; } }
 async function recPrepLeitor(){
   if(REC.det===undefined){ REC.det=null; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('code_128')) REC.det=new BarcodeDetector({formats:['code_128']}); } }catch(e){} }
-  if(!REC.zx){ try{ const Z=await loadZXing(); const h=new Map(); h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); h.set(Z.DecodeHintType.TRY_HARDER,true);
+  if(!REC.zw){ try{ REC.zw=await loadZXingWasm(); }catch(e){ REC.zw=null; } }
+  if(!REC.zw && !REC.zx){ try{ const Z=await loadZXing(); const h=new Map(); h.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]); h.set(Z.DecodeHintType.TRY_HARDER,true);
       const hr=new Map(); hr.set(Z.DecodeHintType.POSSIBLE_FORMATS,[Z.BarcodeFormat.CODE_128]);
       REC.zx={Z, r:new Z.Code128Reader(), hints:h, rapido:hr}; }catch(e){ if(!REC.det) throw e; } }
+}
+// zxing-cpp numa imagem (canvas): Code 128, esforço máximo, gira 90/180/270 e reduz sozinho
+async function recZW(cv){ const Z=REC.zw; if(!Z) return null;
+  try{ const im=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,cv.width,cv.height);
+    const r=await Z.readBarcodes(im,{formats:['Code128'], tryHarder:true, tryRotate:true, tryInvert:false, tryDownscale:true, maxNumberOfSymbols:4});
+    for(const x of r||[]){ const d=_chave44(x.text); if(d) return d; } }catch(e){} return null; }
+// ---- ACHAR o código antes de ler: ângulo das barras (gradiente) + região com mais "listras" ----
+function recCinza(cv){ const W=cv.width, H=cv.height, d=cv.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data, g=new Float32Array(W*H);
+  for(let i=0,j=0;j<g.length;i+=4,j++) g[j]=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; return g; }
+// ângulos (graus) em que as BARRAS estão "de pé": os 2 picos do histograma de direção do gradiente
+function recAngulos(cv){ const W=cv.width, H=cv.height, g=recCinza(cv), hist=new Float64Array(180);
+  for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x;
+    const gx=g[i+1-W]+2*g[i+1]+g[i+1+W]-g[i-1-W]-2*g[i-1]-g[i-1+W], gy=g[i+W-1]+2*g[i+W]+g[i+W+1]-g[i-W-1]-2*g[i-W]-g[i-W+1], m=gx*gx+gy*gy;
+    if(m<4000) continue; let a=Math.atan2(gy,gx)*180/Math.PI; if(a<0) a+=180; if(a>=180) a-=180; hist[Math.floor(a)]+=Math.sqrt(m); }
+  const sm=new Float64Array(180); for(let a=0;a<180;a++){ let s=0; for(let k=-3;k<=3;k++) s+=hist[(a+k+180)%180]; sm[a]=s; }
+  const picos=[]; for(let a=0;a<180;a++){ const v=sm[a]; if(v>0 && v>=sm[(a+1)%180] && v>=sm[(a+179)%180]) picos.push([a,v]); }
+  picos.sort((a,b)=>b[1]-a[1]); const out=[];
+  for(const [a] of picos){ if(out.every(b=>Math.min(Math.abs(a-b),180-Math.abs(a-b))>8)) out.push(a); if(out.length>=3) break; }
+  // afina: média ponderada ±6° em volta de cada pico (erro de 3° já atrapalha o código longo)
+  return out.map(a=>{ let s=0, w=0; for(let k=-6;k<=6;k++){ const v=hist[(a+k+180)%180]; s+=v*(a+k); w+=v; } return w?s/w:a; });   // gradiente em "a" graus → girar a foto em -a deixa as barras verticais
+}
+// região do código numa imagem já "endireitada": muita borda na horizontal, pouca na vertical
+function recRegiao(cv){ const W=cv.width, H=cv.height, g=recCinza(cv), e=new Float32Array(W*H);
+  for(let y=1;y<H-1;y++) for(let x=1;x<W-1;x++){ const i=y*W+x, gx=Math.abs(g[i+1]-g[i-1]), gy=Math.abs(g[i+W]-g[i-W]); e[i]=Math.max(0,gx-gy); }
+  const rx=Math.max(3,Math.round(W/40)), ry=Math.max(2,Math.round(H/80)), a=new Float32Array(W*H), b=new Float32Array(W*H);
+  for(let y=0;y<H;y++){ let s=0; for(let x=0;x<W;x++){ s+=e[y*W+x]; if(x>=2*rx+1) s-=e[y*W+x-2*rx-1]; a[y*W+Math.max(0,x-rx)]=s; } }
+  for(let x=0;x<W;x++){ let s=0; for(let y=0;y<H;y++){ s+=a[y*W+x]; if(y>=2*ry+1) s-=a[(y-2*ry-1)*W+x]; b[Math.max(0,y-ry)*W+x]=s; } }
+  let mi=0; for(let i=1;i<b.length;i++) if(b[i]>b[mi]) mi=i; const lim=b[mi]*0.45; if(!(lim>0)) return null;
+  const nota=b[mi]/((2*rx+1)*(2*ry+1));
+  let x0=mi%W, x1=x0, y0=(mi/W)|0, y1=y0; const vis=new Uint8Array(W*H), pil=[mi]; vis[mi]=1;
+  while(pil.length){ const i=pil.pop(), x=i%W, y=(i/W)|0; if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+    for(const j of [i-1,i+1,i-W,i+W]){ if(j>=0&&j<b.length&&!vis[j]&&b[j]>=lim&&Math.abs((j%W)-x)<=1){ vis[j]=1; pil.push(j); } } }
+  return {x0:x0/W, y0:y0/H, x1:(x1+1)/W, y1:(y1+1)/H, nota};
+}
+// NITIDEZ só na horizontal (atravessando as barras): desfaz parte do borrado sem inventar barras
+function recNitidez(cv, r, k){ const W=cv.width, H=cv.height, ctx=cv.getContext('2d',{willReadFrequently:true}), im=ctx.getImageData(0,0,W,H), d=im.data, g=recCinza(cv);
+  for(let y=0;y<H;y++){ let s=0; const o=y*W; for(let x=0;x<Math.min(W,r);x++) s+=g[o+x];
+    for(let x=0;x<W;x++){ const a=x+r, b=x-r-1; if(a<W) s+=g[o+a]; if(b>=0) s-=g[o+b]; const n=Math.min(W-1,x+r)-Math.max(0,x-r)+1, v=g[o+x]+k*(g[o+x]-s/n), j=(o+x)*4;
+      d[j]=d[j+1]=d[j+2]=v<0?0:v>255?255:v; } }
+  ctx.putImageData(im,0,0); return cv; }
+function recGira(src, graus, maxLado){ const sw=src.naturalWidth||src.width, sh=src.naturalHeight||src.height, k=Math.min(1, maxLado/Math.max(sw,sh));
+  const w=sw*k, h=sh*k, r=graus*Math.PI/180, c=Math.abs(Math.cos(r)), s=Math.abs(Math.sin(r));
+  const cv=document.createElement('canvas'); cv.width=Math.round(w*c+h*s); cv.height=Math.round(w*s+h*c); const x=cv.getContext('2d',{willReadFrequently:true});
+  x.fillStyle='#fff'; x.fillRect(0,0,cv.width,cv.height); x.translate(cv.width/2,cv.height/2); x.rotate(r); x.drawImage(src,-w/2,-h/2,w,h); return cv; }
+function recRecorta(cv, reg, fator){ const W=cv.width, H=cv.height, mx=(reg.x1-reg.x0)*0.12, my=Math.max((reg.y1-reg.y0)*0.6, 0.02);
+  const x0=Math.max(0,(reg.x0-mx)*W), y0=Math.max(0,(reg.y0-my)*H), x1=Math.min(W,(reg.x1+mx)*W), y1=Math.min(H,(reg.y1+my)*H);
+  const o=document.createElement('canvas'); o.width=Math.max(1,Math.round((x1-x0)*fator)); o.height=Math.max(1,Math.round((y1-y0)*fator));
+  const x=o.getContext('2d',{willReadFrequently:true}); x.imageSmoothingQuality='high'; x.drawImage(cv,x0,y0,x1-x0,y1-y0,0,0,o.width,o.height); return o; }
+// tenta: foto inteira → para cada ângulo provável: endireita, acha a região, recorta (tamanho real, 2× e ½)
+async function recLocalizaELe(img){
+  const W=img.naturalWidth, H=img.naturalHeight;
+  const base=recGira(img,0,3200); let d=await recZW(base); if(d) return d;
+  const peq=recGira(img,0,640), cand=[];
+  for(const a of recAngulos(peq)){ const rot=recGira(img,-a,3600), mini=recGira(rot,0,700), reg=recRegiao(mini); if(reg) cand.push({a, rot, reg}); }
+  cand.sort((x,y)=>y.reg.nota-x.reg.nota);   // o ângulo mais "listrado" (o do código) primeiro
+  const tick=async()=>{ await new Promise(r=>setTimeout(r,0)); };
+  for(const {rot,reg} of cand){
+    const larg=(reg.x1-reg.x0)*rot.width;
+    for(const f of (larg<1400?[2,1,0.5]:larg>3000?[0.6,1,0.35]:[1,0.5,1.6])){ const c=recRecorta(rot,reg,f); if(c.width<30) continue; d=await recZW(c); if(d) return d; }
+    await tick();
+  }
+  // foto DESFOCADA: realça a nitidez atravessando as barras (vários graus) no recorte do melhor candidato
+  for(const {rot,reg} of cand.slice(0,2)){
+    const larg=(reg.x1-reg.x0)*rot.width, f0=larg<1400?1.5:larg>3000?0.6:1;
+    for(const [f,r,k] of [[f0,2,1.5],[f0,3,3],[f0,5,3],[f0*0.6,2,2],[f0,4,6]]){ const c=recNitidez(recRecorta(rot,reg,f),r,k); d=await recZW(c); if(d) return d; await tick(); }
+  }
+  return null;
 }
 const _chave44=t=>{ const d=String(t||'').replace(/\D/g,''); return (d.length===44&&nfeChaveOk(d))?d:null; };
 async function recDecodificar(cv, rapido){
   if(REC.det){ try{ const r=await REC.det.detect(cv); for(const c of r||[]){ const d=_chave44(c.rawValue); if(d) return d; } }catch(e){} }
+  if(REC.zw) return await recZW(cv);
   return _chave44(recZxing(cv,false,rapido)) || _chave44(recZxing(cv,true,rapido));
 }
 // média na VERTICAL (as barras são verticais): tira o ruído do papel/foto sem apagar as barras
@@ -3420,11 +3505,12 @@ async function recLerFoto(file){
     faixas(false).forEach(f=>tent.push([...f,1800,0,2,1])); faixas(true).forEach(f=>tent.push([...f,1800,90,2,1]));
     [-5,5].forEach(g=>{ tent.push([0,0,W,H,1800,g,0,0]); faixas(false).slice(1,5).forEach(f=>tent.push([...f,1800,g,1,1])); });
     if(REC.det){ try{ const r=await REC.det.detect(img); for(const c of r||[]){ const d=_chave44(c.rawValue); if(d){ REC.lendo=false; REC.msg=''; return recAbrirChave(d); } } }catch(e){} }
+    if(REC.zw){ const d=await recLocalizaELe(img); if(d){ REC.lendo=false; REC.msg=''; return recAbrirChave(d); } }
     for(let i=0;i<tent.length;i++){ const [sx,sy,sw,sh,larg,g,ef,rap]=tent[i];
       let cv=recDesenha(img,sx,sy,sw,sh,larg,g); if(ef===2) cv=recContraste(cv); if(ef) cv=recSuaviza(cv, 9);
       const d=await recDecodificar(cv, !!rap); if(d){ REC.lendo=false; REC.msg=''; return recAbrirChave(d); }
       if(i%6===5){ const st=document.getElementById('rec-lendo'); if(st) st.textContent=`🔎 Procurando o código na foto… ${Math.round((i+1)/tent.length*100)}%`; await new Promise(r=>setTimeout(r,0)); } }
-    REC.msg=`Não encontrei o código de barras nesta foto. Tire de novo bem de perto, com o código reto ocupando a largura da foto, sem sombra nem reflexo. (foto ${W}×${H} · leitor ${REC.det?'do aparelho + ZXing':'ZXing'})`;
+    REC.msg=`Não encontrei o código de barras nesta foto. Tire de novo bem de perto, com o código reto ocupando a largura da foto, sem sombra nem reflexo. (foto ${W}×${H} · leitor ${[REC.det?'do aparelho':'', REC.zw?'zxing-cpp':'', (!REC.zw&&REC.zx)?'ZXing':''].filter(Boolean).join(' + ')||'nenhum'})`;
   }catch(e){ REC.msg='Não consegui ler a foto: '+e.message; }
   REC.lendo=false; route({keepScroll:true});
 }
@@ -3542,6 +3628,7 @@ function recSemXmlHtml(){
 V.receber=function(){
   if(!syncUrl()||!nfeToken()) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas pela câmera, este aparelho precisa da <b>sincronização</b> e do <b>Token da NF-e</b> (em <a class="link" data-go="#/sync">Sincronizar</a>).</div>`;
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0">A planilha ainda está com o <b>Code.gs antigo</b> — implante a versão nova para receber notas.</div>`;
+  if(REC.etapa==='ler') setTimeout(()=>{ loadZXingWasm().catch(()=>{}); }, 400);   // já baixa o leitor enquanto a pessoa aponta a câmera
   if(REC.etapa==='conferir') return recConferirHtml();
   if(REC.etapa==='semxml') return recSemXmlHtml();
   if(REC.etapa==='aviso') return recAvisoHtml();

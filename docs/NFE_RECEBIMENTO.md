@@ -324,6 +324,18 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   (tira o ruído sem apagar as barras), contraste reforçado, leitor nativo (quando existe) e ZXing
   (`Code128Reader`, binarização híbrida e global). Aceita só chave com DV válido.
   Digitar o nº da nota ou a chave fica recolhido em "Não conseguiu ler?".
+- **Leitor v4 (30/09/2026):** mesma opção única (foto), com motor novo e localização do código:
+  1. leitor do aparelho (`BarcodeDetector`, Android) na foto inteira;
+  2. **zxing-cpp em WebAssembly** (`zxing-wasm@3.1.4`, jsdelivr, versão fixa; `.wasm` ~930 KB baixado
+     ao abrir a tela Receber nota) na foto inteira (gira 90°/180°, reduz sozinho);
+  3. **acha o código**: ângulo das barras pelo histograma de direção do gradiente (os 3 picos, afinados
+     por média ±6°), endireita a foto, acha a região mais "listrada" (borda horizontal − vertical) e
+     recorta em tamanho real, 2× e ½ — o ângulo com região mais listrada é tentado primeiro;
+  4. foto desfocada: nitidez só na horizontal (atravessando as barras) em vários graus;
+  5. as tentativas antigas (faixas, 3 tamanhos, ±5°). Se o zxing-cpp não carregar, volta o ZXing JS.
+  Banco de 13 fotos difíceis geradas no teste (longe, desfocada, tremida, 15°/35°, perspectiva,
+  sombra, escura+ruído+JPEG ruim, vertical, papel curvo): v3 lia 4, v4 lê 12 (a que falha tem borrão
+  maior que 2 barras finas — pede nova foto).
 - **Validação:** 44 dígitos, modelo 55 e DV (módulo 11). Chave inválida é recusada com o motivo.
 - **Alternativas:** nº da nota (procura nas notas EM TRÂNSITO); os 44 dígitos (com validação ao
   vivo; abre sozinho ao completar); leitor USB/Bluetooth no mesmo campo (Enter).
