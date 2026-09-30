@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-168';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-169';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6328,6 +6328,7 @@ const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização auto
 const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
 let syncBusy=false, pushTimer=null, pollTimer=null;
+let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
 let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false, lastServerHash='';
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
@@ -6511,7 +6512,7 @@ function buildFieldEdits(){
   return eds;
 }
 function applyPulledData(d){
-  DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
+  DATA=d; dadosDaPlanilha=true; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   saveDataCache(d);   // guarda p/ abrir com o dado mais recente na próxima vez
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // NÃO apaga as edições cegamente: só descarta o override que JÁ está igual na planilha
@@ -6895,8 +6896,10 @@ function pollTick(){
   if(isEditing()) return;                          // você está mexendo: não mexe na tela
   // ficou pendente uma atualização enquanto você editava? aplica agora que parou (sem rolar)
   if(pendingRerender){ pendingRerender=false; route({keepScroll:true}); }
-  // com edições pendentes: só ENVIA, não puxa (evita qualquer atropelo do que ainda não foi salvo)
-  if(buildFieldEdits().length>0){ scheduleAutoPush(); return; }
+  // com edições pendentes: ENVIA primeiro. Mas se o último envio FALHOU, puxa também (o que não foi salvo
+  // continua guardado — o puxar não apaga edição pendente). Antes: edição presa = o aparelho nunca mais puxava.
+  const fe=buildFieldEdits(), vivas=fe.length-edicoesOrfas(fe).length;
+  if(vivas>0){ scheduleAutoPush(); if(lastPushOk) return; }
   syncPull({auto:true, silentToast:true});
 }
 function startPolling(){
@@ -6935,7 +6938,8 @@ function editDesc(e){
 // Vem da planilha (abas_faltando); com Code.gs antigo, deduz: talhão sem plano no puxar (e que não é novo deste aparelho).
 function talhoesSemAba(){
   const out=new Set((DATA&&DATA.abas_faltando)||[]);
-  if(DATA && DATA.planos && Object.keys(DATA.planos).length){ const novos=new Set(((OV&&OV.talhaoAdd)||[]).map(t=>t.id));
+  // dados vindos da planilha (não do data.json embutido): talhão sem plano = sem aba — inclusive TODOS sem aba
+  if(DATA && DATA.planos && dadosDaPlanilha){ const novos=new Set(((OV&&OV.talhaoAdd)||[]).map(t=>t.id));
     (DATA.talhoes||[]).forEach(t=>{ if(!DATA.planos[t.id] && !novos.has(t.id)) out.add(t.id); }); }
   return out;
 }

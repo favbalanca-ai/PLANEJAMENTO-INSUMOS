@@ -176,3 +176,6 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   O app não reenvia edições desses talhões (antes: "aba não encontrada" em loop) e mostra em Sincronizar
   um aviso com o botão **Descartar**. Excluir um talhão pelo app **não apaga mais a aba**: ela é renomeada
   para "TL01 (excluído dd/mm hh:mm)" — para recuperar, renomeie de volta e recoloque a linha na ÁREA PLANTIO.
+  Com Code.gs antigo (sem `abas_faltando`) o app deduz: talhão que veio sem plano no puxar = sem aba —
+  inclusive quando **todos** estão sem aba. E, se o último envio falhou, o app continua puxando a planilha
+  (antes: edição presa = o aparelho nunca mais puxava).
