@@ -63,6 +63,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   **👥 Usuários**: criar/editar pessoas, perfil (Administrador/Operador), módulos e telas liberados
   (nenhuma tela marcada = todas do módulo), redefinir PIN, desativar. O menu, o Início e as rotas só
   mostram o que é liberado; quem filtra os dados de verdade é a planilha (ver `sync/README.md`).
+- **Modo embutido** (`?embed=receber`) — o app aparece dentro de outro (módulo **📦 Receber insumos** do
+  Pesagem v2, mesmo site `favbalanca-ai.github.io` → mesmo login no aparelho): sem menus, só as abas
+  **Receber** e **Pendências** (conforme a permissão), além de Entrar / Minha conta / ⚙️ Sincronizar.
+  Não troca o módulo salvo do app normal.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.

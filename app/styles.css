@@ -1356,3 +1356,13 @@ body[data-view="login"] .content{max-width:none;padding:0}
 .usu-ativo{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;justify-content:flex-start;align-self:end;padding-bottom:8px}
 .usu-ativo input{width:auto!important;margin:0}
 @media (max-width:640px){ .usu-list .usu-row{grid-template-columns:1fr auto} .usu-list .usu-chips,.usu-list .usu-ult{grid-column:1/-1} }
+/* ===== Modo embutido (?embed=receber) — dentro do Pesagem v2: sem menus, só a tela ===== */
+body[data-embed] .sidebar,body[data-embed] .topbar,body[data-embed] .mod-trocar{display:none!important}
+body[data-embed] .main{padding-bottom:0!important;margin-left:0!important}
+body[data-embed] .content{padding:10px 10px 24px}
+.embed-bar{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden;margin:0 0 10px;padding:6px;background:#fff;border:1px solid var(--line,#e5e8ec);border-radius:12px}
+.eb-tab{padding:7px 10px;border-radius:9px;font-size:12.5px;white-space:nowrap;font-weight:700;color:#46545c;text-decoration:none;cursor:pointer}
+.eb-tab.on{background:#2e7d8a;color:#fff}
+.eb-n{background:#e53935;color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:2px}
+.eb-user{font-size:12px;font-weight:600;color:#1f4a55;text-decoration:none;cursor:pointer;max-width:96px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eb-cfg{font-size:15px;text-decoration:none;cursor:pointer;padding:2px 6px}
