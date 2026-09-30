@@ -59,6 +59,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   execução, edições, puxar, NF-e…): hora, quanto demorou e o que a planilha respondeu (erros em vermelho,
   lentos > 20 s em amarelo). Filtro "Só problemas" e botão **Copiar** para mandar o log numa mensagem.
   Guarda as últimas 300 no aparelho.
+- **Login** — tela **Entrar** (login + PIN), **Minha conta** (trocar PIN, sair) e, para o administrador,
+  **👥 Usuários**: criar/editar pessoas, perfil (Administrador/Operador), módulos e telas liberados
+  (nenhuma tela marcada = todas do módulo), redefinir PIN, desativar. O menu, o Início e as rotas só
+  mostram o que é liberado; quem filtra os dados de verdade é a planilha (ver `sync/README.md`).
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.

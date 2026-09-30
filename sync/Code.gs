@@ -401,7 +401,7 @@ var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
 var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
   'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
-var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP'];   // colunas guardadas como texto
+var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP','LOGIN','PIN NOVO','PIN'];   // colunas guardadas como texto
 
 // aba com colunas achadas PELO CABEÇALHO (cria a aba/colunas que faltarem; colunas de texto não perdem zero à esquerda)
 function sheetCols_(name, cols){
@@ -1415,6 +1415,149 @@ function pedidoColOf(P){
   return 23;
 }
 
+/* ============================ LOGIN / ACESSO ============================
+   Aba USUÁRIOS APP (uma linha por pessoa) + aba CONFIG APP (EXIGIR LOGIN = SIM/NÃO).
+   - PIN guardado EMBARALHADO (SHA-256 com "sal" do script). Para criar/trocar: digite em "PIN NOVO" —
+     no 1º login ele vira embaralhado e some da planilha.
+   - Sessão = chave ASSINADA (HMAC) com login + versão + validade (30 dias). Trocar PIN / desativar
+     aumenta a VERSÃO → os aparelhos daquela pessoa saem na hora.
+   - O doGet MANDA SÓ OS DADOS dos módulos liberados (e sem R$ para quem não tem Planejamento/Preços/
+     Administrativo); o doPost só GRAVA o que os módulos da pessoa permitem. ADMIN = tudo.
+   - EXIGIR LOGIN = NÃO (padrão): funciona como antes para quem não entrou; quem entrou já é filtrado. */
+var USU_SHEET = 'USUÁRIOS APP', CFGAPP_SHEET = 'CONFIG APP';
+var USU_COLS = ['NOME','LOGIN','PERFIL','MÓDULOS','TELAS','PIN NOVO','PIN','ATIVO','VERSÃO','ÚLTIMO ACESSO'];
+var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
+// dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
+var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas'];
+var MOD_DADOS = {
+  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','compras_app','nfe_estados'],
+  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','nfe_resumo'],
+  precos:['precos_app'],
+  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
+  tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
+// quem pode GRAVAR cada tipo (payload __x) — módulos
+var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin','campo'], __entrada:['admin','campo'], __saida:['campo','planejamento'],
+  __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
+  __limites:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __recebimento:['admin','campo'], __pendencia:['admin','campo'], __nfeFoto:['admin','campo'] };
+// edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
+var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
+  plantio:['campo','planejamento'], plantio_safrinha:['campo','planejamento'], dae:['campo','planejamento'], ciclo:['campo','planejamento'], ciclo_safrinha:['campo','planejamento'] };
+function _prop_(k){ var pr = PropertiesService.getScriptProperties(), v = pr.getProperty(k); if (!v){ v = Utilities.getUuid() + '-' + Date.now() + '-' + Math.random(); pr.setProperty(k, v); } return v; }
+function _b64_(bytes){ return Utilities.base64EncodeWebSafe(bytes); }
+function _hashPin_(login, pin){ return _b64_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, _prop_('LOGIN_SAL') + '|' + login + '|' + pin, Utilities.Charset.UTF_8)); }
+function _lista_(v){ return S(v).split(/[,;\s]+/).map(function(x){ return x.trim().toLowerCase(); }).filter(String); }
+function _normLogin_(v){ return S(v).toLowerCase().replace(/\s+/g,''); }
+function loginCfg_(){
+  var c = CacheService.getScriptCache(), k = c.get('lg_cfg'); if (k) return JSON.parse(k);
+  var t = sheetCols_(CFGAPP_SHEET, ['CHAVE','VALOR','OBS']), s = t.s, exig = false, tem = false;
+  if (s.getLastRow() >= 2) s.getRange(2,1,s.getLastRow()-1,2).getValues().forEach(function(r){ if (_hkey(r[0]) === 'EXIGIRLOGIN'){ tem = true; exig = /^(SIM|S|1|TRUE|X)$/i.test(S(r[1])); } });
+  if (!tem){ var r = _novaLinha_(s); s.getRange(r,1,1,3).setValues([['EXIGIR LOGIN','NÃO','SIM = o app pede login e PIN; cada pessoa vê só os módulos/telas liberados (aba USUÁRIOS APP).']]); }
+  sheetCols_(USU_SHEET, USU_COLS);
+  var cfg = { exigido:exig }; c.put('lg_cfg', JSON.stringify(cfg), 60); return cfg;
+}
+function _usuObj_(t, r, row){ var g = function(h){ return r[t.col(h)]; };
+  var perfil = S(g('PERFIL')).toUpperCase().indexOf('ADM') === 0 ? 'ADMIN' : 'OPERADOR', at = S(g('ATIVO')).toUpperCase();
+  return { row:row, nome:S(g('NOME')), login:_normLogin_(g('LOGIN')), perfil:perfil, modulos:_lista_(g('MÓDULOS')).filter(function(m){ return MODULOS_APP.indexOf(m) >= 0; }),
+    telas:_lista_(g('TELAS')), pinNovo:S(g('PIN NOVO')), pin:S(g('PIN')), ativo:!(at === 'NÃO' || at === 'NAO' || at === 'N' || at === 'FALSE' || at === '0'),
+    versao:N(g('VERSÃO')) || 0, ultimo:_fmtDT(g('ÚLTIMO ACESSO')) }; }
+function usuariosLer_(){
+  var t = sheetCols_(USU_SHEET, USU_COLS), s = t.s, out = [];
+  if (s.getLastRow() >= 2) s.getRange(2,1,s.getLastRow()-1,t.ncol).getValues().forEach(function(r, i){ var u = _usuObj_(t, r, i + 2); if (u.login) out.push(u); });
+  return { t:t, lista:out };
+}
+var _USU_MEMO_ = null;
+function usuarioPorLogin_(login){
+  if (!_USU_MEMO_){ var c = CacheService.getScriptCache(), k = c.get('lg_usu');
+    if (k) _USU_MEMO_ = JSON.parse(k); else { _USU_MEMO_ = {}; usuariosLer_().lista.forEach(function(u){ _USU_MEMO_[u.login] = u; }); try { c.put('lg_usu', JSON.stringify(_USU_MEMO_), 60); } catch (e) {} } }
+  return _USU_MEMO_[_normLogin_(login)] || null;
+}
+function _usuLimpaCache_(){ _USU_MEMO_ = null; try { CacheService.getScriptCache().removeAll(['lg_usu','lg_cfg']); } catch (e) {} }
+function usuarioInfo_(u){ return { nome:u.nome || u.login, login:u.login, perfil:u.perfil, modulos:u.perfil === 'ADMIN' ? MODULOS_APP.slice() : u.modulos, telas:u.perfil === 'ADMIN' ? [] : u.telas }; }
+function tokenGera_(login, ver){ var p = login + '|' + ver + '|' + (Date.now() + 30 * 864e5);
+  return _b64_(p) + '.' + _b64_(Utilities.computeHmacSha256Signature(p, _prop_('LOGIN_SEGREDO'))); }
+// sessão → {u, admin, mods} · sem sessão → null · sessão ruim → {erro}
+function acessoDe_(tk){
+  tk = S(tk); if (!tk) return null; var partes = tk.split('.'); if (partes.length !== 2) return { erro:'sessão inválida — entre de novo' };
+  var p; try { p = Utilities.newBlob(Utilities.base64DecodeWebSafe(partes[0])).getDataAsString(); } catch (e) { return { erro:'sessão inválida — entre de novo' }; }
+  if (_b64_(Utilities.computeHmacSha256Signature(p, _prop_('LOGIN_SEGREDO'))) !== partes[1]) return { erro:'sessão inválida — entre de novo' };
+  var f = p.split('|'); if (!(+f[2] > Date.now())) return { erro:'sessão expirada — entre de novo' };
+  var u = usuarioPorLogin_(f[0]); if (!u || !u.ativo) return { erro:'usuário desativado' };
+  if (u.versao !== +f[1]) return { erro:'o PIN foi trocado — entre de novo' };
+  var mods = {}; (u.perfil === 'ADMIN' ? MODULOS_APP : u.modulos).forEach(function(m){ mods[m] = 1; });
+  return { u:u, admin:u.perfil === 'ADMIN', mods:mods };
+}
+function _temMod_(acc, lista){ if (!acc || acc.admin) return true; for (var i = 0; i < lista.length; i++) if (acc.mods[lista[i]]) return true; return false; }
+// JSON completo → só o que a pessoa pode ver
+function acessoFiltra_(str, acc){
+  if (!acc || !acc.u || acc.admin) return str;
+  var d = JSON.parse(str), ok = {}; DADOS_SEMPRE.forEach(function(k){ ok[k] = 1; });
+  Object.keys(acc.mods).forEach(function(m){ (MOD_DADOS[m] || []).forEach(function(k){ ok[k] = 1; }); });
+  Object.keys(d).forEach(function(k){ if (!ok[k]) delete d[k]; });
+  if (!_temMod_(acc, ['planejamento','precos','admin'])){   // sem módulo de dinheiro: nada de R$
+    (d.produtos || []).forEach(function(p){ p.preco = 0; });
+    (d.maquinas || []).forEach(function(m){ m.custo_hm_ha = 0; m.rs_hm = 0; }); }
+  return JSON.stringify(d);
+}
+// null = pode · texto = motivo da recusa
+function acessoPodeGravar_(acc, payload){
+  if (!acc || acc.admin) return null;
+  if (Array.isArray(payload)){ var ruim = payload.filter(function(ed){ return !_temMod_(acc, EDIT_MOD[S(ed && ed.type)] || ['planejamento']); });
+    return ruim.length ? 'sem permissão para ' + ruim.length + ' edição(ões) (' + ruim.map(function(e){ return e.type; }).filter(function(x, i, a){ return a.indexOf(x) === i; }).join(', ') + ')' : null; }
+  var k = Object.keys(payload || {}).filter(function(x){ return x.indexOf('__') === 0; })[0];
+  if (k === '__usuarios') return 'só administrador';
+  var mods = GRAVA_MOD[k]; if (!mods) return null;
+  return _temMod_(acc, mods) ? null : 'sem permissão para gravar (' + k.slice(2) + ')';
+}
+function loginFaz_(l){
+  var login = _normLogin_(l && l.login), pin = S(l && l.pin).replace(/\D/g, '');
+  if (!login || !pin) return { ok:false, erro:'informe login e PIN' };
+  var c = CacheService.getScriptCache(), kf = 'lf_' + login, falhas = +c.get(kf) || 0;
+  if (falhas >= 5) return { ok:false, erro:'muitas tentativas erradas — espere 10 minutos' };
+  var U = usuariosLer_(), u = U.lista.filter(function(x){ return x.login === login; })[0], t = U.t;
+  var falha = function(msg){ c.put(kf, String(falhas + 1), 600); return { ok:false, erro:msg || 'login ou PIN errado' }; };
+  if (!u) return falha();
+  if (!u.ativo) return { ok:false, erro:'usuário desativado — fale com o administrador' };
+  if (u.pinNovo){   // PIN digitado na planilha: vira embaralhado, some da planilha e derruba sessões antigas
+    var pn = u.pinNovo.replace(/\D/g, ''); if (!/^\d{4,6}$/.test(pn)) return { ok:false, erro:'o PIN NOVO na planilha precisa ter 4 a 6 números' };
+    u.pin = _hashPin_(login, pn); u.versao++; _setCells_(t, u.row, { 'PIN':u.pin, 'PIN NOVO':'', 'VERSÃO':u.versao }); }
+  if (!u.pin || _hashPin_(login, pin) !== u.pin) return falha();
+  c.remove(kf); _setCells_(t, u.row, { 'ÚLTIMO ACESSO':new Date() }); _usuLimpaCache_();
+  return { ok:true, token:tokenGera_(login, u.versao), usuario:usuarioInfo_(u), exigido:loginCfg_().exigido };
+}
+function trocarPin_(acc, r){
+  if (!acc || !acc.u) return { ok:false, erro:'entre primeiro' };
+  var novo = S(r && r.novo).replace(/\D/g, ''); if (!/^\d{4,6}$/.test(novo)) return { ok:false, erro:'o PIN precisa ter 4 a 6 números' };
+  var U = usuariosLer_(), u = U.lista.filter(function(x){ return x.login === acc.u.login; })[0]; if (!u) return { ok:false, erro:'usuário não encontrado' };
+  if (_hashPin_(u.login, S(r.atual).replace(/\D/g, '')) !== u.pin) return { ok:false, erro:'PIN atual errado' };
+  u.versao++; _setCells_(U.t, u.row, { 'PIN':_hashPin_(u.login, novo), 'PIN NOVO':'', 'VERSÃO':u.versao }); _usuLimpaCache_();
+  return { ok:true, token:tokenGera_(u.login, u.versao) };
+}
+// lista p/ a tela Usuários (sem PIN)
+function usuariosLista_(){ return usuariosLer_().lista.map(function(u){ var i = usuarioInfo_(u); i.modulos = u.modulos; i.telas = u.telas; i.ativo = u.ativo; i.ultimo = u.ultimo; i.temPin = !!(u.pin || u.pinNovo); return i; }); }
+// salvar (criar/editar) ou excluir — só ADMIN. Sempre sobra pelo menos 1 administrador ativo.
+function usuariosSalva_(acc, r){
+  var U = usuariosLer_(), t = U.t, s = t.s, lista = U.lista;
+  if (r && r.excluir){ var ex = lista.filter(function(x){ return x.login === _normLogin_(r.excluir); })[0]; if (!ex) return { rows:0, erro:'usuário não encontrado' };
+    if (ex.perfil === 'ADMIN' && lista.filter(function(x){ return x.perfil === 'ADMIN' && x.ativo && x.login !== ex.login; }).length === 0) return { rows:0, erro:'não dá para excluir o último administrador' };
+    s.deleteRow(ex.row); _usuLimpaCache_(); return { rows:1 }; }
+  var d = (r && r.salvar) || {}, login = _normLogin_(d.login); if (!/^[a-z0-9._-]{2,30}$/.test(login)) return { rows:0, erro:'login: 2 a 30 letras/números, sem espaço' };
+  var antigo = _normLogin_(d.loginAntigo || login), u = lista.filter(function(x){ return x.login === antigo; })[0];
+  if (login !== antigo && lista.some(function(x){ return x.login === login; })) return { rows:0, erro:'já existe o login ' + login };
+  if (!u && lista.some(function(x){ return x.login === login; })) return { rows:0, erro:'já existe o login ' + login };
+  var perfil = S(d.perfil).toUpperCase() === 'ADMIN' ? 'ADMIN' : 'OPERADOR', ativo = d.ativo !== false;
+  var sobra = lista.filter(function(x){ return x.perfil === 'ADMIN' && x.ativo && (!u || x.login !== u.login); }).length + (perfil === 'ADMIN' && ativo ? 1 : 0);
+  if (sobra === 0) return { rows:0, erro:'precisa ficar pelo menos 1 administrador ativo' };
+  var pin = S(d.pinNovo).replace(/\D/g, ''); if (d.pinNovo && !/^\d{4,6}$/.test(pin)) return { rows:0, erro:'o PIN precisa ter 4 a 6 números' };
+  if (!u && !pin) return { rows:0, erro:'usuário novo precisa de PIN' };
+  var row = u ? u.row : _novaLinha_(s), ver = u ? u.versao : 0;
+  if (pin || (u && (u.ativo && !ativo)) || (u && login !== antigo)) ver++;   // PIN novo / desativado / login trocado → sai dos aparelhos
+  var vals = { 'NOME':S(d.nome), 'LOGIN':login, 'PERFIL':perfil, 'MÓDULOS':(d.modulos || []).filter(function(m){ return MODULOS_APP.indexOf(m) >= 0; }).join(', '),
+    'TELAS':(d.telas || []).join(', '), 'ATIVO':ativo ? 'SIM' : 'NÃO', 'VERSÃO':ver };
+  if (pin){ vals['PIN'] = _hashPin_(login, pin); vals['PIN NOVO'] = ''; }
+  _setCells_(t, row, vals); _usuLimpaCache_(); return { rows:1 };
+}
+
 /* ----------------------------- ENDPOINTS ----------------------------- */
 function json(o){ return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 function jsonStr(s){ return ContentService.createTextOutput(s).setMimeType(ContentService.MimeType.JSON); }
@@ -1443,7 +1586,7 @@ function cachePutK_(pfx, str){
     c.putAll(obj, CACHE_TTL);
   } catch (e) {}
 }
-function cacheClear(){ try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta']); } catch (e) {} }
+function cacheClear(){ try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu']); } catch (e) {} }
 function cacheClearApp_(){ try { CacheService.getScriptCache().remove('pa_meta'); } catch (e) {} }
 // edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
 function onEdit(e){ cacheClear(); }
@@ -1457,10 +1600,15 @@ function currentJson(){
 }
 
 function doGet(e){
-  // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE)
+  var prm = (e && e.parameter) || {}, acc = acessoDe_(prm.s);
+  if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
+    if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
+    return json({ ok:true, usuarios:usuariosLista_() }); }
+  // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE OU login com Administrativo/Campo)
   if (e && e.parameter && e.parameter.acao){
     var p = e.parameter;
-    if (!nfeTokenOk_(p.token)) return json({ ok:false, erro:'token da NF-e inválido ou NF-e não configurada' });
+    var sessOk = acc && acc.u && (acc.admin || acc.mods.admin || (acc.mods.campo && p.acao !== 'capturar'));
+    if (!nfeTokenOk_(p.token) && !sessOk) return json({ ok:false, erro:(acc && acc.erro) || 'token da NF-e inválido ou NF-e não configurada' });
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
     if (p.acao === 'capturar'){ var cr = capturarNfe(25000); return json({ ok:cr !== 'ocupado', erro:(typeof cr === 'string') ? cr : '', captura:nfeCapturaInfo_() }); }
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
@@ -1469,7 +1617,11 @@ function doGet(e){
     if (p.acao === 'pendencias') return json(nfePendenciasLista_(p.status));
     return json({ ok:false, erro:'ação desconhecida' });
   }
-  var str = currentJson();
+  var cfg = loginCfg_();
+  if (acc && acc.erro) return json({ ok:false, login:true, erro:acc.erro, exigido:cfg.exigido });   // sessão velha/derrubada
+  if (cfg.exigido && !(acc && acc.u)) return json({ ok:false, login:true, erro:'entre com seu login e PIN', exigido:true });
+  var str = acessoFiltra_(currentJson(), acc);
+  str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + '}';
   // ?h=1 -> devolve só o "hash" (resposta minúscula) para o app checar se mudou antes de baixar tudo
   if (e && e.parameter && e.parameter.h){
     var dig = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8);
@@ -1479,6 +1631,7 @@ function doGet(e){
   return jsonStr(str);
 }
 
+var _ACC_ = null;   // sessão do pedido atual (doPost)
 function doPost(e){
   var out = { ok:0, fail:0, msgs:[] }, base = false;
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
@@ -1486,8 +1639,20 @@ function doPost(e){
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(45000)){ out.fail = 1; out.msgs.push('planilha ocupada — tente de novo'); return json(out); }
   try {
-    var payload = JSON.parse(e.postData.contents);
-    if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
+    var payload = JSON.parse(e.postData.contents), acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
+    _ACC_ = acc;
+    var livre = payload && (payload.__login || payload.__retorno);   // login e retorno do operador (retorno.html) não pedem sessão
+    if (!livre && acc && acc.erro){ out.fail = 1; out.login = true; out.msgs.push(acc.erro); }
+    else if (!livre && cfg.exigido && !(acc && acc.u)){ out.fail = 1; out.login = true; out.msgs.push('entre com seu login e PIN'); }
+    else if (!livre && acc && acc.u && acessoPodeGravar_(acc, payload)){ out.fail = 1; out.msgs.push(acessoPodeGravar_(acc, payload)); }
+    else if (payload && payload.__login){          // login + PIN → sessão
+      var lg = loginFaz_(payload.__login); out.ok = lg.ok ? 1 : 0; if (!lg.ok){ out.fail = 1; out.msgs.push(lg.erro); } else { out.token = lg.token; out.usuario = lg.usuario; out.exigido = lg.exigido; }
+    } else if (payload && payload.__trocarPin){    // a própria pessoa troca o PIN
+      var tp = trocarPin_(acc, payload.__trocarPin); out.ok = tp.ok ? 1 : 0; if (!tp.ok){ out.fail = 1; out.msgs.push(tp.erro); } else out.token = tp.token;
+    } else if (payload && payload.__usuarios){     // tela Usuários (só ADMIN): criar/editar/excluir
+      if (!(acc && acc.admin)){ out.fail = 1; out.msgs.push('só administrador'); }
+      else { var us = usuariosSalva_(acc, payload.__usuarios); out.ok = us.rows; if (us.erro){ out.fail = 1; out.msgs.push(us.erro); } }
+    } else if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows; base = true;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
       var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows; base = true;
@@ -1506,7 +1671,7 @@ function doPost(e){
     } else if (payload && payload.__result){         // Resultados: colhido/preço por talhão/safra (merge por chave)
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
     } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto || payload.__nfeReabrir || payload.__nfeProdutor)){   // NF-e: exigem o token
-      if (!nfeTokenOk_(payload.token)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
+      if (!nfeTokenOk_(payload.token) && !(_ACC_ && _ACC_.u)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
       else if (payload.__recebimento){ var rb = nfeRecebimento_(payload.__recebimento); out.ok = rb.rows; if (rb.erro){ out.fail = 1; out.msgs.push(rb.erro); } }
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
       else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
