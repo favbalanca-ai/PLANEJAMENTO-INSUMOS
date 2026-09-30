@@ -55,9 +55,9 @@ function readBase_(){
     }
   }
 
-  var planos = {};
+  var planos = {}, semAba = [];
   talhoes.forEach(function(t){
-    var s = sh(t.id); if (!s) return;
+    var s = sh(t.id); if (!s){ semAba.push(t.id); return; }
     var n = Math.max(10, s.getLastRow());                // só até a última linha usada (antes: a aba inteira, com as linhas vazias)
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
@@ -90,7 +90,7 @@ function readBase_(){
     }
   }
 
-  return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos,
+  return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos, abas_faltando:semAba,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), equipe_sst:readEquipeSST() };
 }
 function readAppPart_(){
@@ -1175,7 +1175,8 @@ function applyDelTalhao(ed, out){
     if (A){ var last = A.getLastRow();
       if (last >= 2){ var idv = A.getRange(2, 1, last - 1, 1).getValues();
         for (var i = idv.length - 1; i >= 0; i--){ if (S(idv[i][0]) === id) A.deleteRow(2 + i); } } }
-    var s = ss().getSheetByName(id); if (s) ss().deleteSheet(s);
+    // a aba NÃO é apagada: vira "TL01 (excluído 30/09 14:50)" — dá para recuperar (renomear de volta)
+    var s = ss().getSheetByName(id); if (s) s.setName(id + ' (excluído ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm') + ')');
     out.ok++;
   } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
 }
@@ -1257,7 +1258,7 @@ function applyAreaPlantio(edits, out){
 // aba do talhão: 1 leitura do bloco (1..9), aplica tudo em memória, grava B:C e I de volta
 function applyTalhao(tid, edits, out){
   var s = sh(tid);
-  if (!s){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba não encontrada: ' + tid); return; }
+  if (!s){ edits.forEach(function(){ out.fail++; }); if (out.msgs.length < 10) out.msgs.push('aba não encontrada: ' + tid + ' (a planilha não tem uma aba com esse nome)'); return; }
   // 1) operações NOVAS além das existentes: insere os blocos (linhas) primeiro e relê a aba
   edits.forEach(function(ed){ if (ed.type !== 'addopblock') return;
     try { var cnt = Math.max(1, Math.min(50, N(ed.count) || 1)); for (var c = 0; c < cnt; c++) addOpBlock(s, ed.tag); out.ok++; }
@@ -1431,7 +1432,7 @@ var USU_SHEET = 'USUÁRIOS APP', CFGAPP_SHEET = 'CONFIG APP';
 var USU_COLS = ['NOME','LOGIN','PERFIL','MÓDULOS','TELAS','PIN NOVO','PIN','ATIVO','VERSÃO','ÚLTIMO ACESSO'];
 var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
-var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas'];
+var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
   planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','compras_app','nfe_estados'],
   campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app'],

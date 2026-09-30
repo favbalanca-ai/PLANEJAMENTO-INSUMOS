@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-167';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-168';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5742,6 +5742,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
+    else if(a.act==='pendDiscardOrfas'){ const orf=edicoesOrfas(buildFieldEdits());
+      if(orf.length && confirm(`Descartar ${orf.length} edição(ões) de talhões sem aba na planilha?\nElas voltam a valer o que está na planilha.`)){ let n=0; orf.forEach(e=>{ try{ if(discardEdit(e)) n++; }catch(err){} }); saveOverrides(); toast(n+' edição(ões) descartada(s)'); updateEditBadge(); route({keepScroll:true}); } }
     else if(a.act==='pendDiscard'){ let e=null; try{ e=JSON.parse(decodeURIComponent(a.sig||'')); }catch(err){}
       const cur=e&&buildFieldEdits().find(x=>JSON.stringify(x)===JSON.stringify(e));
       if(!cur){ toast('Essa edição já não está pendente'); updateSyncBar(); }
@@ -6360,7 +6362,7 @@ function syncLogResp(r){
   return 'ok'+(r.ok!=null&&r.ok!==true?' '+r.ok:'')+(m?' · '+m:'');
 }
 function syncLogErr(e){ const m=(e&&e.message)||String(e||''); if(/abort/i.test(m)) return 'tempo esgotado (a planilha não respondeu)';
-  if(/Unexpected token '<'|DOCTYPE/i.test(m)) return 'o Google devolveu uma página de erro (planilha lenta/ocupada ou Code.gs antigo)'; if(navigator.onLine===false) return 'sem internet'; return 'erro de conexão: '+m; }
+  if(/Unexpected token '<'|DOCTYPE|Unrecognized token '<'|did not match the expected pattern/i.test(m)) return 'o Google devolveu uma página de erro (planilha lenta/ocupada ou Code.gs antigo)'; if(navigator.onLine===false) return 'sem internet'; return 'erro de conexão: '+m; }
 let syncLogSoErros=false;
 function syncLogDetHtml(){
   let L=syncLogLer(); if(syncLogSoErros) L=L.filter(e=>!e.ok || e.ms>20000);
@@ -6671,7 +6673,9 @@ async function syncPush(opts){
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
-  const eds=buildFieldEdits(), sig=JSON.stringify(eds);
+  let eds=buildFieldEdits(); const orfas=edicoesOrfas(eds);
+  if(orfas.length){ eds=eds.filter(e=>!orfas.includes(e)); if(!opts.auto) toast(`${orfas.length} edição(ões) de talhão sem aba na planilha — veja em Sincronizar`); }
+  const sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
   if(syncBusy){ scheduleAutoPush(); return false; }       // ocupado: tenta de novo depois
@@ -6927,6 +6931,16 @@ function editDesc(e){
   return {lbl, txt:[tal,op,val].filter(Boolean).join(' · ')};
 }
 // descarta a edição local (volta a valer o que está na planilha)
+// talhões que a PLANILHA não tem aba (renomeada/excluída): edições deles não têm onde gravar.
+// Vem da planilha (abas_faltando); com Code.gs antigo, deduz: talhão sem plano no puxar (e que não é novo deste aparelho).
+function talhoesSemAba(){
+  const out=new Set((DATA&&DATA.abas_faltando)||[]);
+  if(DATA && DATA.planos && Object.keys(DATA.planos).length){ const novos=new Set(((OV&&OV.talhaoAdd)||[]).map(t=>t.id));
+    (DATA.talhoes||[]).forEach(t=>{ if(!DATA.planos[t.id] && !novos.has(t.id)) out.add(t.id); }); }
+  return out;
+}
+function edicoesOrfas(eds){ const sa=talhoesSemAba(); if(!sa.size) return [];
+  return (eds||[]).filter(e=>e.talhao && sa.has(e.talhao) && !/^(addtalhao|deltalhao)$/.test(e.type)); }
 function discardEdit(e){
   const k=(e.talhao||'')+'|'+(e.tag||'')+(e.op!=null?e.op:''), seq=e.tag==='S'?'safrinha':'principal';
   switch(e.type){
@@ -6949,9 +6963,14 @@ function discardEdit(e){
 }
 // painel "Edições pendentes" da tela Sincronizar (o que ainda não foi confirmado pela planilha) — uma linha por edição
 function pendingPanelHtml(eds){
-  if(!(eds||[]).length) return `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
+  const orf=edicoesOrfas(eds), sa=[...talhoesSemAba()];
+  const aviso=orf.length?`<div class="nfe-aviso err" style="margin:10px 14px">⚠️ <b>${orf.length} edição(ões)</b> são de talhões que <b>não têm aba na planilha</b>: <b>${esc([...new Set(orf.map(e=>e.talhao))].join(', '))}</b>. Elas não conseguem ser gravadas e não são mais reenviadas.<br>
+    Confira na planilha se essas abas foram excluídas ou renomeadas (dá para recuperar em <b>Arquivo → Histórico de versões</b>). Se não precisar mais delas: <button class="btn btn-sm btn-outline" data-act="pendDiscardOrfas">Descartar essas ${orf.length} edições</button></div>`
+    :(sa.length?`<div class="nfe-aviso warn" style="margin:10px 14px">A planilha não tem aba para: <b>${esc(sa.join(', '))}</b>.</div>`:'');
+  if(orf.length) eds=eds.filter(e=>!orf.includes(e));
+  if(!(eds||[]).length) return aviso+ `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
   const lim=40, pode=e=>!/^(addtalhao|deltalhao)$/.test(e.type);
-  return `<div class="pend-list">${eds.slice(0,lim).map(e=>{ const d=editDesc(e);
+  return aviso+`<div class="pend-list">${eds.slice(0,lim).map(e=>{ const d=editDesc(e);
       return `<div class="pend-row"><div><b>${esc(d.lbl)}</b><div class="mut" style="font-size:12px">${esc(d.txt)}</div></div>
         ${pode(e)?`<button class="btn btn-outline btn-sm" data-act="pendDiscard" data-sig="${esc(encodeURIComponent(JSON.stringify(e)))}" title="Descartar esta edição e voltar ao valor da planilha">Descartar</button>`:''}</div>`; }).join('')}
     ${eds.length>lim?`<div class="mut" style="font-size:12px;padding:6px 0">+${eds.length-lim} edição(ões)…</div>`:''}
@@ -6976,7 +6995,7 @@ function pendingInfo(){
   const add=(n,lbl)=>{ if(n>0){ parts.push(`${n} ${lbl}`); total+=n; } };
   try{
     if(!DATA||!OV) return {total:0, parts:[]};
-    add(buildFieldEdits().length, 'edição(ões) de campo');
+    { const fe=buildFieldEdits(), orf=edicoesOrfas(fe); add(fe.length-orf.length, 'edição(ões) de campo'); add(orf.length, 'edição(ões) de talhão SEM ABA na planilha'); }
     if(COMPRAS) add((COMPRAS.registros||[]).filter(c=>!c.pushed).length, 'compra(s)');
     if(COMPRAS) add((COMPRAS.excluidas||[]).filter(e=>!e.ok).length, 'exclusão(ões) de compra');
     let bx=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey && r.status==='aprovada' && !r.saidaPushed) bx++; });
