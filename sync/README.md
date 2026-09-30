@@ -179,3 +179,5 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   Com Code.gs antigo (sem `abas_faltando`) o app deduz: talhão que veio sem plano no puxar = sem aba —
   inclusive quando **todos** estão sem aba. E, se o último envio falhou, o app continua puxando a planilha
   (antes: edição presa = o aparelho nunca mais puxava).
+  Ao abrir, o app começa com a lista de talhões embutida (data.json); antes de enviar edições de campo ele
+  agora **puxa a planilha primeiro** — assim não manda edição para talhão que a planilha nem tem mais.

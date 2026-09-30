@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-169';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-170';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6674,6 +6674,10 @@ async function syncPush(opts){
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
+  // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
+  // para talhões que a planilha nem tem mais (ex.: TL01 numa planilha refeita com 17) -> "aba não encontrada" em loop
+  if(!dadosDaPlanilha){ try{ await syncPull({auto:true, silentToast:true}); }catch(e){}
+    if(!dadosDaPlanilha){ if(!opts.auto) toast('Não consegui ler a planilha ainda — tento enviar de novo em seguida'); scheduleAutoPush(); return false; } }
   let eds=buildFieldEdits(); const orfas=edicoesOrfas(eds);
   if(orfas.length){ eds=eds.filter(e=>!orfas.includes(e)); if(!opts.auto) toast(`${orfas.length} edição(ões) de talhão sem aba na planilha — veja em Sincronizar`); }
   const sig=JSON.stringify(eds);
