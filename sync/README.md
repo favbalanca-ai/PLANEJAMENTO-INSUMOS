@@ -14,7 +14,7 @@ Com a URL salva e a chave **Sincronização automática** ligada (tela
   pisca a tela).
 
 **Velocidade (cache em duas partes).** O `doGet` guarda os dados no cache do Apps Script
-(`CacheService`) por até 5 min, em duas partes: **BASE** (portfólio, talhões/planos — lê as
+(`CacheService`) — parte BASE por até **30 min**, parte APP por até 5 min — em duas partes: **BASE** (portfólio, talhões/planos — lê as
 abas de talhão —, DRE, máquinas, preços, equipe) e **APP** (compras, saídas, tarefas,
 execução, resultados, limites, NF-e). Gravação do app que só mexe na parte APP limpa só
 ela, então o próximo puxar não relê as abas de talhão. Edições de campo (dose, estoque,
@@ -164,3 +164,11 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **`EXIGIR LOGIN = NÃO`** (padrão): quem não entrou funciona como antes (vê tudo); quem entrou já é
   filtrado. **`SIM`**: sem sessão não recebe nem grava nada (menos `__retorno` do retorno.html).
 - O login com Administrativo também vale no lugar do Token da NF-e. **Receber nota** é só do Administrativo (saiu do Campo).
+
+### Planilha lenta (log com "página de erro do Google" / ~30 s)
+- Só **uma leitura pesada por vez** (`currentJson` com `LockService.getDocumentLock`, separada da trava
+  das gravações): pedidos simultâneos com o cache vazio esperam e usam o que o primeiro leu.
+- As abas de talhão são lidas só até a **última linha usada** (`getLastRow`).
+- O gatilho de 15 min (`capturarNfe`) só limpa o cache se algo mudou e **deixa a leitura pronta** no cache.
+- Erro dentro do `doGet` volta como JSON `{ok:false, erro}` (antes: página HTML do Google) e o puxar
+  traz `_srv:{ms, base, app}` (quanto a planilha levou e o que releu) — aparece no Log detalhado do app.

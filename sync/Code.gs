@@ -58,7 +58,7 @@ function readBase_(){
   var planos = {};
   talhoes.forEach(function(t){
     var s = sh(t.id); if (!s) return;
-    var n = s.getMaxRows();                              // sem teto: a aba cresce quando há mais de 12 operações
+    var n = Math.max(10, s.getLastRow());                // só até a última linha usada (antes: a aba inteira, com as linhas vazias)
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
     var split = findSafraSplit(big, n, m);               // linha do 2º cabeçalho = início da safrinha
@@ -628,6 +628,7 @@ function processarXmlNfe(txt, origem){
 //   arquivo continua na Entrada). Gatilho: ~4 min (o Google corta em 6). Botão Atualizar: ~25 s.
 // O resultado da última busca fica guardado (propriedade NFE_CAPTURA) e aparece no app.
 function capturarNfe(maxMs){
+  var gatilho = typeof maxMs !== 'number';   // o gatilho de 15 min chama com um "evento"; o botão Atualizar com o tempo
   maxMs = +maxMs || 240000;
   var t0 = Date.now(), pr = PropertiesService.getScriptProperties(), lock = LockService.getScriptLock();
   // só UMA busca por vez (gatilho × botão): marca "capturando" (vale 6 min, caso uma busca morra no meio)
@@ -640,7 +641,7 @@ function capturarNfe(maxMs){
   _NFE_MEMO_ = {};
   try {
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
-    try { passo(function(){ nfeRepararChaves_(); nfeReavaliarIgnoradas_(); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
+    var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
     // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
     var p = nfePastas_(cfg), it = p.entrada.getFiles();
     while (it.hasNext() && !fimTempo()){ var f = it.next();
@@ -666,7 +667,9 @@ function capturarNfe(maxMs){
     _NFE_MEMO_ = null;
     _nfeCapturaSalva_(res, erros, parcial);
     try { pr.deleteProperty('NFE_CAPTURANDO'); } catch (e) {}
-    cacheClearApp_(); }   // NF-e: só a parte APP do cache
+    if (res.length || mexeu) cacheClearApp_(); }   // NF-e: só a parte APP do cache, e só se algo mudou
+  // gatilho: aproveita e deixa a leitura da planilha pronta no cache → quem abrir o app não espera
+  if (gatilho && Date.now() - t0 < 180000) try { currentJson(); } catch (e) {}
   return res;
 }
 function _nfeCapturaSalva_(res, erros, parcial){
@@ -1555,7 +1558,9 @@ function usuariosSalva_(acc, r){
   var vals = { 'NOME':S(d.nome), 'LOGIN':login, 'PERFIL':perfil, 'MÓDULOS':(d.modulos || []).filter(function(m){ return MODULOS_APP.indexOf(m) >= 0; }).join(', '),
     'TELAS':(d.telas || []).join(', '), 'ATIVO':ativo ? 'SIM' : 'NÃO', 'VERSÃO':ver };
   if (pin){ vals['PIN'] = _hashPin_(login, pin); vals['PIN NOVO'] = ''; }
-  _setCells_(t, row, vals); _usuLimpaCache_(); return { rows:1 };
+  _setCells_(t, row, vals); _usuLimpaCache_();
+  var eu = acc && acc.u && u && acc.u.login === u.login && ativo;   // editou a si mesmo: chave nova (não cai do app)
+  return { rows:1, token:(eu && ver !== u.versao) ? tokenGera_(login, ver) : undefined };
 }
 
 /* ----------------------------- ENDPOINTS ----------------------------- */
@@ -1568,7 +1573,7 @@ function jsonStr(s){ return ContentService.createTextOutput(s).setMimeType(Conte
    - edição feita À MÃO na planilha limpa as duas (gatilho simples onEdit, abaixo);
    - de qualquer jeito, cada parte vence em CACHE_TTL s (pega fórmulas/IMPORTRANGE que mudam sozinhas).
    Como o valor pode passar de 100KB, é fatiado. */
-var CACHE_TTL = 300;
+var CACHE_TTL = 300, CACHE_TTL_BASE = 1800;   // APP: 5 min · BASE (abas de talhão): 30 min — as edições limpam na hora
 function cacheGetK_(pfx){
   var c = CacheService.getScriptCache(), meta = c.get(pfx + 'meta');
   if (!meta) return null;
@@ -1578,12 +1583,12 @@ function cacheGetK_(pfx){
   for (var j = 0; j < n; j++){ var v = got[pfx + j]; if (v == null) return null; parts.push(v); }
   return parts.join('');
 }
-function cachePutK_(pfx, str){
+function cachePutK_(pfx, str, ttl){
   try {
     var c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(str.length / size), obj = {};
     for (var i = 0; i < n; i++) obj[pfx + i] = str.substr(i * size, size);
     obj[pfx + 'meta'] = String(n);
-    c.putAll(obj, CACHE_TTL);
+    c.putAll(obj, ttl || CACHE_TTL);
   } catch (e) {}
 }
 function cacheClear(){ try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu']); } catch (e) {} }
@@ -1591,15 +1596,31 @@ function cacheClearApp_(){ try { CacheService.getScriptCache().remove('pa_meta')
 // edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
 function onEdit(e){ cacheClear(); }
 // JSON atual dos dados (cada parte do cache; senão lê a planilha e cacheia)
+// UMA leitura pesada por vez (trava do documento, separada da trava das gravações): se 2 aparelhos
+// (ou a checagem + o puxar) pedem juntos com o cache vazio, o 2º espera e usa o que o 1º leu —
+// antes os dois liam as 20 abas ao mesmo tempo, um atrasava o outro e o Google cortava (~30 s).
+var _SRV_ = null;   // quanto a planilha levou (vai no fim do puxar, p/ o log do app)
 function currentJson(){
-  var b = cacheGetK_('pb_');
-  if (b == null){ b = JSON.stringify(readBase_()); cachePutK_('pb_', b); }
-  var a = cacheGetK_('pa_');
-  if (a == null){ a = JSON.stringify(readAppPart_()); cachePutK_('pa_', a); }
+  var t0 = Date.now(), info = { base:false, app:false };
+  var b = cacheGetK_('pb_'), a = cacheGetK_('pa_');
+  if (b == null || a == null){
+    var lk = null; try { lk = LockService.getDocumentLock(); } catch (e) {}
+    var tem = false; try { tem = lk ? lk.tryLock(55000) : false; } catch (e) {}
+    try {
+      if (b == null){ b = cacheGetK_('pb_'); if (b == null){ b = JSON.stringify(readBase_()); cachePutK_('pb_', b, CACHE_TTL_BASE); info.base = true; } }
+      if (a == null){ a = cacheGetK_('pa_'); if (a == null){ a = JSON.stringify(readAppPart_()); cachePutK_('pa_', a, CACHE_TTL); info.app = true; } }
+    } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
+  }
+  info.ms = Date.now() - t0; _SRV_ = info;
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }
 
 function doGet(e){
+  try { return doGet_(e); }
+  catch (err){ var m = ''; try { m = (err && (err.message || String(err))) || ''; } catch (x) {}
+    return json({ ok:false, erro:'a planilha deu erro: ' + (m || 'sem mensagem') }); }
+}
+function doGet_(e){
   var prm = (e && e.parameter) || {}, acc = acessoDe_(prm.s);
   if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
     if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
@@ -1628,6 +1649,7 @@ function doGet(e){
     var hash = Utilities.base64Encode(dig);
     return jsonStr(JSON.stringify({ hash: hash }));
   }
+  if (_SRV_) str = str.slice(0, -1) + ',"_srv":' + JSON.stringify(_SRV_) + '}';   // fora do hash (muda a cada leitura)
   return jsonStr(str);
 }
 
@@ -1651,7 +1673,7 @@ function doPost(e){
       var tp = trocarPin_(acc, payload.__trocarPin); out.ok = tp.ok ? 1 : 0; if (!tp.ok){ out.fail = 1; out.msgs.push(tp.erro); } else out.token = tp.token;
     } else if (payload && payload.__usuarios){     // tela Usuários (só ADMIN): criar/editar/excluir
       if (!(acc && acc.admin)){ out.fail = 1; out.msgs.push('só administrador'); }
-      else { var us = usuariosSalva_(acc, payload.__usuarios); out.ok = us.rows; if (us.erro){ out.fail = 1; out.msgs.push(us.erro); } }
+      else { var us = usuariosSalva_(acc, payload.__usuarios); out.ok = us.rows; if (us.token) out.token = us.token; if (us.erro){ out.fail = 1; out.msgs.push(us.erro); } }
     } else if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows; base = true;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
