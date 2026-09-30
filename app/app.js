@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-160';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-161';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1669,25 +1669,27 @@ function nfeCapturaHtml(c){
   const quando=new Date(String(c.em).replace(' ','T')), min=(Date.now()-quando.getTime())/60000;
   const hora=isNaN(min)?esc(c.em):quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   const parado=!isNaN(min) && min>45;
-  return `<div class="mut" style="padding:8px 14px 0;font-size:12px">Última busca: <b>${hora}</b> · ${c.lidas} arquivo(s)${c.novas?` · ${c.novas} nova(s)`:''}${c.repetidas?` · ${c.repetidas} repetida(s)`:''}${c.ignoradas?` · ${c.ignoradas} ignorada(s)`:''}</div>
-    ${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
+  return `${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
     ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
     ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
 }
 // o que aconteceu com cada arquivo lido (últimos 30): nova, repetida, ignorada (com botão p/ reabrir) ou rejeitada — com o motivo
-const NFE_HIST_ST={nova:['✅','entrou para classificar'],casada:['✅','casou com o recebimento'],duplicada:['🔁','repetida'],ignorada:['🚫','ignorada'],rejeitada:['❌','rejeitada'],cancelada:['⛔','cancelamento']};
+const NFE_HIST_ST={nova:['ok','Nova'],casada:['ok','Casou c/ recebimento'],duplicada:['rep','Repetida'],ignorada:['ign','Ignorada'],rejeitada:['rej','Rejeitada'],cancelada:['canc','Cancelamento']};
+let nfeHistAberto=false;   // histórico de leitura começa RECOLHIDO (lembra se você abriu)
 function nfeHistoricoHtml(L){
   const h=L.historico||[]; if(!h.length) return '';
   const ign={}; (L.ignoradas||[]).forEach(c=>ign[c]=1);
   const quando=em=>{ const d=new Date(String(em).replace(' ','T')); return isNaN(d)?esc(em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); };
-  const it=h.map(x=>{ const st=NFE_HIST_ST[x.status]||['•',x.status], p=x.chave&&/^\d{44}$/.test(x.chave)?nfeChavePartes(x.chave):null;
-    return `<div class="nfe-hist-it"><span>${st[0]}</span><div><b>${esc(st[1])}</b> · <span class="mut">${quando(x.em)}</span>${p?` · NF ${esc(p.nNF)} · ${esc(nfeCnpjFmt(p.doc))}`:''}
-      <div class="mut" style="font-size:11px;word-break:break-all">${esc(x.arq||'')}${x.motivo?` — ${esc(x.motivo)}`:''}</div>
-      ${(ign[x.chave]&&x.status==='ignorada')?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${x.dest?`<button class="btn btn-primary btn-sm" data-act="nfeProdutor" data-doc="${esc(x.dest)}" title="Coloca este CPF/CNPJ na lista PRODUTOR (aba CONFIG NFE): as notas dele passam a entrar">➕ Cadastrar ${esc(nfeDocFmt(x.dest))} como produtor</button>`:''}
-        <button class="btn btn-outline btn-sm" data-act="nfeReabrir" data-chave="${esc(x.chave)}">Classificar mesmo assim</button></div>`:''}</div></div>`; }).join('');
-  const abre=!(L.notas||[]).length;   // lista vazia: já abre, p/ ver o porquê
-  return `<details class="nfe-hist"${abre?' open':''}><summary>Últimos arquivos lidos (${h.length})</summary>${it}</details>`;
+  const it=h.map(x=>{ const st=NFE_HIST_ST[x.status]||['rep',x.status], p=x.chave&&/^\d{44}$/.test(x.chave)?nfeChavePartes(x.chave):null;
+    const acao=(ign[x.chave]&&x.status==='ignorada')?`<div class="nh-act">${x.dest?`<button class="btn btn-primary btn-sm" data-act="nfeProdutor" data-doc="${esc(x.dest)}" title="Coloca este CPF/CNPJ na lista PRODUTOR (aba CONFIG NFE): as notas dele passam a entrar">➕ Cadastrar ${esc(nfeDocFmt(x.dest))} como produtor</button>`:''}
+        <button class="btn btn-outline btn-sm" data-act="nfeReabrir" data-chave="${esc(x.chave)}">Classificar mesmo assim</button></div>`:'';
+    return `<div class="nh-row"><span class="nh-st nh-${st[0]}">${esc(st[1])}</span>
+      <span class="nh-nf">${p?`NF <b>${esc(p.nNF)}</b> <span class="nh-doc">${esc(nfeCnpjFmt(p.doc))}</span>`:`<span class="nh-doc">${esc(x.arq||'—')}</span>`}</span>
+      <span class="nh-when">${quando(x.em)}</span>
+      <span class="nh-det" title="${esc(x.arq||'')}">${x.motivo?esc(x.motivo.replace(/^já estava na planilha/,'já estava na planilha')):esc(x.arq||'')}</span>${acao}</div>`; }).join('');
+  const temAcao=h.some(x=>ign[x.chave]&&x.status==='ignorada');
+  return `<details class="nfe-hist"${(nfeHistAberto||temAcao)?' open':''}><summary data-act="nfeHistToggle"><span>🗂 Histórico de leitura da pasta</span><span class="nh-count">${h.length} arquivo(s)</span></summary><div class="nh-list">${it}</div></details>`;
 }
 const nfeDocFmt=d=>/^\d{11}$/.test(d)?d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,'$1.$2.$3-$4'):nfeCnpjFmt(d);
 async function nfeAddProdutor(doc){
@@ -1746,12 +1748,19 @@ function nfeListaHtml(){
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Conferir</button>
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
-  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">${(L.notas||[]).length} nota(s) · coloque os XML na pasta NFe/Entrada do Drive (lida a cada 15 min ou no Atualizar)</span>
-      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar">🔄 Atualizar</button></div>
+  const nN=(L.notas||[]).length, c=L.captura;
+  let ult=''; if(c){ const d=new Date(String(c.em).replace(' ','T')); ult=isNaN(d)?esc(c.em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
+  const ST_LBL={'A CLASSIFICAR':'A classificar','EM TRÂNSITO':'Em trânsito','A ENTREGAR':'A entregar','ENTREGUE':'Entregues','RECEBIDA':'Recebidas','RECEBIDA SEM XML':'Recebidas s/ XML','IGNORADA':'Ignoradas','CANCELADA':'Canceladas'};
+  const ORD=Object.keys(ST_LBL), cont=L.contagem||{};
+  const chips=Object.keys(cont).filter(k=>cont[k]>0).sort((a,b)=>(ORD.indexOf(a)+99*(ORD.indexOf(a)<0))-(ORD.indexOf(b)+99*(ORD.indexOf(b)<0)))
+    .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
+  const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta <b>NFe/Entrada</b> do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
+  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
+    <div class="nfe-stats">${c?`<span class="nfe-chip st-ult" title="${c.lidas} arquivo(s) lidos nessa leitura">🕒 Última leitura <b>${ult}</b></span>`:''}${chips}</div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
-    ${nfeCapturaHtml(L.captura)}
-    ${L.contagem&&Object.keys(L.contagem).length?`<div class="mut" style="padding:4px 14px 0;font-size:12px">Na planilha (NFE RECEBIDAS): ${Object.keys(L.contagem).map(k=>`${esc(k.toLowerCase()||'sem status')} ${L.contagem[k]}`).join(' · ')}</div>`:''}
-    ${rows||'<p class="mut" style="padding:12px 14px">✔ Nenhuma nota a classificar.</p>'}
+    ${nfeCapturaHtml(c)}
+    ${rows||vazio}
     ${nfeHistoricoHtml(L)}</div>`;
 }
 // itens da nota no formato da planilha (NFE ITENS)
@@ -5497,6 +5506,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
     else if(a.act==='nfeReabrir'){ nfeReabrir(a.chave); }
+    else if(a.act==='nfeHistToggle'){ nfeHistAberto=!act.closest('details').open; }
     else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
