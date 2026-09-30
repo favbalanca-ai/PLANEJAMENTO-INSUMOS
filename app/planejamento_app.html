@@ -1241,6 +1241,19 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-hist summary{cursor:pointer;color:var(--muted,#667);font-size:12px;padding:4px 0}
 .nfe-hist-it{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line,#e5e8ec)}
 .nfe-hist-it>span{flex:0 0 auto}
+/* "hidden" vale SEMPRE: a faixa "Falta sincronizar", o selo "N pendentes" e outros tinham display próprio
+   (flex/inline) que passava por cima do atributo hidden — ficavam na tela com o texto velho. */
+[hidden]{display:none!important}
+/* Sincronizar → Log detalhado */
+.slog{max-height:420px;overflow:auto}
+.slog-row{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:6px 14px;border-top:1px solid var(--line,#e5e8ec);font-size:12px}
+.slog-row .slog-when{color:var(--muted,#667);font-variant-numeric:tabular-nums}
+.slog-row .slog-kind{font-weight:600}
+.slog-row .slog-ms{color:var(--muted,#667);font-variant-numeric:tabular-nums;text-align:right}
+.slog-row .slog-det{grid-column:1/-1;word-break:break-word}
+.slog-row.is-err{background:#fde3e3}
+.slog-row.is-err .slog-det{color:#7a1f1f;font-weight:600}
+.slog-row.is-slow{background:#fff6d6}
 
 </style>
 </head>
@@ -1334,7 +1347,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-158';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-159';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2966,7 +2979,13 @@ function nfeToken(){ try{ return localStorage.getItem(NFE_TOKEN_KEY)||''; }catch
 // a planilha tem a fase 2 (Code.gs novo implantado) e este aparelho tem o token
 function nfeServerOk(){ return !!(syncUrl() && nfeToken() && DATA && DATA.nfe_resumo); }
 function nfeGet(params){ const url=syncUrl(); const q=new URLSearchParams(Object.assign({}, params, {token:nfeToken(), t:Date.now()})).toString();
-  return syncFetch(url+(url.indexOf('?')<0?'?':'&')+q, {method:'GET', cache:'no-store', redirect:'follow'}, 60000).then(r=>r.json()); }
+  const t0=Date.now(), tipo=NFE_ACAO[params.acao]||('NF-e: '+params.acao);
+  return syncFetch(url+(url.indexOf('?')<0?'?':'&')+q, {method:'GET', cache:'no-store', redirect:'follow'}, 60000).then(r=>r.json())
+    .then(j=>{ let det=syncLogResp(j);
+      if(j&&j.ok&&params.acao==='capturar'&&j.captura){ const c=j.captura; det=`ok · ${c.lidas} arquivo(s), ${c.novas} nova(s)${c.parcial?' · parcial':''}${(c.erros||[]).length?' · erros: '+c.erros.join('; '):''}`; }
+      else if(j&&j.ok&&Array.isArray(j.notas)) det='ok · '+j.notas.length+' nota(s)';
+      syncLogAdd('down', tipo, t0, !!(j&&j.ok!==false), det); return j; },
+      e=>{ syncLogAdd('down', tipo, t0, false, syncLogErr(e)); throw e; }); }
 function nfePost(body){ return syncPost(syncUrl(), JSON.stringify(Object.assign({token:nfeToken()}, body))); }
 function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
@@ -6294,9 +6313,15 @@ V.sync = function(){
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Edições pendentes</h2><span class="sub">${eds.length?`${eds.length} ainda não confirmada(s) pela planilha`:'nenhuma'}</span></div>
     <div id="sync-pend">${pendingPanelHtml(eds)}</div></div>
-  <div class="panel"><div class="panel-head"><h2>Histórico de sincronização</h2><span class="sub">últimas 50</span>
+  <div class="panel"><div class="panel-head"><h2>Histórico de sincronização</h2><span class="sub">resumo · últimas 50</span>
       <div class="spacer"></div><button class="btn btn-ghost btn-sm" data-act="hist-clear">Limpar histórico</button></div>
     <div id="sync-hist" class="sync-hist">${histRowsHtml()}</div></div>
+  <div class="panel"><div class="panel-head"><h2>📋 Log detalhado</h2><span class="sub">cada envio/puxar: o que foi, quanto demorou e o que a planilha respondeu</span>
+      <div class="spacer"></div>
+      <button class="btn btn-sm ${syncLogSoErros?'btn-primary':'btn-outline'}" data-act="slogErros">⚠ Só problemas</button>
+      <button class="btn btn-outline btn-sm" data-act="slogCopiar" title="Copia o log para colar numa mensagem">📋 Copiar</button>
+      <button class="btn btn-ghost btn-sm" data-act="slogLimpar">Limpar</button></div>
+    <div id="sync-logdet" class="sync-hist slog">${syncLogDetHtml()}</div></div>
   <div class="panel"><div class="panel-head"><h2>Configurar (uma vez)</h2></div>
     <ol class="mut" style="font-size:13px;line-height:1.75;padding:12px 34px;margin:0">
       <li>Abra sua planilha no Google Sheets → <b>Extensões → Apps Script</b>.</li>
@@ -6698,6 +6723,11 @@ document.addEventListener('click',e=>{
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }
+    else if(a.act==='slogErros'){ syncLogSoErros=!syncLogSoErros; act.classList.toggle('btn-primary',syncLogSoErros); act.classList.toggle('btn-outline',!syncLogSoErros); renderSyncLogDet(); }
+    else if(a.act==='slogCopiar'){ const t=syncLogTexto();
+      (navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Log copiado — cole na mensagem'))
+        .catch(()=>{ download('log_sincronizacao.txt', t, 'text/plain'); toast('Log baixado como arquivo'); }); }
+    else if(a.act==='slogLimpar'){ if(confirm('Limpar o log detalhado?')){ try{ localStorage.removeItem(SYNC_LOG_KEY); }catch(e){} renderSyncLogDet(); } }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     else if(a.act==='campoFiltro'){ campoFiltro=a.val||'todas'; route({keepScroll:true}); }
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
@@ -7321,6 +7351,51 @@ function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
 function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createElement('div'); d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight; } }
+/* ---- LOG DETALHADO da sincronização: CADA conversa com a planilha (o que foi, quanto demorou, o que ela respondeu).
+   Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
+const SYNC_LOG_KEY='planejamento_sync_log';
+const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
+  __result:'Resultados',__limites:'Limites (mapa)',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
+  __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
+const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
+function syncLogTipo(body){
+  try{ const o=JSON.parse(body); if(Array.isArray(o)) return 'Edições de campo ('+o.length+')';
+    const k=Object.keys(o).find(x=>x.startsWith('__')); if(!k) return 'Envio';
+    const v=o[k], n=Array.isArray(v)?v.length:(v&&Array.isArray(v.itens)?v.itens.length:(v&&typeof v==='object'&&!v.id?Object.keys(v).length:0));
+    return (SYNC_TIPO[k]||k.slice(2))+(n>1?' ('+n+')':''); }catch(e){ return 'Envio'; }
+}
+function syncLogLer(){ try{ return JSON.parse(localStorage.getItem(SYNC_LOG_KEY)||'[]'); }catch(_){ return []; } }
+function syncLogAdd(dir, tipo, t0, ok, det){
+  try{ const L=syncLogLer(); L.unshift({t:Date.now(), dir, tipo, ms:Date.now()-t0, ok:!!ok, det:String(det||'').slice(0,300)});
+    if(L.length>300) L.length=300; localStorage.setItem(SYNC_LOG_KEY, JSON.stringify(L)); }catch(_){}
+  try{ renderSyncLogDet(); }catch(_){}
+}
+// resposta da planilha → texto curto: "ok 3" · "planilha ocupada — tente de novo" · msgs de erro
+function syncLogResp(r){
+  if(!r || typeof r!=='object') return 'resposta vazia';
+  const m=(r.msgs||[]).filter(Boolean).join(' · ');
+  if(r.fail>0) return 'falhou'+(m?': '+m:'');
+  if(r.ok===false) return 'falhou'+(r.erro?': '+r.erro:'');
+  return 'ok'+(r.ok!=null&&r.ok!==true?' '+r.ok:'')+(m?' · '+m:'');
+}
+function syncLogErr(e){ const m=(e&&e.message)||String(e||''); if(/abort/i.test(m)) return 'tempo esgotado (a planilha não respondeu)'; if(navigator.onLine===false) return 'sem internet'; return 'erro de conexão: '+m; }
+let syncLogSoErros=false;
+function syncLogDetHtml(){
+  let L=syncLogLer(); if(syncLogSoErros) L=L.filter(e=>!e.ok || e.ms>20000);
+  if(!L.length) return `<div class="hist-empty mut">${syncLogSoErros?'Nenhum problema registrado.':'Nada registrado ainda.'}</div>`;
+  const seg=ms=>ms<1000?ms+' ms':(ms/1000).toFixed(1).replace('.',',')+' s';
+  return L.slice(0,150).map(e=>`<div class="slog-row ${e.ok?(e.ms>20000?'is-slow':'is-ok'):'is-err'}">
+    <span class="slog-when">${esc(fmtHist(e.t))}:${String(new Date(e.t).getSeconds()).padStart(2,'0')}</span>
+    <span class="slog-kind">${e.dir==='up'?'⬆':'⬇'} ${esc(e.tipo)}</span>
+    <span class="slog-ms">${seg(e.ms)}</span>
+    <span class="slog-det">${e.ok?'✔':'✖'} ${esc(e.det)}</span></div>`).join('');
+}
+function renderSyncLogDet(){ const el=$('#sync-logdet'); if(el) el.innerHTML=syncLogDetHtml(); }
+function syncLogTexto(){
+  return 'Log de sincronização — app v'+APP_VERSION+' — '+new Date().toLocaleString('pt-BR')+'\n'+
+    syncLogLer().slice(0,150).map(e=>`${fmtHist(e.t)}:${String(new Date(e.t).getSeconds()).padStart(2,'0')} ${e.dir==='up'?'ENVIAR':'PUXAR '} ${e.tipo} · ${(e.ms/1000).toFixed(1)}s · ${e.ok?'OK':'ERRO'} · ${e.det}`).join('\n');
+}
 // histórico persistente de sincronização (data/hora, puxar/enviar, ok/falhas) — fica no localStorage
 const HIST_KEY='planejamento_sync_hist';
 const SYNC_LAST_KEY='planejamento_sync_last';   // timestamp da última sincronização bem-sucedida
@@ -7519,14 +7594,17 @@ async function syncFetch(url, opts, ms){
 let syncKeepalive=false;
 // GET com timeout longo + 1 tentativa extra (a 1ª chamada do Apps Script costuma ser lenta = "aquecimento")
 async function syncGet(url, opts){
-  opts=opts||{}; let lastErr;
+  opts=opts||{}; let lastErr; const t0=Date.now();
   for(let attempt=0; attempt<2; attempt++){
     try{
       const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
       const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},120000);
-      return await r.json();
+      const txt=await r.text(), d=JSON.parse(txt);
+      syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
+      return d;
     }catch(e){ lastErr=e; if(attempt===0){ if(!opts.auto) syncLog('… demorou; tentando de novo'); await new Promise(res=>setTimeout(res,1800)); } }
   }
+  syncLogAdd('down', 'Puxar planilha', t0, false, syncLogErr(lastErr)+' (2 tentativas)');
   throw lastErr;
 }
 // checagem leve: pergunta só o "hash" dos dados (resposta minúscula, servidor usa cache)
@@ -7535,7 +7613,7 @@ async function getServerHash(url){
     const bust=(url.indexOf('?')<0?'?':'&')+'h=1&t='+Date.now();
     const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},30000);
     const j=await r.json(); return (j&&j.hash)||null;
-  }catch(e){ return null; }
+  }catch(e){ syncLogAdd('down', 'Checar mudanças', Date.now(), false, syncLogErr(e)); return null; }
 }
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
@@ -7580,13 +7658,16 @@ async function syncPull(opts){
 }
 // POST com timeout longo (120s) + 1 tentativa extra (rede instável / Apps Script lento)
 async function syncPost(url, body){
-  let lastErr;
+  let lastErr; const t0=Date.now(), tipo=syncLogTipo(body);
   for(let attempt=0; attempt<2; attempt++){
     try{
       const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body},120000);
-      return await r.json();
+      const j=await r.json();
+      syncLogAdd('up', tipo, t0, !(j && (j.fail>0 || j.ok===false)), syncLogResp(j)+(attempt?' (2ª tentativa)':''));
+      return j;
     }catch(e){ lastErr=e; if(attempt===0) await new Promise(res=>setTimeout(res,1500)); }
   }
+  syncLogAdd('up', tipo, t0, false, syncLogErr(lastErr)+' (2 tentativas)');
   throw lastErr;
 }
 // ENVIAR — app -> planilha. opts.auto = disparado por edição (silencioso; deduplica)
