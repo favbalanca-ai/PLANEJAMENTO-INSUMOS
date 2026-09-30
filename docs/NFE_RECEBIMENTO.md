@@ -367,3 +367,9 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 | 3 | Estados a entregar / em trânsito, contratos de entrega futura, nova fórmula do "a comprar" | Exemplo de 1.000 L com 2 remessas bate em todas as etapas; nada conta em dobro |
 | 4 | Tela `#/receber`: câmera, validação da chave, alternativas, casos da 9.3 | Leitura funciona em Android e iPhone; chave com DV errado é recusada |
 | 5 | Conferência com divergências, fotos, `PENDÊNCIAS RECEBIMENTO`, WhatsApp | Falta de 2 GL gera entrada de 22 GL + pendência aberta, e o "a comprar" não aumenta |
+
+## 12.6 Decisão da dona (30/09/2026): sem leitura de e-mail
+- A captura **não lê mais o Gmail**. As notas entram só pela pasta **`NFe/Entrada`** do Drive,
+  alimentada à mão (lida a cada 15 min pelo gatilho ou na hora pelo botão **Atualizar** do app).
+- O código do Gmail continua no `capturarNfe`, desligado: para voltar, na aba `CONFIG NFE` criar a
+  linha **`LER E-MAIL` = `SIM`** (sem a linha, ou com `NÃO`, fica desligado). O `setupNfe` cria a linha com `NÃO`.
