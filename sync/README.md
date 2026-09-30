@@ -163,4 +163,4 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   `{__usuarios:{salvar|excluir}}` só para ADMIN (sempre sobra 1 admin ativo); `{__trocarPin:{atual,novo}}`.
 - **`EXIGIR LOGIN = NÃO`** (padrão): quem não entrou funciona como antes (vê tudo); quem entrou já é
   filtrado. **`SIM`**: sem sessão não recebe nem grava nada (menos `__retorno` do retorno.html).
-- O login com Administrativo/Campo também vale no lugar do Token da NF-e.
+- O login com Administrativo também vale no lugar do Token da NF-e. **Receber nota** é só do Administrativo (saiu do Campo).

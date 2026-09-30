@@ -1431,15 +1431,15 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas'];
 var MOD_DADOS = {
   planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','compras_app','nfe_estados'],
-  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','nfe_resumo'],
+  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app'],
   precos:['precos_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
-var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin','campo'], __entrada:['admin','campo'], __saida:['campo','planejamento'],
+var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
   __limites:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
-  __recebimento:['admin','campo'], __pendencia:['admin','campo'], __nfeFoto:['admin','campo'] };
+  __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
   plantio:['campo','planejamento'], plantio_safrinha:['campo','planejamento'], dae:['campo','planejamento'], ciclo:['campo','planejamento'], ciclo_safrinha:['campo','planejamento'] };
@@ -1604,10 +1604,10 @@ function doGet(e){
   if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
     if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
     return json({ ok:true, usuarios:usuariosLista_() }); }
-  // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE OU login com Administrativo/Campo)
+  // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE OU login com Administrativo)
   if (e && e.parameter && e.parameter.acao){
     var p = e.parameter;
-    var sessOk = acc && acc.u && (acc.admin || acc.mods.admin || (acc.mods.campo && p.acao !== 'capturar'));
+    var sessOk = acc && acc.u && (acc.admin || acc.mods.admin);
     if (!nfeTokenOk_(p.token) && !sessOk) return json({ ok:false, erro:(acc && acc.erro) || 'token da NF-e inválido ou NF-e não configurada' });
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
     if (p.acao === 'capturar'){ var cr = capturarNfe(25000); return json({ ok:cr !== 'ocupado', erro:(typeof cr === 'string') ? cr : '', captura:nfeCapturaInfo_() }); }
