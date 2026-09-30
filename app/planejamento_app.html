@@ -1478,7 +1478,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-166';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-167';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5269,6 +5269,7 @@ async function usuSalvar(){
   const salvar={nome:e.nome, login:e.login, loginAntigo:e.loginAntigo||'', perfil:e.perfil, modulos:e.perfil==='ADMIN'?[]:(e.modulos||[]), telas:e.perfil==='ADMIN'?[]:(e.telas||[]).filter(v=>(e.modulos||[]).some(m=>navTelas(m).some(t=>t.v===v))), ativo:e.ativo!==false};
   if(e.pinNovo) salvar.pinNovo=e.pinNovo;
   try{ const r=await syncPost(syncUrl(), JSON.stringify({__usuarios:{salvar}})); if(!r||r.fail) throw new Error(((r&&r.msgs)||[]).join(' ')||'falha');
+    if(r.token){ const x=sessao(); if(x){ x.token=r.token; x.usuario=Object.assign({}, x.usuario, {login:salvar.login.toLowerCase().replace(/\s+/g,''), nome:salvar.nome||x.usuario.nome}); sessSalva(x); acessoChip(); } }
     toast('Usuário salvo'); USU_EDIT=null; USU_LISTA=null; route(); }
   catch(err){ toast('Não salvou: '+err.message); }
 }
@@ -7834,7 +7835,8 @@ function syncLogResp(r){
   if(r.ok===false) return 'falhou'+(r.erro?': '+r.erro:'');
   return 'ok'+(r.ok!=null&&r.ok!==true?' '+r.ok:'')+(m?' · '+m:'');
 }
-function syncLogErr(e){ const m=(e&&e.message)||String(e||''); if(/abort/i.test(m)) return 'tempo esgotado (a planilha não respondeu)'; if(navigator.onLine===false) return 'sem internet'; return 'erro de conexão: '+m; }
+function syncLogErr(e){ const m=(e&&e.message)||String(e||''); if(/abort/i.test(m)) return 'tempo esgotado (a planilha não respondeu)';
+  if(/Unexpected token '<'|DOCTYPE/i.test(m)) return 'o Google devolveu uma página de erro (planilha lenta/ocupada ou Code.gs antigo)'; if(navigator.onLine===false) return 'sem internet'; return 'erro de conexão: '+m; }
 let syncLogSoErros=false;
 function syncLogDetHtml(){
   let L=syncLogLer(); if(syncLogSoErros) L=L.filter(e=>!e.ok || e.ms>20000);
@@ -8059,20 +8061,23 @@ async function syncGet(url, opts){
       const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},120000);
       const txt=await r.text(), d=JSON.parse(txt);
       if(d && d.login){ syncLogAdd('down', 'Puxar planilha', t0, false, 'precisa entrar: '+(d.erro||'')); return d; }
-      syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
+      if(d && d.ok===false && d.erro) throw new Error(d.erro);   // a planilha explicou o erro (ex.: "timed out")
+      const sv=d&&d._srv, lida=sv?(sv.base||sv.app?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',sv.app?'compras/NF-e/execução':''].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
+      syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${lida}${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
       return d;
     }catch(e){ lastErr=e; if(attempt===0){ if(!opts.auto) syncLog('… demorou; tentando de novo'); await new Promise(res=>setTimeout(res,1800)); } }
   }
-  syncLogAdd('down', 'Puxar planilha', t0, false, syncLogErr(lastErr)+' (2 tentativas)');
+  syncLogAdd('down', 'Puxar planilha', t0, false, (/planilha deu erro/.test((lastErr&&lastErr.message)||'')?lastErr.message:syncLogErr(lastErr))+' (2 tentativas)');
   throw lastErr;
 }
 // checagem leve: pergunta só o "hash" dos dados (resposta minúscula, servidor usa cache)
 async function getServerHash(url){
+  const t0=Date.now();
   try{
     const bust=(url.indexOf('?')<0?'?':'&')+'h=1&t='+Date.now();
-    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},30000);
-    const j=await r.json(); return (j&&j.hash)||null;
-  }catch(e){ syncLogAdd('down', 'Checar mudanças', Date.now(), false, syncLogErr(e)); return null; }
+    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},45000);
+    const j=await r.json(); if(j && j.ok===false && j.erro) syncLogAdd('down', 'Checar mudanças', t0, false, j.erro); return (j&&j.hash)||null;
+  }catch(e){ syncLogAdd('down', 'Checar mudanças', t0, false, syncLogErr(e)); return null; }
 }
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
