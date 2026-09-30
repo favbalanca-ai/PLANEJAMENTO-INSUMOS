@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-163';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-164';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -411,13 +411,46 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'planejamento', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'both', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both' };
-function currentModule(){ const m=localStorage.getItem(MOD_KEY); return (m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento'; }
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both',
+  login:'both', conta:'both', usuarios:'both' };
+/* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
+   A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
+   A planilha é quem filtra os dados e recusa gravações fora da permissão — aqui só escondemos o que não é seu. */
+const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido';
+const MODULOS=['planejamento','campo','precos','admin','tarefas'];
+const TELA_PAI={talhao:'talhoes'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={receber:['admin','campo']};
+function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
+function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
+function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
+function sessUsuario(){ const x=sessao(); return (x&&x.usuario)||null; }
+function loginExigido(){ try{ return localStorage.getItem(LOGIN_EXIG_KEY)==='1'; }catch(e){ return false; } }
+function setLoginExigido(b){ try{ localStorage.setItem(LOGIN_EXIG_KEY, b?'1':'0'); }catch(e){} }
+function ehAdmin(){ const u=sessUsuario(); return !!(u&&u.perfil==='ADMIN'); }
+function podeModulo(m){ const u=sessUsuario(); return !u || u.perfil==='ADMIN' || (u.modulos||[]).includes(m); }
+// telas de um módulo = itens do menu daquele módulo (sem Sincronizar/Usuários)
+function navTelas(m){ return Array.from(document.querySelectorAll('#nav a[data-view]')).filter(a=>(a.dataset.mod||'').split(' ').includes(m) && !['sync','usuarios'].includes(a.dataset.view))
+  .map(a=>({v:a.dataset.view, nome:(a.querySelector('.lbl')||a).textContent.trim()})); }
+function podeTela(v){
+  if(TELAS_LIVRES.includes(v)) return true;
+  const u=sessUsuario(); if(v==='usuarios') return !!(u&&u.perfil==='ADMIN');
+  if(!u || u.perfil==='ADMIN') return true;
+  v=TELA_PAI[v]||v; const vm=VIEW_MOD[v]; const mods=u.modulos||[], t=u.telas||[];
+  const daTela=(vm==='both'?(TELA_MODS[v]||[]):[vm]).filter(m=>mods.includes(m)); if(!daTela.length) return false;
+  // por módulo: nenhuma tela marcada daquele módulo = todas liberadas
+  return daTela.some(m=>{ const doMod=navTelas(m).map(x=>x.v); return !doMod.some(x=>t.includes(x)) || t.includes(v); });
+}
+// card do Início: quem tem só algumas telas liberadas vê o nome DELAS
+function acessoItensCard(m, itens){ const u=sessUsuario(); if(!u||u.perfil==='ADMIN') return itens;
+  const tl=navTelas(m), lib=tl.filter(x=>podeTela(x.v)); return lib.length && lib.length<tl.length ? lib.map(x=>x.nome) : itens; }
+function homeDoModulo(m){ const h=moduleHome(m); if(podeTela(h.replace('#/',''))) return h; const t=navTelas(m).find(x=>podeTela(x.v)); return t?'#/'+t.v:'#/inicio'; }
+function currentModule(){ let m=localStorage.getItem(MOD_KEY); m=(m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento';
+  if(!podeModulo(m)){ const x=MODULOS.find(podeModulo); if(x) m=x; } return m; }
 function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/calendario':'#/dashboard'))); }
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
 function applyModule(){
   const m=currentModule();
-  document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m); });
+  document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m) || !podeTela(a.dataset.view||''); });
+  try{ acessoChip(); }catch(e){}
   const cur=document.getElementById('mod-cur');
   if(cur){ const info=MOD_INFO[m]; cur.innerHTML=`<span class="mc-ico">${info.ico}</span><span class="mc-name">${info.nome}</span>`; }
   document.body.dataset.mod=m;
@@ -1495,6 +1528,11 @@ function comprasPorNotaHtml(regs){
           <div class="cr-foot"><button class="btn btn-ghost btn-sm del" data-act="cmpDel" data-id="${esc(c.id)}">🗑 Excluir esta compra</button></div></div></details>`; }).join('');
 }
 function filterComprasReg(){ const q=_crNorm(cmpBusca); document.querySelectorAll('#cr-list .cr-item').forEach(d=>{ d.hidden=!!q && !(d.getAttribute('data-busca')||'').includes(q); }); }
+document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
+  if(t.dataset && (t.dataset.usumod || t.dataset.usuperfil)){ usuLeForm();
+    if(t.dataset.usumod){ const m=t.dataset.usumod, ms=new Set(USU_EDIT.modulos||[]); if(t.checked) ms.add(m); else ms.delete(m); USU_EDIT.modulos=MODULOS.filter(x=>ms.has(x)); }
+    setTimeout(()=>route({keepScroll:true}),0); } });
+document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
@@ -1663,7 +1701,7 @@ const NFE_TOKEN_KEY='planejamento_nfe_token', NFE_PEND_KEY='planejamento_nfe_pen
 let NFE_LISTA=null;   // {ts, notas:[…], alertas:[…], erro}
 function nfeToken(){ try{ return localStorage.getItem(NFE_TOKEN_KEY)||''; }catch(e){ return ''; } }
 // a planilha tem a fase 2 (Code.gs novo implantado) e este aparelho tem o token
-function nfeServerOk(){ return !!(syncUrl() && nfeToken() && DATA && DATA.nfe_resumo); }
+function nfeServerOk(){ return !!(syncUrl() && (nfeToken()||sessToken()) && DATA && DATA.nfe_resumo); }
 function nfeGet(params){ const url=syncUrl(); const q=new URLSearchParams(Object.assign({}, params, {token:nfeToken(), t:Date.now()})).toString();
   const t0=Date.now(), tipo=NFE_ACAO[params.acao]||('NF-e: '+params.acao);
   return syncFetch(url+(url.indexOf('?')<0?'?':'&')+q, {method:'GET', cache:'no-store', redirect:'follow'}, 60000).then(r=>r.json())
@@ -1770,7 +1808,7 @@ function nfeNavBadge(){ const a=document.querySelector('#nav a[data-view="entrad
   b.textContent=n; b.title=`${r.aClassificar||0} nota(s) a classificar${r.alertas?` · ${r.alertas} alerta(s)`:''}`; b.classList.toggle('alert', !!r.alertas); }
 function nfeListaHtml(){
   if(!syncUrl()) return '';
-  if(!nfeToken()) return `<div class="nfe-aviso info" style="margin:0 0 14px">📥 Os XML que você coloca na pasta <b>NFe/Entrada</b> do Drive aparecem aqui. Para ligar, cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> (está na aba CONFIG NFE da planilha).</div>`;
+  if(!nfeToken() && !sessToken()) return `<div class="nfe-aviso info" style="margin:0 0 14px">📥 Os XML que você coloca na pasta <b>NFe/Entrada</b> do Drive aparecem aqui. Para ligar, cole o <b>Token da NF-e</b> em <a class="link" data-go="#/sync">Sincronizar</a> (está na aba CONFIG NFE da planilha).</div>`;
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
@@ -2198,7 +2236,7 @@ function recSemXmlHtml(){
       <button class="btn btn-primary" data-act="recConfirmar">✅ Registrar recebimento</button></div></div>`;
 }
 V.receber=function(){
-  if(!syncUrl()||!nfeToken()) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas pela câmera, este aparelho precisa da <b>sincronização</b> e do <b>Token da NF-e</b> (em <a class="link" data-go="#/sync">Sincronizar</a>).</div>`;
+  if(!syncUrl()||!(nfeToken()||sessToken())) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas pela câmera, este aparelho precisa da <b>sincronização</b> e do <b>Token da NF-e</b> (em <a class="link" data-go="#/sync">Sincronizar</a>).</div>`;
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0">A planilha ainda está com o <b>Code.gs antigo</b> — implante a versão nova para receber notas.</div>`;
   if(REC.etapa==='ler') setTimeout(()=>{ loadZXingWasm().catch(()=>{}); }, 400);   // já baixa o leitor enquanto a pessoa aponta a câmera
   if(REC.etapa==='conferir') return recConferirHtml();
@@ -3585,12 +3623,12 @@ V.empreendimentos = function(arg){
 /* ================= TELA INICIAL (porta de entrada: Planejamento × Campo) ================= */
 V.inicio = function(){
   const m=currentModule();
-  const card=(mod,ico,nome,desc,itens,hoverCls)=>`
+  const card=(mod,ico,nome,desc,itens,hoverCls)=>!podeModulo(mod)?'':`
     <button class="entry-card ${hoverCls}" data-act="pickmod" data-mod="${mod}">
       <span class="ec-ico">${ico}</span>
       <span class="ec-name">${nome}</span>
       <span class="ec-desc">${desc}</span>
-      <ul class="ec-list">${itens.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>
+      <ul class="ec-list">${acessoItensCard(mod,itens).map(i=>`<li>${esc(i)}</li>`).join('')}</ul>
       ${m===mod?'<span class="ec-badge">último usado</span>':''}
       <span class="ec-go">Entrar →</span>
     </button>`;
@@ -3612,9 +3650,139 @@ V.inicio = function(){
         ['Quadro (estilo Trello)','Cronograma (Gantt)','Equipe / operadores'],'ec-tarefas')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
+    ${sessUsuario()?`<p class="entry-foot">👤 <b>${esc(sessUsuario().nome)}</b> · <a class="link" data-go="#/conta">minha conta / sair</a>${ehAdmin()?' · <a class="link" data-go="#/usuarios">👥 usuários</a>':''}</p>`:(syncUrl()?`<p class="entry-foot"><a class="link" data-go="#/login">🔐 Entrar com login</a></p>`:'')}
   </div>`;
 };
 
+/* ================= LOGIN: telas Entrar · Minha conta · Usuários ================= */
+// a planilha disse "precisa entrar" (sessão vencida/derrubada ou login exigido)
+function acessoPrecisaLogin(r){
+  if(r && r.exigido!==undefined) setLoginExigido(!!r.exigido); else if(r && r.login && !sessToken()) setLoginExigido(true);
+  const tinha=!!sessToken(); if(tinha) sessSalva(null);
+  if(tinha) toast((r&&r.erro)||'Entre de novo');
+  if(loginExigido()){ if(!/^#\/login/.test(location.hash)) location.hash='#/login'; else route(); }
+  else { applyModule(); route({keepScroll:true}); }
+}
+// cada puxar traz {exigido, usuario}: guarda e aplica as permissões (o admin mudou? vale na hora)
+function acessoAplicar(a){
+  if(!a) return; setLoginExigido(!!a.exigido);
+  const x=sessao(); if(x && a.usuario){ x.usuario=a.usuario; sessSalva(x); }
+  applyModule();
+  const v=(location.hash.replace(/^#\//,'')||'').split('/')[0]; if(v && !podeTela(v)) setTimeout(()=>route(),0);
+}
+function acessoChip(){ const c=document.getElementById('user-chip'); if(!c) return; const u=sessUsuario();
+  c.hidden=!u; if(u) c.innerHTML=`👤 <span class="uc-nome">${esc(u.nome||u.login)}</span>${u.perfil==='ADMIN'?' <span class="uc-adm">ADMIN</span>':''}`; }
+V.login=function(){
+  if(!syncUrl()) return `<div class="login-wrap"><div class="login-box"><div class="lg-brand">🌱 Planejamento de Safra</div>
+    <p>Para entrar, este aparelho precisa estar ligado à planilha.</p><a class="btn btn-primary" data-go="#/sync">Configurar a sincronização</a></div></div>`;
+  return `<div class="login-wrap"><div class="login-box">
+    <div class="lg-brand">🌱 Planejamento de Safra</div>
+    <h2>Entrar</h2>
+    <label>Login<input id="lg-login" class="txt" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc((sessUsuario()||{}).login||localStorage.getItem('planejamento_ultimo_login')||'')}"></label>
+    <label>PIN<input id="lg-pin" class="txt" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" placeholder="4 a 6 números"></label>
+    <button class="btn btn-primary lg-btn" data-act="lgEntrar">Entrar</button>
+    <div id="lg-msg" class="lg-msg"></div>
+    ${loginExigido()?'':`<a class="link lg-sem" data-go="#/inicio">continuar sem entrar</a>`}
+    <p class="mut lg-dica">Esqueceu o PIN? Peça ao administrador para redefinir.</p>
+  </div></div>`;
+};
+async function lgEntrar(){
+  const login=($('#lg-login')||{}).value||'', pin=($('#lg-pin')||{}).value||'', msg=$('#lg-msg');
+  if(!login.trim()||!pin.trim()){ if(msg) msg.textContent='Informe login e PIN.'; return; }
+  if(msg) msg.textContent='Entrando…';
+  let r=null; try{ r=await syncPost(syncUrl(), JSON.stringify({__login:{login, pin}})); }catch(e){ if(msg) msg.textContent='Sem conexão com a planilha. Tente de novo.'; return; }
+  if(!r || !r.token){ if(msg) msg.textContent='✘ '+(((r&&r.msgs)||[]).join(' ')||'Não deu para entrar'+(r&&!('token' in r)&&!r.fail?' (a planilha está com o Code.gs antigo)':'')); const p=$('#lg-pin'); if(p){ p.value=''; p.focus(); } return; }
+  const antes=sessUsuario();
+  if(antes && antes.login!==r.usuario.login){ try{ localStorage.removeItem(DATA_KEY); }catch(e){} }   // outra pessoa neste aparelho
+  sessSalva({token:r.token, usuario:r.usuario, em:Date.now()}); setLoginExigido(!!r.exigido);
+  try{ localStorage.setItem('planejamento_ultimo_login', r.usuario.login); }catch(e){}
+  toast('Olá, '+(r.usuario.nome||r.usuario.login)+'!'); applyModule();
+  const m=MODULOS.find(podeModulo); location.hash=m&&MODULOS.filter(podeModulo).length===1?homeDoModulo(m):'#/inicio';
+  lastRawSig=''; setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 100);
+}
+V.conta=function(){
+  const u=sessUsuario();
+  if(!u) return `<div class="panel"><div class="panel-head"><h2>Minha conta</h2></div><div style="padding:14px">Você não entrou com login. <a class="link" data-go="#/login">Entrar</a></div></div>`;
+  const mods=u.perfil==='ADMIN'?MODULOS:(u.modulos||[]);
+  return `<div class="panel"><div class="panel-head"><h2>👤 ${esc(u.nome||u.login)}</h2><span class="sub">login <b>${esc(u.login)}</b> · ${u.perfil==='ADMIN'?'Administrador':'Operador'}</span></div>
+    <div style="padding:12px 14px"><div class="mut" style="font-size:12px;margin-bottom:6px">Módulos liberados</div>
+      <div class="usu-chips">${mods.map(m=>`<span class="usu-chip">${MOD_INFO[m].ico} ${esc(MOD_INFO[m].nome)}</span>`).join('')||'<span class="mut">nenhum</span>'}</div>
+      ${u.perfil!=='ADMIN'&&(u.telas||[]).length?`<div class="mut" style="font-size:12px;margin:10px 0 4px">Telas: ${esc((u.telas||[]).map(v=>TITLES[v]||v).join(', '))}</div>`:''}</div></div>
+  <div class="panel"><div class="panel-head"><h2>Trocar meu PIN</h2></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>PIN atual<input id="ct-atual" class="txt" type="password" inputmode="numeric" maxlength="6"></label>
+      <label>PIN novo (4 a 6 números)<input id="ct-novo" class="txt" type="password" inputmode="numeric" maxlength="6"></label>
+      <label>Repita o PIN novo<input id="ct-novo2" class="txt" type="password" inputmode="numeric" maxlength="6"></label></div>
+    <div style="padding:0 14px 12px"><button class="btn btn-primary btn-sm" data-act="ctTrocarPin">Trocar PIN</button></div></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">${ehAdmin()?'<button class="btn btn-outline" data-go="#/usuarios">👥 Usuários</button>':''}
+    <button class="btn btn-outline del" data-act="sessSair">🚪 Sair deste aparelho</button></div>`;
+};
+async function ctTrocarPin(){
+  const a=$('#ct-atual').value, n=$('#ct-novo').value, n2=$('#ct-novo2').value;
+  if(!/^\d{4,6}$/.test(n)){ toast('O PIN novo precisa ter 4 a 6 números'); return; } if(n!==n2){ toast('Os dois PINs novos não são iguais'); return; }
+  try{ const r=await syncPost(syncUrl(), JSON.stringify({__trocarPin:{atual:a, novo:n}})); if(!r||!r.token) throw new Error(((r&&r.msgs)||[]).join(' ')||'falha');
+    const x=sessao(); x.token=r.token; sessSalva(x); toast('PIN trocado'); route(); }
+  catch(e){ toast('Não trocou: '+e.message); }
+}
+async function sessSair(){
+  if(hasPending()){ if(!confirm('Há dados deste aparelho ainda não enviados à planilha. Enviar agora e depois sair?')) return; try{ await syncPush({}); }catch(e){} }
+  if(hasPending() && !confirm('Ainda ficou algo sem enviar (sem internet?). Sair mesmo assim? O que não foi enviado continua guardado neste aparelho.')) return;
+  sessSalva(null); try{ localStorage.removeItem(DATA_KEY); }catch(e){}   // tira do aparelho os dados que eram dessa pessoa
+  location.hash=loginExigido()?'#/login':'#/inicio'; location.reload();
+}
+// ---- tela Usuários (só ADMIN) ----
+let USU_LISTA=null, USU_EDIT=null;
+async function usuCarregar(){
+  try{ const url=syncUrl(); const r=await syncFetch(url+(url.indexOf('?')<0?'?':'&')+'acao=usuarios&t='+Date.now(),{method:'GET',cache:'no-store',redirect:'follow'},60000).then(x=>x.json());
+    USU_LISTA=r&&r.ok?r.usuarios:{erro:(r&&r.erro)||'falha'}; }catch(e){ USU_LISTA={erro:'sem conexão com a planilha'}; }
+  if(/#\/usuarios/.test(location.hash)) route({keepScroll:true});
+}
+function usuForm(){ const e=USU_EDIT, novo=!e.loginAntigo;
+  const mods=MODULOS.map(m=>{ const on=(e.modulos||[]).includes(m), tl=navTelas(m);
+    return `<div class="usu-mod ${on?'on':''}"><label class="usu-modh"><input type="checkbox" data-usumod="${m}"${on?' checked':''}${e.perfil==='ADMIN'?' disabled':''}> ${MOD_INFO[m].ico} <b>${esc(MOD_INFO[m].nome)}</b></label>
+      ${on&&e.perfil!=='ADMIN'?`<div class="usu-telas">${tl.map(t=>`<label><input type="checkbox" data-usutela="${t.v}"${(e.telas||[]).includes(t.v)?' checked':''}> ${esc(t.nome)}</label>`).join('')}
+        <div class="mut usu-dica">Nenhuma marcada = <b>todas</b> as telas de ${esc(MOD_INFO[m].nome)}.</div></div>`:''}</div>`; }).join('');
+  return `<div class="panel usu-form"><div class="panel-head"><h2>${novo?'Novo usuário':'Editar '+esc(e.nome||e.login)}</h2><div class="spacer"></div><button class="btn btn-ghost btn-sm" data-act="usuCancelar">Cancelar</button></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Nome<input id="usu-nome" class="txt" value="${esc(e.nome||'')}" placeholder="ex.: João da Silva"></label>
+      <label>Login<input id="usu-login" class="txt" value="${esc(e.login||'')}" autocapitalize="none" placeholder="ex.: joao"></label>
+      <label>Perfil<select id="usu-perfil" class="txt" data-usuperfil="1"><option value="OPERADOR"${e.perfil!=='ADMIN'?' selected':''}>Operador</option><option value="ADMIN"${e.perfil==='ADMIN'?' selected':''}>Administrador (tudo)</option></select></label>
+      <label>${novo?'PIN (4 a 6 números)':'Redefinir PIN (deixe vazio p/ manter)'}<input id="usu-pin" class="txt" type="password" inputmode="numeric" maxlength="6"></label>
+      <label class="usu-ativo"><input id="usu-ativo" type="checkbox"${e.ativo!==false?' checked':''}> Ativo</label></div>
+    <div style="padding:0 14px 6px" class="mut">${e.perfil==='ADMIN'?'Administrador vê todos os módulos e telas, e gerencia usuários.':'Marque os módulos e, se quiser, só algumas telas de cada um:'}</div>
+    <div class="usu-mods">${mods}</div>
+    <div style="display:flex;gap:8px;padding:12px 14px;flex-wrap:wrap"><button class="btn btn-primary" data-act="usuSalvar">💾 Salvar</button>
+      ${novo?'':`<button class="btn btn-ghost del" data-act="usuExcluir">Excluir usuário</button>`}</div></div>`;
+}
+function usuLeForm(){ const e=USU_EDIT; if(!e) return; const g=id=>document.getElementById(id);
+  if(g('usu-nome')){ e.nome=g('usu-nome').value; e.login=g('usu-login').value; e.perfil=g('usu-perfil').value; e.pinNovo=g('usu-pin').value; e.ativo=g('usu-ativo').checked; }
+  e.telas=Array.from(document.querySelectorAll('[data-usutela]')).filter(c=>c.checked).map(c=>c.dataset.usutela).concat((e.telas||[]).filter(v=>!document.querySelector(`[data-usutela="${v}"]`))); }
+V.usuarios=function(){
+  if(!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
+  if(USU_LISTA===null){ setTimeout(usuCarregar,0); return `<div class="panel"><div class="panel-head"><h2>👥 Usuários</h2><span class="sub">carregando…</span></div></div>`; }
+  if(USU_LISTA.erro) return `<div class="nfe-aviso err">Não carregou: ${esc(USU_LISTA.erro)} <button class="btn btn-sm btn-outline" data-act="usuRecarregar">Tentar de novo</button></div>`;
+  const rows=USU_LISTA.map(u=>{ const mods=u.perfil==='ADMIN'?['todos']:(u.modulos||[]);
+    return `<div class="usu-row${u.ativo?'':' off'}"><div class="usu-quem"><b>${esc(u.nome||u.login)}</b><small>${esc(u.login)} · ${u.perfil==='ADMIN'?'<span class="uc-adm">ADMIN</span>':'operador'}${u.ativo?'':' · <span class="usu-off">desativado</span>'}</small></div>
+      <div class="usu-chips">${mods.map(m=>m==='todos'?'<span class="usu-chip">tudo</span>':`<span class="usu-chip">${MOD_INFO[m].ico} ${esc(MOD_INFO[m].nome)}</span>`).join('')||'<span class="mut">nada liberado</span>'}
+        ${u.perfil!=='ADMIN'&&(u.telas||[]).length?`<span class="usu-chip t">${u.telas.length} tela(s)</span>`:''}</div>
+      <div class="usu-ult mut">${u.ultimo?'último acesso '+esc(u.ultimo):'nunca entrou'}</div>
+      <button class="btn btn-outline btn-sm" data-act="usuEditar" data-login="${esc(u.login)}">Editar</button></div>`; }).join('');
+  return `${USU_EDIT?usuForm():''}
+  <div class="panel"><div class="panel-head"><h2>👥 Usuários</h2><span class="sub">${USU_LISTA.length} pessoa(s) · ${loginExigido()?'login <b>exigido</b>':'login ainda <b>não exigido</b> (aba CONFIG APP → EXIGIR LOGIN)'}</span>
+    <div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="usuNovo">+ Novo usuário</button></div>
+    <div class="usu-list">${rows||'<div class="mut" style="padding:14px">Nenhum usuário.</div>'}</div></div>
+  <p class="mut" style="font-size:12px">O que cada pessoa pode ver e gravar é conferido <b>pela planilha</b>: quem não tem Planejamento, Preços ou Administrativo não recebe preços nem valores em R$. Desativar ou redefinir o PIN tira a pessoa dos aparelhos na hora.</p>`;
+};
+async function usuSalvar(){
+  usuLeForm(); const e=USU_EDIT;
+  if(!e.login.trim()){ toast('Informe o login'); return; } if(!e.loginAntigo && !/^\d{4,6}$/.test(e.pinNovo||'')){ toast('Usuário novo precisa de PIN com 4 a 6 números'); return; }
+  if(e.pinNovo && !/^\d{4,6}$/.test(e.pinNovo)){ toast('O PIN precisa ter 4 a 6 números'); return; }
+  const salvar={nome:e.nome, login:e.login, loginAntigo:e.loginAntigo||'', perfil:e.perfil, modulos:e.perfil==='ADMIN'?[]:(e.modulos||[]), telas:e.perfil==='ADMIN'?[]:(e.telas||[]).filter(v=>(e.modulos||[]).some(m=>navTelas(m).some(t=>t.v===v))), ativo:e.ativo!==false};
+  if(e.pinNovo) salvar.pinNovo=e.pinNovo;
+  try{ const r=await syncPost(syncUrl(), JSON.stringify({__usuarios:{salvar}})); if(!r||r.fail) throw new Error(((r&&r.msgs)||[]).join(' ')||'falha');
+    toast('Usuário salvo'); USU_EDIT=null; USU_LISTA=null; route(); }
+  catch(err){ toast('Não salvou: '+err.message); }
+}
 /* ================= MODO CAMPO (planejado × realizado) ================= */
 const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'} };
 function opsDoTalhao(t){
@@ -5118,7 +5286,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -5127,6 +5295,9 @@ function route(opts){
   const hash=location.hash.replace(/^#\//,'')||'dashboard';
   const [view,arg]=hash.split('/');
   const fn=V[view];
+  // login: com EXIGIR LOGIN ligado, sem sessão só a tela de entrar (e a de configurar a sincronização)
+  if(loginExigido() && !sessToken() && !['login','sync'].includes(view)){ location.replace('#/login'); return; }
+  if(!podeTela(view)){ const m=MODULOS.find(podeModulo); toast('Sem acesso a esta tela'); location.replace(m?homeDoModulo(m):'#/inicio'); return; }
   // mantém o módulo ativo em sincronia com a tela aberta (telas exclusivas trocam o módulo)
   const vm=VIEW_MOD[view]||'planejamento';
   if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
@@ -5531,7 +5702,17 @@ document.addEventListener('click',e=>{
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
-    else if(a.act==='pickmod'){ const m=a.mod; localStorage.setItem(MOD_KEY,m); location.hash=moduleHome(m); }
+    else if(a.act==='lgEntrar'){ lgEntrar(); }
+    else if(a.act==='sessSair'){ sessSair(); }
+    else if(a.act==='ctTrocarPin'){ ctTrocarPin(); }
+    else if(a.act==='usuNovo'){ USU_EDIT={nome:'',login:'',perfil:'OPERADOR',modulos:['campo'],telas:[],ativo:true}; route({keepScroll:true}); window.scrollTo(0,0); }
+    else if(a.act==='usuEditar'){ const u=(USU_LISTA||[]).find(x=>x.login===a.login); if(u){ USU_EDIT=Object.assign({},u,{loginAntigo:u.login, modulos:(u.modulos||[]).slice(), telas:(u.telas||[]).slice()}); route({keepScroll:true}); window.scrollTo(0,0); } }
+    else if(a.act==='usuCancelar'){ USU_EDIT=null; route({keepScroll:true}); }
+    else if(a.act==='usuSalvar'){ usuSalvar(); }
+    else if(a.act==='usuRecarregar'){ USU_LISTA=null; route(); }
+    else if(a.act==='usuExcluir'){ const e=USU_EDIT; if(e && confirm(`Excluir ${e.nome||e.login}? (para só bloquear, desmarque "Ativo")`)){
+        syncPost(syncUrl(), JSON.stringify({__usuarios:{excluir:e.loginAntigo}})).then(r=>{ if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')); toast('Usuário excluído'); USU_EDIT=null; USU_LISTA=null; route(); }).catch(err=>toast('Não excluiu: '+err.message)); } }
+    else if(a.act==='pickmod'){ const m=a.mod; if(!podeModulo(m)){ toast('Sem acesso a este módulo'); return; } localStorage.setItem(MOD_KEY,m); location.hash=homeDoModulo(m); }
     else if(a.act==='prAddRef'){ safraAtual().refs.push({classe:'',produto:'',vista:0,prazo:0}); savePrecos(); route(); }
     else if(a.act==='prDelRef'){ safraAtual().refs.splice(+a.i,1); savePrecos(); route(); }
     else if(a.act==='prAddItem'){ safraAtual().itens.push({empresa:'',classe:'',produto:'',pct:0}); savePrecos(); route(); }
@@ -6328,6 +6509,7 @@ function applyPulledData(d){
   try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
+  try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
   try{ setTimeout(nfeNavBadge, 50); }catch(e){}
@@ -6368,6 +6550,8 @@ function reconcileOverrides(){
 // PUXAR — planilha -> app. opts.auto = silencioso (não faz toast/log se nada mudou)
 // fetch com timeout GENEROSO (o Apps Script lê a planilha toda e pode demorar; só aborta se travar de vez)
 async function syncFetch(url, opts, ms){
+  const su=syncUrl(), tk=sessToken();
+  if(tk && su && typeof url==='string' && url.indexOf(su)===0) url+=(url.indexOf('?')<0?'?':'&')+'s='+encodeURIComponent(tk);
   const ctrl = ('AbortController' in window) ? new AbortController() : null;
   const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||120000) : null;
   // keepalive: pedido disparado ao SAIR do app (aba escondida/fechando) continua mesmo com a página em segundo plano
@@ -6384,6 +6568,7 @@ async function syncGet(url, opts){
       const bust=(url.indexOf('?')<0?'?':'&')+'t='+Date.now();
       const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},120000);
       const txt=await r.text(), d=JSON.parse(txt);
+      if(d && d.login){ syncLogAdd('down', 'Puxar planilha', t0, false, 'precisa entrar: '+(d.erro||'')); return d; }
       syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
       return d;
     }catch(e){ lastErr=e; if(attempt===0){ if(!opts.auto) syncLog('… demorou; tentando de novo'); await new Promise(res=>setTimeout(res,1800)); } }
@@ -6411,6 +6596,7 @@ async function syncPull(opts){
   const t0=Date.now(), seg=()=>((Date.now()-t0)/1000).toFixed(1).replace('.',',')+' s';
   try{
     const d=await syncGet(url,opts);
+    if(d && d.login){ syncBusy=false; setSyncStatus('err','Entrar'); acessoPrecisaLogin(d); return false; }
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
     getServerHash(url).then(h=>{ if(h) lastServerHash=h; });   // registra o hash atual p/ as próximas checagens
     const raw=JSON.stringify(d);
@@ -6448,6 +6634,7 @@ async function syncPost(url, body){
       const r=await syncFetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body},120000);
       const j=await r.json();
       syncLogAdd('up', tipo, t0, !(j && (j.fail>0 || j.ok===false)), syncLogResp(j)+(attempt?' (2ª tentativa)':''));
+      if(j && j.login) setTimeout(()=>acessoPrecisaLogin(j), 0);
       return j;
     }catch(e){ lastErr=e; if(attempt===0) await new Promise(res=>setTimeout(res,1500)); }
   }

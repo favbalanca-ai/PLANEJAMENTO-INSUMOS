@@ -147,3 +147,20 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   substitui a fórmula por um valor naquela célula.
 - A estrutura das abas deve seguir a planilha padrão (mesmas colunas). Se você
   mudar o layout, ajuste os índices de coluna no `Code.gs`.
+
+## Login (administrador × operador)
+- Abas criadas sozinhas: **`USUÁRIOS APP`** (NOME · LOGIN · PERFIL ADMIN/OPERADOR · MÓDULOS · TELAS ·
+  PIN NOVO · PIN · ATIVO · VERSÃO · ÚLTIMO ACESSO) e **`CONFIG APP`** (linha `EXIGIR LOGIN` = SIM/NÃO).
+- **1º administrador:** digite na `USUÁRIOS APP` uma linha com NOME, LOGIN, PERFIL = `ADMIN` e um
+  `PIN NOVO` (4 a 6 números). No 1º login o PIN vira embaralhado (SHA-256 + sal do script) e some da
+  planilha. Depois, usuários se gerenciam pelo app (tela 👥 Usuários).
+- **Sessão:** `{__login:{login,pin}}` devolve uma chave assinada (HMAC, 30 dias) que o app manda em todo
+  pedido como `?s=…`. Trocar PIN / desativar aumenta a VERSÃO → aparelhos daquela pessoa saem na hora.
+  5 PINs errados bloqueiam o login por 10 min.
+- **Filtro no servidor:** o `doGet` manda só os dados dos módulos liberados (`MOD_DADOS`) e zera preços
+  e custos (R$) para quem não tem Planejamento, Preços ou Administrativo. O `doPost` recusa gravações
+  fora da permissão (`GRAVA_MOD`, `EDIT_MOD`). ADMIN vê e grava tudo. `?acao=usuarios` e
+  `{__usuarios:{salvar|excluir}}` só para ADMIN (sempre sobra 1 admin ativo); `{__trocarPin:{atual,novo}}`.
+- **`EXIGIR LOGIN = NÃO`** (padrão): quem não entrou funciona como antes (vê tudo); quem entrou já é
+  filtrado. **`SIM`**: sem sessão não recebe nem grava nada (menos `__retorno` do retorno.html).
+- O login com Administrativo/Campo também vale no lugar do Token da NF-e.
