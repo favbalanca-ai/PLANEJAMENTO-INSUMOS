@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-161';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-162';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1455,6 +1455,47 @@ function estoqueEntradas(){
   }
   return m;
 }
+/* ---- Compras registradas: resumo POR PRODUTO (padrão) ou POR NOTA, uma linha cada; toque abre o detalhe ---- */
+let cmpVisao='produto', cmpBusca='';
+const _crNorm=t=>String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+function _crStatus(c){ return syncUrl()?(c.pushed?'<span class="cr-st ok" title="já está na planilha">✔</span>':'<span class="cr-st pend" title="ainda não foi para a planilha">pendente</span>'):''; }
+function _crEsc(c){ return c.fornecedor||'—'; }
+function comprasPorProdutoHtml(regs){
+  const g={};
+  regs.forEach(c=>(c.itens||[]).forEach(it=>{ if(!it.produto) return;
+    const x=g[it.produto]||(g[it.produto]={produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:0, valor:0, qPreco:0, linhas:[]});
+    const q=+it.qtd||0, pr=+it.preco||0; x.qtd+=q; x.valor+=q*pr; if(pr>0) x.qPreco+=q;
+    x.linhas.push({c, q, pr}); }));
+  const lista=Object.values(g).sort((a,b)=>b.valor-a.valor||a.produto.localeCompare(b.produto));
+  const q=_crNorm(cmpBusca);
+  return `<div class="cr-head cr-prod"><span>Produto</span><span class="num">Quantidade</span><span class="num">Preço médio</span><span class="num">Valor</span></div>`+
+    lista.map(x=>{ const busca=_crNorm([x.produto, ...x.linhas.map(l=>_crEsc(l.c)+' '+(l.c.nf||''))].join(' '));
+      const pm=x.qPreco>0?x.valor/x.qPreco:0, cl=(PROD[x.produto]&&PROD[x.produto].classe)||'';
+      const sub=x.linhas.sort((a,b)=>String(b.c.data||'').localeCompare(String(a.c.data||''))).map(l=>`<div class="cr-sub-row">
+          <span class="cr-when">${esc(fmtData(l.c.data))}</span><span class="cr-forn">${esc(_crEsc(l.c))}${l.c.nf?` <span class="mut">· NF ${esc(l.c.nf)}</span>`:''}${l.c.nfe?' <span class="cr-xml" title="importada do XML da NF-e">XML</span>':''}</span>
+          <span class="num">${num(l.q)} ${esc(x.un)}</span><span class="num mut">${l.pr>0?brl(l.pr):'—'}</span><span class="num">${brl0(l.q*l.pr)}</span>${_crStatus(l.c)}</div>`).join('');
+      return `<details class="cr-item" data-busca="${esc(busca)}"${q&&!busca.includes(q)?' hidden':''}><summary class="cr-row cr-prod">
+          <span class="cr-nome"><b>${esc(x.produto)}</b>${cl?`<small>${esc(cl)}</small>`:''}</span>
+          <span class="num"><b>${num(x.qtd)}</b> ${esc(x.un)}</span>
+          <span class="num mut">${pm>0?brl(pm)+(x.un?'/'+esc(x.un):''):'—'}</span>
+          <span class="num"><b>${brl0(x.valor)}</b><small>${x.linhas.length} compra${x.linhas.length>1?'s':''}</small></span></summary>
+        <div class="cr-sub">${sub}</div></details>`; }).join('');
+}
+function comprasPorNotaHtml(regs){
+  const q=_crNorm(cmpBusca);
+  return `<div class="cr-head cr-nota"><span>Data</span><span>Fornecedor / nota</span><span class="num">Itens</span><span class="num">Total</span><span></span></div>`+
+    regs.map(c=>{ const its=(c.itens||[]).filter(x=>x.produto);
+      const busca=_crNorm([_crEsc(c), c.nf, ...its.map(x=>x.produto)].join(' '));
+      return `<details class="cr-item" data-busca="${esc(busca)}"${q&&!busca.includes(q)?' hidden':''}><summary class="cr-row cr-nota">
+          <span class="cr-when">${esc(fmtData(c.data))}</span>
+          <span class="cr-nome"><b>${esc(_crEsc(c))}</b><small>${c.nf?'NF '+esc(c.nf):'sem NF'}${c.nfe?' · <span class="cr-xml">XML</span>':''}${its.length?' · '+esc(its.slice(0,2).map(x=>x.produto).join(', '))+(its.length>2?'…':''):''}</small></span>
+          <span class="num mut">${its.length}</span><span class="num"><b>${brl0(compraTotal(c))}</b></span>${_crStatus(c)||'<span></span>'}</summary>
+        <div class="cr-sub">${its.map(x=>`<div class="cr-sub-row cr-sub-it"><span class="cr-forn">${esc(x.produto)}</span><span class="num">${num(x.qtd)} ${esc(x.un||'')}</span><span class="num mut">${x.preco>0?brl(x.preco):'—'}</span><span class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</span></div>`).join('')}
+          ${c.obs?`<div class="cr-obs mut">${esc(c.obs)}</div>`:''}
+          <div class="cr-foot"><button class="btn btn-ghost btn-sm del" data-act="cmpDel" data-id="${esc(c.id)}">🗑 Excluir esta compra</button></div></div></details>`; }).join('');
+}
+function filterComprasReg(){ const q=_crNorm(cmpBusca); document.querySelectorAll('#cr-list .cr-item').forEach(d=>{ d.hidden=!!q && !(d.getAttribute('data-busca')||'').includes(q); }); }
+document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
   const d=compraDraft;
@@ -1468,19 +1509,7 @@ V.entradas=function(){
   const total=compraTotal(d);
   const regs=(COMPRAS.registros||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
   const totGeral=regs.reduce((a,c)=>a+compraTotal(c),0);
-  const cards=regs.map(c=>{
-    const its=(c.itens||[]).filter(x=>x.produto);
-    return `<div class="recom-card rc-apr">
-      <div class="rc-head"><span class="rc-badge rc-apr">📦 Entrada</span>
-        ${c.fornecedor?`<span class="rc-op">${esc(c.fornecedor)}</span>`:''}${c.nf?`<span class="mut" style="font-size:11px">NF ${esc(c.nf)}</span>`:''}${c.nfe?'<span class="pill pill-buy" title="importada do XML (id = chave de acesso)">NF-e XML</span>':''}
-        ${syncUrl()?(c.pushed?'<span class="pill pill-buy">na planilha</span>':'<span class="pill pill-noprice">pendente</span>'):''}
-        <span class="spacer"></span><span class="mut" style="font-size:11px">${esc(fmtData(c.data))}</span>
-        <button class="icon-btn del" data-act="cmpDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div>
-      <div class="table-wrap"><table class="camp-ins"><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th></tr></thead>
-        <tbody>${its.map(x=>`<tr><td class="c-full">${esc(x.produto)}</td><td class="num">${num(x.qtd)}</td><td>${esc(x.un||'')}</td><td class="num">${x.preco>0?brl(x.preco):'—'}</td><td class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</td></tr>`).join('')}</tbody>
-        <tfoot class="tfoot"><tr><td colspan="4">Total</td><td class="num">${brl0(compraTotal(c))}</td></tr></tfoot></table></div>
-      ${c.obs?`<div class="rc-obs mut">${esc(c.obs)}</div>`:''}</div>`;
-  }).join('');
+  const cards=regs.length?(cmpVisao==='nota'?comprasPorNotaHtml(regs):comprasPorProdutoHtml(regs)):'';
   return `${prodDatalist()}
   ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label>
     <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. Para conferir o caminhão chegando, use <b>Receber nota</b>.</span></div>`}
@@ -1498,9 +1527,11 @@ V.entradas=function(){
       <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
       <button class="btn btn-primary btn-sm" data-act="cmpSave">✅ Registrar entrada</button>
     </div></div>
-  <div class="panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
+  <div class="panel cr-panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
       <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
-    <div class="recom-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
+    ${regs.length?`<div class="cr-bar"><div class="cr-seg"><button class="${cmpVisao!=='nota'?'on':''}" data-act="cmpVisao" data-v="produto">Por produto</button><button class="${cmpVisao==='nota'?'on':''}" data-act="cmpVisao" data-v="nota">Por nota</button></div>
+      <input id="cr-busca" class="txt" type="search" placeholder="🔎 Buscar produto, fornecedor ou NF" value="${esc(cmpBusca)}"></div>`:''}
+    <div class="cr-list" id="cr-list">${cards||'<div class="mut" style="padding:14px">Nenhuma compra registrada. As compras dão entrada no estoque (saldo = inicial + entradas − saídas).</div>'}</div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">${syncUrl()?'Sincroniza com a planilha (aba <b>COMPRAS APP</b>): todos os aparelhos veem a mesma lista.':'Salvo <b>no aparelho</b>.'} Cada compra soma como <b>entrada</b> no Estoque e reduz o "a comprar" da Demanda.</p>`;
 };
 /* ================= NF-e (fase 1): importar o XML → conferir (de-para) → entrada no estoque =================
@@ -5490,6 +5521,7 @@ document.addEventListener('click',e=>{
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
+    else if(a.act==='cmpVisao'){ cmpVisao=a.v==='nota'?'nota':'produto'; route({keepScroll:true}); }
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
