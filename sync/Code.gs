@@ -419,7 +419,13 @@ function _fmtD(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.
 function _fmtDT(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : S(v); }
 
 // ---- configuração (aba CONFIG NFE: CHAVE | VALOR | OBS) ----
+// Durante a captura, config e pastas são lidas 1x só (_NFE_MEMO_); antes eram relidas a cada XML (lento no Drive).
+var _NFE_MEMO_ = null;
 function nfeConfig_(){
+  if (_NFE_MEMO_ && _NFE_MEMO_.cfg) return _NFE_MEMO_.cfg;
+  var cfg = nfeConfigLer_(); if (_NFE_MEMO_) _NFE_MEMO_.cfg = cfg; return cfg;
+}
+function nfeConfigLer_(){
   var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30 }; if (!s) return cfg;
   var last = s.getLastRow(); if (last < 2) return cfg;
   var v = s.getRange(2,1,last-1,2).getValues();
@@ -435,8 +441,10 @@ function nfeConfig_(){
 function nfeTokenOk_(tk){ var t = nfeConfig_().token; return !!t && S(tk) === t; }
 function _pasta(parent, nome){ var it = parent.getFoldersByName(nome); return it.hasNext() ? it.next() : parent.createFolder(nome); }
 function nfePastas_(cfg){
+  if (_NFE_MEMO_ && _NFE_MEMO_.pastas) return _NFE_MEMO_.pastas;
   var raiz = DriveApp.getFolderById(cfg.pasta);
-  return { raiz:raiz, entrada:_pasta(raiz,'Entrada'), xml:_pasta(raiz,'XML'), rejeitados:_pasta(raiz,'Rejeitados') };
+  var p = { raiz:raiz, entrada:_pasta(raiz,'Entrada'), xml:_pasta(raiz,'XML'), rejeitados:_pasta(raiz,'Rejeitados') };
+  if (_NFE_MEMO_) _NFE_MEMO_.pastas = p; return p;
 }
 // Rode UMA vez pelo editor do Apps Script (menu de funções → setupNfe → Executar). Pode rodar de novo sem problema.
 function setupNfe(){
@@ -611,37 +619,55 @@ function processarXmlNfe(txt, origem){
   return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '', dest:fora ? n.dest : '' };
 }
 // GATILHO (a cada 15 min): Gmail + pasta NFe/Entrada. Também roda pelo botão "Atualizar" do app (?acao=capturar).
-// Um e-mail/arquivo com problema NÃO trava os outros: o erro fica anotado e o resto segue.
+// - Um e-mail/arquivo com problema NÃO trava os outros: o erro fica anotado e o resto segue.
+// - A TRAVA da planilha é pega por ARQUIVO (poucos segundos), não pela busca inteira: as gravações do app
+//   (compras, execução…) passam no meio da busca em vez de ficar esperando / dar "planilha ocupada".
+// - Tem limite de tempo (maxMs): o que faltar fica para a próxima busca (e-mail sem o rótulo NFe é relido;
+//   arquivo continua na Entrada). Gatilho: ~4 min (o Google corta em 6). Botão Atualizar: ~25 s.
 // O resultado da última busca fica guardado (propriedade NFE_CAPTURA) e aparece no app.
-function capturarNfe(){
-  var lock = LockService.getScriptLock(); if (!lock.tryLock(20000)) return 'ocupado';
-  var res = [], erros = [];
+function capturarNfe(maxMs){
+  maxMs = +maxMs || 240000;
+  var t0 = Date.now(), pr = PropertiesService.getScriptProperties(), lock = LockService.getScriptLock();
+  // só UMA busca por vez (gatilho × botão): marca "capturando" (vale 6 min, caso uma busca morra no meio)
+  if (!lock.tryLock(30000)) return 'ocupado';
+  try { var em = +pr.getProperty('NFE_CAPTURANDO') || 0; if (Date.now() - em < 360000) return 'ocupado'; pr.setProperty('NFE_CAPTURANDO', String(Date.now())); }
+  finally { lock.releaseLock(); }
+  var res = [], erros = [], parcial = false;
+  var passo = function(fn){ if (!lock.tryLock(30000)) throw new Error('planilha ocupada'); try { return fn(); } finally { lock.releaseLock(); } };
+  var fimTempo = function(){ if (Date.now() - t0 > maxMs){ parcial = true; return true; } return false; };
+  _NFE_MEMO_ = {};
   try {
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
-    try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e){ erros.push('conserto das chaves: ' + e); }
-    try {
-      var label = GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL);
-      GmailApp.search('has:attachment (filename:xml OR filename:zip) newer_than:7d -label:' + NFE_LABEL, 0, 50).forEach(function(th){
-        try {
-          th.getMessages().forEach(function(m){ m.getAttachments().forEach(function(a){ _nfeBlobs(a).forEach(function(b){
-            var r = processarXmlNfe(_blobTxt(b), 'e-mail'); r.arq = S(b.getName()); res.push(r); }); }); });
-          th.addLabel(label);
-        } catch (e){ erros.push('e-mail "' + S(th.getFirstMessageSubject()).slice(0,60) + '": ' + e); } });
-    } catch (e){ erros.push('Gmail: ' + e); }
+    try { passo(function(){ nfeRepararChaves_(); nfeReavaliarIgnoradas_(); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
+    // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
     var p = nfePastas_(cfg), it = p.entrada.getFiles();
-    while (it.hasNext()){ var f = it.next();
+    while (it.hasNext() && !fimTempo()){ var f = it.next();
       try {
         var bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
         if (!bs.length) res.push({ status:'rejeitada', arq:f.getName(), motivo:'não é arquivo .xml nem .zip' });
-        bs.forEach(function(b){ var r = processarXmlNfe(_blobTxt(b), 'pasta'); r.arq = S(f.getName()); res.push(r); if (r.status === 'rejeitada') ok = false; });
+        bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = S(f.getName()); res.push(r); if (r.status === 'rejeitada') ok = false; });
         if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados);   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
       } catch (e){ erros.push('arquivo "' + f.getName() + '": ' + e); } }   // fica na Entrada: tenta de novo na próxima
-  } finally { _nfeCapturaSalva_(res, erros); lock.releaseLock(); cacheClearApp_(); }   // NF-e: só a parte APP do cache
+    if (!fimTempo()) try {
+      var label = GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL);
+      var ths = GmailApp.search('has:attachment (filename:xml OR filename:zip) newer_than:7d -label:' + NFE_LABEL, 0, 50);
+      for (var i = 0; i < ths.length; i++){ var th = ths[i]; if (fimTempo()) break;
+        try {
+          th.getMessages().forEach(function(m){ m.getAttachments().forEach(function(a){ _nfeBlobs(a).forEach(function(b){
+            var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'e-mail'); }); r.arq = S(b.getName()); res.push(r); }); }); });
+          th.addLabel(label);
+        } catch (e){ erros.push('e-mail "' + S(th.getFirstMessageSubject()).slice(0,60) + '": ' + e); } }
+    } catch (e){ erros.push('Gmail: ' + e); }
+  } finally {
+    _NFE_MEMO_ = null;
+    _nfeCapturaSalva_(res, erros, parcial);
+    try { pr.deleteProperty('NFE_CAPTURANDO'); } catch (e) {}
+    cacheClearApp_(); }   // NF-e: só a parte APP do cache
   return res;
 }
-function _nfeCapturaSalva_(res, erros){
+function _nfeCapturaSalva_(res, erros, parcial){
   try {
-    var c = { em:Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10) };
+    var c = { em:Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial };
     res.forEach(function(r){ if (r.status === 'nova' || r.status === 'casada') c.novas++; else if (r.status === 'duplicada') c.repetidas++;
       else if (r.status === 'ignorada') c.ignoradas++; else if (r.status === 'rejeitada') c.rejeitadas.push((r.arq ? r.arq + ': ' : '') + (r.motivo || '')); });
     c.rejeitadas = c.rejeitadas.slice(0,10);
@@ -666,8 +692,13 @@ function nfeReabrir_(r){
   return { rows:1 };
 }
 // ---- endpoints (todos exigem o token da CONFIG NFE) ----
+// conserto rápido antes de ler (lista / Receber nota) — só se a planilha estiver livre (não briga com a captura)
+function _nfeConsertoLeve_(){
+  var lk = LockService.getScriptLock(); if (!lk.tryLock(3000)) return;
+  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {} finally { lk.releaseLock(); }
+}
 function nfeLista_(status){
-  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {}
+  _nfeConsertoLeve_();
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {}, ign = [];
   var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
   if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
@@ -764,7 +795,7 @@ function nfeEstados_(){
 // ---- FASE 4: recebimento na fazenda (tela Receber nota) ----
 // consulta pela chave lida na câmera: status + itens já classificados (NFE ITENS)
 function nfeChave_(chave){
-  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {}
+  _nfeConsertoLeve_();
   chave = S(chave); var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave);
   if (!row) return { ok:true, encontrada:false };
   var o = {}; var r = t.s.getRange(row,1,1,t.ncol).getValues()[0]; NFE_IDX_COLS.forEach(function(h){ o[h] = r[t.col(h)]; });
@@ -1427,7 +1458,7 @@ function doGet(e){
     var p = e.parameter;
     if (!nfeTokenOk_(p.token)) return json({ ok:false, erro:'token da NF-e inválido ou NF-e não configurada' });
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
-    if (p.acao === 'capturar'){ var cr = capturarNfe(); return json({ ok:cr !== 'ocupado', erro:(typeof cr === 'string') ? cr : '', captura:nfeCapturaInfo_() }); }
+    if (p.acao === 'capturar'){ var cr = capturarNfe(25000); return json({ ok:cr !== 'ocupado', erro:(typeof cr === 'string') ? cr : '', captura:nfeCapturaInfo_() }); }
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
     if (p.acao === 'contratos') return json({ ok:true, contratos:nfeContratos_() });
     if (p.acao === 'nfe_chave') return json(nfeChave_(p.chave));

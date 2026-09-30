@@ -105,7 +105,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
     e a pasta `NFe/Entrada`; `processarXmlNfe()` valida, evita duplicar pela chave,
     salva em `NFe/XML/AAAA-MM/` e grava a `NFE RECEBIDAS` (status A CLASSIFICAR).
   - `doGet ?acao=nfe_lista&status=…&token=…` e `?acao=nfe&chave=…&token=…`;
-  - `doGet ?acao=capturar&token=…` → roda `capturarNfe` na hora (botão **Atualizar** do app).
+  - `doGet ?acao=capturar&token=…` → roda `capturarNfe` na hora (botão **Atualizar** do app, limite ~25 s).
+    A captura pega a trava da planilha **por arquivo** (não pela busca inteira), então as gravações do app
+    passam no meio; tem limite de tempo (gatilho ~4 min) e o que faltar fica para a próxima (`captura.parcial`);
+    só roda uma captura por vez (propriedade `NFE_CAPTURANDO`, vale 6 min).
     Cada e-mail/arquivo é tratado à parte: um com erro não trava os outros (fica na Entrada e é
     tentado de novo). O resumo da última busca (hora, lidas, novas, repetidas, rejeitadas com o
     motivo, erros) fica na propriedade do script `NFE_CAPTURA` e vai em `nfe_lista.captura`;
