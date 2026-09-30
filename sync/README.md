@@ -172,3 +172,7 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - O gatilho de 15 min (`capturarNfe`) só limpa o cache se algo mudou e **deixa a leitura pronta** no cache.
 - Erro dentro do `doGet` volta como JSON `{ok:false, erro}` (antes: página HTML do Google) e o puxar
   traz `_srv:{ms, base, app}` (quanto a planilha levou e o que releu) — aparece no Log detalhado do app.
+- **Talhão sem aba:** o `doGet` devolve `abas_faltando` (talhões da ÁREA PLANTIO sem aba com o mesmo nome).
+  O app não reenvia edições desses talhões (antes: "aba não encontrada" em loop) e mostra em Sincronizar
+  um aviso com o botão **Descartar**. Excluir um talhão pelo app **não apaga mais a aba**: ela é renomeada
+  para "TL01 (excluído dd/mm hh:mm)" — para recuperar, renomeie de volta e recoloque a linha na ÁREA PLANTIO.
