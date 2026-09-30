@@ -1373,6 +1373,16 @@ body[data-view="login"] .content{max-width:none;padding:0}
 .usu-ativo{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;justify-content:flex-start;align-self:end;padding-bottom:8px}
 .usu-ativo input{width:auto!important;margin:0}
 @media (max-width:640px){ .usu-list .usu-row{grid-template-columns:1fr auto} .usu-list .usu-chips,.usu-list .usu-ult{grid-column:1/-1} }
+/* ===== Modo embutido (?embed=receber) — dentro do Pesagem v2: sem menus, só a tela ===== */
+body[data-embed] .sidebar,body[data-embed] .topbar,body[data-embed] .mod-trocar{display:none!important}
+body[data-embed] .main{padding-bottom:0!important;margin-left:0!important}
+body[data-embed] .content{padding:10px 10px 24px}
+.embed-bar{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden;margin:0 0 10px;padding:6px;background:#fff;border:1px solid var(--line,#e5e8ec);border-radius:12px}
+.eb-tab{padding:7px 10px;border-radius:9px;font-size:12.5px;white-space:nowrap;font-weight:700;color:#46545c;text-decoration:none;cursor:pointer}
+.eb-tab.on{background:#2e7d8a;color:#fff}
+.eb-n{background:#e53935;color:#fff;border-radius:999px;padding:0 6px;font-size:11px;margin-left:2px}
+.eb-user{font-size:12px;font-weight:600;color:#1f4a55;text-decoration:none;cursor:pointer;max-width:96px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eb-cfg{font-size:15px;text-decoration:none;cursor:pointer;padding:2px 6px}
 
 </style>
 </head>
@@ -1468,7 +1478,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-165';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-166';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1883,6 +1893,10 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
    A planilha é quem filtra os dados e recusa gravações fora da permissão — aqui só escondemos o que não é seu. */
 const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido';
+// MODO EMBUTIDO (?embed=receber): o app aparece DENTRO de outro (ex.: módulo "Receber insumos" do Pesagem v2).
+// Sem menus; só Receber nota / Pendências (+ entrar, conta e configurar). Não mexe no módulo salvo do app normal.
+const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
+const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
 const TELA_PAI={talhao:'talhoes'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={};   // Receber nota saiu do Campo: é só do Administrativo
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
@@ -3702,8 +3716,9 @@ function recSemXmlHtml(){
       <button class="btn btn-primary" data-act="recConfirmar">✅ Registrar recebimento</button></div></div>`;
 }
 V.receber=function(){
-  if(!syncUrl()||!(nfeToken()||sessToken())) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas pela câmera, este aparelho precisa da <b>sincronização</b> e do <b>Token da NF-e</b> (em <a class="link" data-go="#/sync">Sincronizar</a>).</div>`;
-  if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0">A planilha ainda está com o <b>Code.gs antigo</b> — implante a versão nova para receber notas.</div>`;
+  if(!syncUrl()) return `<div class="nfe-aviso info" style="margin:0">📷 Este aparelho ainda não está ligado à <b>planilha do Planejamento</b>. Toque em <b>Configurar</b> e cole o endereço do Web App (peça ao administrador) — é uma vez só.<div style="margin-top:10px"><a class="btn btn-primary btn-sm" data-go="#/sync">⚙️ Configurar</a></div></div>`;
+  if(!(nfeToken()||sessToken())) return `<div class="nfe-aviso info" style="margin:0">📷 Para receber notas, <b>entre com seu login</b> do Planejamento.<div style="margin-top:10px"><a class="btn btn-primary btn-sm" data-go="#/login">🔐 Entrar</a></div></div>`;
+  if(!(DATA&&DATA.nfe_resumo)) return (syncBusy||!lastRawSig)?`<div class="nfe-aviso info" style="margin:0">⏳ Buscando os dados da planilha…</div>`:`<div class="nfe-aviso warn" style="margin:0">A planilha ainda está com o <b>Code.gs antigo</b> — implante a versão nova para receber notas.</div>`;
   if(REC.etapa==='ler') setTimeout(()=>{ loadZXingWasm().catch(()=>{}); }, 400);   // já baixa o leitor enquanto a pessoa aponta a câmera
   if(REC.etapa==='conferir') return recConferirHtml();
   if(REC.etapa==='semxml') return recSemXmlHtml();
@@ -5120,6 +5135,14 @@ V.inicio = function(){
   </div>`;
 };
 
+// barrinha do modo embutido: abas Receber / Pendências + quem está usando + estado da sincronização
+function embedBarHtml(view){
+  const u=sessUsuario(), tab=(v,t)=>podeTela(v)?`<a class="eb-tab${view===v?' on':''}" data-go="#/${v}">${t}</a>`:'';
+  const pend=(DATA&&DATA.nfe_resumo&&DATA.nfe_resumo.pendAbertas)||0;
+  return `<div class="embed-bar">${tab('receber','📷 Receber')}${tab('pendencias','⚠️ Pendências'+(pend?` <b class="eb-n">${pend}</b>`:''))}
+    <span class="spacer"></span>${u?`<a class="eb-user" data-go="#/conta" title="Minha conta / sair">👤 ${esc(u.nome||u.login)}</a>`:(syncUrl()?`<a class="eb-user" data-go="#/login">🔐 Entrar</a>`:'')}
+    <a class="eb-cfg" data-go="#/sync" title="Sincronização">⚙️</a></div>`;
+}
 /* ================= LOGIN: telas Entrar · Minha conta · Usuários ================= */
 // a planilha disse "precisa entrar" (sessão vencida/derrubada ou login exigido)
 function acessoPrecisaLogin(r){
@@ -5148,7 +5171,7 @@ V.login=function(){
     <label>PIN<input id="lg-pin" class="txt" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="current-password" placeholder="4 a 6 números"></label>
     <button class="btn btn-primary lg-btn" data-act="lgEntrar">Entrar</button>
     <div id="lg-msg" class="lg-msg"></div>
-    ${loginExigido()?'':`<a class="link lg-sem" data-go="#/inicio">continuar sem entrar</a>`}
+    ${loginExigido()?'':`<a class="link lg-sem" data-go="${EMBED?'#/receber':'#/inicio'}">continuar sem entrar</a>`}
     <p class="mut lg-dica">Esqueceu o PIN? Peça ao administrador para redefinir.</p>
   </div></div>`;
 };
@@ -5163,8 +5186,8 @@ async function lgEntrar(){
   sessSalva({token:r.token, usuario:r.usuario, em:Date.now()}); setLoginExigido(!!r.exigido);
   try{ localStorage.setItem('planejamento_ultimo_login', r.usuario.login); }catch(e){}
   toast('Olá, '+(r.usuario.nome||r.usuario.login)+'!'); applyModule();
-  const m=MODULOS.find(podeModulo); location.hash=m&&MODULOS.filter(podeModulo).length===1?homeDoModulo(m):'#/inicio';
-  lastRawSig=''; setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 100);
+  const m=MODULOS.find(podeModulo); location.hash=EMBED?'#/receber':(m&&MODULOS.filter(podeModulo).length===1?homeDoModulo(m):'#/inicio');
+  lastRawSig=''; lastInputTs=0; setTimeout(()=>syncPull({force:true, silentToast:true}), 100);   // não-automático: redesenha a tela assim que os dados chegam
 }
 V.conta=function(){
   const u=sessUsuario();
@@ -5194,7 +5217,7 @@ async function sessSair(){
   if(hasPending()){ if(!confirm('Há dados deste aparelho ainda não enviados à planilha. Enviar agora e depois sair?')) return; try{ await syncPush({}); }catch(e){} }
   if(hasPending() && !confirm('Ainda ficou algo sem enviar (sem internet?). Sair mesmo assim? O que não foi enviado continua guardado neste aparelho.')) return;
   sessSalva(null); try{ localStorage.removeItem(DATA_KEY); }catch(e){}   // tira do aparelho os dados que eram dessa pessoa
-  location.hash=loginExigido()?'#/login':'#/inicio'; location.reload();
+  location.hash=loginExigido()?'#/login':(EMBED?'#/receber':'#/inicio'); location.reload();
 }
 // ---- tela Usuários (só ADMIN) ----
 let USU_LISTA=null, USU_EDIT=null;
@@ -6763,15 +6786,16 @@ function route(opts){
   const fn=V[view];
   // login: com EXIGIR LOGIN ligado, sem sessão só a tela de entrar (e a de configurar a sincronização)
   if(loginExigido() && !sessToken() && !['login','sync'].includes(view)){ location.replace('#/login'); return; }
-  if(!podeTela(view)){ const m=MODULOS.find(podeModulo); toast('Sem acesso a esta tela'); location.replace(m?homeDoModulo(m):'#/inicio'); return; }
+  if(EMBED && !EMBED_TELAS.includes(view)){ location.replace('#/receber'); return; }
+  if(!podeTela(view)){ const m=MODULOS.find(podeModulo); toast('Sem acesso a esta tela'); location.replace(EMBED?(view==='receber'?'#/conta':'#/receber'):(m?homeDoModulo(m):'#/inicio')); return; }
   // mantém o módulo ativo em sincronia com a tela aberta (telas exclusivas trocam o módulo)
   const vm=VIEW_MOD[view]||'planejamento';
-  if(vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
+  if(!EMBED && vm!=='both' && vm!==currentModule()) localStorage.setItem(MOD_KEY,vm);
   applyModule();
   document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
-  try{ $('#content').innerHTML = fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`; }
+  try{ $('#content').innerHTML = (EMBED&&view!=='login'?embedBarHtml(view):'') + (fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`); }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
   // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
@@ -8459,7 +8483,9 @@ function updateSyncBar(){
 // portão de sincronização (modal): envia pendentes -> puxa a planilha; se falhar, deixa tentar de novo ou seguir offline
 let syncGateOpen=false;
 async function syncGate(mode){
-  if(!syncUrl()||syncGateOpen) return; syncGateOpen=true;
+  if(!syncUrl()||syncGateOpen) return;
+  if(loginExigido() && !sessToken()) return;   // sem login: a tela Entrar vem primeiro (o aviso não pode ficar na frente)
+  syncGateOpen=true;
   const ov=document.createElement('div'); ov.className='modal-ov sync-gate'; ov.id='sync-gate';
   ov.innerHTML=`<div class="modal-box" style="width:min(460px,100%)"><div class="modal-head"><h3>🔄 Sincronizar com a planilha</h3></div>
     <div id="sg-body"></div><div class="modal-foot" id="sg-foot"></div></div>`;
@@ -8477,6 +8503,7 @@ async function syncGate(mode){
       const okG=await syncPull({auto:true, force:true, silentToast:true}); if(okG===false) throw new Error('pull');
       step('✔ Sincronizado'); setTimeout(close, 450);
     }catch(e){
+      if(loginExigido() && !sessToken()){ close(); return; }   // a planilha pediu login: fecha e deixa a tela Entrar
       const off=navigator.onLine===false||/offline/.test(String(e&&e.message||''));
       body.innerHTML='';
       step(off?'📴 <b>Sem conexão com a internet.</b>':'⚠️ <b>Não foi possível sincronizar agora.</b>');
@@ -8549,6 +8576,7 @@ async function checkNewVersion(){
 
 /* ================= INIT ================= */
 function boot(d){
+  if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
   loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
