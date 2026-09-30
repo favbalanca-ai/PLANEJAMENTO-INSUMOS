@@ -55,6 +55,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Compras (entradas)** — compras registradas à mão, por XML de NF-e ou pelo
   Receber nota. A lista **sincroniza entre aparelhos** pela aba `COMPRAS APP` da
   planilha; excluir uma compra tira as entradas dela do estoque em todos os aparelhos.
+- **Sincronizar → Log detalhado** — cada conversa do app com a planilha (compras, baixas, de-para,
+  execução, edições, puxar, NF-e…): hora, quanto demorou e o que a planilha respondeu (erros em vermelho,
+  lentos > 20 s em amarelo). Filtro "Só problemas" e botão **Copiar** para mandar o log numa mensagem.
+  Guarda as últimas 300 no aparelho.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.

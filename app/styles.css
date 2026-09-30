@@ -1224,3 +1224,16 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-hist summary{cursor:pointer;color:var(--muted,#667);font-size:12px;padding:4px 0}
 .nfe-hist-it{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line,#e5e8ec)}
 .nfe-hist-it>span{flex:0 0 auto}
+/* "hidden" vale SEMPRE: a faixa "Falta sincronizar", o selo "N pendentes" e outros tinham display próprio
+   (flex/inline) que passava por cima do atributo hidden — ficavam na tela com o texto velho. */
+[hidden]{display:none!important}
+/* Sincronizar → Log detalhado */
+.slog{max-height:420px;overflow:auto}
+.slog-row{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:6px 14px;border-top:1px solid var(--line,#e5e8ec);font-size:12px}
+.slog-row .slog-when{color:var(--muted,#667);font-variant-numeric:tabular-nums}
+.slog-row .slog-kind{font-weight:600}
+.slog-row .slog-ms{color:var(--muted,#667);font-variant-numeric:tabular-nums;text-align:right}
+.slog-row .slog-det{grid-column:1/-1;word-break:break-word}
+.slog-row.is-err{background:#fde3e3}
+.slog-row.is-err .slog-det{color:#7a1f1f;font-weight:600}
+.slog-row.is-slow{background:#fff6d6}
