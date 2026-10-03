@@ -70,6 +70,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Pesagem v2, mesmo site `favbalanca-ai.github.io` → mesmo login no aparelho): sem menus, só as abas
   **Receber** e **Pendências** (conforme a permissão), além de Entrar / Minha conta / ⚙️ Sincronizar.
   Não troca o módulo salvo do app normal.
+- **Campo → Recomendação de TS** — toda operação com **semente + produtos de TS** ganha a seção
+  🧪 *Recomendação de TS* e o botão **Enviar TS**. A batelada é medida em **bag** (a unidade da semente
+  no planejamento, ex.: 5MM); as doses vêm do **planejamento** (por ha) e viram "por batelada"
+  (`dose/ha ÷ bags/ha × bags por batelada`). Mostra nº de bateladas, a última (parcial), sementes/ha e,
+  com o PMS (opcional), kg/ha. O operador abre o link (`retorno.html` em modo TS), vê a dose por batelada
+  e dá baixa: a **semente e os produtos de TS saem do estoque** nessa hora e a operação de plantio
+  continua aberta — ao concluir o plantio eles **não saem de novo** (`opBaixaEff`). Unidades em branco no
+  PORTIFÓLIO aparecem como aviso (preencher na planilha).
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.
