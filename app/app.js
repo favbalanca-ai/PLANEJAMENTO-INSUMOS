@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-170';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-171';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -597,6 +597,11 @@ function effItems(tid, tagoi, baseItens){
 function talhaoVazio(t){ return !(t.empreendimento||'').trim() && !(t.emp_safrinha||'').trim() && (+t.area||0)===0; }
 function talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id] && !talhaoVazio(t)).concat(OV.talhaoAdd); }
 function findTalhao(id){ return DATA.talhoes.find(t=>t.id===id) || OV.talhaoAdd.find(t=>t.id===id); }
+// nome do talhão para MOSTRAR: só o nome ("ESTEVÃO"), sem os códigos na frente ("NV2-", "TL02-").
+// O código (t.id) continua sendo a chave da aba na planilha — só não aparece mais na tela.
+function tNome(t){ if(typeof t==='string') t=findTalhao(t)||{id:t}; if(!t) return '—';
+  const limpa=x=>String(x||'').replace(/^\s*((NV|TL)\s*\d+\s*[-–·_.:]?\s*)+/i,'').trim();
+  return limpa(t.nome)||limpa(t.id)||String(t.nome||t.id||'—'); }
 function planoDe(id){
   if(id in DATA.planos) return DATA.planos[id];
   const c=OV.talhaoAdd.find(t=>t.id===id);
@@ -1135,7 +1140,7 @@ V.dashboard = function(){
   <div class="panel"><div class="panel-head"><h2>Custo por ha · classe × talhão</h2><span class="sub">R$/ha de cada classe de insumo em cada talhão${ccCols.length?` — top ${ccCols.length} classes`:''}</span></div>
     <div class="table-wrap"><table class="cc-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th>${ccCols.map(c=>`<th class="num">${esc(c)}</th>`).join('')}<th class="num">Total/ha</th></tr></thead>
     <tbody>${tCC.slice(0,40).map(o=>{ const tot=Object.values(o.cc).reduce((x,y)=>x+y,0); const e=empDe(o.t);
-      return `<tr><td><b>${esc(o.t.id)}</b>${o.t.nome?` <span class="mut">${esc(o.t.nome)}</span>`:''}${e&&e!=='—'?`<br><span class="mut" style="font-size:11px">${esc(e)}</span>`:''}</td>
+      return `<tr><td><b>${esc(tNome(o.t))}</b>${e&&e!=='—'?`<br><span class="mut" style="font-size:11px">${esc(e)}</span>`:''}</td>
       <td class="num">${num(o.area)}</td>${ccCols.map(c=>`<td class="num">${o.cc[c]?brl(o.cc[c]):'·'}</td>`).join('')}<td class="num"><b>${brl(tot)}</b></td></tr>`;}).join('')||`<tr><td colspan="${ccCols.length+3}" class="empty" style="padding:16px">Sem dados</td></tr>`}</tbody>
     ${tais.length?`<tfoot><tr><th>Média ponderada / ha</th><th class="num">${num(areaTotal)}</th>${ccCols.map(c=>{ let s=0; tCC.forEach(o=>{ s+=(o.cc[c]||0)*o.area; }); return `<th class="num">${areaTotal>0?brl(s/areaTotal):'·'}</th>`; }).join('')}<th class="num">${areaTotal>0?brl(custoTotal/areaTotal):'·'}</th></tr></tfoot>`:''}</table></div>
     ${tCC.length>40?`<p class="mut" style="font-size:12px;padding:6px 16px">Mostrando os 40 talhões de maior custo/ha de ${tCC.length}.</p>`:''}</div>
@@ -1177,7 +1182,7 @@ V.talhoes = function(){
   const totArea=rows.reduce((a,r)=>a+r.area,0);
   const totCusto=rows.reduce((a,r)=>a+r.custo,0);
   const empOpts=empList().filter(e=>e&&e!=='—').map(e=>`<option value="${esc(e)}">`).join('');
-  const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(t.id)} · ${esc(t.nome||'')}</option>`).join('');
+  const copyOpts=all.map(t=>`<option value="${esc(t.id)}">${esc(tNome(t))}</option>`).join('');
   return `${prodDatalist()}
   <datalist id="emplist">${empOpts}</datalist>
   <details class="panel panel-collapse">
@@ -1197,12 +1202,12 @@ V.talhoes = function(){
     <button class="btn btn-ghost btn-sm" data-act="pdfcronogeral" title="Cronograma de planejamento de todos os talhões: datas, operações, o que aplicar e máquina">📅 Cronograma geral</button>
     <div class="spacer"></div><span class="badge badge-muted">Edite área/produtividade; abra para editar insumos; 🗑 exclui o talhão</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-talhoes">
-    <thead><tr><th>Talhão</th><th>Nome</th><th>Cultura</th><th class="num">Área (ha)</th>
+    <thead><tr><th>Talhão</th><th>Aba</th><th>Cultura</th><th class="num">Área (ha)</th>
       <th class="num">Prod. (sc/ha)</th><th class="num">Produção (sc)</th><th class="num">Custo/ha</th><th class="num">Custo total</th><th></th></tr></thead>
     <tbody>${rows.map(r=>`
       <tr data-search="${esc((r.t.id+' '+(r.t.nome||'')+' '+empDe(r.t)+' '+empSafDe(r.t)).toLowerCase())}">
-        <td><b>${esc(r.t.id)}</b>${r.novo?' <span class="pill pill-buy">novo</span>':''}</td>
-        <td><a class="link" data-go="#/talhao/${esc(r.t.id)}">${esc(r.t.nome||'—')}</a></td>
+        <td><a class="link" data-go="#/talhao/${esc(r.t.id)}"><b>${esc(tNome(r.t))}</b></a>${r.novo?' <span class="pill pill-buy">novo</span>':''}</td>
+        <td class="mut" style="font-size:12px">${esc(r.t.id)}</td>
         <td><span class="classe-tag">${esc(empDe(r.t)||'—')}</span>${temSafrinha(r.t)?` <span class="classe-tag" style="background:var(--amber-soft);color:var(--amber)">+ ${esc(empSafDe(r.t))}</span>`:''}</td>
         <td class="num"><input class="cell ${OV.talhao[r.t.id]&&OV.talhao[r.t.id].area!=null?'edited':''}" data-edit="area" data-id="${r.t.id}" value="${r.area}"></td>
         <td class="num"><input class="cell ${OV.talhao[r.t.id]&&OV.talhao[r.t.id].produtividade!=null?'edited':''}" data-edit="prodv" data-id="${r.t.id}" value="${r.prodv}"></td>
@@ -1297,7 +1302,7 @@ V.talhao = function(id){
   return `${prodDatalist()}<datalist id="emplist">${empOpts}</datalist>
   <a class="link" data-go="#/talhoes">‹ Talhões</a>
   <div class="detail-head" style="margin-top:10px">
-    <div class="di"><div class="l">Talhão</div><div class="v">${esc(t.id)} · ${esc(t.nome||'—')}</div></div>
+    <div class="di"><div class="l">Talhão</div><div class="v">${esc(tNome(t))} <span class="mut" style="font-size:12px">(aba ${esc(t.id)})</span></div></div>
     <div class="di"><div class="l">Área</div><div class="v">${num(area)} ha</div></div>
     <div class="di"><div class="l">Insumos/ha</div><div class="v">${brl(c.ha)}</div></div>
     <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}</div></div>
@@ -2658,7 +2663,7 @@ function _pYMD(s){ const p=String(s||'').slice(0,10).split('-'); return p.length
 function _addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
 function _diffDays(a,b){ return Math.round((b-a)/86400000); }
 function tarefaFim(t){ const s=_pYMD(t.inicio); if(!s) return null; return _addDays(s, Math.max(1,+t.dias||1)-1); }
-function talhaoLabel(id){ const t=findTalhao(id); return t?(t.id+(t.nome?' · '+t.nome:'')):''; }
+function talhaoLabel(id){ const t=findTalhao(id); return t?tNome(t):''; }
 // puxa as operações (com insumos) de todos os talhões e cria uma tarefa para cada uma que
 // ainda não virou tarefa (casa pela origem talhão|operação). Data sugerida = plantio + DAP.
 function importarOperacoes(){
@@ -2725,7 +2730,7 @@ function tarefaFormHtml(){
   return `<div class="panel"><div class="panel-head"><h2>${editando?'Editar tarefa':'Nova tarefa'}</h2><span class="sub">quem faz o quê, quando e por quantos dias</span></div>
     <div class="app-grid" style="padding:12px 14px">
       <label>Tarefa / Operação<input class="txt" data-tarf="titulo" value="${esc(d.titulo)}" placeholder="ex.: Plantio, Pulverização 1…"></label>
-      <label>Talhão / Área<select class="txt" data-tarf="talhaoId"><option value="">—</option>${talhoes.map(t=>`<option value="${esc(t.id)}"${d.talhaoId===t.id?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''}</option>`).join('')}</select></label>
+      <label>Talhão / Área<select class="txt" data-tarf="talhaoId"><option value="">—</option>${talhoes.map(t=>`<option value="${esc(t.id)}"${d.talhaoId===t.id?' selected':''}>${esc(tNome(t))}</option>`).join('')}</select></label>
       <label>Responsável<select class="txt" data-tarf="funcionarioId"><option value="">— sem responsável —</option>${fs.map(f=>`<option value="${esc(f.id)}"${d.funcionarioId===f.id?' selected':''}>${esc(f.nome)}${f.funcao?' · '+esc(f.funcao):''}</option>`).join('')}</select></label>
       <label>Início<input type="date" data-tarf="inicio" value="${esc(d.inicio)}"></label>
       <label>Dias<input class="cell" inputmode="numeric" data-tarf="dias" value="${d.dias||''}" placeholder="1"></label>
@@ -2827,7 +2832,7 @@ V.agenda=function(){
       <button class="ag-check${done?' on':''}" data-act="agToggle" data-id="${esc(t.id)}"${linked?' disabled title="O status vem da Operação de Campo"':' title="Concluir/reabrir"'}>${done?'✓':''}</button>
       <div class="ag-main"${linked?' data-go="#/campo"':''}>
         <div class="ag-title${done?' done':''}">${esc(t.titulo||'(sem título)')}</div>
-        <div class="ag-sub">${t.talhaoId?`🗺️ ${esc(t.talhaoId)} · `:''}<span class="kb-dot" style="background:${funcCor(t.funcionarioId)}"></span> ${esc(funcNome(t.funcionarioId))}${linked?' · 🔗 Campo':''}</div>
+        <div class="ag-sub">${t.talhaoId?`🗺️ ${esc(talhaoLabel(t.talhaoId)||t.talhaoId)} · `:''}<span class="kb-dot" style="background:${funcCor(t.funcionarioId)}"></span> ${esc(funcNome(t.funcionarioId))}${linked?' · 🔗 Campo':''}</div>
       </div>
       <div class="ag-due${atraso>0?' late':''}">${atraso>0?atraso+'d atraso':esc(per)}</div>
     </div>`; };
@@ -2915,7 +2920,7 @@ V.cronograma=function(){
       const s=_pYMD(t.inicio), off=_diffDays(minS,s), dias=Math.max(1,+t.dias||1), cor=funcCor(t.funcionarioId);
       const done=tarefaStatusEff(t)==='concluida', atraso=tarefaAtraso(t);
       rows+=`<div class="g-row">
-        <div class="g-lbl" style="width:${labelW}px" title="${esc(t.titulo||'')}">${atraso>0?'⚠ ':''}${esc(t.titulo||'(sem título)')}${t.talhaoId?`<small>${esc(t.talhaoId)}</small>`:''}</div>
+        <div class="g-lbl" style="width:${labelW}px" title="${esc(t.titulo||'')}">${atraso>0?'⚠ ':''}${esc(t.titulo||'(sem título)')}${t.talhaoId?`<small>${esc(talhaoLabel(t.talhaoId)||t.talhaoId)}</small>`:''}</div>
         <div class="g-track" style="width:${D*dayW}px">
           <div class="g-bar${done?' g-done':''}${atraso>0?' g-atraso':''}" style="left:${off*dayW}px;width:${dias*dayW-4}px;background:${cor}" title="${esc(funcNome(t.funcionarioId))} · ${fmtDataBR(t.inicio)} · ${dias}d${atraso>0?' · ATRASADA '+atraso+'d':''}">${esc(t.titulo||'')}</div>
         </div></div>`;
@@ -3030,7 +3035,7 @@ V.compras = function(){
       <span class="sub">${tsel.size?`${tsel.size} talhão(ões)`:'todos os talhões'}</span></div>
     <div class="classe-filter" id="compras-talf" style="margin:12px 14px">
       <button class="chip-f ${tsel.size===0?'on':''}" data-talf="">Todos</button>
-      ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.nome||'')}">${esc(t.id)}</button>`).join('')}
+      ${talhoes.map(t=>`<button class="chip-f ${tsel.has(t.id)?'on':''}" data-talf="${esc(t.id)}" title="${esc(t.id)}">${esc(tNome(t))}</button>`).join('')}
     </div></div>
   <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Filtrar por classe</h2>
       <span class="sub">${comprasClsSel.size?`${comprasClsSel.size} classe(s)`:'todas as classes'}</span>
@@ -3319,7 +3324,7 @@ V.resultados = function(){
   const sgn=v=>`<b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b>`;
   const nColhidos=rows.filter(r=>r.temReal).length;
   const body=rows.map(r=>`<tr data-search="${esc((r.t.id+' '+r.emp).toLowerCase())}">
-      <td class="c-full"><b>${esc(r.t.id)}</b>${r.t.nome?` <span class="mut">${esc(r.t.nome)}</span>`:''}<br><span class="mut" style="font-size:11px">${esc(r.emp)}${r.cv.seq==='safrinha'?' · 2ª':''}</span></td>
+      <td class="c-full"><b>${esc(tNome(r.t))}</b><br><span class="mut" style="font-size:11px">${esc(r.emp)}${r.cv.seq==='safrinha'?' · 2ª':''}</span></td>
       <td class="num" data-th="Área">${num(r.area)}</td>
       <td class="num" data-th="Colhido/ha"><input class="cell ${r.temReal?'edited':''}" inputmode="decimal" data-edit="resProd" data-key="${esc(r.key)}" value="${r.temReal?esc(String(OV.result[r.key].prodHa)):''}" placeholder="${num(r.prodHaReal)}"><small> ${esc(r.unit)}</small></td>
       <td class="num c-more" data-th="Preço"><input class="cell ${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'edited':''}" inputmode="decimal" data-edit="resPreco" data-key="${esc(r.key)}" value="${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?esc(String(OV.result[r.key].preco)):''}" placeholder="${nf2.format(r.precoReal)}"></td>
@@ -3360,7 +3365,7 @@ V.dre = function(){
     const k=nkEmp(cv.emp);
     const g=emps[k]||(emps[k]={name:String(cv.emp||'—').trim(),area:0,prod:0,ins:0,opDefault:0,cc:{},variantes:{},cvs:[]});
     g.area+=cv.area; g.prod+=cv.prod; g.ins+=cv.ins; g.opDefault+=cv.maqHa*cv.area; g.cvs.push(cv);
-    (g.variantes[cv.emp]=g.variantes[cv.emp]||[]).push(cv.t.id+(cv.seq==='safrinha'?' (2ª)':''));
+    (g.variantes[cv.emp]=g.variantes[cv.emp]||[]).push(tNome(cv.t)+(cv.seq==='safrinha'?' (2ª)':''));
     const cc=custoClasseHaSeqs(cv.t,[cv.seq]); for(const k2 in cc) g.cc[k2]=(g.cc[k2]||0)+cc[k2]*cv.area;   // R$ por classe
   });
   const list=Object.values(emps).map(g=>[g.name,g]).sort((a,b)=>b[1].area-a[1].area);
@@ -3595,7 +3600,7 @@ V.empreendimentos = function(arg){
   return `${prodDatalist()}
   <div class="chips">${chips}</div>
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Talhões${seqSaf?' (safrinha)':''}</div><div class="k-value">${talhaoIds.length}</div><div class="k-sub">${talhaoIds.map(esc).join(', ')}</div></div>
+    <div class="kpi"><div class="k-label">Talhões${seqSaf?' (safrinha)':''}</div><div class="k-value">${talhaoIds.length}</div><div class="k-sub">${talhaoIds.map(id=>esc(tNome(id))).join(', ')}</div></div>
     <div class="kpi"><div class="k-label">Área plantada</div><div class="k-value">${num(area)} ha</div></div>
     <div class="kpi"><div class="k-label">Custo insumos</div><div class="k-value">${brl0(custo)}</div></div>
     <div class="kpi"><div class="k-label">Insumos distintos</div><div class="k-value">${prods.length}</div></div>
@@ -3883,7 +3888,7 @@ function campoAppMsg(key){
   const all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
   const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
   const L=[];
-  L.push(`🚿 *Aplicação* — ${t.id}${t.nome?' '+t.nome:''} (${num(area)} ha)`);
+  L.push(`🚿 *Aplicação* — ${tNome(t)} (${num(area)} ha)`);
   const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
   if(l1.length) L.push(l1.join(' · '));
   { const i=key.indexOf('|'), tg=key.slice(i+1), mq=(r.status==='concluido'&&app.maq)?app.maq:(fk.op?opMaqDe(fk.talId,tg[0],+tg.slice(1),fk.op):''); if(mq) L.push(`🚜 ${mq}`); }
@@ -3901,7 +3906,7 @@ function campoAppMsg(key){
   if(r.obs) L.push(`\n📝 ${r.obs}`);
   // link de resposta: abre um questionário no WhatsApp para o operador informar o volume utilizado
   const q=[];
-  q.push(`📋 Volume utilizado — ${t.id}${fk.op?' · '+fk.op.nome:''}`);
+  q.push(`📋 Volume utilizado — ${tNome(t)}${fk.op?' · '+fk.op.nome:''}`);
   q.push('(preencha e envie de volta)');
   all.forEach(x=>q.push(`${x.produto}: ___ ${x.un}`));
   if(liq.length) q.push('Nº de tanques cheios: ___');
@@ -3960,7 +3965,7 @@ V.monitoramento=function(arg){
   const t=all.find(x=>x.id===selId);
   const regs=MONIT.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const tOpt=all.map(x=>{ const n=MONIT.registros.filter(r=>r.talhao===x.id).length;
-    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n} reg.`:''}</option>`; }).join('');
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n} reg.`:''}</option>`; }).join('');
   const hoje=new Date().toISOString().slice(0,10);
   const cards=regs.map(r=>{
     const cat=MONIT_CAT[r.categoria]||MONIT_CAT.outro;
@@ -3990,7 +3995,7 @@ V.monitoramento=function(arg){
   }).join('')||'<div class="mut" style="padding:14px">Sem registros neste talhão ainda.</div>';
   return `<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
   <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="monit-talhao">${tOpt}</select></div></div>
-  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
   <div class="panel"><div class="panel-head"><h2>Novo registro</h2><span class="sub">monitoramento de campo</span></div>
     <div class="app-grid" style="padding:14px 16px">
       <label>Data<input type="date" id="monit-data" value="${hoje}"></label>
@@ -4042,7 +4047,7 @@ V.chuva=function(){
   const hoje=new Date().toISOString().slice(0,10), mesAtual=hoje.slice(0,7);
   const somaMM=list=>list.reduce((s,r)=>s+(_numc(r.mm)||0),0);
   const totalMes=somaMM(regs.filter(r=>String(r.data||'').slice(0,7)===mesAtual)), totalGeral=somaMM(regs);
-  const locais=[...new Set(talhoesAll().map(t=>`${t.id} · ${t.nome||''}`.trim()).concat(regs.map(r=>r.local).filter(Boolean)))];
+  const locais=[...new Set(talhoesAll().map(t=>tNome(t)).concat(regs.map(r=>r.local).filter(Boolean)))];
   const groups={}; regs.forEach(r=>{ const k=String(r.data||'').slice(0,7)||'0000-00'; (groups[k]=groups[k]||[]).push(r); });
   const groupsHtml=Object.keys(groups).sort().reverse().map(k=>{
     const y=k.slice(0,4), m=+k.slice(5,7); const tit=(m>=1&&m<=12)?`${_MESN[m-1]}/${y}`:'sem data';
@@ -4117,7 +4122,7 @@ V.stand=function(arg){
   const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
   const regs=STAND.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const tOpt=all.map(x=>{ const n=STAND.registros.filter(r=>r.talhao===x.id).length;
-    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n}`:''}</option>`; }).join('');
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n}`:''}</option>`; }).join('');
   const hoje=new Date().toISOString().slice(0,10);
   const cards=regs.map(r=>`<div class="monit-card${r.falha!=null&&r.falha>=10?' monit-alert':''}">
     <div class="monit-card-top"><b>${nfpop(r.pop)} plantas/ha</b>
@@ -4127,7 +4132,7 @@ V.stand=function(arg){
     <div class="monit-card-body"><span>Espaç.: <b>${esc(r.esp)}</b> m</span><span>Compr.: <b>${esc(r.comp)}</b> m</span><span>Meta: <b>${r.meta?nfpop(r.meta):'—'}</b>/ha</span>${r.falha!=null&&r.falha>0?`<span class="monit-flag">⚠️ falha ${r.falha}%</span>`:''}</div>
     <div class="monit-obs mut">Pontos: ${esc(r.pontos)}${r.obs?` · ${esc(r.obs)}`:''}</div></div>`).join('')||'<div class="mut" style="padding:14px">Sem contagens neste talhão ainda.</div>';
   return `<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="stand-talhao">${tOpt}</select></div></div>
-  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
   <div class="panel"><div class="panel-head"><h2>Nova contagem</h2><span class="sub">população de plantas</span></div>
     <div class="app-grid" style="padding:14px 16px">
       <label>Data<input type="date" id="stand-data" value="${hoje}"></label>
@@ -4256,7 +4261,7 @@ function recomLink(r){
   const t=findTalhao(r.talhao);
   let tanque=_mmC(r.tanque)||0;   // tanque definido na própria recomendação (junto com a vazão/calda)
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
-  const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:(t&&t.nome)||'', c:(t?empDe(t):'')||'',
+  const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:t?tNome(t):'', c:(t?empDe(t):'')||'',
     a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
@@ -4273,7 +4278,7 @@ function recomWhats(id){
   const r=recomById(id); if(!r) return; recomNorm(r);
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r);
   let x=`*RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO*\n`;
-  x+=`Talhão: ${r.talhao}${t&&t.nome?` · ${t.nome}`:''}${area?` (${num(area)} ha)`:''}\n`;
+  x+=`Talhão: ${t?tNome(t):r.talhao}${area?` (${num(area)} ha)`:''}\n`;
   if(r.cultura||r.estadio) x+=`Cultura: ${r.cultura||'—'}${r.estadio?` · estádio ${r.estadio}`:''}\n`;
   if(r.opNome) x+=`Operação: ${r.opNome}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}${r.janela?` · janela: ${r.janela}`:''}\n`;
@@ -4462,7 +4467,7 @@ function exportRecomPDF(id){
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
-    ${kv('Talhão',`<b>${esc(r.talhao)}</b>${t&&t.nome?` · ${esc(t.nome)}`:''}`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
+    ${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
     ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}</div></div>
   <div class="rx-sec"><h2>2. Diagnóstico</h2><div class="rx-kv">
     ${kv('Alvo',esc(r.alvo||''),'w2')}${kv('Nível / infestação',esc(r.nivel||''),'w2')}${kv('Justificativa técnica',esc(r.justif||''),'w4')}</div></div>
@@ -4493,7 +4498,7 @@ V.recomendacao=function(arg){
   const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
   const regs=RECOM.registros.filter(r=>r.talhao===selId).map(recomNorm).sort((a,b)=>(b.ts||0)-(a.ts||0));
   const tOpt=all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
-    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')}${n?` — ${n}`:''}</option>`; }).join('');
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n}`:''}</option>`; }).join('');
   const ops=opsDoTalhao(t);
   const opBtns=ops.map(o=>`<button class="btn btn-outline btn-sm" data-act="recomFromOp" data-t="${esc(selId)}" data-op="${esc(o.key)}">➕ ${esc(o.op.nome)}${o.op.dap?` · ${esc(String(o.op.dap))} DAP`:''}${o.seq==='safrinha'?' · 2ª':''}</button>`).join('')
     || '<span class="mut" style="font-size:12px">Sem operações planejadas neste talhão.</span>';
@@ -4501,7 +4506,7 @@ V.recomendacao=function(arg){
     || '<div class="mut" style="padding:14px">Sem recomendações neste talhão ainda. Crie a partir de uma operação do planejamento ou em branco.</div>';
   return `${prodDatalist()}<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
   <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div></div>
-  <div class="camp-tinfo">📍 <b>${esc(t.id)}</b> ${esc(t.nome||'')} · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
+  <div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
   <div class="panel"><div class="panel-head"><h2>Nova recomendação</h2><span class="sub">puxe do planejamento ou crie em branco</span></div>
     <div class="bulk-add" style="flex-wrap:wrap;padding:12px 14px;gap:8px;align-items:center">
       <span class="mut" style="font-size:12px;font-weight:700">Do planejamento:</span>${opBtns}
@@ -4542,7 +4547,7 @@ const CULT_COR={soja:'#43a047',milho:'#fdd835',sorgo:'#fb8c00',braquiaria:'#26a6
 function talSafraAtual(t){ const hj=_hojeISO(), pS=temSafrinha(t)&&plantioRealDe(t.id,'safrinha'); return (pS&&pS<=hj)?'safrinha':'principal'; }
 const _normNome=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
 function limMatchTalhao(nome){ const n=_normNome(nome); if(!n) return '';
-  const t=talhoesAll().find(t=>_normNome(t.nome)===n||_normNome(t.id)===n); return t?t.id:''; }
+  const t=talhoesAll().find(t=>_normNome(t.nome)===n||_normNome(t.id)===n||_normNome(tNome(t))===n); return t?t.id:''; }
 // ---- leitura de arquivos ----
 function parseKmlText(txt){
   const doc=new DOMParser().parseFromString(txt,'text/xml'), out=[];
@@ -4722,9 +4727,9 @@ async function mapaInit(){
     const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
     const so=t?talStatusOps(t):{nivel:'none',late:[],soon:[],prox:null}, sc=OPST[so.nivel];
     const pg=L.polygon(lm.coords,{color:sc.cor,weight:3,fillColor:sc.cor,fillOpacity:.38}).addTo(_map);
-    pg.bindTooltip(`${esc(tid)}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
+    pg.bindTooltip(`${esc(tNome(t||tid))}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
     const li=(arr,fn)=>arr.slice(0,4).map(fn).join('')+(arr.length>4?`<li class="mut">+${arr.length-4}…</li>`:'');
-    pg.bindPopup(`<b>${esc(tid)}${t&&t.nome?' · '+esc(t.nome):''}</b><br>${esc(emp||'sem cultura')} · ${nf2.format(haLim)} ha${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
+    pg.bindPopup(`<b>${esc(tNome(t||tid))}</b><br>${esc(emp||'sem cultura')} · ${nf2.format(haLim)} ha${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
       <div class="mp-st mp-${so.nivel}">${sc.ico} <b>${so.nivel==='late'?`${so.late.length} operação(ões) atrasada(s)`:so.nivel==='soon'?'Operação nos próximos dias':sc.lbl}</b></div>
       ${so.late.length?`<ul class="mp-ul">${li(so.late,x=>`<li>${esc(x.nome)} — <b class="mp-red">${-x.dd} d atrasada</b></li>`)}</ul>`:''}
       ${so.soon.length?`<ul class="mp-ul">${li(so.soon,x=>`<li>${esc(x.nome)} — ${x.and?'em andamento':x.dd===0?'<b>hoje</b>':`em ${x.dd} d (${_dtBRc(x.dp).slice(0,5)})`}</li>`)}</ul>`:''}
@@ -4752,7 +4757,7 @@ function mapaLocate(){
 }
 /* ============ Módulo Campo: Painel, Timeline e Relatórios (visão consolidada) ============ */
 function _capf(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
-function _talNomeC(id){ const t=talhoesAll().find(x=>x.id===id); return t?(t.id+(t.nome?' · '+t.nome:'')):(id||'—'); }
+function _talNomeC(id){ const t=talhoesAll().find(x=>x.id===id); return t?tNome(t):(id||'—'); }
 function _dtBRc(s){ if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; }
 function _tsC(r){ return r.ts || (r.data?(Date.parse(String(r.data).slice(0,10)+'T12:00:00')||0):0); }
 function _diasC(ts){ if(!ts) return null; return Math.floor((Date.now()-ts)/86400000); }
@@ -4838,7 +4843,7 @@ V.timeline = function(arg){
   const tals=talhoesAll(), ev=camposEventos();
   const sel=(arg&&tals.some(t=>t.id===arg))?arg:'';
   const porTal={}; ev.forEach(e=>{ const k=e.talhao||'__geral'; (porTal[k]=porTal[k]||[]).push(e); });
-  const tOpt=`<option value="">Todos os talhões</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''} — ${(porTal[t.id]||[]).length} evento(s)</option>`).join('');
+  const tOpt=`<option value="">Todos os talhões</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(tNome(t))} — ${(porTal[t.id]||[]).length} evento(s)</option>`).join('');
   const top=`<div class="tl-top2"><select class="sel" id="tl-talhao">${tOpt}</select>
     <div class="search"><input id="q-tl" value="${esc(timelineQ)}" placeholder="Buscar na timeline…" autocomplete="off"></div></div>`;
   const chipsDe=(lista,extra)=>{ const cont={}; lista.forEach(e=>cont[e.tipo]=(cont[e.tipo]||0)+1);
@@ -4854,7 +4859,7 @@ V.timeline = function(arg){
       const hj=_hojeISO(), pS=temSafrinha(t)&&plantioEffDe(t.id,'safrinha'), sq=(pS&&pS<=hj)?'safrinha':'principal', fe=estadiosDe(t,sq), st=estadioEm(fe,hj);
       return `<div class="tlg-card">
         <div class="tlg-head" data-go="#/timeline/${encodeURIComponent(t.id)}">
-          <div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div></div>
+          <div><b>${esc(tNome(t))}</b><div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha</div></div>
           <div class="tlg-meta"><span><b>${l.length}</b> evento(s)</span><span>${u?`última ${d===0?'hoje':d===1?'ontem':d+' dias atrás'}`:''}</span></div></div>
         ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações</span></div>`:''}
         ${st?`<div class="lt-nowbar"><span class="lt-now">🌿 ${esc(fe.F.nome)} hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}</span></div>`:''}
@@ -4866,7 +4871,7 @@ V.timeline = function(arg){
       ${ev.length?chipsDe(ev):''}
       <div class="tlg-grid" id="tl-list">${ativos.map(card).join('')}
       ${geral.length?`<div class="tlg-card"><div class="tlg-head"><div><b>🌧️ Geral</b><div class="tlg-sub">registros sem talhão (chuva…)</div></div><div class="tlg-meta"><span><b>${geral.length}</b> evento(s)</span></div></div><div class="tl">${geral.slice(0,4).map(e=>_tlWrap(e)).join('')}</div></div>`:''}</div>
-      ${parados.length?`<div class="tlg-parados">Sem atividade ainda: ${parados.map(t=>`<a class="link" data-go="#/timeline/${encodeURIComponent(t.id)}">${esc(t.id)}</a>`).join(' · ')}</div>`:''}
+      ${parados.length?`<div class="tlg-parados">Sem atividade ainda: ${parados.map(t=>`<a class="link" data-go="#/timeline/${encodeURIComponent(t.id)}">${esc(tNome(t))}</a>`).join(' · ')}</div>`:''}
       ${!ev.length?'<p class="mut" style="padding:18px;text-align:center">Nenhum evento ainda. Registre atividades no Painel de Campo.</p>':''}`;
   }
   // ===== UM TALHÃO: linha do tempo única (plantio → estádios + operações + registros → colheita) =====
@@ -4929,7 +4934,7 @@ V.timeline = function(arg){
   const plantio=plantioEffDe(t.id,'principal');
   return `${top}
     <a class="link" data-go="#/timeline">‹ Todos os talhões</a>
-    <div class="tlg-card tlg-hero"><div class="tlg-head" style="cursor:default"><div><b>${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}<div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha${plantio?` · 🌱 plantio ${fmtDataBR(plantio)}`:''}</div></div>
+    <div class="tlg-card tlg-hero"><div class="tlg-head" style="cursor:default"><div><b>${esc(tNome(t))}</b><div class="tlg-sub">${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''} · ${num(areaDe(t))} ha${plantio?` · 🌱 plantio ${fmtDataBR(plantio)}`:''}</div></div>
       <div class="tlg-meta"><span><b>${ok}</b>/${ops.length} operações</span><span><b>${histAll.length}</b> registros</span></div></div>
       ${ops.length?`<div class="tlg-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span>${ok}/${ops.length} operações concluídas</span></div>`:''}
       ${stAtual?`<div class="lt-nowbar">${stAtual}</div>`:''}
@@ -4985,7 +4990,7 @@ V.relatorios = function(){
     else if(e.tipo==='aplicacao')b.apl++; else if(e.tipo==='operacao')b.oper++;
     if((e.ts||0)>b.ult) b.ult=e.ts; });
   const rows=tals.map(t=>{ const b=byTal[t.id];
-    return `<tr><td class="c-full"><b>${esc(t.id)}</b>${t.nome?` <span class="mut">${esc(t.nome)}</span>`:''}</td>
+    return `<tr><td class="c-full"><b>${esc(tNome(t))}</b></td>
       <td class="num" data-th="Monit.">${b.monit||'·'}</td><td class="num" data-th="Stand">${b.stand||'·'}</td>
       <td class="num" data-th="Recom.">${b.recom||'·'}</td><td class="num" data-th="Aplic.">${b.apl||'·'}</td><td class="num" data-th="Operações">${b.oper||'·'}</td>
       <td class="num" data-th="Última atividade">${b.ult?_dtBRc(new Date(b.ult).toISOString().slice(0,10)):'—'}</td></tr>`;}).join('');
@@ -5007,7 +5012,7 @@ function exportCampoCsv(){
 V.mapa=function(){
   const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
   const tals=talhoesAll(), lims=limitesAll(), comLim=tals.filter(t=>lims[t.id]), semLim=tals.filter(t=>!lims[t.id]);
-  const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(t.id)}${t.nome?' · '+esc(t.nome):''} (${num(areaDe(t))} ha)</option>`).join('');
+  const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(tNome(t))} (${num(areaDe(t))} ha)</option>`).join('');
   const imp=_limImport?`<div class="panel lim-imp"><div class="panel-head"><h2>📥 Conferir importação</h2><span class="sub">${esc(_limImport.arquivo)}</span></div>
       <div class="lim-list">${_limImport.itens.map((it,i)=>{ const t=it.tid&&findTalhao(it.tid), dif=t&&areaDe(t)?(it.ha/areaDe(t)-1)*100:null;
         return `<div class="lim-row"><div><b>${esc(it.nome)}</b><div class="mut" style="font-size:12px">${it.arquivo?`${esc(it.arquivo)} · `:''}${nf2.format(it.ha)} ha no contorno${dif!=null?` · <span${Math.abs(dif)>10?' class="lim-warn"':''}>${dif>=0?'+':''}${nf1.format(dif)}% vs cadastro${Math.abs(dif)>10?' — confira o talhão':''}</span>`:''}</div></div>
@@ -5019,9 +5024,9 @@ V.mapa=function(){
   const own=(OV.limites||{});
   const lista=comLim.map(t=>{ const lm=lims[t.id], ha=lm.ha||limAreaHa(lm.coords), dif=areaDe(t)?(ha/areaDe(t)-1)*100:null;
     const so=talStatusOps(t);
-    return `<div class="lim-row"><div><b>${OPST[so.nivel].ico} ${esc(t.id)}</b>${t.nome?` · ${esc(t.nome)}`:''}${so.late.length?` <span class="cp-tag late">${so.late.length} atrasada(s)</span>`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
+    return `<div class="lim-row"><div><b>${OPST[so.nivel].ico} ${esc(tNome(t))}</b>${so.late.length?` <span class="cp-tag late">${so.late.length} atrasada(s)</span>`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
-  const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(id)}</b>${t&&t.nome?` · ${esc(t.nome)}`:''}<div class="mut" style="font-size:12px">limite removido</div></div>
+  const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
       <div class="spacer"></div>
@@ -5039,7 +5044,7 @@ V.mapa=function(){
       `<p class="lim-ok">🔄 Limites sincronizados entre os aparelhos pela planilha (aba “LIMITES APP”).</p>`}
     <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
     ${remov?`<div class="lim-sub">Removidos</div><div class="lim-list">${remov}</div>`:''}
-    ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(t.id)).join(' · ')}</p>`:''}
+    ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(tNome(t))).join(' · ')}</p>`:''}
     <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Aceita <b>KML, KMZ, GeoJSON, ZIP</b> e <b>Shapefile</b> (escolha juntos o .shp, o .dbf e o .prj de cada área). Pode selecionar vários arquivos de uma vez — ou a pasta inteira no computador. O talhão é reconhecido pelo nome do polígono/arquivo (ex.: “AREA 1” → ÁREA 1); confira antes de salvar.</p></div>`;
 };
 function limZoom(tid){ const lm=limitesAll()[tid]; if(!_map||!lm||!window.L) return; try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); document.getElementById('mapa-canvas').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
@@ -5088,7 +5093,7 @@ function finalizarOpModal(key){
   const old=document.getElementById('fin-ov'); if(old) old.remove();
   const ov=document.createElement('div'); ov.id='fin-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box">
-    <div class="modal-head"><h3>Finalizar — ${esc(o.op.nome)} · ${esc(talId)}</h3><button class="icon-btn" data-act="finClose" title="Fechar">✕</button></div>
+    <div class="modal-head"><h3>Finalizar — ${esc(o.op.nome)} · ${esc(tNome(talId))}</h3><button class="icon-btn" data-act="finClose" title="Fechar">✕</button></div>
     <div style="overflow:auto;max-height:60vh">
       <p class="mut" style="font-size:12px;margin:0 0 8px">Informe o <b>volume total usado</b> de cada insumo. Ao confirmar, dá <b>baixa no estoque</b> e entra no <b>histórico do talhão</b>.</p>
       <div class="app-grid" style="margin-bottom:8px">
@@ -5124,7 +5129,7 @@ V.campo = function(arg){
   const t=all.find(x=>x.id===selId);
   const tOpt=all.map(x=>{ const ops=campoOpsDoTalhao(x);
     const d=ops.filter(o=>{const r=realOf(o.key);return r&&r.status==='concluido';}).length;
-    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(x.id)} · ${esc(x.nome||'')} — ${d}/${ops.length} ok</option>`; }).join('');
+    return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))} — ${d}/${ops.length} ok</option>`; }).join('');
   const ops=campoOpsDoTalhao(t);
   const stOf=o=>((realOf(o.key)||{}).status)||'pendente';
   const cnt={pendente:0,andamento:0,concluido:0}; ops.forEach(o=>cnt[stOf(o)]++);
@@ -5234,7 +5239,7 @@ V.campo = function(arg){
   return `${prodDatalist()}
   <div class="cp-top">
     <div class="cp-sel"><select class="sel" id="camp-talhao">${tOpt}</select></div>
-    <div class="cp-tinfo"><b>${esc(t.nome||t.id)}</b> <span>${esc(t.id)} · ${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
+    <div class="cp-tinfo"><b>${esc(tNome(t))}</b> <span>${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
       ${(plantio||col)?`<span>${plantio?`🌱 plantio ${fmtDataBR(plantio)}`:''}${col?` · 🌾 colheita ${fmtDataBR(col)}`:''}</span>`:''}</div>
     <div class="cp-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span><b>${cnt.concluido}</b>/${ops.length} concluídas · ${pct}%</span></div>
     <div class="cp-chips">${chip('todas','Todas',ops.length)}${chip('pendente','Pendentes',cnt.pendente)}${chip('andamento','Em andamento',cnt.andamento)}${chip('concluido','Concluídas',cnt.concluido)}</div>
@@ -5752,7 +5757,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='limSalvar'){ limSalvarImport(); }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
-    else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(`Remover o limite de ${a.id}${t&&t.nome?' · '+t.nome:''} do mapa?\n(dá para restaurar depois)`)) limRemover(a.id); }
+    else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(`Remover o limite de ${tNome(t||a.id)} do mapa?\n(dá para restaurar depois)`)) limRemover(a.id); }
     else if(a.act==='limRestaurar'){ limRestaurar(a.id); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
@@ -6119,7 +6124,7 @@ function exportDemandaEmpPDF(){
   const vDem=rows.reduce((a,r)=>a+r.demanda*r.preco,0), vBuy=rows.reduce((a,r)=>a+r.valor,0), vEst=rows.reduce((a,r)=>a+Math.min(Math.max(0,r.saldo),Math.max(0,r.demanda-(r.saida||0)))*r.preco,0);
   const nBuy=rows.filter(r=>r.comprar>0).length, nSem=rows.filter(r=>r.comprar>0&&r.preco<=0).length;
   const filtros=[ comprasEmpSel.size?`Empreendimento: ${[...comprasEmpSel].join(', ')}`:'Todos os empreendimentos',
-    comprasTalSel.size?`Talhão: ${[...comprasTalSel].join(', ')}`:'Todos os talhões',
+    comprasTalSel.size?`Talhão: ${[...comprasTalSel].map(id=>tNome(id)).join(', ')}`:'Todos os talhões',
     comprasClsSel.size?`Classe: ${[...comprasClsSel].map(k=>labels[k]||k).join(', ')}`:'Todas as classes',
     comprasSoComprar?'Só itens a comprar':'' ].filter(Boolean);
   // grupos por classe
@@ -6190,7 +6195,7 @@ function cronogramaTalhaoHtml(t){
       <td class="ins">${r.items.map(it=>`${esc(it.produto)} <span class="mut2">— ${fmtDose(it.dose)} ${esc(it.un||'')}</span>`).join('<br>')}</td><td>${esc(r.conj||'—')}</td><td class="fill">☐ ___/___</td></tr>`; });
     return s+`</tbody></table></div>`;
   };
-  let h=`<div class="crono-head"><h1>${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''} <span class="mut2">— ${num(area)} ha</span></h1></div>`;
+  let h=`<div class="crono-head"><h1>${esc(tNome(t))} <span class="mut2">— ${num(area)} ha</span></h1></div>`;
   h+=seqTable('principal','P',cult1,prodvDe(t));
   if(cult2) h+=seqTable('safrinha','S',cult2,prodSafDe(t));
   return h;
@@ -6243,7 +6248,7 @@ function produtosOpTalhaoHtml(t){
       <div class="pop-tot"><span><b>${n}</b> operações · <b>${nProd}</b> produtos</span><span>Insumos: <b>${brl(totHa)}/ha</b> · <b>${brl0(totHa*area)}</b> no talhão</span></div></div>`;
   };
   const cultTxt=[cult1, cult2].filter(Boolean).map(esc).join(' → ');
-  let h=`<div class="pop-head"><div class="pop-id"><b>${esc(t.id)}</b>${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''}</div>
+  let h=`<div class="pop-head"><div class="pop-id"><b>${esc(tNome(t))}</b></div>
     <div class="pop-kpis"><span><small>Área</small>${num(area)} ha</span>${cultTxt?`<span><small>Cultura(s)</small>${cultTxt}</span>`:''}</div></div>`;
   h+=seqTable('principal','P',cult1,prodvDe(t));
   if(cult2) h+=seqTable('safrinha','S',cult2,prodSafDe(t));
@@ -6307,7 +6312,7 @@ function exportTalhaoPDF(id){
     return s+`</section>`;
   };
   const cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
-  let html=`<div class="pdf-head"><h1>Planejamento do talhão ${esc(t.id)}${t.nome&&t.nome!==t.id?` · ${esc(t.nome)}`:''}</h1>
+  let html=`<div class="pdf-head"><h1>Planejamento do talhão ${esc(tNome(t))}</h1>
     <div class="meta">Safra 2026/2027 · gerado em ${hoje}</div>
     <table class="pdf-ops pdf-kv"><colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup><tbody>
       <tr><td><small>Área</small><b>${num(area)} ha</b></td>
@@ -6318,7 +6323,7 @@ function exportTalhaoPDF(id){
     </tbody></table></div>`;
   html+=seqBlock('principal','P',cult1,prodvDe(t));
   if(temSafrinha(t)) html+=seqBlock('safrinha','S',cult2,prodSafDe(t));
-  html+=`<div class="pdf-foot">Planejamento de Safra 26/27 · ${esc(t.id)} · preços de referência do app · custo total = custo/ha × ${num(area)} ha · data prevista = plantio + DAE.</div>`;
+  html+=`<div class="pdf-foot">Planejamento de Safra 26/27 · ${esc(tNome(t))} · preços de referência do app · custo total = custo/ha × ${num(area)} ha · data prevista = plantio + DAE.</div>`;
   printDoc(html);
   toast('Gerando PDF do talhão — escolha "Salvar como PDF"');
 }
@@ -6931,7 +6936,7 @@ function pendingSummaryTxt(eds){ return pendingGroups(eds).map(x=>`${x.label} ×
 // descrição legível de UMA edição pendente (para o usuário saber exatamente o que está travado)
 function editDesc(e){
   const lbl=EDIT_TIPO[e.type]||e.type, t=e.talhao?findTalhao(e.talhao):null;
-  const tal=e.talhao?`${e.talhao}${t&&t.nome?' '+t.nome:''}`:'';
+  const tal=e.talhao?(t?tNome(t):e.talhao):'';
   let op=''; if(e.tag!=null&&e.op!=null){ const seq=e.tag==='S'?'safrinha':'principal', o=(opsOf(e.talhao,seq)||[])[e.op]; op=(o&&o.nome?o.nome:`Operação ${e.op+1}`)+(e.tag==='S'?' (2ª)':''); }
   const val=e.type==='dose'?`dose ${e.value}`:e.type==='dae'?`DAE ${e.value}`:e.type==='itemprod'?`${e.from} → ${e.to}`:(e.type==='additem'||e.type==='delitem')?e.produto:
     e.type==='reorderops'?`${(e.ops||[]).length} operações`:e.type==='addopblock'?`+${e.count}`:(e.produto?`${e.produto} = ${e.value}`:(e.value!=null?String(e.value):''));

@@ -44,6 +44,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   insumos, itens sem preço; custo por cultura, compras por classe, maiores compras.
 - **Talhões** — criar, duplicar (copiando o plano de outro) e excluir talhões;  lista dos 20 talhões; edite **área** e **produtividade** e o
   cálculo (produção, custo/ha, custo total) atualiza sozinho. Clique para abrir.
+  Em todo o app o talhão aparece **só pelo nome** (ex.: "ESTEVÃO"): códigos na frente do nome
+  ("NV2-", "TL02-") são escondidos (`tNome`). O código continua sendo o nome da **aba** na planilha e
+  aparece discreto só na coluna "Aba" da lista de Talhões e no detalhe do talhão.
 - **Talhão (detalhe)** — operações da safra principal e safrinha, com produtos,
   **dose/ha editável**, preço, custo/ha. Cada operação tem uma **máquina**
   (conjunto) sugerida automaticamente pela classe dos insumos e trocável no

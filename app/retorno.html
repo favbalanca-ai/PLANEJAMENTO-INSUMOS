@@ -239,8 +239,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     '<header class="top"><div class="brand"><span class="leaf">🌱</span> Planejamento de Safra 26/27</div>'+
       '<h1>Recomendação de aplicação</h1>'+
       '<div class="op">'+(REC.op?esc(REC.op):'Aplicação')+(REC.al?' · alvo: '+esc(REC.al):'')+'</div></header>'+
-    '<div class="talhao"><div class="talhao-top"><span class="talhao-id">'+esc(REC.t||'')+'</span>'+
-      (REC.tn?'<span class="talhao-nome">· '+esc(REC.tn)+'</span>':'')+'</div>'+
+    '<div class="talhao"><div class="talhao-top"><span class="talhao-id">'+esc(REC.tn||REC.t||'')+'</span></div>'+
       (REC.c?'<div class="talhao-cult">'+esc(REC.c)+'</div>':'')+
       (chips.length?'<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>':'')+
     '</div>'+ recipeSec + baixaSec;
@@ -313,7 +312,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     opEl.classList.remove('err');
     if(!dados.itens.some(function(x){return x.real>0;})){ sendErr.textContent='Informe o volume usado de pelo menos um produto.'; return; }
     if(!REC.u){ // sem sincronização: manda os valores de volta por WhatsApp como plano B
-      var txt='*Baixa da aplicação* ('+(REC.t||'')+')\nOperador: '+dados.operador+'\n'+
+      var txt='*Baixa da aplicação* ('+(REC.tn||REC.t||'')+')\nOperador: '+dados.operador+'\n'+
         dados.itens.filter(function(x){return x.real>0;}).map(function(x){return '• '+x.produto+': '+nf.format(x.real)+' '+x.un;}).join('\n')+
         (dados.obs?'\nObs: '+dados.obs:'');
       window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
