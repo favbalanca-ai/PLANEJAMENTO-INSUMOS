@@ -158,6 +158,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
 (function(){
   var nf=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
   var nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
+  var nf1=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
   function num(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
@@ -173,7 +174,9 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     wrap.innerHTML='<div class="err-page"><h2>Link incompleto</h2><p>Peça para reenviarem a recomendação pelo app. O link precisa vir completo do WhatsApp.</p></div>';
     return;
   }
-  var ITENS=REC.it.map(function(x){ return {produto:x.p, un:x.u||'', dose:+x.d||0, liquido:!!x.l, sem:!!x.s}; });
+  var ITENS=REC.it.map(function(x){ return {produto:x.p, un:x.u||'', dose:+x.d||0, liquido:!!x.l, sem:!!x.s, ts:!!x.t}; });
+  // ---- plantio: regulagem da plantadeira (sementes por metro) + sulco/adubo ----
+  var PL=REC.pl||null;
   // ---- tratamento de sementes (TS): dose por BATELADA (bag) em vez de por tanque ----
   var TS=REC.ts||null;
   var SEM=ITENS.filter(function(i){return i.sem;})[0]||null, TSP=ITENS.filter(function(i){return !i.sem;});
@@ -181,14 +184,15 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   function B(n){ return nf.format(n)+' '+BL+(BL==='bag'&&n>=2?'s':''); }
   function BLs(){ return BL==='bag'?'bags':(BL==='saco'?'sacos':BL); }
   var AREA=+REC.a||0, VAZAO=+REC.v||0;
-  var LIQ=ITENS.filter(function(i){return i.liquido;}), SOL=ITENS.filter(function(i){return !i.liquido;});
+  var OUT=PL?ITENS.filter(function(i){return !i.sem && !i.ts;}):ITENS;   // no plantio a semente/TS ficam na regulagem
+  var LIQ=OUT.filter(function(i){return i.liquido;}), SOL=OUT.filter(function(i){return !i.liquido;});
 
   var TANK=+REC.tk||0;   // volume do tanque definido pelo escritório (o operador NÃO edita)
 
   // ---- monta a página ----
   var chips=[];
   if(AREA) chips.push('📐 '+nf.format(AREA)+' ha');
-  if(VAZAO) chips.push('💧 Calda '+nf.format(VAZAO)+' L/ha');
+  if(VAZAO) chips.push('💧 '+(PL?'Sulco ':'Calda ')+nf.format(VAZAO)+' L/ha');
   if(REC.es) chips.push('🌱 '+REC.es);
   if(REC.aj) chips.push('🧪 '+REC.aj);
   if(REC.jn) chips.push('⏱ '+REC.jn);
@@ -199,7 +203,25 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   var tsUlt = (TS && TS.n && TS.ul && TS.ul < BAT-1e-6)
     ? '🛈 São <b>'+(TS.n-1)+' batelada(s) cheia(s)</b> + 1 de <b>'+B(TS.ul)+'</b>: '+TSP.map(function(it){ return esc(it.produto)+' '+nf.format((SD?it.dose/SD:0)*TS.ul)+' '+esc(it.un); }).join(' · ')
     : '🛈 Meça a dose "por batelada" de cada produto em cada batelada.';
-  var recipeSec = TS ? (
+  var PSEM=PL?ITENS.filter(function(i){return i.sem;})[0]:null;
+  function PLB(n){ var b=PL.bl||'bag'; return nf.format(n)+' '+b+(b==='bag'&&n>=2?'s':''); }
+  var plSec = PL ? (
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Regulagem da plantadeira</span>'+
+      '<span class="sec-s">espaçamento<br>'+nf.format(PL.esp||0.5)+' m</span></div>'+
+    '<div class="card">'+
+      '<div class="tiles">'+
+        '<div class="tile"><div class="t-v">'+(PL.sm?nf1.format(PL.sm):(PL.gm?nf.format(PL.gm):'—'))+'</div><div class="t-l">'+(PL.sm||!PL.gm?'sementes por metro':'gramas por metro')+'</div></div>'+
+        '<div class="tile alt"><div class="t-v">'+(PL.sh?nf0.format(PL.sh):'—')+'</div><div class="t-l">sementes/ha</div></div>'+
+      '</div>'+
+      '<div class="cfg">'+
+        '<div class="c ro"><div class="c-lbl">Semente</div><div class="val" style="font-size:15px">'+esc(PSEM?PSEM.produto:'—')+'</div></div>'+
+        '<div class="c ro"><div class="c-lbl">kg/ha</div><div class="val">'+(PL.kh?nf.format(PL.kh):'—')+'</div></div>'+
+        '<div class="c ro"><div class="c-lbl">No talhão</div><div class="val">'+(PSEM?PLB(PSEM.dose*AREA):'—')+'</div></div>'+
+      '</div>'+
+      (PL.ts?'<div class="recipe-note">'+(PL.ts==='feito'?'✅ Semente tratada (TS feito).':(PL.ts==='enviada'?'🧪 TS enviado — confira se a semente já foi tratada.':'⚠️ TS ainda não registrado — confira o tratamento da semente.'))+'</div>':'')+
+    '</div></section>'
+  ) : '';
+  var recipeSec = PL && !OUT.length ? '' : TS ? (
     '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Como tratar — por batelada</span>'+
       '<span class="sec-s">batelada de<br>'+B(BAT)+'</span></div>'+
     '<div class="card">'+
@@ -222,7 +244,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
       '</div>'+
     '</div></section>'
   ) : VAZAO>0 && LIQ.length ? (
-    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Como dosar no tanque</span>'+
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">'+(PL?'Sulco — como dosar no tanque':'Como dosar no tanque')+'</span>'+
       '<span class="sec-s">dose por tanque<br>(tanque do escritório)</span></div>'+
     '<div class="card">'+
       '<div class="cfg">'+
@@ -248,17 +270,17 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     '</div></section>'
   ) : (
     // sem calda/vazão informada: mostra só os totais por produto
-    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Produtos a aplicar</span></div>'+
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">'+(PL?'Sulco e adubo':'Produtos a aplicar')+'</span></div>'+
     '<div class="card"><div class="recipe" style="border-top:none">'+
       '<div class="recipe-h"><span>Produto</span><span class="r2">Dose/ha</span><span class="r3">Total</span></div>'+
-      ITENS.map(function(it){ return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div></div>'+
+      OUT.map(function(it){ return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div></div>'+
         '<div class="r-tank"><div class="big" style="color:var(--ink)">'+nf.format(it.dose)+'</div><div class="un">'+esc(it.un)+'/ha</div></div>'+
         '<div class="r-tot">'+(AREA?nf.format(it.dose*AREA)+' '+esc(it.un):'—')+'</div></div>'; }).join('')+
     '</div></div></section>'
   );
 
   var baixaSec =
-    '<section class="sec"><div class="sec-h"><span class="sec-n">'+(VAZAO>0&&LIQ.length?'2':'2')+'</span><span class="sec-t">'+(TS?'Dar baixa após tratar':'Dar baixa após aplicar')+'</span>'+
+    '<section class="sec"><div class="sec-h"><span class="sec-n">'+(VAZAO>0&&LIQ.length?'2':'2')+'</span><span class="sec-t">'+(TS?'Dar baixa após tratar':(PL?'Dar baixa após plantar':'Dar baixa após aplicar'))+'</span>'+
       '<span class="sec-s">'+(TS?'quanto usou<br>de cada item':'volume usado<br>de cada produto')+'</span></div>'+
     '<div class="prod-list" id="baixaList"></div>'+
     '<div class="card" style="padding:14px 16px;margin-top:11px">'+
@@ -270,12 +292,13 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
 
   wrap.innerHTML =
     '<header class="top"><div class="brand"><span class="leaf">🌱</span> Planejamento de Safra 26/27</div>'+
-      '<h1>'+(TS?'Tratamento de sementes (TS)':'Recomendação de aplicação')+'</h1>'+
+      '<h1>'+(TS?'Tratamento de sementes (TS)':(PL?'Recomendação de plantio':'Recomendação de aplicação'))+'</h1>'+
       '<div class="op">'+(REC.op?esc(REC.op):'Aplicação')+(REC.al?' · alvo: '+esc(REC.al):'')+'</div></header>'+
     '<div class="talhao"><div class="talhao-top"><span class="talhao-id">'+esc(REC.tn||REC.t||'')+'</span></div>'+
       (REC.c?'<div class="talhao-cult">'+esc(REC.c)+'</div>':'')+
       (chips.length?'<div class="chips">'+chips.map(function(c){return '<span class="chip">'+esc(c)+'</span>';}).join('')+'</div>':'')+
-    '</div>'+ recipeSec + baixaSec;
+    '</div>'+ plSec + recipeSec + baixaSec;
+  document.querySelectorAll('.sec-n').forEach(function(e,i){ e.textContent=i+1; });
 
   // ---- receita do tanque (tanque FIXO, definido pelo escritório) ----
   function renderRecipe(){
@@ -302,9 +325,9 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   // ---- baixa (volume usado por produto) ----
   document.getElementById('baixaList').innerHTML=ITENS.map(function(it,i){
     var total=it.dose*AREA;
-    if(TS && it.sem && BL==='bag') it={produto:it.produto, un:'bags', dose:it.dose, sem:true};   // só a exibição: "8 bags" em vez de "8 5MM"
+    if(it.sem && ((TS && BL==='bag')||(PL && PL.bl==='bag'))) it={produto:it.produto, un:'bags', dose:it.dose, sem:true};   // só a exibição: "8 bags" em vez de "8 5MM"
     return '<div class="card prod" data-i="'+i+'" data-plan="'+total+'" data-un="'+esc(it.un)+'">'+
-      '<div class="prod-head"><div><div class="prod-name">'+(it.sem?'🌱 Semente tratada — ':'')+esc(it.produto)+'</div>'+
+      '<div class="prod-head"><div><div class="prod-name">'+(it.sem?(TS?'🌱 Semente tratada — ':'🌱 Semente plantada — '):(it.ts&&PL?'🧪 TS — ':''))+esc(it.produto)+'</div>'+
       '<div class="prod-plan">Planejado: <b>'+(total?nf.format(total)+' '+esc(it.un):'—')+'</b>'+(it.dose?' ('+nf.format(it.dose)+' '+esc(it.un)+'/ha)':'')+'</div></div></div>'+
       '<div class="inp-row"><input type="text" inputmode="decimal" placeholder="0" aria-label="Total usado"><span class="unit">'+esc(it.un||'un')+'</span></div>'+
       '<div class="diff none"><span class="dot"></span>Quanto usou no total?</div></div>';
@@ -326,7 +349,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   // ---- enviar ----
   document.getElementById('bar').hidden=false;
   var sendBtn=document.getElementById('send'), sendErr=document.getElementById('sendErr');
-  var SEND_TXT=TS?'📲 Enviar baixa do TS':'📲 Enviar baixa da aplicação'; sendBtn.textContent=SEND_TXT;
+  var SEND_TXT=TS?'📲 Enviar baixa do TS':(PL?'📲 Enviar baixa do plantio':'📲 Enviar baixa da aplicação'); sendBtn.textContent=SEND_TXT;
   var done=document.getElementById('done'), fail=document.getElementById('fail');
 
   function coleta(){
@@ -347,7 +370,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     opEl.classList.remove('err');
     if(!dados.itens.some(function(x){return x.real>0;})){ sendErr.textContent='Informe o volume usado de pelo menos um produto.'; return; }
     if(!REC.u){ // sem sincronização: manda os valores de volta por WhatsApp como plano B
-      var txt=(TS?'*Baixa do TS* (':'*Baixa da aplicação* (')+(REC.tn||REC.t||'')+')\nOperador: '+dados.operador+'\n'+
+      var txt=(TS?'*Baixa do TS* (':(PL?'*Baixa do plantio* (':'*Baixa da aplicação* ('))+(REC.tn||REC.t||'')+')\nOperador: '+dados.operador+'\n'+
         dados.itens.filter(function(x){return x.real>0;}).map(function(x){return '• '+x.produto+': '+nf.format(x.real)+' '+x.un;}).join('\n')+
         (dados.obs?'\nObs: '+dados.obs:'');
       window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');

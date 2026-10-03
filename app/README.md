@@ -78,6 +78,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   e dá baixa: a **semente e os produtos de TS saem do estoque** nessa hora e a operação de plantio
   continua aberta — ao concluir o plantio eles **não saem de novo** (`opBaixaEff`). Unidades em branco no
   PORTIFÓLIO aparecem como aviso (preencher na planilha).
+- **Campo → Recomendação de plantio** — na operação com semente, a seção 🚿 de aplicação vira
+  🌱 *Recomendação de plantio*: **espaçamento** (padrão 0,50 m), sementes por bag, PMS, plantadeira,
+  tanque e vazão **no sulco**. Calcula **sementes por metro** (`sementes/ha × espaçamento ÷ 10.000`; semente
+  em kg → gramas por metro), sementes/ha, kg/ha, total no talhão, produtos do sulco por tanque e adubo.
+  O WhatsApp e o `retorno.html` (modo plantio) mostram a **regulagem da plantadeira** e o operador dá
+  baixa da semente plantada, do sulco e do adubo — ao concluir, o plantio vira realizado (dia 0 do DAE).
+  Mostra se o TS já foi feito; depois de enviar o TS, os produtos de TS saem da recomendação de plantio.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.
