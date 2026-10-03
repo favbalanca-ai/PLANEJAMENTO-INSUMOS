@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-171';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-172';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -709,7 +709,7 @@ function plantioRealAutoDe(tid,seq){
   (opsOf(tid,seq)||[]).forEach((op,oi)=>{ const r=OV.realizado&&OV.realizado[`${tid}|${tag}${oi}`];
     if(r && r.status==='concluido' && _isISO(r.data) && opTemSemente(tid,`${tag}${oi}`)) datas.push(String(r.data).slice(0,10)); });
   (typeof RECOM!=='undefined'&&RECOM&&RECOM.registros||[]).forEach(r=>{
-    if(r.talhao!==tid || r.status!=='aprovada' || !(r.itens||[]).some(it=>it.produto&&_isSemente(it)) || recomSeq(r)!==seq) return;
+    if(r.tipo==='ts' || r.talhao!==tid || r.status!=='aprovada' || !(r.itens||[]).some(it=>it.produto&&_isSemente(it)) || recomSeq(r)!==seq) return;
     const rl=r.opKey&&OV.realizado&&OV.realizado[r.opKey];
     const d=(rl&&_isISO(rl.data))?rl.data:(_isISO(r.data)?r.data:(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):''));
     if(d) datas.push(String(d).slice(0,10)); });
@@ -2380,7 +2380,7 @@ function estoqueSaidas(){
   const mov=(DATA&&DATA.movimentacao)||null;
   // baixas das operações de campo concluídas (id op:) — pendentes de envio (as enviadas já vêm da planilha)
   const opBaixas=(onlyPending)=>{ const R=OV.realizado||{}; for(const k in R){ const r=R[k];
-    if(!r||r.status!=='concluido'||!r.baixa) continue; if(onlyPending&&r.saidaPushed) continue; for(const pr in r.baixa) add(pr, r.baixa[pr]); } };
+    if(!r||r.status!=='concluido'||!r.baixa) continue; if(onlyPending&&r.saidaPushed) continue; const b=opBaixaEff(r); for(const pr in b) add(pr, b[pr]); } };
   if(mov&&mov.saidas){
     for(const k in mov.saidas) add(k, mov.saidas[k]);                         // planilha (todos os aparelhos)
     (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.saidaPushed||r0.opKey) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
@@ -2714,7 +2714,7 @@ function maybePlantioConcluido(key){
 
 // recomendação avulsa de SEMENTE aprovada → plantio realizado (se não houver ajuste manual)
 function maybePlantioRecom(r){
-  if(!(r.itens||[]).some(it=>it.produto&&_isSemente(it))) return;
+  if(r.tipo==='ts' || !(r.itens||[]).some(it=>it.produto&&_isSemente(it))) return;
   const tid=r.talhao, seq=recomSeq(r);
   const man=OV.result&&OV.result[`${tid}|${seq}`]&&OV.result[`${tid}|${seq}`].plantioReal; if(_isISO(man)) return;
   const real=plantioRealAutoDe(tid,seq); if(!real) return;
@@ -3815,7 +3815,8 @@ function realOf(key){ return OV.realizado[key]||null; }
 function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{}}); }
 function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
-  && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)) delete OV.realizado[key]; }
+  && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)
+  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!==''))) delete OV.realizado[key]; }
 // localiza operação a partir da chave "TL|tagOp"
 function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), tagoi=key.slice(i+1);
   const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
@@ -3834,6 +3835,102 @@ function campoItems(talId, tagoi, opItens, r){
   }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})))
   .filter(x=>x.produto);
 }
+// ---- Tratamento de sementes (TS) ----
+// A batelada é medida em BAG = a unidade da semente no planejamento (ex.: bag 5MM). As doses dos produtos
+// de TS vêm do PLANEJAMENTO (por ha) e viram "por bag": dose/ha ÷ bags/ha. Não precisa de PMS.
+function _isTS(it){ const c=String((it&&it.classe)||((it&&PROD[it.produto])||{}).classe||'').trim().toUpperCase();
+  return c==='TS'||/^TS\b/.test(c)||/TRATAMENTO DE SEMENTE/.test(c); }
+// sementes por unidade, pela unidade do PORTIFÓLIO: "5MM" = 5 milhões · "60M"/"60MIL" = 60 mil
+function semPorUn(un){ const u=String(un||'').trim().toUpperCase().replace(/\s+/g,'');
+  let m=u.match(/^(\d+(?:[.,]\d+)?)MM$/); if(m) return parseFloat(m[1].replace(',','.'))*1e6;
+  m=u.match(/^(\d+(?:[.,]\d+)?)(M|MIL)$/); if(m) return parseFloat(m[1].replace(',','.'))*1e3;
+  return 0; }
+// nome da unidade da batelada: bag (5MM…), saco (SC), kg (KG)
+function tsBagLbl(un){ const u=String(un||'').trim().toUpperCase(); if(semPorUn(u)) return 'bag'; if(u==='SC') return 'saco'; if(u==='KG') return 'kg'; return u?u.toLowerCase():'un'; }
+// tudo o que a recomendação de TS precisa, a partir da operação de plantio (semente + produtos de TS)
+function tsCalc(key, rl){
+  const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t||!fk.op) return null;
+  rl=rl||realOf(key)||{}; const cfg=rl.ts||{};
+  const its=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto);
+  const sem=its.find(_isSemente), prods=its.filter(_isTS);
+  if(!sem||!prods.length) return null;
+  const area=areaDe(t)||0, semDose=+sem.dose||0, semUn=sem.un||'', bl=tsBagLbl(semUn);
+  const porBag=(cfg.semBag!=null&&cfg.semBag!=='')?(+cfg.semBag||0):semPorUn(semUn);   // sementes por bag
+  const bat=(+cfg.bat>0)?+cfg.bat:(bl==='kg'?1000:1);                                  // bags por batelada
+  const pms=+cfg.pms||0;                                                                 // peso de mil sementes (g) — opcional
+  const bags=semDose*area, nBat=bags>0?Math.ceil(bags/bat-1e-9):0, ult=nBat?+(bags-(nBat-1)*bat).toFixed(4):0;
+  const semHa=porBag?semDose*porBag:0, kgHa=(semHa&&pms)?semHa*pms/1e6:(bl==='kg'?semDose:0);
+  const itens=prods.map(it=>{ const d=+it.dose||0, pb=semDose?d/semDose:0;
+    return {produto:it.produto, un:it.un||'', dose:d, porBag:pb, porBat:pb*bat, ult:pb*ult, total:d*area}; });
+  return {key, t, area, sem:{produto:sem.produto, un:semUn, dose:semDose}, bl, porBag, bat, pms, bags, nBat, ult, semHa, kgHa,
+    itens, st:cfg.st||'', quem:cfg.quem||'', em:cfg.em||0};
+}
+function tsFeito(rl){ return !!(rl&&rl.ts&&rl.ts.st==='feito'); }
+// quadro de cálculo do TS (aba Campo)
+function tsOut(c){
+  if(!c) return '';
+  const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
+  const B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
+  const cheias=c.nBat?(c.ult<c.bat-1e-6?c.nBat-1:c.nBat):0;
+  const avisos=[];
+  if(!c.sem.un) avisos.push(`A semente <b>${esc(c.sem.produto)}</b> está <b>sem unidade</b> no PORTIFÓLIO da planilha — preencha (ex.: 5MM, SC ou KG).`);
+  const semUnP=c.itens.filter(x=>!x.un).map(x=>x.produto);
+  if(semUnP.length) avisos.push(`Sem unidade no PORTIFÓLIO: <b>${esc(semUnP.join(', '))}</b> — preencha (ex.: L) na planilha.`);
+  const rows=c.itens.map(x=>`<tr><td>${esc(x.produto)}</td>
+      <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
+      <td class="num"><b>${fmtDose(x.porBat)}</b><small> ${esc(x.un)}</small></td>
+      <td class="num">${fmtDose(x.total)}<small> ${esc(x.un)}</small></td></tr>`).join('');
+  return `<div class="app-stats">
+      ${stat('Área do talhão',num(c.area)+' ha')}
+      ${stat('Semente total',B(c.bags))}
+      ${stat('Bateladas',c.nBat?`${c.nBat} × ${B(c.bat)}`:'—')}
+      ${stat('Semente/ha',[`${fmtDose(c.sem.dose)} ${c.bl}`, c.semHa?nf0.format(c.semHa)+' sem.':'', c.kgHa?fmtDose(c.kgHa)+' kg':''].filter(Boolean).join(' · '))}
+    </div>
+    <div class="app-secttl">🧪 ${esc(c.sem.produto)} — dose por batelada (${B(c.bat)})</div>
+    <table class="app-ins"><thead><tr><th>Produto</th><th class="num">Dose/ha</th><th class="num">Por batelada</th><th class="num">Total</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    ${c.nBat&&cheias<c.nBat?`<p class="app-note">${cheias?`${cheias} batelada(s) cheia(s) + `:''}1 de <b>${B(c.ult)}</b>: ${c.itens.map(x=>`${esc(x.produto)} ${fmtDose(x.ult)} ${esc(x.un)}`).join(' · ')}</p>`:''}
+    ${avisos.map(a=>`<p class="app-note" style="color:var(--amber)">⚠️ ${a}</p>`).join('')}`;
+}
+// cria/atualiza a recomendação de TS da operação (tipo 'ts'; NÃO usa opKey: o TS não conclui a operação de plantio)
+function tsRecomFromOp(key){
+  const c=tsCalc(key); if(!c) return null;
+  let r=RECOM.registros.filter(x=>x.tipo==='ts'&&x.tsOp===key&&x.status!=='aprovada').sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
+  if(!r){ r=recomCreate(c.t.id,''); if(!r) return null; r.tipo='ts'; r.tsOp=key; }
+  const fk=opFromKey(key), seq=fk.tagoi[0]==='S'?'safrinha':'principal';
+  r.opNome='Tratamento de sementes'+(fk.op&&fk.op.nome?' · '+fk.op.nome:''); r.area=c.area; r.cultivar=c.sem.produto;
+  r.cultura=(seq==='safrinha'?empSafDe(c.t):empDe(c.t))||r.cultura||'';
+  r.itens=c.itens.map(x=>({produto:x.produto, un:x.un, dose:x.dose, real:null}))
+    .concat([{produto:c.sem.produto, un:c.sem.un, dose:c.sem.dose, real:null, sem:true}]);
+  r.tsCfg={bat:c.bat, bl:c.bl, porBag:c.porBag, pms:c.pms, nBat:c.nBat, ult:c.ult, semHa:c.semHa, kgHa:c.kgHa};
+  if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
+  recomNorm(r); saveRecom(); return r;
+}
+// mensagem de WhatsApp do TS
+function tsWhats(r){
+  const t=findTalhao(r.talhao), c=r.tsCfg||{}, area=+r.area||0, bl=c.bl||'bag';
+  const B=n=>`${fmtDose(n)} ${bl}${bl==='bag'&&n>=2?'s':''}`;
+  const sem=(r.itens||[]).find(it=>it.sem), prods=(r.itens||[]).filter(it=>!it.sem&&it.produto), sd=sem?+sem.dose||0:0;
+  const pb=it=>sd?(+it.dose||0)/sd:0;
+  let x=`*RECOMENDAÇÃO DE TRATAMENTO DE SEMENTES (TS)*\n`;
+  x+=`Talhão: ${t?tNome(t):r.talhao}${area?` (${num(area)} ha)`:''}\n`;
+  if(r.cultura) x+=`Cultura: ${r.cultura}\n`;
+  if(sem) x+=`Semente: *${sem.produto}* — ${B(sd*area)} no talhão (${fmtDose(sd)} ${bl}/ha${c.semHa?` · ${nf0.format(c.semHa)} sementes/ha`:''}${c.kgHa?` · ${fmtDose(c.kgHa)} kg/ha`:''})\n`;
+  if(c.nBat){ const cheias=c.ult<c.bat-1e-6?c.nBat-1:c.nBat;
+    x+=`Batelada: ${B(c.bat)} → *${c.nBat} batelada(s)*${cheias<c.nBat?` (${cheias} cheia(s) + 1 de ${B(c.ult)})`:''}\n`; }
+  x+=`\n*Por batelada (${B(c.bat||1)}):*\n`+prods.map((it,i)=>`${i+1}. ${it.produto} — *${fmtDose(pb(it)*(c.bat||1))}${it.un?' '+it.un:''}*`).join('\n')+'\n';
+  if(c.nBat && c.ult<c.bat-1e-6) x+=`\n*Última batelada (${B(c.ult)}):* `+prods.map(it=>`${it.produto} ${fmtDose(pb(it)*c.ult)}${it.un?' '+it.un:''}`).join(' · ')+'\n';
+  x+=`\n*Total no talhão:* `+prods.map(it=>`${it.produto} ${fmtDose((+it.dose||0)*area)}${it.un?' '+it.un:''}`).join(' · ')+'\n';
+  if(r.obs) x+=`Obs.: ${r.obs}\n`;
+  if(r.resp) x+=`Resp. técnico: ${r.resp}${r.crea?` · ${r.crea}`:''}\n`;
+  x+=`\n👉 *Abrir para ver por batelada e dar baixa:*\n${recomLink(r)}\n`;
+  if(!syncUrl()) x+=`\n_(configure a Sincronização no app para a baixa do operador voltar automática)_`;
+  window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
+}
+// baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
+function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
+  const o={}; for(const p in b){ if(_isTS({produto:p})||_isSemente({produto:p})) continue; o[p]=b[p]; } return o; }
+
 // recomendação de aplicação: líquidos (calda/tanque) e sólidos (só total na área) separados
 function campoAppOut(talId, tagoi, opItens, r){
   const t=findTalhao(talId); if(!t) return '';
@@ -4200,7 +4297,8 @@ function recomCalda(r){
 // itens prontos a partir de uma operação planejada do talhão (produto · dose · unidade)
 function recomItensFromOp(t, opKey){
   const o=opsDoTalhao(t).find(x=>x.key===opKey); if(!o) return [];
-  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto)
+  const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
+  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)))
     .map(it=>({produto:it.produto, un:it.un||'', dose:+it.dose||0, real:null}));
 }
 function recomCreate(talId, opKey){
@@ -4262,8 +4360,9 @@ function recomLink(r){
   let tanque=_mmC(r.tanque)||0;   // tanque definido na própria recomendação (junto com a vazão/calda)
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:t?tNome(t):'', c:(t?empDe(t):'')||'',
-    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
-    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0})) };
+    a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.tipo==='ts'?'':recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
+    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0, ...(it.sem?{s:1}:{})})) };
+  if(r.tipo==='ts'){ const c=r.tsCfg||{}; payload.ts={b:+c.bat||1, bl:c.bl||'bag', n:c.nBat||0, ul:c.ult||0, sh:Math.round(c.semHa||0), kh:+(+c.kgHa||0).toFixed(2)}; }
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
   return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
 }
@@ -4276,6 +4375,7 @@ function recomCondTxt(r){
 }
 function recomWhats(id){
   const r=recomById(id); if(!r) return; recomNorm(r);
+  if(r.tipo==='ts') return tsWhats(r);
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r);
   let x=`*RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO*\n`;
   x+=`Talhão: ${t?tNome(t):r.talhao}${area?` (${num(area)} ha)`:''}\n`;
@@ -4304,7 +4404,7 @@ function recomWhats(id){
 // baixa dos operadores (aba RETORNOS APP) → preenche o "Utilizado" e move p/ "retorno recebido"
 function applyRetornos(retornos){
   if(!Array.isArray(retornos)||!retornos.length||!RECOM) return false;
-  let changed=false, ovChanged=false; const byId={}, concluidas=[];
+  let changed=false, ovChanged=false; const byId={}, concluidas=[], tsAprovados=[];
   retornos.forEach(row=>{ if(row&&row.id) (byId[row.id]=byId[row.id]||[]).push(row); });
   Object.keys(byId).forEach(id=>{
     const r=recomById(id); if(!r) return; recomNorm(r);
@@ -4314,7 +4414,11 @@ function applyRetornos(retornos){
       if(row) it.real=+row.real||0; });
     const last=rows.reduce((a,b)=>((b.ts||0)>(a.ts||0)?b:a), rows[0]);
     r.retorno={quem:last.operador||'', obs:last.obs||'', ts:last.ts||Date.now()};
-    if(r.opKey){
+    if(r.tipo==='ts'){
+      // TS: o operador tratou e deu baixa → aprovado, baixa no estoque; a operação de plantio continua aberta
+      r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()}; r.saidaPushed=false; tsAprovados.push(r);
+      if(r.tsOp){ const rl=realEnsure(r.tsOp); rl.ts=Object.assign({}, rl.ts||{}, {st:'feito', recom:r.id, quem:last.operador||'', em:last.ts||Date.now()}); rl._u=Date.now(); ovChanged=true; }
+    } else if(r.opKey){
       // operador FINALIZOU pela página do WhatsApp -> conclui a operação, dá baixa e vai pro histórico
       r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()};
       const rl=realEnsure(r.opKey), baixa={};
@@ -4331,6 +4435,7 @@ function applyRetornos(retornos){
   });
   if(changed) saveRecom();
   if(ovChanged){ saveOverrides(); concluidas.forEach(k=>{ try{ pushOpSaida(k); }catch(e){} }); scheduleRealizadoPush(); }
+  tsAprovados.forEach(r=>{ try{ pushSaida(r); }catch(e){} });
   return changed;
 }
 // cartão de uma recomendação, com aparência/ações conforme o estado
@@ -4778,7 +4883,7 @@ function camposEventos(){
     const prods=(r.itens||[]).filter(it=>it.produto).map(it=>it.produto).join(', ');
     if(r.status==='aprovada'){
       ev.push({ts:(r.aprov&&r.aprov.ts)||_tsC(r),data:r.data,tipo:'aplicacao',talhao:r.talhao,
-        titulo:'Aplicação'+(r.opNome?' · '+r.opNome:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
+        titulo:r.tipo==='ts'?'🧪 Sementes tratadas (TS)':'Aplicação'+(r.opNome?' · '+r.opNome:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
     } else {
       ev.push({ts:_tsC(r),data:r.data,tipo:'recomendacao',talhao:r.talhao,
         titulo:'Recomendação'+(r.janela?' · '+r.janela:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
@@ -5064,7 +5169,7 @@ function fillDosesFromBaixa(key){
     if(vol!=null) rl.doses[iid]=+(vol/area).toFixed(4); });
 }
 function opSaidaPayload(key){
-  const r=(OV.realizado&&OV.realizado[key])||{}, b=r.baixa||{}, talId=key.split('|')[0];
+  const r=(OV.realizado&&OV.realizado[key])||{}, b=opBaixaEff(r), talId=key.split('|')[0];
   const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0}));
   return { id:opBaixaId(key), talhao:talId, data:r.data||'', operador:(r.app&&r.app.operador)||'', itens };
 }
@@ -5167,6 +5272,7 @@ V.campo = function(arg){
     const sbtn=v=>`<button class="camp-st ${REAL_ST[v].cls}${r.status===v?' on':''}" data-act="realStatus" data-key="${esc(o.key)}" data-val="${v}">${REAL_ST[v].lbl}</button>`;
     const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dd=diasAte(dp);
     const conj=opMaqCampo(t,o,r);
+    const tc=tsCalc(o.key, r), tsSt=(r.ts&&r.ts.st)||'';
     const isProx=prox&&prox.key===o.key;
     // quando: DAE · data · (atrasada N d / hoje / em N d)
     let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
@@ -5175,9 +5281,12 @@ V.campo = function(arg){
     else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
     const resumo=(o.items||[]).map(it=>`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join(' · ');
     // ação principal do cartão, conforme o status
-    const acao= r.status==='pendente' ? `<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar ao operador</button>`
-      : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button><button class="btn btn-outline btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`
+    const tsBtn=(tc && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
+    const acao= r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 ${tc?'Enviar plantio':'Enviar ao operador'}</button>`
+      : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`
       : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
+    const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · baixa da semente e do TS ✓</div>`
+      :(tsSt==='enviada'?`<div class="cp-maq">🧪 TS enviado ao operador — aguardando a baixa</div>`:`<div class="cp-maq mut">🧪 ${tc.nBat} batelada(s) de TS · ${esc(tc.sem.produto)}</div>`));
     const sep=(o.seq!==lastSeq && (o.seq==='safrinha'||ops.some(x=>x.seq==='safrinha')))?`<div class="cp-seqhd">${o.seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} · ${esc(o.cultura||'—')}</div>`:''; lastSeq=o.seq;
     return `${sep}<div class="cp-card ${st.cls}${isProx?' prox':''}">
       <div class="cp-face">
@@ -5187,6 +5296,7 @@ V.campo = function(arg){
           <div class="cp-when">${quando?`📅 ${quando}`:'<span class="mut">sem data — defina o plantio no talhão</span>'} ${prazo}</div>
           ${resumo?`<div class="cp-prods">${resumo}</div>`:''}
           ${conj?`<div class="cp-maq">🚜 ${esc(conj)}</div>`:''}
+          ${tsLinha}
         </div>
         <span class="camp-badge ${st.cls}">${st.lbl}</span>
       </div>
@@ -5203,8 +5313,21 @@ V.campo = function(arg){
         <tbody>${insRows||'<tr><td colspan="3" class="mut" style="padding:8px 10px">Sem insumos planejados nesta operação.</td></tr>'}${extrasRows}</tbody>
       </table></div>
       <button class="btn btn-outline btn-sm" data-act="realAddExtra" data-key="${esc(o.key)}">+ insumo extra</button>
+      ${tc?`<details class="camp-app panel-collapse">
+        <summary class="camp-app-sum"><span>🧪 Recomendação de TS (tratamento de sementes)</span><span class="panel-chevron">▸</span></summary>
+        <div class="camp-app-in">
+          <div class="app-grid">
+            <label>Batelada (${tc.bl==='bag'?'bags':tc.bl==='saco'?'sacos':tc.bl})<input class="cell" inputmode="decimal" data-edit="realTs" data-field="bat" data-key="${esc(o.key)}" value="${r.ts&&r.ts.bat!=null?r.ts.bat:''}" placeholder="${tc.bl==='kg'?'1000':'1'}"></label>
+            ${tc.bl==='kg'?'':`<label>Sementes por ${tc.bl}<input class="cell" inputmode="numeric" data-edit="realTs" data-field="semBag" data-key="${esc(o.key)}" value="${r.ts&&r.ts.semBag!=null?r.ts.semBag:''}" placeholder="${semPorUn(tc.sem.un)?nf0.format(semPorUn(tc.sem.un)):'ex.: 60.000'}"></label>`}
+            ${tc.bl==='kg'?'':`<label>PMS (g) — opcional<input class="cell" inputmode="decimal" data-edit="realTs" data-field="pms" data-key="${esc(o.key)}" value="${r.ts&&r.ts.pms!=null?r.ts.pms:''}" placeholder="peso de mil sementes"></label>`}
+          </div>
+          <div class="camp-appout" data-tsout="${esc(o.key)}">${tsOut(tc)}</div>
+          <p class="app-note mut">Doses do planejamento (por ha) convertidas para a batelada. A baixa do operador tira do estoque a semente e os produtos de TS — a operação de plantio não baixa eles de novo.</p>
+          ${tsSt==='feito'?'':`<button class="btn btn-wa btn-sm" data-act="waTs" data-key="${esc(o.key)}">📲 Enviar recomendação de TS por WhatsApp</button>`}
+        </div>
+      </details>`:''}
       <details class="camp-app panel-collapse">
-        <summary class="camp-app-sum"><span>🚿 Recomendação de aplicação</span><span class="panel-chevron">▸</span></summary>
+        <summary class="camp-app-sum"><span>🚿 Recomendação de ${tc?'plantio / aplicação':'aplicação'}</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
             <label>Tipo (líquidos)<select class="sel" data-edit="realApp" data-field="tipo" data-key="${esc(o.key)}">
@@ -5447,6 +5570,14 @@ function applyEdit(el){
     if(!(r0 && r0.status==='concluido')){ const i=key.indexOf('|'); OV.opMaq[opMaqKey(key.slice(0,i), key.slice(i+1))]=el.value;
       if(r0 && r0.app && r0.app.maq!=null){ delete r0.app.maq; stampReal(key); }
       saveOverrides(); toast('Máquina da operação atualizada no planejamento'); route({keepScroll:true}); return; }
+  }
+  if(kind==='realTs'){   // modo Campo: recomendação de TS (bags por batelada, sementes por bag, PMS)
+    const r=realEnsure(el.dataset.key); r.ts=r.ts||{}; const raw=el.value.trim();
+    const val=/,/.test(raw)?raw.replace(/\./g,'').replace(',','.'):(/^\d{1,3}(\.\d{3})+$/.test(raw)?raw.replace(/\./g,''):raw);
+    r.ts[el.dataset.field]=val===''?null:(parseFloat(val)||0);
+    realClean(el.dataset.key); stampReal(el.dataset.key);
+    const box=document.querySelector('[data-tsout="'+el.dataset.key+'"]'); if(box) box.innerHTML=tsOut(tsCalc(el.dataset.key));
+    return;
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
@@ -5901,6 +6032,10 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
+    else if(a.act==='waTs'){ const r=tsRecomFromOp(a.key);
+      if(!r){ toast('Esta operação não tem semente com produtos de TS'); return; }
+      const rl=realEnsure(a.key); rl.ts=rl.ts||{}; if(rl.ts.st!=='feito') rl.ts.st='enviada'; rl.ts.recom=r.id; stampReal(a.key);
+      recomWhats(r.id); route({keepScroll:true}); toast('Recomendação de TS enviada ao operador'); }
     else if(a.act==='waApp'){ const r=recomFromCampoOp(a.key);
       if(!r){ toast('Nada para enviar'); return; }
       const rl=realEnsure(a.key); if(rl.status==='pendente'){ rl.status='andamento'; stampReal(a.key); }  // enviou -> em andamento
