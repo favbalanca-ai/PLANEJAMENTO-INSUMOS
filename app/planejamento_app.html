@@ -1478,7 +1478,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-172';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-173';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5403,6 +5403,104 @@ function tsWhats(r){
   if(!syncUrl()) x+=`\n_(configure a Sincronização no app para a baixa do operador voltar automática)_`;
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
 }
+// ---- Recomendação de PLANTIO: regulagem da plantadeira (sementes por metro) + sulco + adubo ----
+const ESP_PADRAO=0.5;
+const fmtSemM=v=>String(Math.round((+v||0)*10)/10).replace('.',',');   // 10 · 11,3 (sementes por metro)   // espaçamento entre linhas (m) — padrão da fazenda; dá para trocar por operação
+function plantioCalc(key, rl){
+  const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t||!fk.op) return null;
+  rl=rl||realOf(key)||{}; const cfg=rl.ts||{};
+  const its=campoItems(fk.talId,fk.tagoi,fk.op.itens,rl).map(x=>Object.assign({}, x, {classe:((PROD[x.produto]||{}).classe)||''}));
+  const all=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto);
+  const sem=all.find(_isSemente); if(!sem) return null;
+  const tsSt=(cfg.st)||'', temTS=all.some(_isTS);
+  const area=areaDe(t)||0, semUn=sem.un||'', bl=tsBagLbl(semUn);
+  const semDose=+((its.find(x=>x.produto===sem.produto)||sem).dose)||0;
+  const porBag=(cfg.semBag!=null&&cfg.semBag!=='')?(+cfg.semBag||0):semPorUn(semUn);
+  const pms=+cfg.pms||0, esp=(+cfg.esp>0)?+cfg.esp:ESP_PADRAO;
+  const semHa=porBag?semDose*porBag:0, kgHa=(semHa&&pms)?semHa*pms/1e6:(bl==='kg'?semDose:0);
+  const semM=semHa?semHa*esp/10000:0, gM=(!semHa&&kgHa)?kgHa*1000*esp/10000:0;
+  const outros=its.filter(x=>x.produto!==sem.produto && !_isTS(x));          // sulco (líquidos) e adubo/sólidos
+  return {key, t, area, sem:{produto:sem.produto, un:semUn, dose:semDose}, bl, porBag, pms, esp, semHa, kgHa, semM, gM,
+    bags:semDose*area, temTS, tsSt, tsProds:all.filter(_isTS).map(x=>x.produto), outros, app:rl.app||{}};
+}
+function plantioTsTxt(c){ if(!c.temTS) return ''; if(c.tsSt==='feito') return 'semente tratada ✓ (TS feito)';
+  return c.tsSt==='enviada'?'TS enviado — aguardando a baixa do tratamento':'⚠️ TS ainda não enviado'; }
+// quadro da recomendação de plantio (aba Campo)
+function plantioOut(c){
+  if(!c) return '';
+  const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
+  const B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
+  const vaz=+c.app.vazao||0, tk=+c.app.tanque||0, haTk=(vaz&&tk)?tk/vaz:0;
+  const liq=c.outros.filter(x=>isLiquido(x.un)), sol=c.outros.filter(x=>!isLiquido(x.un));
+  let h=`<div class="app-stats">
+      ${stat('Sementes por metro', c.semM?`<span style="font-size:1.25em">${fmtSemM(c.semM)}</span>`:(c.gM?`${fmtDose(c.gM)} g/m`:'—'))}
+      ${stat('Sementes/ha', c.semHa?nf0.format(c.semHa):'—')}
+      ${stat('kg/ha', c.kgHa?fmtDose(c.kgHa):'—')}
+      ${stat('Semente no talhão', B(c.bags)+(c.kgHa&&c.area?` · ${nf0.format(c.kgHa*c.area)} kg`:''))}
+    </div>
+    <p class="app-note">🌱 <b>${esc(c.sem.produto)}</b> · ${fmtDose(c.sem.dose)} ${c.bl}/ha · espaçamento ${fmtDose(c.esp)} m${c.temTS?` · ${plantioTsTxt(c)}`:''}</p>`;
+  if(!c.semHa && c.bl!=='kg') h+=`<p class="app-note" style="color:var(--amber)">⚠️ Informe <b>sementes por ${c.bl}</b> para calcular sementes por metro${c.sem.un?'':' (a semente está sem unidade no PORTIFÓLIO — preencha na planilha, ex.: 5MM)'}.</p>`;
+  if(liq.length) h+=`<div class="app-secttl">💧 No sulco (tanque)</div>
+    <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Total</th><th class="num">Por tanque</th></tr></thead><tbody>${liq.map(x=>`<tr><td>${esc(x.produto)}</td>
+      <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}</small></td><td class="num">${fmtDose(x.dose*c.area)}<small> ${esc(x.un)}</small></td>
+      <td class="num">${haTk?fmtDose(x.dose*haTk):'—'}<small> ${haTk?esc(x.un):''}</small></td></tr>`).join('')}</tbody></table>
+    ${haTk?`<p class="app-note">1 tanque cobre <b>${nf1.format(haTk)} ha</b> (tanque ÷ vazão no sulco).</p>`:'<p class="app-note mut">Informe tanque e vazão no sulco para ver a dose por tanque.</p>'}`;
+  if(sol.length) h+=`<div class="app-secttl">📦 Adubo / sólidos</div>
+    <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Total</th></tr></thead><tbody>${sol.map(x=>`<tr><td>${esc(x.produto)}</td>
+      <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td><td class="num">${fmtDose(x.dose*c.area)}<small> ${esc(x.un)}</small></td></tr>`).join('')}</tbody></table>`;
+  return h;
+}
+// seção "Recomendação de plantio" do cartão da operação (aba Campo)
+function plantioSec(t,o,r,pc){
+  const K=esc(o.key), v=f=>(r.ts&&r.ts[f]!=null)?r.ts[f]:'', va=f=>(r.app&&r.app[f]!=null)?r.app[f]:'';
+  return `<details class="camp-app panel-collapse">
+        <summary class="camp-app-sum"><span>🌱 Recomendação de plantio</span><span class="panel-chevron">▸</span></summary>
+        <div class="camp-app-in">
+          <div class="app-grid">
+            <label>Espaçamento (m)<input class="cell" inputmode="decimal" data-edit="realTs" data-field="esp" data-key="${K}" value="${v('esp')}" placeholder="${fmtDose(ESP_PADRAO)}"></label>
+            ${pc.bl==='kg'?'':`<label>Sementes por ${pc.bl}<input class="cell" inputmode="numeric" data-edit="realTs" data-field="semBag" data-key="${K}" value="${v('semBag')}" placeholder="${semPorUn(pc.sem.un)?nf0.format(semPorUn(pc.sem.un)):'ex.: 60.000'}"></label>
+            <label>PMS (g) — opcional<input class="cell" inputmode="decimal" data-edit="realTs" data-field="pms" data-key="${K}" value="${v('pms')}" placeholder="peso de mil sementes"></label>`}
+            <label>Plantadeira<select class="sel" data-edit="realApp" data-field="maq" data-key="${K}">
+              <option value="">— máquina —</option>
+              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${(opMaqCampo(t,o,r)===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
+            </select></label>
+            <label>Tanque do sulco (L)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${K}" value="${va('tanque')}" placeholder="ex.: 600"></label>
+            <label>Vazão no sulco (L/ha)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${K}" value="${va('vazao')}" placeholder="ex.: 50"></label>
+            <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${K}" value="${esc(va('hIni'))}"></label>
+            <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${K}" value="${esc(va('hFim'))}"></label>
+          </div>
+          <div class="camp-appout" data-plout="${K}">${plantioOut(pc)}</div>
+          <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${K}">📲 Enviar recomendação de plantio por WhatsApp</button>
+        </div>
+      </details>`;
+}
+// mensagem de WhatsApp do PLANTIO
+function plantioWhats(r){
+  const c=plantioCalc(r.opKey); if(!c) return false;
+  const t=c.t, area=c.area, cd=recomCalda(r), U=u=>u?' '+u:'';
+  const B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
+  let x=`*RECOMENDAÇÃO DE PLANTIO*\n`;
+  x+=`Talhão: ${tNome(t)}${area?` (${num(area)} ha)`:''}\n`;
+  if(r.cultura) x+=`Cultura: ${r.cultura}\n`;
+  if(r.opNome) x+=`Operação: ${r.opNome}\n`;
+  if(r.data) x+=`Data: ${fmtData(r.data)}\n`;
+  x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
+  if(c.semM) x+=`• Espaçamento ${fmtDose(c.esp)} m → *${fmtSemM(c.semM)} sementes por metro*\n`;
+  else if(c.gM) x+=`• Espaçamento ${fmtDose(c.esp)} m → *${fmtDose(c.gM)} g por metro*\n`;
+  x+=`• ${[c.semHa?nf0.format(c.semHa)+' sementes/ha':'', c.kgHa?fmtDose(c.kgHa)+' kg/ha':'', fmtDose(c.sem.dose)+' '+c.bl+'/ha'].filter(Boolean).join(' · ')}\n`;
+  x+=`• Total no talhão: ${B(c.bags)}${c.semHa?` (${nf0.format(c.semHa*area)} sementes${c.kgHa?` · ${nf0.format(c.kgHa*area)} kg`:''})`:''}\n`;
+  const liq=c.outros.filter(z=>isLiquido(z.un)), sol=c.outros.filter(z=>!isLiquido(z.un));
+  if(liq.length){ x+=`\n💧 *No sulco:*\n`+liq.map(z=>`• ${z.produto} — ${fmtDose(z.dose)}${U(z.un)}/ha = ${fmtDose(z.dose*area)}${U(z.un)} no talhão${cd.haTk?` · ${fmtDose(z.dose*cd.haTk)}${U(z.un)}/tanque`:''}`).join('\n')+'\n';
+    if(cd.calda) x+=`Vazão no sulco ${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L (${num(cd.haTk)} ha/tanque)`:''}\n`; }
+  if(sol.length) x+=`\n📦 *Adubo / sólidos:*\n`+sol.map(z=>`• ${z.produto} — ${fmtDose(z.dose)}${U(z.un)}/ha = ${fmtDose(z.dose*area)}${U(z.un)} no talhão`).join('\n')+'\n';
+  if(r.maquina) x+=`\n🚜 ${r.maquina}\n`;
+  if(r.obs) x+=`Obs.: ${r.obs}\n`;
+  if(r.resp) x+=`Resp. técnico: ${r.resp}${r.crea?` · ${r.crea}`:''}\n`;
+  x+=`\n👉 *Abrir para ver a regulagem e dar baixa:*\n${recomLink(r)}\n`;
+  if(!syncUrl()) x+=`\n_(configure a Sincronização no app para a baixa do operador voltar automática)_`;
+  window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
+  return true;
+}
 // baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
 function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
   const o={}; for(const p in b){ if(_isTS({produto:p})||_isSemente({produto:p})) continue; o[p]=b[p]; } return o; }
@@ -5805,6 +5903,10 @@ function recomFromCampoOp(opKey){
   let r=RECOM.registros.filter(x=>x.opKey===opKey && x.status!=='aprovada').sort((a,b)=>(b.ts||0)-(a.ts||0))[0];
   if(!r){ r=recomCreate(talId, opKey); if(!r) return null; }
   const rl=realOf(opKey);                                   // traz vazão e tanque da Operação de Campo p/ a recomendação
+  if(opTemSemente(talId, opKey.slice(i+1)) && !r.retorno){   // plantio: segue o planejamento/TS atual a cada envio
+    r.itens=recomItensFromOp(t, opKey);
+    if(rl && rl.app){ if(rl.app.vazao!=null&&rl.app.vazao!=='') r.calda=String(rl.app.vazao); if(rl.app.tanque!=null&&rl.app.tanque!=='') r.tanque=String(rl.app.tanque); }
+    const mq=opMaqCampo(t, {key:opKey, tag:opKey[i+1], oi:+opKey.slice(i+2), op:opFromKey(opKey).op}, rl||{}); if(mq) r.maquina=mq; }
   if(rl && rl.app && rl.app.vazao!=null && rl.app.vazao!=='' && !r.calda) r.calda=String(rl.app.vazao);
   if(rl && rl.app && rl.app.tanque!=null && rl.app.tanque!=='' && !r.tanque) r.tanque=String(rl.app.tanque);
   if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
@@ -5837,7 +5939,10 @@ function recomLink(r){
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:t?tNome(t):'', c:(t?empDe(t):'')||'',
     a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.tipo==='ts'?'':recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
-    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0, ...(it.sem?{s:1}:{})})) };
+    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0,
+      ...((it.sem||(r.tipo!=='ts'&&_isSemente(it)))?{s:1}:{}), ...((r.tipo!=='ts'&&_isTS(it))?{t:1}:{})})) };
+  const pc=(r.tipo!=='ts'&&r.opKey)?plantioCalc(r.opKey):null;
+  if(pc){ payload.cd=''; payload.pl={sm:+pc.semM.toFixed(2), gm:+pc.gM.toFixed(2), sh:Math.round(pc.semHa), kh:+pc.kgHa.toFixed(2), esp:pc.esp, bl:pc.bl, ts:pc.temTS?(pc.tsSt||'pend'):''}; }
   if(r.tipo==='ts'){ const c=r.tsCfg||{}; payload.ts={b:+c.bat||1, bl:c.bl||'bag', n:c.nBat||0, ul:c.ult||0, sh:Math.round(c.semHa||0), kh:+(+c.kgHa||0).toFixed(2)}; }
   // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
   return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
@@ -5852,6 +5957,7 @@ function recomCondTxt(r){
 function recomWhats(id){
   const r=recomById(id); if(!r) return; recomNorm(r);
   if(r.tipo==='ts') return tsWhats(r);
+  if(r.opKey && opTemSemente(r.opKey.split('|')[0], r.opKey.split('|')[1]||'') && plantioWhats(r)) return;
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r);
   let x=`*RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO*\n`;
   x+=`Talhão: ${t?tNome(t):r.talhao}${area?` (${num(area)} ha)`:''}\n`;
@@ -6748,7 +6854,7 @@ V.campo = function(arg){
     const sbtn=v=>`<button class="camp-st ${REAL_ST[v].cls}${r.status===v?' on':''}" data-act="realStatus" data-key="${esc(o.key)}" data-val="${v}">${REAL_ST[v].lbl}</button>`;
     const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dd=diasAte(dp);
     const conj=opMaqCampo(t,o,r);
-    const tc=tsCalc(o.key, r), tsSt=(r.ts&&r.ts.st)||'';
+    const tc=tsCalc(o.key, r), tsSt=(r.ts&&r.ts.st)||'', pc=plantioCalc(o.key, r);
     const isProx=prox&&prox.key===o.key;
     // quando: DAE · data · (atrasada N d / hoje / em N d)
     let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
@@ -6758,11 +6864,12 @@ V.campo = function(arg){
     const resumo=(o.items||[]).map(it=>`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join(' · ');
     // ação principal do cartão, conforme o status
     const tsBtn=(tc && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
-    const acao= r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 ${tc?'Enviar plantio':'Enviar ao operador'}</button>`
+    const acao= r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 ${pc?'Enviar plantio':'Enviar ao operador'}</button>`
       : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`
       : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
     const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · baixa da semente e do TS ✓</div>`
       :(tsSt==='enviada'?`<div class="cp-maq">🧪 TS enviado ao operador — aguardando a baixa</div>`:`<div class="cp-maq mut">🧪 ${tc.nBat} batelada(s) de TS · ${esc(tc.sem.produto)}</div>`));
+    const plLinha=(pc&&pc.semM)?`<div class="cp-maq">🌱 ${fmtSemM(pc.semM)} sementes/m · ${nf0.format(pc.semHa)} sem./ha${pc.kgHa?' · '+fmtDose(pc.kgHa)+' kg/ha':''}</div>`:'';
     const sep=(o.seq!==lastSeq && (o.seq==='safrinha'||ops.some(x=>x.seq==='safrinha')))?`<div class="cp-seqhd">${o.seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} · ${esc(o.cultura||'—')}</div>`:''; lastSeq=o.seq;
     return `${sep}<div class="cp-card ${st.cls}${isProx?' prox':''}">
       <div class="cp-face">
@@ -6772,7 +6879,7 @@ V.campo = function(arg){
           <div class="cp-when">${quando?`📅 ${quando}`:'<span class="mut">sem data — defina o plantio no talhão</span>'} ${prazo}</div>
           ${resumo?`<div class="cp-prods">${resumo}</div>`:''}
           ${conj?`<div class="cp-maq">🚜 ${esc(conj)}</div>`:''}
-          ${tsLinha}
+          ${plLinha}${tsLinha}
         </div>
         <span class="camp-badge ${st.cls}">${st.lbl}</span>
       </div>
@@ -6802,8 +6909,8 @@ V.campo = function(arg){
           ${tsSt==='feito'?'':`<button class="btn btn-wa btn-sm" data-act="waTs" data-key="${esc(o.key)}">📲 Enviar recomendação de TS por WhatsApp</button>`}
         </div>
       </details>`:''}
-      <details class="camp-app panel-collapse">
-        <summary class="camp-app-sum"><span>🚿 Recomendação de ${tc?'plantio / aplicação':'aplicação'}</span><span class="panel-chevron">▸</span></summary>
+      ${pc?plantioSec(t,o,r,pc):`<details class="camp-app panel-collapse">
+        <summary class="camp-app-sum"><span>🚿 Recomendação de aplicação</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
             <label>Tipo (líquidos)<select class="sel" data-edit="realApp" data-field="tipo" data-key="${esc(o.key)}">
@@ -6828,7 +6935,7 @@ V.campo = function(arg){
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
           <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
         </div>
-      </details>
+      </details>`}
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
         </div>
       </details>
@@ -7053,6 +7160,8 @@ function applyEdit(el){
     r.ts[el.dataset.field]=val===''?null:(parseFloat(val)||0);
     realClean(el.dataset.key); stampReal(el.dataset.key);
     const box=document.querySelector('[data-tsout="'+el.dataset.key+'"]'); if(box) box.innerHTML=tsOut(tsCalc(el.dataset.key));
+    const pbox=document.querySelector('[data-plout="'+el.dataset.key+'"]'); if(pbox) pbox.innerHTML=plantioOut(plantioCalc(el.dataset.key));
+    document.querySelectorAll('[data-edit="realTs"][data-field="'+el.dataset.field+'"]').forEach(x=>{ if(x!==el && x.dataset.key===el.dataset.key) x.value=el.value; });
     return;
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
@@ -7063,6 +7172,7 @@ function applyEdit(el){
     // atualiza só o quadro de cálculo (sem re-render, para não rolar a tela)
     const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]');
     if(box) box.innerHTML=campoAppOut(fk.talId, fk.tagoi, fk.op?fk.op.itens:[], (OV.realizado[el.dataset.key]||r));
+    const pbox=document.querySelector('[data-plout="'+el.dataset.key+'"]'); if(pbox) pbox.innerHTML=plantioOut(plantioCalc(el.dataset.key));
     return;
   }
   if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
