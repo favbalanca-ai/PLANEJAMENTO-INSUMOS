@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-175';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-176';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3993,7 +3993,8 @@ function plantioSec(t,o,r,pc){
             <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${K}" value="${esc(va('hFim'))}"></label>
           </div>
           <div class="camp-appout" data-plout="${K}">${plantioOut(pc)}</div>
-          <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${K}">📲 Enviar recomendação de plantio por WhatsApp</button>
+          <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${K}">📲 Enviar recomendação de plantio por WhatsApp</button>
+          <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${K}">🖨 PDF do plantio (com link de baixa)</button></div>
         </div>
       </details>`;
 }
@@ -4680,8 +4681,67 @@ function recomCard(r,t){
     <div class="rc-actions">${actions}</div></div>`;
 }
 // impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
+// bloco do LINK de baixa no PDF (clicável no PDF salvo; no papel, o operador abre pelo WhatsApp)
+function recomPdfLink(r){
+  const link=recomLink(r);
+  return `<div class="rx-link"><a href="${esc(link)}">👉 ABRIR PARA DAR BAIXA</a>
+    <span>Toque no link (no celular ou no computador) para ver a recomendação e informar o que foi usado — a baixa vai direto para o estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span></div>`;
+}
+const rxKv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
+function rxAssin(r){ return `<div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução</div></div>
+  <div class="pdf-foot">Planejamento de Safra 26/27 · gerado em ${fmtDataBR(new Date().toISOString().slice(0,10))} · Nº ${esc(r.id)}</div>`; }
+// PDF da recomendação de TS (tratamento de sementes) — dose por batelada
+function exportTsPDF(r){
+  const c=tsCalc(r.tsOp); if(!c){ toast('Operação de TS não encontrada'); return; }
+  const t=c.t, B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`, U=u=>u?' '+esc(u):'';
+  const parcial=c.nBat && c.ult<c.bat-1e-6, cheias=parcial?c.nBat-1:c.nBat;
+  let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE TRATAMENTO DE SEMENTES (TS)</h1><span class="n">${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
+  <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
+    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Operação',esc(r.opNome||''))}</div></div>
+  <div class="rx-sec"><h2>2. Semente</h2><div class="rx-kv">
+    ${rxKv('Cultivar',`<b>${esc(c.sem.produto)}</b>`)}${rxKv('Semente no talhão',`<b>${B(c.bags)}</b>`)}${rxKv('Sementes/ha',c.semHa?nf0.format(c.semHa):'')}${rxKv('kg/ha',c.kgHa?fmtDose(c.kgHa):'')}
+    ${rxKv('Batelada',`<b>${B(c.bat)}</b>`)}${rxKv('Nº de bateladas',`<b>${c.nBat}</b>${parcial?` (${cheias} cheia(s) + 1 de ${B(c.ult)})`:''}`,'w2')}${rxKv('PMS',c.pms?`${fmtDose(c.pms)} g`:'')}</div></div>
+  <div class="rx-sec"><h2>3. Produtos — dose por batelada (${B(c.bat)})</h2>
+    <table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:${parcial?31:38}%"><col style="width:12%"><col style="width:15%">${parcial?'<col style="width:12%">':''}<col style="width:12%"><col style="width:13%"></colgroup>
+    <thead><tr><th>#</th><th>Produto</th><th class="num">Dose/ha</th><th class="num">Por batelada</th>${parcial?`<th class="num">Última (${B(c.ult)})</th>`:''}<th class="num">Total</th><th class="num">Utilizado</th></tr></thead><tbody>
+    ${c.itens.map((x,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(x.produto)}</b></td><td class="num">${fmtDose(x.dose)}${U(x.un)}</td><td class="num"><b style="font-size:13px">${fmtDose(x.porBat)}${U(x.un)}</b></td>${parcial?`<td class="num">${fmtDose(x.ult)}${U(x.un)}</td>`:''}<td class="num">${fmtDose(x.total)}${U(x.un)}</td><td></td></tr>`).join('')}
+    <tr><td class="num">—</td><td><b>Semente tratada — ${esc(c.sem.produto)}</b></td><td class="num">${fmtDose(c.sem.dose)} ${c.bl}</td><td class="num">${B(c.bat)}</td>${parcial?`<td class="num">${B(c.ult)}</td>`:''}<td class="num">${B(c.bags)}</td><td></td></tr>
+    </tbody></table></div>
+  ${recomPdfLink(r)}
+  <div class="rx-warn">Usar EPI (luvas, avental, máscara e óculos). Tratar em local ventilado e coberto, sobre lona. Misturar bem cada batelada até cobrir toda a semente. Semente tratada <b>não</b> pode ser usada para alimentação humana ou animal. Lavar o equipamento e devolver as embalagens vazias ao ponto de recebimento.</div>
+  ${r.obs?`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
+  ${rxAssin(r)}`;
+  printDoc(h); toast('Gerando PDF do TS — escolha "Salvar como PDF"');
+}
+// PDF da recomendação de PLANTIO — população, sementes por metro (linhas a 50 cm), fertilizantes e líquidos por ha
+function exportPlantioPDF(r){
+  const c=plantioCalc(r.opKey); if(!c){ toast('Operação de plantio não encontrada'); return; }
+  const t=c.t, B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
+  const o=opsDoTalhao(t).find(x=>x.key===r.opKey), dp=o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):'';
+  let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE PLANTIO</h1><span class="n">${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
+  <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
+    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}
+    ${rxKv('Plantadeira',esc(r.maquina||''),'w2')}${rxKv('Operação',esc(r.opNome||''))}${rxKv('Tratamento (TS)',c.temTS?esc(plantioTsTxt(c).replace('⚠️ ','')):'sem TS')}</div></div>
+  <div class="rx-sec"><h2>2. Semente — ${esc(c.sem.produto)}</h2>
+    <div class="rx-big">${c.bl==='kg'
+      ?`<div><b>${fmtDose(c.kgHa)}</b><span>kg de semente por ha</span></div>`
+      :`<div><b>${c.pop?nf0.format(c.pop):'—'}</b><span>sementes por ha</span></div><div><b>${c.semM?fmtSemM(c.semM):'—'}</b><span>sementes por metro<br>(linhas a 50 cm)</span></div>`}
+      <div><b>${B(c.bags)}</b><span>semente no talhão</span></div></div></div>
+  ${c.outros.length?`<div class="rx-sec"><h2>3. Fertilizantes e líquidos — por ha</h2>
+    <table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:45%"><col style="width:18%"><col style="width:17%"><col style="width:15%"></colgroup>
+    <thead><tr><th>#</th><th>Produto</th><th class="num">Dose/ha</th><th class="num">Total no talhão</th><th class="num">Utilizado</th></tr></thead><tbody>
+    ${c.outros.map((x,i)=>{ const d=doseHaUn(x.dose,x.un); return `<tr><td class="num">${i+1}</td><td><b>${esc(x.produto)}</b></td><td class="num"><b style="font-size:13px">${fmtDose(d.v)} ${esc(d.u)}/ha</b></td><td class="num">${fmtDose(d.v*c.area)} ${esc(d.u)}</td><td></td></tr>`; }).join('')}
+    </tbody></table></div>`:''}
+  ${recomPdfLink(r)}
+  <div class="rx-warn">Conferir a regulagem da plantadeira (sementes por metro) no início e a cada troca de lote. Usar EPI ao manusear semente tratada e produtos. Semente tratada <b>não</b> pode ser usada para alimentação. Devolver as embalagens vazias ao ponto de recebimento.</div>
+  ${r.obs?`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
+  ${rxAssin(r)}`;
+  printDoc(h); toast('Gerando PDF do plantio — escolha "Salvar como PDF"');
+}
 function exportRecomPDF(id){
   const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
+  if(r.tipo==='ts') return exportTsPDF(r);
+  if(r.opKey && opTemSemente(r.opKey.split('|')[0], r.opKey.split('|')[1]||'') && plantioCalc(r.opKey)) return exportPlantioPDF(r);
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
   const kv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
@@ -4708,6 +4768,7 @@ function exportRecomPDF(id){
     ${kv('EPI obrigatório',esc(r.epi||''),'w2')}${kv('Intervalo de reentrada',r.reentrada?`${esc(r.reentrada)} h`:'')}${kv('Carência',its.some(it=>it.car)?'ver tabela':'')}</div>
     <div class="rx-warn">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Não aplicar fora das condições indicadas. Fazer a tríplice lavagem e destinar as embalagens vazias ao ponto de recebimento. Manter o receituário junto ao operador durante a aplicação.</div></div>
   ${r.obs?`<div class="rx-sec"><h2>7. Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
+  ${recomPdfLink(r)}
   <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
   <div class="pdf-foot">Planejamento de Safra 26/27 · gerado em ${fmtDataBR(new Date().toISOString().slice(0,10))} · status: ${esc((RECOM_ST[r.status]||{}).lbl||r.status)}</div>`;
   printDoc(h); toast('Gerando recomendação técnica — escolha "Salvar como PDF"');
@@ -5439,7 +5500,8 @@ V.campo = function(arg){
           </div>
           <div class="camp-appout" data-tsout="${esc(o.key)}">${tsOut(tc)}</div>
           <p class="app-note mut">Doses do planejamento (por ha) convertidas para a batelada. A baixa do operador tira do estoque a semente e os produtos de TS — a operação de plantio não baixa eles de novo.</p>
-          ${tsSt==='feito'?'':`<button class="btn btn-wa btn-sm" data-act="waTs" data-key="${esc(o.key)}">📲 Enviar recomendação de TS por WhatsApp</button>`}
+          <div class="cp-btns">${tsSt==='feito'?'':`<button class="btn btn-wa btn-sm" data-act="waTs" data-key="${esc(o.key)}">📲 Enviar recomendação de TS por WhatsApp</button>`}
+          <button class="btn btn-outline btn-sm" data-act="pdfTs" data-key="${esc(o.key)}">🖨 PDF do TS (com link de baixa)</button></div>
         </div>
       </details>`:''}
       ${pc?plantioSec(t,o,r,pc):`<details class="camp-app panel-collapse">
@@ -5466,7 +5528,8 @@ V.campo = function(arg){
             <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}">Calcular vazão</button>
           </div>
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
-          <button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
+          <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
+          <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${esc(o.key)}">🖨 PDF (com link de baixa)</button></div>
         </div>
       </details>`}
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
@@ -6152,6 +6215,14 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
+    else if(a.act==='pdfTs'){ const r=tsRecomFromOp(a.key);
+      if(!r){ toast('Esta operação não tem semente com produtos de TS'); return; }
+      const rl=realEnsure(a.key); rl.ts=rl.ts||{}; if(rl.ts.st!=='feito') rl.ts.st='enviada'; rl.ts.recom=r.id; stampReal(a.key);
+      exportRecomPDF(r.id); route({keepScroll:true}); }
+    else if(a.act==='pdfOp'){ const r=recomFromCampoOp(a.key);
+      if(!r){ toast('Nada para gerar'); return; }
+      const rl=realEnsure(a.key); if(rl.status==='pendente'){ rl.status='andamento'; stampReal(a.key); }
+      exportRecomPDF(r.id); route({keepScroll:true}); }
     else if(a.act==='waTs'){ const r=tsRecomFromOp(a.key);
       if(!r){ toast('Esta operação não tem semente com produtos de TS'); return; }
       const rl=realEnsure(a.key); rl.ts=rl.ts||{}; if(rl.ts.st!=='feito') rl.ts.st='enviada'; rl.ts.recom=r.id; stampReal(a.key);
