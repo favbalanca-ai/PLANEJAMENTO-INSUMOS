@@ -205,23 +205,40 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     : '🛈 Meça a dose "por batelada" de cada produto em cada batelada.';
   var PSEM=PL?ITENS.filter(function(i){return i.sem;})[0]:null;
   function PLB(n){ var b=PL.bl||'bag'; return nf.format(n)+' '+b+(b==='bag'&&n>=2?'s':''); }
+  // unidade do operador: tonelada vira kg (a baixa volta convertida para a unidade do estoque)
+  function CONV(un){ var u=String(un||'').trim().toUpperCase();
+    if(u==='T'||u==='TON'||u==='TONELADA'||u==='TONELADAS') return {f:1000, u:'kg'};
+    if(u==='KG') return {f:1, u:'kg'}; if(u==='L'||u==='LT'||u==='LITRO'||u==='LITROS') return {f:1, u:'L'};
+    return {f:1, u:un||''}; }
   var plSec = PL ? (
-    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Regulagem da plantadeira</span>'+
-      '<span class="sec-s">espaçamento<br>'+nf.format(PL.esp||0.5)+' m</span></div>'+
+    '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Semente — regulagem</span>'+
+      '<span class="sec-s">linhas a<br>50 cm</span></div>'+
     '<div class="card">'+
-      '<div class="tiles">'+
-        '<div class="tile"><div class="t-v">'+(PL.sm?nf1.format(PL.sm):(PL.gm?nf.format(PL.gm):'—'))+'</div><div class="t-l">'+(PL.sm||!PL.gm?'sementes por metro':'gramas por metro')+'</div></div>'+
-        '<div class="tile alt"><div class="t-v">'+(PL.sh?nf0.format(PL.sh):'—')+'</div><div class="t-l">sementes/ha</div></div>'+
-      '</div>'+
-      '<div class="cfg">'+
+      (PL.bl==='kg'
+        ? '<div class="tiles"><div class="tile"><div class="t-v">'+nf.format(PL.kh||0)+'</div><div class="t-l">kg de semente por ha</div></div></div>'
+        : '<div class="tiles">'+
+            '<div class="tile alt"><div class="t-v">'+(PL.sh?nf0.format(PL.sh):'—')+'</div><div class="t-l">sementes por ha</div></div>'+
+            '<div class="tile"><div class="t-v">'+(PL.sm?nf1.format(PL.sm):'—')+'</div><div class="t-l">sementes por metro</div></div>'+
+          '</div>')+
+      '<div class="cfg" style="grid-template-columns:1fr 1fr">'+
         '<div class="c ro"><div class="c-lbl">Semente</div><div class="val" style="font-size:15px">'+esc(PSEM?PSEM.produto:'—')+'</div></div>'+
-        '<div class="c ro"><div class="c-lbl">kg/ha</div><div class="val">'+(PL.kh?nf.format(PL.kh):'—')+'</div></div>'+
-        '<div class="c ro"><div class="c-lbl">No talhão</div><div class="val">'+(PSEM?PLB(PSEM.dose*AREA):'—')+'</div></div>'+
+        '<div class="c ro"><div class="c-lbl">No talhão</div><div class="val">'+(PL.bags?PLB(PL.bags):(PSEM?PLB(PSEM.dose*AREA):'—'))+'</div></div>'+
       '</div>'+
       (PL.ts?'<div class="recipe-note">'+(PL.ts==='feito'?'✅ Semente tratada (TS feito).':(PL.ts==='enviada'?'🧪 TS enviado — confira se a semente já foi tratada.':'⚠️ TS ainda não registrado — confira o tratamento da semente.'))+'</div>':'')+
     '</div></section>'
   ) : '';
-  var recipeSec = PL && !OUT.length ? '' : TS ? (
+  // fertilizantes e líquidos: só a dose POR HA (kg/ha ou L/ha)
+  var plProdSec = (PL && OUT.length) ? (
+    '<section class="sec"><div class="sec-h"><span class="sec-n">2</span><span class="sec-t">Fertilizantes e líquidos</span><span class="sec-s">dose<br>por ha</span></div>'+
+    '<div class="card"><div class="recipe" style="border-top:none">'+
+      '<div class="recipe-h"><span>Produto</span><span class="r2">Por ha</span><span class="r3">Talhão</span></div>'+
+      OUT.map(function(it){ var c=CONV(it.un), d=it.dose*c.f;
+        return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div></div>'+
+          '<div class="r-tank"><div class="big">'+nf.format(d)+'</div><div class="un">'+esc(c.u)+'/ha</div></div>'+
+          '<div class="r-tot">'+nf.format(d*AREA)+' '+esc(c.u)+'</div></div>'; }).join('')+
+    '</div></div></section>'
+  ) : '';
+  var recipeSec = PL ? plProdSec : TS ? (
     '<section class="sec"><div class="sec-h"><span class="sec-n">1</span><span class="sec-t">Como tratar — por batelada</span>'+
       '<span class="sec-s">batelada de<br>'+B(BAT)+'</span></div>'+
     '<div class="card">'+
@@ -285,7 +302,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     '<div class="prod-list" id="baixaList"></div>'+
     '<div class="card" style="padding:14px 16px;margin-top:11px">'+
       '<div class="field"><label>Seu nome <span class="req">*</span></label><input id="operador" type="text" placeholder="ex.: José da Silva"></div>'+
-      '<div class="field"><label>Observações (opcional)</label><textarea id="obs" placeholder="'+(TS?'ex.: sobrou meio bag tratado':'ex.: sobrou meio tanque; parei 1h por chuva')+'"></textarea></div>'+
+      '<div class="field"><label>Observações (opcional)</label><textarea id="obs" placeholder="'+(TS?'ex.: sobrou meio bag tratado':(PL?'ex.: sobrou 1 bag; parei 1h por chuva':'ex.: sobrou meio tanque; parei 1h por chuva'))+'"></textarea></div>'+
     '</div>'+
     '<p class="foot">'+(TS?'Ao enviar, a baixa da semente e dos produtos de TS<br>vai direto para o estoque da fazenda.':'Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.')+'</p>'+
     '</section>';
@@ -325,7 +342,9 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   // ---- baixa (volume usado por produto) ----
   document.getElementById('baixaList').innerHTML=ITENS.map(function(it,i){
     var total=it.dose*AREA;
-    if(it.sem && ((TS && BL==='bag')||(PL && PL.bl==='bag'))) it={produto:it.produto, un:'bags', dose:it.dose, sem:true};   // só a exibição: "8 bags" em vez de "8 5MM"
+    if(it.sem && PL && PL.bags && AREA){ it={produto:it.produto, un:PL.bl==='bag'?'bags':it.un, dose:PL.bags/AREA, sem:true}; total=PL.bags; }   // população informada manda
+    else if(it.sem && ((TS && BL==='bag')||(PL && PL.bl==='bag'))) it={produto:it.produto, un:'bags', dose:it.dose, sem:true};
+    else if(PL){ var cv=CONV(it.un); if(cv.f!==1){ it={produto:it.produto, un:cv.u, dose:it.dose*cv.f, ts:it.ts}; total=it.dose*AREA; } }   // só a exibição: "8 bags" em vez de "8 5MM"
     return '<div class="card prod" data-i="'+i+'" data-plan="'+total+'" data-un="'+esc(it.un)+'">'+
       '<div class="prod-head"><div><div class="prod-name">'+(it.sem?(TS?'🌱 Semente tratada — ':'🌱 Semente plantada — '):(it.ts&&PL?'🧪 TS — ':''))+esc(it.produto)+'</div>'+
       '<div class="prod-plan">Planejado: <b>'+(total?nf.format(total)+' '+esc(it.un):'—')+'</b>'+(it.dose?' ('+nf.format(it.dose)+' '+esc(it.un)+'/ha)':'')+'</div></div></div>'+
@@ -357,7 +376,8 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     var obs=(document.getElementById('obs').value||'').trim();
     var itens=[]; document.querySelectorAll('.prod').forEach(function(card){
       var i=+card.dataset.i, it=ITENS[i], v=card.querySelector('input').value.trim();
-      itens.push({produto:it.produto, un:it.un, plan:+(it.dose*AREA).toFixed(2), real:v===''?0:num(v)});
+      var f=(PL && !it.sem)?CONV(it.un).f:1;   // digitado em kg → volta em tonelada (unidade do estoque)
+      itens.push({produto:it.produto, un:it.un, plan:+(it.dose*AREA).toFixed(4), real:v===''?0:+(num(v)/f).toFixed(4)});
     });
     return {operador:operador, obs:obs, itens:itens};
   }
