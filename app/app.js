@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-173';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-174';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -987,7 +987,9 @@ function custoInsumoRealSeq(t,seq){
   const tag=seq==='safrinha'?'S':'P', area=areaDe(t); let real=0;
   opsOf(t.id,seq).forEach((op,oi)=>{ const tagoi=`${tag}${oi}`, key=t.id+'|'+tagoi, r=OV.realizado&&OV.realizado[key];
     const planOp=effItems(t.id,tagoi,op.itens).reduce((s,it)=>s+(+it.dose||0)*area*precoDe(it.produto),0);
-    if(r && r.status==='concluido' && r.baixa){ let ro=0; for(const pr in r.baixa) ro+=(+r.baixa[pr]||0)*precoDe(pr); real+=ro; }
+    if(r && r.status==='concluido' && r.baixa){ let ro=0; const b=opBaixaEff(r); for(const pr in b) ro+=(+b[pr]||0)*precoDe(pr);
+      if(tsFeito(r)) for(const pr in (r.ts.baixa||{})) ro+=(+r.ts.baixa[pr]||0)*precoDe(pr);   // semente + TS baixados pelo TS
+      real+=ro; }
     else real+=planOp;
   });
   return real;
@@ -3873,6 +3875,7 @@ function tsOut(c){
   const B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
   const cheias=c.nBat?(c.ult<c.bat-1e-6?c.nBat-1:c.nBat):0;
   const avisos=[];
+  if(!c.sem.dose) avisos.push(`A dose da semente <b>${esc(c.sem.produto)}</b> está <b>zerada</b> no planejamento do talhão — sem ela não dá para calcular a batelada.`);
   if(!c.sem.un) avisos.push(`A semente <b>${esc(c.sem.produto)}</b> está <b>sem unidade</b> no PORTIFÓLIO da planilha — preencha (ex.: 5MM, SC ou KG).`);
   const semUnP=c.itens.filter(x=>!x.un).map(x=>x.produto);
   if(semUnP.length) avisos.push(`Sem unidade no PORTIFÓLIO: <b>${esc(semUnP.join(', '))}</b> — preencha (ex.: L) na planilha.`);
@@ -4009,6 +4012,7 @@ function plantioWhats(r){
   if(r.opNome) x+=`Operação: ${r.opNome}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}\n`;
   x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
+  if(c.temTS && c.tsSt!=='feito') x+=`🧪 TS planejado: ${c.tsProds.join(', ')}\n`;
   if(c.semM) x+=`• Espaçamento ${fmtDose(c.esp)} m → *${fmtSemM(c.semM)} sementes por metro*\n`;
   else if(c.gM) x+=`• Espaçamento ${fmtDose(c.esp)} m → *${fmtDose(c.gM)} g por metro*\n`;
   x+=`• ${[c.semHa?nf0.format(c.semHa)+' sementes/ha':'', c.kgHa?fmtDose(c.kgHa)+' kg/ha':'', fmtDose(c.sem.dose)+' '+c.bl+'/ha'].filter(Boolean).join(' · ')}\n`;
@@ -4025,6 +4029,20 @@ function plantioWhats(r){
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
   return true;
 }
+// TS feito (ou desfeito) → grava na operação de plantio (sincroniza entre aparelhos). Se o plantio já foi
+// concluído, a baixa dele muda (semente/TS saem ou voltam) → reenvia a saída da operação (mesmo id: não duplica)
+function tsMarca(r, feito, quem){
+  if(!r||r.tipo!=='ts'||!r.tsOp) return false;
+  const rl=realEnsure(r.tsOp); rl.ts=rl.ts||{};
+  if(feito){ const b={}; (r.itens||[]).forEach(it=>{ if(it.produto&&+it.real>0) b[it.produto]=(b[it.produto]||0)+(+it.real); });
+    Object.assign(rl.ts,{st:'feito', recom:r.id, quem:quem||'', em:Date.now(), baixa:b}); }
+  else { rl.ts.st=(r.status==='enviada'||r.status==='retorno')?'enviada':''; delete rl.ts.baixa; delete rl.ts.quem; delete rl.ts.em; }
+  rl._u=Date.now();
+  const reenvia=!!(rl.status==='concluido' && rl.baixa); if(reenvia) rl.saidaPushed=false;
+  return reenvia;
+}
+function tsMarcaSalva(r, feito, quem){ const re=tsMarca(r,feito,quem); if(!r||!r.tsOp) return;
+  saveOverrides(); scheduleRealizadoPush(); if(re) pushOpSaida(r.tsOp).catch(()=>{}); }
 // baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
 function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
   const o={}; for(const p in b){ if(_isTS({produto:p})||_isSemente({produto:p})) continue; o[p]=b[p]; } return o; }
@@ -4523,7 +4541,7 @@ function applyRetornos(retornos){
     if(r.tipo==='ts'){
       // TS: o operador tratou e deu baixa → aprovado, baixa no estoque; a operação de plantio continua aberta
       r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()}; r.saidaPushed=false; tsAprovados.push(r);
-      if(r.tsOp){ const rl=realEnsure(r.tsOp); rl.ts=Object.assign({}, rl.ts||{}, {st:'feito', recom:r.id, quem:last.operador||'', em:last.ts||Date.now()}); rl._u=Date.now(); ovChanged=true; }
+      if(r.tsOp){ if(tsMarca(r, true, last.operador||'')) concluidas.push(r.tsOp); ovChanged=true; }
     } else if(r.opKey){
       // operador FINALIZOU pela página do WhatsApp -> conclui a operação, dá baixa e vai pro histórico
       r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()};
@@ -6030,13 +6048,14 @@ document.addEventListener('click',e=>{
         toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
         pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
       } else {
+        if(r.tipo==='ts') tsMarcaSalva(r, true, r.aprov.por);
         try{ maybePlantioRecom(r); }catch(e){}
         toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
         pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
       } } }
-    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
-    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
-    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
+    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }

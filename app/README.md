@@ -76,7 +76,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   (`dose/ha ÷ bags/ha × bags por batelada`). Mostra nº de bateladas, a última (parcial), sementes/ha e,
   com o PMS (opcional), kg/ha. O operador abre o link (`retorno.html` em modo TS), vê a dose por batelada
   e dá baixa: a **semente e os produtos de TS saem do estoque** nessa hora e a operação de plantio
-  continua aberta — ao concluir o plantio eles **não saem de novo** (`opBaixaEff`). Unidades em branco no
+  continua aberta — ao concluir o plantio eles **não saem de novo** (`opBaixaEff`). Se o TS voltar
+  **depois** do plantio concluído, a baixa do plantio é reenviada sem a semente; reabrir/reprovar/excluir o
+  TS faz o contrário (`tsMarca`). O custo realizado do talhão soma a baixa do TS. Unidades em branco no
   PORTIFÓLIO aparecem como aviso (preencher na planilha).
 - **Campo → Recomendação de plantio** — na operação com semente, a seção 🚿 de aplicação vira
   🌱 *Recomendação de plantio*: **espaçamento** (padrão 0,50 m), sementes por bag, PMS, plantadeira,
