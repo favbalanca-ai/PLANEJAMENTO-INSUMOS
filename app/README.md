@@ -89,6 +89,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   baixa, o adubo é digitado em kg e volta para a planilha na unidade do estoque (t). Ao concluir, o
   plantio vira realizado (dia 0 do DAE). Mostra se o TS já foi feito; depois de enviar o TS, os
   produtos de TS saem da recomendação de plantio.
+- **Campo → PDF da recomendação** — ao lado de cada "Enviar por WhatsApp" (TS, plantio e aplicação) há
+  **🖨 PDF (com link de baixa)**: gera a recomendação pronta para imprimir/salvar ("Salvar como PDF") com o
+  botão **👉 ABRIR PARA DAR BAIXA** clicável no PDF (o mesmo link do WhatsApp para o `retorno.html`).
+  Gerar o PDF conta como enviado (TS "enviado"; operação "em andamento"). O PDF de plantio mostra em
+  destaque sementes por ha, sementes por metro (linhas a 50 cm) e as doses por ha; o de TS, a dose por
+  batelada. A tela Recomendação (🖨) usa o mesmo PDF.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.
