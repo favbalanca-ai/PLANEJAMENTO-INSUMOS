@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-181';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-182';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7087,7 +7087,8 @@ async function syncGet(url, opts){
       if(d && d.login){ syncLogAdd('down', 'Puxar planilha', t0, false, 'precisa entrar: '+(d.erro||'')); return d; }
       if(d && d.ok===false && d.erro) throw new Error(d.erro);   // a planilha explicou o erro (ex.: "timed out")
       const sv=d&&d._srv, lida=sv?(sv.base||sv.app?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',sv.app?'compras/NF-e/execução':''].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
-      syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${lida}${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
+      const cacheAviso=(sv&&sv.cacheErro)?` · ⚠️ a planilha não conseguiu guardar o cache (${sv.cacheErro})`:'';
+      syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${lida}${cacheAviso}${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
       return d;
     }catch(e){ lastErr=e; if(attempt===0){ if(!opts.auto) syncLog('… demorou; tentando de novo'); await new Promise(res=>setTimeout(res,1800)); } }
   }

@@ -45,8 +45,9 @@ function readBase_(){
   var produtos = [], P = sh('PORTIFÓLIO');
   if (P){
     var pcol = pedidoColOf(P);                       // coluna "EM PEDIDO" (acha pelo cabeçalho; cria se não existir)
-    var pv = P.getRange(4, 1, 412, 20).getValues();  // linhas 4..415, colunas A..T
-    var ped = P.getRange(4, pcol, 412, 1).getValues();
+    var nP = Math.max(1, Math.min(430, P.getMaxRows() - 3));   // linhas 4..433 — a MESMA faixa que a gravação usa
+    var pv = P.getRange(4, 1, nP, 20).getValues();  // (antes só até a 415: produto novo nas linhas 416–433 não voltava ao app)
+    var ped = P.getRange(4, pcol, nP, 1).getValues();
     for (var i = 0; i < pv.length; i++){
       var r = pv[i], prod = S(r[2]);            // C = produto
       if (!prod) continue;
@@ -66,9 +67,10 @@ function readBase_(){
     }
   }
 
-  var planos = {}, semAba = [];
+  var planos = {}, semAba = [], abas = {};
+  ss().getSheets().forEach(function(x){ abas[x.getName()] = x; });   // 1 chamada (antes: 1 busca por talhão)
   talhoes.forEach(function(t){
-    var s = sh(t.id); if (!s){ semAba.push(t.id); return; }
+    var s = abas[t.id]; if (!s){ semAba.push(t.id); return; }
     var n = Math.max(10, s.getLastRow());                // só até a última linha usada (antes: a aba inteira, com as linhas vazias)
     var big = s.getRange(1, 1, n, 9).getValues();        // 0-based: linha L -> big[L-1]
     var m = talColMap(big[8]);                           // colunas detectadas pelo cabeçalho (linha 9)
@@ -105,12 +107,13 @@ function readBase_(){
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), equipe_sst:readEquipeSST() };
 }
 function readAppPart_(){
+  _LER_MEMO_ = {};
   try {
     if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
     return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
       result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
       limites_app:readMapApp('LIMITES APP'), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
-  } finally { _CTR_MEMO_ = null; }
+  } finally { _CTR_MEMO_ = null; _LER_MEMO_ = null; }
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
@@ -385,19 +388,23 @@ function readDeParaNfe(){
 // grava/atualiza o de-para (chave CNPJ + CPROD): atualiza a linha existente ou acrescenta no fim
 function writeDeParaNfe(itens){
   itens = itens || []; if (!itens.length) return { rows:0 };
-  var d = deParaSheet_(), s = d.s, ix = d.idx, last = s.getLastRow(), rows = {}, n = 0;
-  if (last >= 2){ var v = s.getRange(2,1,last-1,d.ncol).getValues();
-    for (var i = 0; i < v.length; i++){ var k = S(v[i][ix[_hkey('CNPJ EMITENTE')]]).replace(/\D/g,'') + '|' + S(v[i][ix[_hkey('CPROD')]]); if (k !== '|') rows[k] = i + 2; } }
+  var d = deParaSheet_(), s = d.s, ix = d.idx, last = s.getLastRow(), rows = {}, n = 0, novos = 0;
+  var v = last >= 2 ? s.getRange(2,1,last-1,d.ncol).getValues() : [];
+  for (var i = 0; i < v.length; i++){ var k = S(v[i][ix[_hkey('CNPJ EMITENTE')]]).replace(/\D/g,'') + '|' + S(v[i][ix[_hkey('CPROD')]]); if (k !== '|') rows[k] = i; }
   var hoje = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   itens.forEach(function(it){
     var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
-    var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = S(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : S(it.produto);
+    var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = T_(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : T_(it.produto);
     vals['FATOR'] = N(it.fator) || 1; vals['IGNORAR'] = it.ignorar ? 'SIM' : ''; vals['ÚLTIMO CUSTO'] = N(it.custo) || '';
-    vals['CONFIRMADO POR'] = S(it.por) || 'app'; vals['DATA'] = hoje;
-    var row = rows[cnpj + '|' + cprod];
-    if (!row){ row = s.getLastRow() + 1; rows[cnpj + '|' + cprod] = row; s.getRange(row, ix[_hkey('CNPJ EMITENTE')] + 1).setNumberFormat('@'); s.getRange(row, ix[_hkey('CPROD')] + 1).setNumberFormat('@'); }
-    Object.keys(vals).forEach(function(h){ s.getRange(row, ix[_hkey(h)] + 1).setValue(vals[h]); });
+    vals['CONFIRMADO POR'] = T_(it.por) || 'app'; vals['DATA'] = hoje;
+    var i = rows[cnpj + '|' + cprod];
+    if (i == null){ var a = []; for (var c = 0; c < d.ncol; c++) a.push(''); v.push(a); i = v.length - 1; rows[cnpj + '|' + cprod] = i; novos++; }
+    Object.keys(vals).forEach(function(h){ var c = ix[_hkey(h)]; if (c != null) v[i][c] = vals[h]; });
     n++; });
+  if (!n) return { rows:0 };
+  if (novos){ var r0 = 2 + v.length - novos, falta = 1 + v.length - s.getMaxRows(); if (falta > 0) s.insertRowsAfter(s.getMaxRows(), falta);
+    s.getRange(r0, ix[_hkey('CNPJ EMITENTE')] + 1, novos, 1).setNumberFormat('@'); s.getRange(r0, ix[_hkey('CPROD')] + 1, novos, 1).setNumberFormat('@'); }
+  s.getRange(2, 1, v.length, d.ncol).setValues(v);   // 1 escrita (antes: ~11 chamadas por item)
   return { rows:n };
 }
 /* =====================================================================================
@@ -517,6 +524,28 @@ function _nfeLinha_(t, chave){ var s = t.s, last = s.getLastRow(); if (last < 2)
 // os 44 dígitos da chave em número (5,2E+43), perde dígitos e a nota não é mais achada (duplica, não reabre…).
 function _setCells_(t, row, vals){ Object.keys(vals).forEach(function(h){ var rg = t.s.getRange(row, t.col(h) + 1);
   if (NFE_TEXTO.indexOf(h) >= 0 || h === 'ID'){ rg.setNumberFormat('@'); rg.setValue(S(vals[h])); } else rg.setValue(typeof vals[h] === 'string' ? T_(vals[h]) : vals[h]); }); }
+// apaga linhas (números 1-based, em qualquer ordem) em BLOCOS seguidos — 1 chamada por bloco (antes: 1 por linha)
+function _delLinhas_(s, linhas){
+  linhas = linhas.slice().sort(function(a, b){ return b - a; });
+  for (var k = 0; k < linhas.length;){ var fim = linhas[k], ini = fim;
+    while (k + 1 < linhas.length && linhas[k + 1] === ini - 1){ ini--; k++; }
+    s.deleteRows(ini, fim - ini + 1); k++; }
+}
+// várias linhas NOVAS de uma vez, pelo cabeçalho: chave/CNPJ/códigos como TEXTO; texto de usuário sem virar fórmula.
+// 1 escrita para todas (antes: ~2 chamadas por CÉLULA — uma nota de 30 itens passava de 60 s com a planilha travada)
+function _appendRowsByHeader_(t, objs){
+  if (!objs.length) return 0;
+  var s = t.s, n = objs.length, r0 = _novaLinha_(s), falta = r0 + n - 1 - s.getMaxRows();
+  if (falta > 0) s.insertRowsAfter(s.getMaxRows(), falta);
+  var txt = {};
+  var rows = objs.map(function(o){ var a = []; for (var c = 0; c < t.ncol; c++) a.push('');
+    Object.keys(o).forEach(function(h){ var c = t.col(h); if (c == null) return; var v = o[h];
+      if (NFE_TEXTO.indexOf(h) >= 0 || h === 'ID'){ a[c] = S(v); txt[c] = 1; } else a[c] = (typeof v === 'string') ? T_(v) : v; });
+    return a; });
+  Object.keys(txt).forEach(function(c){ s.getRange(r0, +c + 1, n, 1).setNumberFormat('@'); });
+  s.getRange(r0, 1, n, t.ncol).setValues(rows);
+  return n;
+}
 // linha NOVA no fim da aba. ATENÇÃO: appendRow de uma linha VAZIA não conta para o getLastRow do Google —
 // o jeito antigo (appendRow vazio + getLastRow) escrevia POR CIMA da última linha (e, na 1ª nota, do cabeçalho).
 function _novaLinha_(s){ var r = s.getLastRow() + 1, mx = s.getMaxRows(); if (r > mx) s.insertRowsAfter(mx, r - mx); return r; }
@@ -710,6 +739,7 @@ function nfeReabrir_(r){
 // ---- endpoints (todos exigem o token da CONFIG NFE) ----
 // conserto rápido antes de ler (lista / Receber nota) — só se a planilha estiver livre (não briga com a captura)
 function _nfeConsertoLeve_(){
+  var c = CacheService.getScriptCache(); try { if (c.get('nfe_conserto')) return; c.put('nfe_conserto', '1', 600); } catch (e) {}
   var lk = LockService.getScriptLock(); if (!lk.tryLock(3000)) return;
   try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {} finally { lk.releaseLock(); }
 }
@@ -747,11 +777,12 @@ function nfeClassifica_(c){
   var n = 0;
   if (c.itens && c.itens.length){
     var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, last = s.getLastRow();
-    if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === S(c.chave)) s.deleteRow(i + 2); }
-    c.itens.forEach(function(it){ var r = _novaLinha_(s);
-      _setCells_(ti, r, { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
+    if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = [];
+      for (var i = 0; i < v.length; i++) if (S(v[i][0]) === S(c.chave)) apagar.push(i + 2);
+      _delLinhas_(s, apagar); }
+    n = _appendRowsByHeader_(ti, c.itens.map(function(it){ return { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
         'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
-        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }); n++; });
+        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }; }));
   }
   if (c.depara && c.depara.length) writeDeParaNfe(c.depara);
   // contrato afetado: o próprio (faturamento) ou o da remessa
@@ -760,9 +791,12 @@ function nfeClassifica_(c){
   return { rows:n + 1 };
 }
 // ---- FASE 3: entrega futura (contratos = notas de FATURAMENTO) ----
-function _ler_(name, cols){ var t = sheetCols_(name, cols), s = t.s, last = s.getLastRow(), out = [];
-  if (last < 2) return out;
-  s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r, i){ var o = { __r:i + 2 }; cols.forEach(function(h){ o[h] = r[t.col(h)]; }); if (S(o[cols[0]])) out.push(o); });
+var _LER_MEMO_ = null;   // memória de leituras durante UMA montagem da parte APP (só leitura, nada grava no meio)
+function _ler_(name, cols){
+  var mk = name + '|' + cols.join(','); if (_LER_MEMO_ && _LER_MEMO_[mk]) return _LER_MEMO_[mk];
+  var t = sheetCols_(name, cols), s = t.s, last = s.getLastRow(), out = [];
+  if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r, i){ var o = { __r:i + 2 }; cols.forEach(function(h){ o[h] = r[t.col(h)]; }); if (S(o[cols[0]])) out.push(o); });
+  if (_LER_MEMO_) _LER_MEMO_[mk] = out;
   return out; }
 var NFE_ATIVAS = ['EM TRÂNSITO','RECEBIDA','RECEBIDA SEM XML'];   // remessas que já abatem o contrato
 // contratos de entrega futura: faturado × entregue (remessas vinculadas) × saldo por produto
@@ -845,13 +879,16 @@ function nfeRecebimento_(r){
   if (r.canhoto) _setCells_(t, row, { 'FOTO CANHOTO':S(r.canhoto) });
   var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, n = 0, itens = r.itens || [];
   if (r.semXml){   // itens informados na fazenda
-    var last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(); for (var i = v.length - 1; i >= 0; i--) if (S(v[i][0]) === chave) s.deleteRow(i + 2); }
-    itens.forEach(function(it, k){ var rr = _novaLinha_(s);
-      _setCells_(ti, rr, { 'CHAVE':chave, 'Nº ITEM':S(it.n || k + 1), 'PRODUTO APP':S(it.produto), 'QTD APP':N(it.qtdRecebida), 'UN APP':S(it.un), 'QTD RECEBIDA':N(it.qtdRecebida), 'FATOR':1 }); n++; });
+    var last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = [];
+      for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2);
+      _delLinhas_(s, apagar); }
+    n = _appendRowsByHeader_(ti, itens.map(function(it, k){ return { 'CHAVE':chave, 'Nº ITEM':S(it.n || k + 1), 'PRODUTO APP':S(it.produto), 'QTD APP':N(it.qtdRecebida), 'UN APP':S(it.un), 'QTD RECEBIDA':N(it.qtdRecebida), 'FATOR':1 }; }));
   } else {
     var lin = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; });
+    var lastI = s.getLastRow(), cq = ti.col('QTD RECEBIDA') + 1, colQ = lastI >= 2 ? s.getRange(2, cq, lastI - 1, 1).getValues() : [], mudou = false;
     itens.forEach(function(it){ var m = lin.filter(function(i){ return S(i['Nº ITEM']) === S(it.n); })[0];
-      if (m){ s.getRange(m.__r, ti.col('QTD RECEBIDA') + 1).setValue(N(it.qtdRecebida)); n++; } });
+      if (m && colQ[m.__r - 2]){ colQ[m.__r - 2][0] = N(it.qtdRecebida); mudou = true; n++; } });
+    if (mudou) s.getRange(2, cq, colQ.length, 1).setValues(colQ);   // 1 escrita (antes: 1 por item)
   }
   if (typeof nfeGravaPendencias_ === 'function') nfeGravaPendencias_(chave, r, t, row);   // fase 5
   var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (ref) _atualizaContrato_(ref);
@@ -864,13 +901,13 @@ var NFE_PEND_COLS = ['ID','CHAVE','Nº','FORNECEDOR','PRODUTO','TIPO','QTD','UN'
 function nfeGravaPendencias_(chave, r, t, row){
   var lista = r.pendencias || []; var ps = sheetCols_(NFE_PEND_SHEET, NFE_PEND_COLS), s = ps.s, last = s.getLastRow();
   if (last >= 2){ var v = s.getRange(2,1,last-1,ps.ncol).getValues();
-    for (var i = v.length - 1; i >= 0; i--) if (S(v[i][ps.col('CHAVE')]) === chave && S(v[i][ps.col('STATUS')]).toUpperCase() === 'ABERTA') s.deleteRow(i + 2); }
+    var apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][ps.col('CHAVE')]) === chave && S(v[i][ps.col('STATUS')]).toUpperCase() === 'ABERTA') apagar.push(i + 2);
+    _delLinhas_(s, apagar); }
   if (!lista.length) return 0;
   var nNF = S(t.s.getRange(row, t.col('Nº') + 1).getValue()), forn = S(t.s.getRange(row, t.col('FORNECEDOR') + 1).getValue()), hoje = new Date();
-  lista.forEach(function(pd){ var rr = _novaLinha_(s);
-    _setCells_(ps, rr, { 'ID':chave + '-' + S(pd.n) + '-' + S(pd.tipo).toUpperCase(), 'CHAVE':chave, 'Nº':nNF, 'FORNECEDOR':forn, 'PRODUTO':S(pd.produto),
+  _appendRowsByHeader_(ps, lista.map(function(pd){ return { 'ID':chave + '-' + S(pd.n) + '-' + S(pd.tipo).toUpperCase(), 'CHAVE':chave, 'Nº':nNF, 'FORNECEDOR':forn, 'PRODUTO':S(pd.produto),
       'TIPO':S(pd.tipo).toUpperCase(), 'QTD':N(pd.qtd), 'UN':S(pd.un), 'FICOU NA FAZENDA':pd.ficou ? 'SIM' : '', 'FOTO':S(pd.foto),
-      'CONFERIDO POR':S(r.por) || 'app', 'DATA':hoje, 'STATUS':'ABERTA', 'OBS':S(pd.obs) }); });
+      'CONFERIDO POR':S(r.por) || 'app', 'DATA':hoje, 'STATUS':'ABERTA', 'OBS':S(pd.obs) }; }));
   return lista.length;
 }
 // pendência aberta/cobrada continua abatendo o "a comprar" (falta, avaria, troca); avaria que ficou = saldo avariado
@@ -922,11 +959,11 @@ function writeSaida(sd){
   movDeleteBySource(sd.id);                            // limpa saídas anteriores dessa recom
   var when = new Date();
   if (sd.data && /^\d{4}-\d{2}-\d{2}/.test(String(sd.data))) when = new Date(String(sd.data).slice(0,10) + 'T12:00:00');
-  var origem = 'Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : '') + ' [#' + S(sd.id) + ']';
+  var origem = 'Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : '') + ' [#' + S(sd.id) + ']', rows = [];
   for (var i = 0; i < itens.length; i++){ var it = itens[i];
     if (!S(it.produto) || !(N(it.real) > 0)) continue;
-    logMovimentacao('SAÍDA', it.produto, it.un, it.real, origem, S(sd.operador), when); n++; }
-  return { rows:n };
+    rows.push([when, 'SAÍDA', T_(it.produto), T_(it.un), N(it.real), T_(origem), T_(sd.operador)]); }
+  return { rows:movAppendRows_(rows) };   // 1 escrita (antes: 1 por produto)
 }
 function retornosSheet(){
   var s = ss().getSheetByName(RETORNOS_SHEET);
@@ -966,8 +1003,8 @@ function writeRecomLink_(p){
 }
 function readRecomLink_(id){
   id = S(id); var s = ss().getSheetByName(RECLINK_SHEET); if (!id || !s || s.getLastRow() < 2) return null;
-  var v = s.getRange(2, 1, s.getLastRow() - 1, 2).getValues();
-  for (var i = v.length - 1; i >= 0; i--){ if (S(v[i][0]) === id){ try { return JSON.parse(v[i][1]); } catch(e){ return null; } } }
+  var v = s.getRange(2, 1, s.getLastRow() - 1, 1).getValues();   // só a coluna dos ids (os JSON são grandes)
+  for (var i = v.length - 1; i >= 0; i--){ if (S(v[i][0]) === id){ try { return JSON.parse(s.getRange(i + 2, 2).getValue()); } catch(e){ return null; } } }
   return null;
 }
 
@@ -1256,6 +1293,9 @@ function applyPortifolio(edits, out){
         P.getRange(La, 1, 1, 3).clearDataValidations();
         P.getRange(La, 1, 1, 3).setValues([[S(ed.empresa), S(ed.classe), S(ed.produto)]]);
         if (ed.value !== '' && ed.value != null) P.getRange(La, 19).setValue(ed.value);
+        else if (!S(P.getRange(La, 19).getFormula())) P.getRange(La, 19).setFormula(precoFormula(La));   // S VALOR: preço automático
+        var vw = P.getRange(La, 22, 1, 2).getFormulas()[0];                                                    // V CONSUMO e W SALDO como no modelo
+        if (!S(vw[0]) && !S(vw[1])) P.getRange(La, 22, 1, 2).setFormulas([[consumoFormula(La), '=$T' + La + '-$V' + La]]);
         map[S(ed.produto)] = La; out.ok++; return;
       }
       var L = map[S(ed.produto)]; if (!L) throw 'produto não encontrado: ' + ed.produto;
@@ -1449,8 +1489,9 @@ function pedidoColOf(P){
     var h = S(hdr[c]).toUpperCase();
     if (h.indexOf('EM PEDIDO') === 0 || h === 'PEDIDO' || h === 'PEDIDOS' || h.indexOf('INSUMOS EM PEDIDO') === 0) return c + 1;
   }
-  P.getRange(3, 23).setValue('EM PEDIDO'); // cria o cabeçalho em W3 (você pode mover a coluna; é achada pelo nome)
-  return 23;
+  // sem cabeçalho: cria numa coluna NOVA no fim (antes usava W, que no modelo é o SALDO = fórmula — e era sobrescrito)
+  var nc = P.getLastColumn() + 1; P.getRange(3, nc).setValue('EM PEDIDO');
+  return nc;
 }
 
 /* ============================ LOGIN / ACESSO ============================
@@ -1608,7 +1649,7 @@ function jsonStr(s){ return ContentService.createTextOutput(s).setMimeType(Conte
    - edição feita À MÃO na planilha limpa as duas (gatilho simples onEdit, abaixo);
    - de qualquer jeito, cada parte vence em CACHE_TTL s (pega fórmulas/IMPORTRANGE que mudam sozinhas).
    Como o valor pode passar de 100KB, é fatiado. */
-var CACHE_TTL = 300, CACHE_TTL_BASE = 1800;   // APP: 5 min · BASE (abas de talhão): 30 min — as edições limpam na hora
+var CACHE_TTL = 300, CACHE_TTL_BASE = 1800, _CACHE_ERRO_ = '';   // APP: 5 min · BASE (abas de talhão): 30 min — as edições limpam na hora
 function cacheGetK_(pfx){
   var c = CacheService.getScriptCache(), meta = c.get(pfx + 'meta');
   if (!meta) return null;
@@ -1620,11 +1661,11 @@ function cacheGetK_(pfx){
 }
 function cachePutK_(pfx, str, ttl){
   try {
-    var c = CacheService.getScriptCache(), size = 90000, n = Math.ceil(str.length / size), obj = {};
+    var c = CacheService.getScriptCache(), size = 45000, n = Math.ceil(str.length / size), obj = {};   // 45 mil letras ≤ 100 KB mesmo com acentos
     for (var i = 0; i < n; i++) obj[pfx + i] = str.substr(i * size, size);
     obj[pfx + 'meta'] = String(n);
     c.putAll(obj, ttl || CACHE_TTL);
-  } catch (e) {}
+  } catch (e) { _CACHE_ERRO_ = String(e && e.message || e).slice(0, 120); }   // aparece no Log detalhado do app
 }
 // "geração" de cada parte: toda limpeza troca o número. Uma leitura que começou ANTES da limpeza (gravação
 // no meio) não grava no cache — senão a foto antiga ficava até 30 min e a edição parecia desfeita.
@@ -1650,7 +1691,7 @@ function currentJson(){
       if (a == null){ a = cacheGetK_('pa_'); if (a == null){ var ga = cacheGen_('ga_'); a = JSON.stringify(readAppPart_()); if (cacheGen_('ga_') === ga) cachePutK_('pa_', a, CACHE_TTL); info.app = true; } }
     } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
   }
-  info.ms = Date.now() - t0; _SRV_ = info;
+  info.ms = Date.now() - t0; if (_CACHE_ERRO_){ info.cacheErro = _CACHE_ERRO_; _CACHE_ERRO_ = ''; } _SRV_ = info;
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }
 
