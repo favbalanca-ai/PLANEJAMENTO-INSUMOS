@@ -94,7 +94,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   botão **👉 ABRIR PARA DAR BAIXA** clicável no PDF (o mesmo link do WhatsApp para o `retorno.html`).
   Gerar o PDF conta como enviado (TS "enviado"; operação "em andamento"). O PDF de plantio mostra em
   destaque sementes por ha, sementes por metro (linhas a 50 cm) e as doses por ha; o de TS, a dose por
-  batelada. A tela Recomendação (🖨) usa o mesmo PDF.
+  batelada. A tela Recomendação (🖨) usa o mesmo PDF. O link do PDF é **curto** (`retorno.html?s=…&r=<id>`)
+  e vem com **QR Code**: ao gerar, o app grava a recomendação na aba `RECOM LINKS` (`__recomLink`) e a
+  página do operador busca o resto em `?acao=recom&id=`. Sem o Code.gs novo (ou sem conexão), o PDF sai
+  com o link longo, sem QR. QR via `qrcode-generator@1.4.4` (jsDelivr, carregado só ao gerar o PDF).
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.

@@ -181,3 +181,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   (antes: edição presa = o aparelho nunca mais puxava).
   Ao abrir, o app começa com a lista de talhões embutida (data.json); antes de enviar edições de campo ele
   agora **puxa a planilha primeiro** — assim não manda edição para talhão que a planilha nem tem mais.
+
+## Link curto das recomendações (PDF / QR Code)
+
+- `doPost {__recomLink:{id, d}}` grava a recomendação na aba **RECOM LINKS** (`ID | JSON | ATUALIZADO`;
+  criada sozinha; regravar o mesmo id substitui a linha). Precisa de login com Campo ou Planejamento.
+  Não limpa o cache (não muda o que o app puxa).
+- `doGet ?acao=recom&id=<id>` devolve `{ok, d}` **sem login** (a página do operador, `retorno.html?s=…&r=<id>`,
+  abre pelo QR Code/link do PDF). O id é aleatório; a baixa continua indo por `__retorno`.
+
