@@ -203,3 +203,18 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   uma gravação não vai para o cache. Login/troca de PIN/pedido recusado não limpam o cache.
 - **RETORNOS APP:** gravado numa escrita só, com a coluna **LINHA** (produto repetido em 2 linhas da recomendação).
 
+## Planilha mais rápida (revisão C)
+
+Chamadas à planilha medidas no simulador (cada uma custa ~50–300 ms no Google):
+- **Classificar NF-e de 30 itens + de-para: 1.711 → 49.** Itens, recebimento sem XML e pendências gravados
+  numa escrita só (`_appendRowsByHeader_`: chave/CNPJ/códigos como texto); linhas apagadas em blocos
+  (`_delLinhas_`); de-para atualizado em memória e gravado de uma vez; QTD RECEBIDA numa escrita da coluna.
+- **Montar a parte APP: 39 → 27** — cada aba de NF-e lida uma vez por montagem (`_LER_MEMO_`).
+- Abas de talhão: lista de abas pega 1x (antes uma busca por talhão).
+- Consertos de NF-e (chaves/ignoradas) na leitura: no máximo 1x a cada 10 min (o gatilho de 15 min já conserta).
+- Saída de estoque numa escrita; link curto lê só a coluna dos ids.
+- Cache em pedaços de 45 mil letras (limite é em bytes); falha aparece no Log detalhado do app.
+- **PORTIFÓLIO:** leitura até a linha 433 (a mesma da gravação — produtos das linhas 416–433 não voltavam);
+  sem cabeçalho "EM PEDIDO" cria coluna nova (antes usava W = SALDO e sobrescrevia a fórmula);
+  produto novo (addprod) ganha as fórmulas de VALOR (S), CONSUMO (V) e SALDO (W).
+
