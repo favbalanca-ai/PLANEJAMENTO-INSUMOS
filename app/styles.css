@@ -1380,3 +1380,5 @@ body[data-embed] .content{padding:10px 10px 24px}
 
 /* botões lado a lado nas recomendações do Campo (WhatsApp + PDF) */
 .cp-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.pdf-acts{display:flex;flex-direction:column;gap:8px}
+.pdf-acts .btn{justify-content:center;text-align:center;text-decoration:none}
