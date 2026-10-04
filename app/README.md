@@ -110,6 +110,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   insumos + **máquinas** (somadas por operação) + **arrendamento/outros**
   (R$/ha editável). Preço de venda, custo de máquinas e arrendamento editáveis.
 
+## Baixa do operador e aprovação (v180)
+
+- A baixa que o operador envia pelo link (aplicação, plantio e TS) chega como **Retorno recebido** e só sai
+  do estoque quando o administrador **aprova** — no cartão da operação no **Campo** (✅ Aprovar baixa /
+  ✖ Reprovar) ou na tela Recomendação. Vale só o **último envio** do operador e só uma vez
+  (`retornoTs`): reprovar/reabrir não "volta sozinho" no próximo puxar.
+- Uma baixa só é marcada como enviada se a planilha **aceitou** (`postOk`); planilha ocupada = tenta de novo.
+  A página do operador só mostra "Baixa enviada!" com o OK da planilha.
+- Números digitados: `numBR` — "2,5" e "2.5" = 2,5; "1.500" = 1500.
+- Operação concluída / TS feito: PDF e WhatsApp não criam outro link de baixa (o PDF diz "Baixa já registrada").
+
 ## iPhone: zoom e girar a tela
 
 - No celular, todo campo (input/select/textarea) tem letra de **16px**: com menos, o Safari do iPhone dá

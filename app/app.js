@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-179';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-180';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -498,7 +498,8 @@ function loadOverrides(){
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
-  localStorage.setItem(LS_KEY, JSON.stringify(OV));
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(OV)); }
+  catch(e){ toast('⚠️ A memória do app no aparelho está cheia — sincronize e limpe dados antigos'); }
   if(DATA) buildMaqIndex();
   updateEditBadge();
   if(typeof scheduleAutoPush==='function') scheduleAutoPush(); // envia edições à planilha (auto, com debounce)
@@ -1461,13 +1462,13 @@ function pushSaida(r){
   const itens=(rn.itens||[]).filter(it=>it.produto&&it.real!=null&&+it.real>0).map(it=>({produto:it.produto, un:it.un||'', real:+it.real||0}));
   const payload={id:r.id, talhao:r.talhao||'', data:r.data||'', operador:(r.aprov&&r.aprov.por)||r.resp||'', itens};
   return syncPost(url, JSON.stringify({__saida:payload}))
-    .then(()=>{ r.saidaPushed=true; saveRecom(); return true; }).catch(()=>false);
+    .then(j=>{ if(!postOk(j)) return false; r.saidaPushed=true; saveRecom(); return true; }).catch(()=>false);
 }
 // limpa a SAÍDA de uma recomendação na planilha (ao reprovar/reabrir/excluir uma que já subiu)
 function clearSaida(r){
   if(!r) return Promise.resolve(false);
-  const wasPushed=!!r.saidaPushed; r.saidaPushed=false; saveRecom();
-  const url=syncUrl(); if(!url||!wasPushed) return Promise.resolve(false);
+  r.saidaPushed=false; saveRecom();
+  const url=syncUrl(); if(!url) return Promise.resolve(false);   // manda sempre (é idempotente): a baixa pode ter subido sem a resposta voltar
   return syncPost(url, JSON.stringify({__saida:{id:r.id, itens:[]}})).then(()=>true).catch(()=>false);
 }
 // reenvia as baixas aprovadas que ainda não subiram (ex.: aprovadas offline)
@@ -2593,7 +2594,7 @@ async function tarefasPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ 
   const sig=tarefasSig(); if(opts.auto && sig===lastTarefasPushSig) return;
   syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando tarefas e equipe…');
   try{ const r=await syncPost(url, JSON.stringify({__tarefas:{funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas}}));
-    lastTarefasPushSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced();
+    if(postOk(r)) lastTarefasPushSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced();
     addHist('push', !(r&&r.fail), 'Tarefas: '+((r&&r.ok)||0)+' registros');
     if(!opts.auto) toast('Tarefas e equipe enviadas à planilha'); }
   catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto){ toast('Falha ao enviar tarefas'); addHist('push',false,'Tarefas: '+(e&&e.message||'')); } }
@@ -2604,6 +2605,7 @@ function tarefasApplyPulled(pa){
   if(!f.length && !t.length) return false;                 // planilha ainda vazia: não apaga o local
   const sig=JSON.stringify({f,t});
   if(sig===tarefasSig()){ lastTarefasPushSig=tarefasSig(); return false; }
+  if(lastTarefasPushSig && tarefasSig()!==lastTarefasPushSig){ scheduleTarefasPush(); return false; }   // edição local ainda não enviada: não atropela
   EQUIPE.funcionarios=f; TAREFAS.tarefas=t; _persistEquipe(); _persistTarefas();
   lastTarefasPushSig=tarefasSig(); return true;
 }
@@ -2618,7 +2620,7 @@ async function realizadoPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url)
   const sig=realizadoSig(); if(opts.auto && sig===lastRealizadoSig) return;
   syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando status das operações…');
   try{ const r=await syncPost(url, JSON.stringify({__realizado:(OV.realizado||{})}));
-    lastRealizadoSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Operações: '+((r&&r.ok)||0));
+    if(postOk(r)) lastRealizadoSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Operações: '+((r&&r.ok)||0));
     if(!opts.auto) toast('Status das operações enviado'); }
   catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar status'); }
 }
@@ -2627,8 +2629,10 @@ function realizadoApplyPulled(map){
   OV.realizado=OV.realizado||{}; let changed=false;
   for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
     const loc=OV.realizado[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
-    if(!loc || iu>=lu){ OV.realizado[k]=inc; changed=true; } }
-  if(changed){ saveOverrides(); lastRealizadoSig=realizadoSig(); }
+    if(!loc || iu>lu){ OV.realizado[k]=inc; changed=true; } }
+  const pend=realizadoSig()!==lastRealizadoSig && !!lastRealizadoSig;   // havia coisa local ainda não enviada?
+  if(changed){ saveOverrides(); if(!pend) lastRealizadoSig=realizadoSig(); }
+  if(pend) scheduleRealizadoPush();
   return changed;
 }
 // ---- Resultados (OV.result: colhido/preço por talhão) — sincroniza por chave (mais recente vence) ----
@@ -2641,7 +2645,7 @@ async function resultPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ i
   const sig=resultSig(); if(opts.auto && sig===lastResultSig) return;
   syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando resultados…');
   try{ const r=await syncPost(url, JSON.stringify({__result:(OV.result||{})}));
-    lastResultSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Resultados: '+((r&&r.ok)||0));
+    if(postOk(r)) lastResultSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Resultados: '+((r&&r.ok)||0));
     if(!opts.auto) toast('Resultados enviados'); }
   catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar resultados'); }
 }
@@ -2650,8 +2654,10 @@ function resultApplyPulled(map){
   OV.result=OV.result||{}; let changed=false;
   for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
     const loc=OV.result[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
-    if(!loc || iu>=lu){ OV.result[k]=inc; changed=true; } }
-  if(changed){ saveOverrides(); lastResultSig=resultSig(); }
+    if(!loc || iu>lu){ OV.result[k]=inc; changed=true; } }
+  const pend=resultSig()!==lastResultSig && !!lastResultSig;
+  if(changed){ saveOverrides(); if(!pend) lastResultSig=resultSig(); }
+  if(pend) scheduleResultPush();
   return changed;
 }
 // equipe puxada da aba SST da planilha (read-only) + integrantes manuais adicionados no app
@@ -4035,7 +4041,8 @@ function tsMarcaSalva(r, feito, quem){ const re=tsMarca(r,feito,quem); if(!r||!r
   saveOverrides(); scheduleRealizadoPush(); if(re) pushOpSaida(r.tsOp).catch(()=>{}); }
 // baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
 function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
-  const o={}; for(const p in b){ if(_isTS({produto:p})||_isSemente({produto:p})) continue; o[p]=b[p]; } return o; }
+  const tb=r.ts.baixa;   // o que o TS baixou (se o operador do TS deixou a semente em branco, o plantio baixa a semente)
+  const o={}; for(const p in b){ if((_isTS({produto:p})||_isSemente({produto:p})) && (!tb || tb[p]!=null)) continue; o[p]=b[p]; } return o; }
 
 // recomendação de aplicação: líquidos (calda/tanque) e sólidos (só total na área) separados
 function campoAppOut(talId, tagoi, opItens, r){
@@ -4497,7 +4504,7 @@ function loadQR(){
 let _PDFLINK=null;
 async function recomPdfPrep(r){
   let curto=false, qr='';
-  if(recomExecId()){
+  if(r.status!=='aprovada' && recomExecId()){
     const d=recomPayload(r), sig=JSON.stringify(d);
     if(r.linkSig===sig && r.linkOk) curto=true;   // já gravado igual: não precisa regravar
     else { toast('Preparando o link da baixa…');
@@ -4547,40 +4554,30 @@ function recomWhats(id){
   window.open('https://wa.me/?text='+encodeURIComponent(x),'_blank');
 }
 // baixa dos operadores (aba RETORNOS APP) → preenche o "Utilizado" e move p/ "retorno recebido"
+// baixa dos operadores (aba RETORNOS APP) → preenche o "Utilizado" e a recomendação fica "Retorno recebido",
+// esperando a APROVAÇÃO (tela Recomendação ou aba Campo) — só aí sai do estoque.
+// Usa só o ÚLTIMO envio do operador e só UMA vez (r.retornoTs): reprovar/reabrir não é desfeito no próximo puxar.
 function applyRetornos(retornos){
   if(!Array.isArray(retornos)||!retornos.length||!RECOM) return false;
-  let changed=false, ovChanged=false; const byId={}, concluidas=[], tsAprovados=[];
+  let changed=false; const byId={};
   retornos.forEach(row=>{ if(row&&row.id) (byId[row.id]=byId[row.id]||[]).push(row); });
+  const igual=(a,b)=>String(a||'').toLowerCase()===String(b||'').toLowerCase();
   Object.keys(byId).forEach(id=>{
     const r=recomById(id); if(!r) return; recomNorm(r);
-    if(r.status==='aprovada') return;   // já concluída: não reprocessa (evita re-baixa). retorno/enviada seguem
-    const rows=byId[id];
-    (r.itens||[]).forEach(it=>{ const row=rows.find(x=>x.produto&&it.produto&&String(x.produto).toLowerCase()===String(it.produto).toLowerCase());
-      if(row) it.real=+row.real||0; });
-    const last=rows.reduce((a,b)=>((b.ts||0)>(a.ts||0)?b:a), rows[0]);
-    r.retorno={quem:last.operador||'', obs:last.obs||'', ts:last.ts||Date.now()};
-    if(r.tipo==='ts'){
-      // TS: o operador tratou e deu baixa → aprovado, baixa no estoque; a operação de plantio continua aberta
-      r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()}; r.saidaPushed=false; tsAprovados.push(r);
-      if(r.tsOp){ if(tsMarca(r, true, last.operador||'')) concluidas.push(r.tsOp); ovChanged=true; }
-    } else if(r.opKey){
-      // operador FINALIZOU pela página do WhatsApp -> conclui a operação, dá baixa e vai pro histórico
-      r.status='aprovada'; r.aprov={por:last.operador||'', ts:Date.now()};
-      const rl=realEnsure(r.opKey), baixa={};
-      (r.itens||[]).forEach(it=>{ if(it.produto && it.real!=null && +it.real>0) baixa[it.produto]=(baixa[it.produto]||0)+(+it.real||0); });
-      rl.baixa=baixa; rl.status='concluido';
-      if(!rl.data) rl.data=r.data||(last.ts?new Date(last.ts).toISOString().slice(0,10):new Date().toISOString().slice(0,10));
-      rl.app=rl.app||{}; if(!rl.app.operador && last.operador) rl.app.operador=last.operador;
-      rl.saidaPushed=false; rl._u=Date.now(); fillDosesFromBaixa(r.opKey); ovChanged=true; concluidas.push(r.opKey);
-      try{ maybePlantioConcluido(r.opKey); }catch(e){}
-    } else {
-      r.status='retorno';
-    }
+    if(r.status==='aprovada') return;                       // já concluída: não reprocessa (evita re-baixa)
+    const maxTs=Math.max(...byId[id].map(x=>+x.ts||0));
+    if(r.retornoTs && maxTs<=r.retornoTs) return;           // esse envio já foi aplicado
+    const rows=byId[id].filter(x=>(+x.ts||0)===maxTs), usadas=new Set();
+    (r.itens||[]).filter(it=>it.produto).forEach((it,i)=>{   // i = mesma posição da lista do link (retorno.html)
+      let row=rows.find(x=>x.i!=null && +x.i===i && igual(x.produto,it.produto));
+      if(!row) row=rows.find(x=>!usadas.has(x) && igual(x.produto,it.produto));   // retorno antigo (sem nº de linha)
+      if(row){ usadas.add(row); it.real=+row.real||0; } });
+    const last=rows[0];
+    r.retorno={quem:last.operador||'', obs:last.obs||'', ts:maxTs||Date.now()}; r.retornoTs=maxTs;
+    r.status='retorno';
     changed=true;
   });
   if(changed) saveRecom();
-  if(ovChanged){ saveOverrides(); concluidas.forEach(k=>{ try{ pushOpSaida(k); }catch(e){} }); scheduleRealizadoPush(); }
-  tsAprovados.forEach(r=>{ try{ pushSaida(r); }catch(e){} });
   return changed;
 }
 // cartão de uma recomendação, com aparência/ações conforme o estado
@@ -4712,9 +4709,10 @@ function recomCard(r,t){
 // impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
 // bloco do LINK de baixa no PDF (clicável no PDF salvo; no papel, o operador abre pelo WhatsApp)
 function recomPdfLink(r){
+  if(r.status==='aprovada') return `<div class="rx-link" style="border-color:#555;background:#f3f3f3"><span>✅ <b>Baixa já registrada</b>${r.retorno&&r.retorno.quem?' por '+esc(r.retorno.quem):''}${r.aprov&&r.aprov.ts?' · aprovada em '+fmtDataBR(_dISO(r.aprov.ts)):''} — esta cópia não tem link de baixa.</span></div>`;
   const L=_PDFLINK||{link:recomLink(r), curto:false, qr:''};
   return `<div class="rx-link">${L.qr?`<div class="rx-qr">${L.qr}</div>`:''}<div class="rx-link-in"><a href="${esc(L.link)}">👉 ABRIR PARA DAR BAIXA</a>
-    <span>${L.qr?'<b>Aponte a câmera do celular para o QR Code</b> ou toque no botão':'Toque no botão'} para ver a recomendação e informar o que foi usado — a baixa vai direto para o estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span>
+    <span>${L.qr?'<b>Aponte a câmera do celular para o QR Code</b> ou toque no botão':'Toque no botão'} para ver a recomendação e informar o que foi usado — o administrador confere e aprova a baixa no estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span>
     ${L.curto?`<span class="rx-url">${esc(L.link)}</span>`:''}</div></div>`;
 }
 const rxKv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
@@ -5070,7 +5068,7 @@ async function limitesPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!
   const sig=limitesSig(); if(opts.auto && sig===lastLimitesSig) return;
   syncBusy=true; setSyncStatus('busy');
   try{ const r=await syncPost(url, JSON.stringify({__limites:(OV.limites||{})}));
-    lastLimitesSig=sig; syncBusy=false; setSyncStatus('ok'); markSynced(); addHist('push', !(r&&r.fail), 'Limites: '+((r&&r.ok)||0)); }
+    if(postOk(r)) lastLimitesSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Limites: '+((r&&r.ok)||0)); }
   catch(e){ syncBusy=false; setSyncStatus('err'); }
 }
 function limitesApplyPulled(map){
@@ -5145,7 +5143,11 @@ function _talNomeC(id){ const t=talhoesAll().find(x=>x.id===id); return t?tNome(
 function _dtBRc(s){ if(!s) return ''; const p=String(s).slice(0,10).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; }
 function _tsC(r){ return r.ts || (r.data?(Date.parse(String(r.data).slice(0,10)+'T12:00:00')||0):0); }
 function _diasC(ts){ if(!ts) return null; return Math.floor((Date.now()-ts)/86400000); }
-function _mmC(v){ return parseFloat(String(v==null?'':v).replace(',','.'))||0; }
+// número digitado no padrão BR ou com ponto: "2,5" → 2,5 · "2.5" → 2,5 · "1.500" → 1500 · "1.234,5" → 1234,5
+function numBR(v){ if(typeof v==='number') return isFinite(v)?v:0; let x=String(v==null?'':v).trim().replace(/\s/g,''); if(!x) return 0;
+  if(x.indexOf(',')>=0) x=x.replace(/\./g,'').replace(',','.'); else if(/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(x)) x=x.replace(/\./g,'');
+  return parseFloat(x)||0; }
+function _mmC(v){ return numBR(v); }
 const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicacao:{lbl:'Aplicação',ico:'🚿',cor:'#2e7d32'},
   monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
   chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
@@ -5455,12 +5457,12 @@ function opSaidaPayload(key){
 function pushOpSaida(key){
   const url=syncUrl(), r=OV.realizado&&OV.realizado[key]; if(!r) return Promise.resolve(false);
   if(!url) return Promise.resolve(false);
-  return syncPost(url, JSON.stringify({__saida:opSaidaPayload(key)})).then(()=>{ r.saidaPushed=true; saveOverrides(); return true; }).catch(()=>false);
+  return syncPost(url, JSON.stringify({__saida:opSaidaPayload(key)})).then(j=>{ if(!postOk(j)) return false; r.saidaPushed=true; saveOverrides(); return true; }).catch(()=>false);
 }
 function clearOpSaida(key){
-  const r=OV.realizado&&OV.realizado[key]; const url=syncUrl(), was=r&&r.saidaPushed;
+  const r=OV.realizado&&OV.realizado[key]; const url=syncUrl();
   if(r){ r.saidaPushed=false; saveOverrides(); }
-  if(url&&was) syncPost(url, JSON.stringify({__saida:{id:opBaixaId(key), itens:[]}})).catch(()=>{});
+  if(url) syncPost(url, JSON.stringify({__saida:{id:opBaixaId(key), itens:[]}})).catch(()=>{});
 }
 // modal: operador informa o VOLUME real usado por insumo -> conclui, dá baixa e vai pro histórico
 function finalizarOpModal(key){
@@ -5566,6 +5568,10 @@ V.campo = function(arg){
       : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
     const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · baixa da semente e do TS ✓</div>`
       :(tsSt==='enviada'?`<div class="cp-maq">🧪 TS enviado ao operador — aguardando a baixa</div>`:`<div class="cp-maq mut">🧪 ${tc.nBat} batelada(s) de TS · ${esc(tc.sem.produto)}</div>`));
+    const retHtml=[RECOM.registros.find(x=>x.opKey===o.key && x.status==='retorno'), RECOM.registros.find(x=>x.tipo==='ts' && x.tsOp===o.key && x.status==='retorno')]
+      .filter(Boolean).map(rr=>`<div class="cp-ret"><div>↩️ <b>${rr.tipo==='ts'?'TS — ':''}Retorno do operador</b>${rr.retorno&&rr.retorno.quem?' ('+esc(rr.retorno.quem)+')':''}:
+        ${(rr.itens||[]).filter(it=>it.produto&&it.real!=null).map(it=>`${esc(it.produto)} <b>${fmtDose(it.real)}</b> ${esc(it.un||'')}`).join(' · ')||'—'}${rr.retorno&&rr.retorno.obs?`<br><i>${esc(rr.retorno.obs)}</i>`:''}</div>
+        <div class="cp-btns"><button class="btn btn-primary btn-sm" data-act="recomAprovar" data-id="${esc(rr.id)}">✅ Aprovar baixa</button><button class="btn btn-outline btn-sm" data-act="recomReprovar" data-id="${esc(rr.id)}">✖ Reprovar</button></div></div>`).join('');
     const plLinha=(pc&&pc.semM)?`<div class="cp-maq">🌱 ${nf0.format(pc.pop)}/ha · ${fmtSemM(pc.semM)} por metro</div>`:'';
     const sep=(o.seq!==lastSeq && (o.seq==='safrinha'||ops.some(x=>x.seq==='safrinha')))?`<div class="cp-seqhd">${o.seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} · ${esc(o.cultura||'—')}</div>`:''; lastSeq=o.seq;
     return `${sep}<div class="cp-card ${st.cls}${isProx?' prox':''}">
@@ -5580,7 +5586,7 @@ V.campo = function(arg){
         </div>
         <span class="camp-badge ${st.cls}">${st.lbl}</span>
       </div>
-      <div class="cp-act">${acao}</div>
+      ${retHtml}<div class="cp-act">${acao}</div>
       <details class="cp-det" data-key="${esc(o.key)}"${campoOpen.has(o.key)?' open':''}>
         <summary><span>Detalhes · registrar execução</span><span class="panel-chevron">▸</span></summary>
         <div class="cp-det-in">
@@ -6205,7 +6211,7 @@ document.addEventListener('click',e=>{
         toast(syncUrl()?'Aprovada — baixa no estoque (operação concluída)':'Aprovada — operação concluída');
         pushOpSaida(r.opKey).then(ok=>{ if(ok) route({keepScroll:true}); });
       } else {
-        if(r.tipo==='ts') tsMarcaSalva(r, true, r.aprov.por);
+        if(r.tipo==='ts'){ tsMarcaSalva(r, true, (r.retorno&&r.retorno.quem)||r.aprov.por); route({keepScroll:true}); }
         try{ maybePlantioRecom(r); }catch(e){}
         toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
         pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
@@ -6321,6 +6327,11 @@ document.addEventListener('click',e=>{
     else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
     else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
     else if(a.act==='pdfEnviar'){ if(_pdfPronto) navigator.share({files:[_pdfPronto.file], title:_pdfPronto.nome}).catch(e=>{ if(e&&e.name!=='AbortError') toast('Não deu para enviar daqui — use "Baixar PDF"'); }); }
+    else if(a.act==='pdfTs' && tsFeito(realOf(a.key))){ const id=realOf(a.key).ts.recom;
+      if(id && recomById(id)) exportRecomPDF(id); else toast('TS já feito — a baixa já foi registrada'); }
+    else if((a.act==='pdfOp'||a.act==='waApp') && (realOf(a.key)||{}).status==='concluido'){
+      const ap=RECOM.registros.filter(x=>x.opKey===a.key && x.status==='aprovada').sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
+      if(a.act==='pdfOp' && ap) exportRecomPDF(ap.id); else toast('Operação concluída — a baixa já foi registrada'); }
     else if(a.act==='pdfTs'){ const r=tsRecomFromOp(a.key);
       if(!r){ toast('Esta operação não tem semente com produtos de TS'); return; }
       const rl=realEnsure(a.key); rl.ts=rl.ts||{}; if(rl.ts.st!=='feito') rl.ts.st='enviada'; rl.ts.recom=r.id; stampReal(a.key);
@@ -7095,6 +7106,8 @@ async function syncPull(opts){
     return false; }
 }
 // POST com timeout longo (120s) + 1 tentativa extra (rede instável / Apps Script lento)
+// a planilha aceitou? (ocupada, sem login, sem permissão ou pedido inválido = NÃO; tenta de novo depois)
+function postOk(j){ return !!j && !(+j.fail>0) && j.ok!==false && !j.login; }
 async function syncPost(url, body){
   let lastErr; const t0=Date.now(), tipo=syncLogTipo(body);
   for(let attempt=0; attempt<2; attempt++){

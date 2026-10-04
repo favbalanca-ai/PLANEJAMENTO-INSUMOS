@@ -190,3 +190,16 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - `doGet ?acao=recom&id=<id>` devolve `{ok, d}` **sem login** (a página do operador, `retorno.html?s=…&r=<id>`,
   abre pelo QR Code/link do PDF). O id é aleatório; a baixa continua indo por `__retorno`.
 
+## Revisão de segurança e confiabilidade (v180)
+
+- **Um tipo de gravação por pedido:** `doPost` recusa pedidos com mais de uma chave `__…` (antes
+  `{__retorno, __precos}` passava sem login e gravava os preços). `__login`/`__retorno` só são livres sozinhos.
+- **Texto que vira fórmula:** todo texto de usuário gravado em célula passa por `T_()` (se começa com
+  `= + - @`, vai com apóstrofo = texto puro). Vale para retornos, tarefas/equipe, razão de estoque,
+  preços, link curto e textos de NF-e.
+- **Regravar sem apagar antes:** `regrava_()` escreve as linhas novas e só depois limpa o que sobrou
+  (REALIZADO APP, mapas KEY|JSON, TAREFAS/EQUIPE, PREÇOS APP, PREÇOS). Antes, um erro no meio deixava a aba vazia.
+- **Cache sem foto velha:** cada limpeza troca a "geração" (`gb_`/`ga_`); uma leitura que começou antes de
+  uma gravação não vai para o cache. Login/troca de PIN/pedido recusado não limpam o cache.
+- **RETORNOS APP:** gravado numa escrita só, com a coluna **LINHA** (produto repetido em 2 linhas da recomendação).
+

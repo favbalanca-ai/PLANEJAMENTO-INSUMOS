@@ -12,6 +12,17 @@
 function ss(){ return SpreadsheetApp.getActiveSpreadsheet(); }
 function sh(n){ return ss().getSheetByName(n); }
 function S(v){ return v == null ? '' : String(v).trim(); }
+// TEXTO digitado por usuário → célula. Começando com = + - @ a planilha transformaria em FÓRMULA
+// (ex.: uma observação "=IMPORTRANGE(...)" leria outras abas). O apóstrofo guarda como texto puro.
+function T_(v){ v = S(v); return /^[=+\-@]/.test(v) ? "'" + v : v; }
+// regrava uma aba inteira SEM apagar antes: escreve as linhas novas e só depois limpa o que sobrou embaixo.
+// (antes: clearContents + setValues — se o setValues falhasse no meio, a aba ficava VAZIA)
+function regrava_(s, rows, ncol){
+  var old = s.getLastRow(), oldc = s.getLastColumn();
+  if (rows.length) s.getRange(1, 1, rows.length, ncol).setValues(rows);
+  if (old > rows.length) s.getRange(rows.length + 1, 1, old - rows.length, Math.max(ncol, oldc || ncol)).clearContent();
+  if (oldc > ncol && rows.length) s.getRange(1, ncol + 1, rows.length, oldc - ncol).clearContent();
+}
 // número tolerante a texto no padrão BR: "0,04" -> 0.04 ; "1.234,56" -> 1234.56
 function N(v){
   if (typeof v === 'number') return isFinite(v) ? Math.round(v * 1e4) / 1e4 : 0;
@@ -200,7 +211,7 @@ function writeRealizadoApp(map){
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO']];
   for (var kk in cur){ rows.push([kk, JSON.stringify(cur[kk]), (cur[kk] && cur[kk]._u)||'']); }
-  s.clearContents(); s.getRange(1,1,rows.length,3).setValues(rows); try { s.setFrozenRows(1); } catch(e){}
+  regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
 }
 // mapa genérico chave->JSON (merge por chave pelo _u) numa aba KEY|JSON|ATUALIZADO — usado por Resultados
@@ -218,7 +229,7 @@ function writeMapApp(name, map){
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO']];
   for (var kk in cur){ rows.push([kk, JSON.stringify(cur[kk]), (cur[kk] && cur[kk]._u)||'']); }
-  s.clearContents(); s.getRange(1,1,rows.length,3).setValues(rows); try { s.setFrozenRows(1); } catch(e){}
+  regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
 }
 // ---- Módulo Tarefas: equipe + tarefas (sincroniza entre aparelhos) ----
@@ -238,16 +249,14 @@ function readTarefasApp(){
 function writeTarefasApp(obj){
   obj = obj || {}; var eq = obj.funcionarios || [], tf = obj.tarefas || [], b = ss();
   var se = b.getSheetByName(EQUIPE_SHEET) || b.insertSheet(EQUIPE_SHEET);
-  se.clearContents();
   var er = [['ID','NOME','FUNCAO']];
-  eq.forEach(function(f){ er.push([S(f.id), S(f.nome), S(f.funcao)]); });
-  se.getRange(1,1,er.length,3).setValues(er); try { se.setFrozenRows(1); } catch(e){}
+  eq.forEach(function(f){ er.push([T_(f.id), T_(f.nome), T_(f.funcao)]); });
+  regrava_(se, er, 3); try { se.setFrozenRows(1); } catch(e){}
   var st = b.getSheetByName(TAREFAS_SHEET_APP) || b.insertSheet(TAREFAS_SHEET_APP);
-  st.clearContents();
   var tr = [['ID','TITULO','TALHAO','RESPONSAVEL_ID','INICIO','DIAS','STATUS','OBS','OPKEY']];
-  tf.forEach(function(t){ tr.push([S(t.id), S(t.titulo), S(t.talhaoId), S(t.funcionarioId), S(t.inicio), N(t.dias)||1, S(t.status), S(t.obs), S(t.opKey)]); });
+  tf.forEach(function(t){ tr.push([T_(t.id), T_(t.titulo), T_(t.talhaoId), T_(t.funcionarioId), S(t.inicio), N(t.dias)||1, T_(t.status), T_(t.obs), T_(t.opKey)]); });
   if (tf.length) st.getRange(2,5,tf.length,1).setNumberFormat('@');   // coluna INICIO como texto (não vira data)
-  st.getRange(1,1,tr.length,9).setValues(tr); try { st.setFrozenRows(1); } catch(e){}
+  regrava_(st, tr, 9); try { st.setFrozenRows(1); } catch(e){}
   return { rows: eq.length + tf.length };
 }
 
@@ -266,7 +275,7 @@ function movSheet_(){
   return s;
 }
 function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
-  movSheet_().appendRow([when || new Date(), S(tipo), S(produto), S(un), N(qtd), S(origem), S(obs)]);
+  movSheet_().appendRow([when || new Date(), S(tipo), T_(produto), T_(un), N(qtd), T_(origem), T_(obs)]);
 }
 // grava VÁRIAS linhas no razão de uma vez (1 escrita em vez de 1 por linha — bem mais rápido)
 function movAppendRows_(rows){
@@ -322,7 +331,7 @@ function entradaRows_(ent){
   var ehNfe = /^\d{44}$/.test(S(ent && ent.id));
   var origem = (ehNfe ? 'NF-e' : 'Compra') + (ent.nf ? (ehNfe ? ' ' : ' NF ') + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
-    rows.push([when, 'ENTRADA', S(it.produto), S(it.un), N(it.qtd), origem, S(ent.obs)]); }
+    rows.push([when, 'ENTRADA', T_(it.produto), T_(it.un), N(it.qtd), T_(origem), T_(ent.obs)]); }
   return rows;
 }
 // Lista "Compras registradas" do app, compartilhada entre aparelhos: aba COMPRAS APP (KEY|JSON|ATUALIZADO,
@@ -507,7 +516,7 @@ function _nfeLinha_(t, chave){ var s = t.s, last = s.getLastRow(); if (last < 2)
 // grava células pelo cabeçalho. Chave, CPF/CNPJ e códigos vão SEMPRE como TEXTO: sem isso o Sheets transforma
 // os 44 dígitos da chave em número (5,2E+43), perde dígitos e a nota não é mais achada (duplica, não reabre…).
 function _setCells_(t, row, vals){ Object.keys(vals).forEach(function(h){ var rg = t.s.getRange(row, t.col(h) + 1);
-  if (NFE_TEXTO.indexOf(h) >= 0 || h === 'ID'){ rg.setNumberFormat('@'); rg.setValue(S(vals[h])); } else rg.setValue(vals[h]); }); }
+  if (NFE_TEXTO.indexOf(h) >= 0 || h === 'ID'){ rg.setNumberFormat('@'); rg.setValue(S(vals[h])); } else rg.setValue(typeof vals[h] === 'string' ? T_(vals[h]) : vals[h]); }); }
 // linha NOVA no fim da aba. ATENÇÃO: appendRow de uma linha VAZIA não conta para o getLastRow do Google —
 // o jeito antigo (appendRow vazio + getLastRow) escrevia POR CIMA da última linha (e, na 1ª nota, do cabeçalho).
 function _novaLinha_(s){ var r = s.getLastRow() + 1, mx = s.getMaxRows(); if (r > mx) s.insertRowsAfter(mx, r - mx); return r; }
@@ -930,11 +939,11 @@ function retornosSheet(){
 function readRetornos(){
   var s = ss().getSheetByName(RETORNOS_SHEET); if (!s) return [];
   var last = s.getLastRow(); if (last < 2) return [];
-  var v = s.getRange(2, 1, last - 1, 9).getValues(), out = [];
+  var v = s.getRange(2, 1, last - 1, 10).getValues(), out = [];
   for (var i = 0; i < v.length; i++){
     var r = v[i], id = S(r[1]); if (!id) continue;
     out.push({ ts:(r[0] instanceof Date)?r[0].getTime():N(r[0]), id:id, talhao:S(r[2]), operador:S(r[3]),
-      produto:S(r[4]), un:S(r[5]), plan:N(r[6]), real:N(r[7]), obs:S(r[8]) });
+      produto:S(r[4]), un:S(r[5]), plan:N(r[6]), real:N(r[7]), obs:S(r[8]), i:(r[9] === '' || r[9] == null) ? null : N(r[9]) });
   }
   return out;
 }
@@ -952,7 +961,7 @@ function writeRecomLink_(p){
   if (last >= 2){ var ids = s.getRange(2, 1, last - 1, 1).getValues();
     for (var i = 0; i < ids.length; i++){ if (S(ids[i][0]) === id){ row = 2 + i; break; } } }
   if (!row) row = _novaLinha_(s);
-  s.getRange(row, 1, 1, 3).setValues([[id, JSON.stringify(p.d), new Date()]]);
+  s.getRange(row, 1, 1, 3).setValues([[T_(id), JSON.stringify(p.d), new Date()]]);
   return { rows:1 };
 }
 function readRecomLink_(id){
@@ -963,17 +972,20 @@ function readRecomLink_(id){
 }
 
 function writeRetorno(ret){
-  var s = retornosSheet(), when = new Date(), n = 0, itens = (ret && ret.itens) || [];
+  var s = retornosSheet(), when = new Date(), itens = (ret && ret.itens) || [], rows = [];
+  if (!S(s.getRange(1, 10).getValue())) s.getRange(1, 10).setValue('LINHA');
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
-    s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), S(it.produto), S(it.un), N(it.plan), N(it.real), S(ret.obs)]);
-    n++;
+    rows.push([when, T_(ret.id), T_(ret.talhao), T_(ret.operador), T_(it.produto), T_(it.un), N(it.plan), N(it.real), T_(ret.obs), (it.i == null || it.i === '') ? '' : N(it.i)]);
   }
-  if (!n){ s.appendRow([when, S(ret.id), S(ret.talhao), S(ret.operador), '', '', 0, 0, S(ret.obs)]); }
+  if (!rows.length) rows.push([when, T_(ret.id), T_(ret.talhao), T_(ret.operador), '', '', 0, 0, T_(ret.obs), '']);
+  var r0 = _novaLinha_(s);   // 1ª linha livre (cria se faltar); o resto abaixo:
+  var falta = r0 + rows.length - 1 - s.getMaxRows(); if (falta > 0) s.insertRowsAfter(s.getMaxRows(), falta);
+  s.getRange(r0, 1, rows.length, 10).setValues(rows);   // 1 escrita para a baixa inteira
   // A SAÍDA de estoque NÃO é lançada aqui: o retorno do operador é só a informação do volume.
   // A baixa no estoque é lançada quando o Adm APROVA a recomendação (writeSaida), ponto único
   // de commit — assim não conta duas vezes e sincroniza entre aparelhos.
-  return { rows:n };
+  return { rows:rows.length };
 }
 
 /* --------- MÓDULO PREÇOS (composição de preços por safra do app) ---------
@@ -1015,23 +1027,22 @@ function readPrecosSheet(){
 }
 function writePrecosSheet(precos){
   var s = precosSheet();
-  s.clearContents();
   var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO','UN']];
   var safras = (precos && precos.safras) || {};
   Object.keys(safras).forEach(function(nm){
     var sf = safras[nm] || {};
     (sf.refs || []).forEach(function(r){
-      rows.push([nm, 'REF', '', S(r.classe), S(r.produto),
+      rows.push([T_(nm), 'REF', '', T_(r.classe), T_(r.produto),
         r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '', '']);
     });
     (sf.itens || []).forEach(function(it){
-      rows.push([nm, 'ITEM', S(it.empresa), S(it.classe), S(it.produto),
+      rows.push([T_(nm), 'ITEM', T_(it.empresa), T_(it.classe), T_(it.produto),
         (it.precoVista == null || it.precoVista === '') ? '' : N(it.precoVista),
         (it.precoPrazo == null || it.precoPrazo === '') ? '' : N(it.precoPrazo),
         it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100), S(it.un || '')]);
     });
   });
-  s.getRange(1, 1, rows.length, 10).setValues(rows);
+  regrava_(s, rows, 10);
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
 }
@@ -1046,13 +1057,12 @@ function writeFlatPrecos(list, safra){
 }
 function writeFlatPrecosEm(b, list, safra){
   var s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
-  s.clearContents();
   // A..D usados pelo VLOOKUP do PORTIFÓLIO (A:B); UN vai na coluna E (não quebra a fórmula).
   var rows = [['PRODUTO', 'À VISTA', 'A PRAZO', 'SAFRA', 'UN']];
   (list || []).forEach(function(it){
-    rows.push([S(it.p), (it.v == null || it.v === '') ? '' : N(it.v), (it.z == null || it.z === '') ? '' : N(it.z), S(safra), S(it.u || '')]);
+    rows.push([T_(it.p), (it.v == null || it.v === '') ? '' : N(it.v), (it.z == null || it.z === '') ? '' : N(it.z), T_(safra), T_(it.u || '')]);
   });
-  s.getRange(1, 1, rows.length, 5).setValues(rows);
+  regrava_(s, rows, 5);
   try { s.setFrozenRows(1); } catch (e) {}
   return { rows: rows.length - 1 };
 }
@@ -1616,8 +1626,12 @@ function cachePutK_(pfx, str, ttl){
     c.putAll(obj, ttl || CACHE_TTL);
   } catch (e) {}
 }
-function cacheClear(){ try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu']); } catch (e) {} }
-function cacheClearApp_(){ try { CacheService.getScriptCache().remove('pa_meta'); } catch (e) {} }
+// "geração" de cada parte: toda limpeza troca o número. Uma leitura que começou ANTES da limpeza (gravação
+// no meio) não grava no cache — senão a foto antiga ficava até 30 min e a edição parecia desfeita.
+function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; } catch (e) { return ''; } }
+function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
+function cacheClear(){ cacheNovaGen_(['gb_','ga_']); try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu']); } catch (e) {} }
+function cacheClearApp_(){ cacheNovaGen_(['ga_']); try { CacheService.getScriptCache().remove('pa_meta'); } catch (e) {} }
 // edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
 function onEdit(e){ cacheClear(); }
 // JSON atual dos dados (cada parte do cache; senão lê a planilha e cacheia)
@@ -1632,8 +1646,8 @@ function currentJson(){
     var lk = null; try { lk = LockService.getDocumentLock(); } catch (e) {}
     var tem = false; try { tem = lk ? lk.tryLock(55000) : false; } catch (e) {}
     try {
-      if (b == null){ b = cacheGetK_('pb_'); if (b == null){ b = JSON.stringify(readBase_()); cachePutK_('pb_', b, CACHE_TTL_BASE); info.base = true; } }
-      if (a == null){ a = cacheGetK_('pa_'); if (a == null){ a = JSON.stringify(readAppPart_()); cachePutK_('pa_', a, CACHE_TTL); info.app = true; } }
+      if (b == null){ b = cacheGetK_('pb_'); if (b == null){ var gb = cacheGen_('gb_'); b = JSON.stringify(readBase_()); if (cacheGen_('gb_') === gb) cachePutK_('pb_', b, CACHE_TTL_BASE); info.base = true; } }
+      if (a == null){ a = cacheGetK_('pa_'); if (a == null){ var ga = cacheGen_('ga_'); a = JSON.stringify(readAppPart_()); if (cacheGen_('ga_') === ga) cachePutK_('pa_', a, CACHE_TTL); info.app = true; } }
     } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
   }
   info.ms = Date.now() - t0; _SRV_ = info;
@@ -1693,14 +1707,16 @@ function doPost(e){
   try {
     var payload = JSON.parse(e.postData.contents), acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
     _ACC_ = acc;
-    var livre = payload && (payload.__login || payload.__retorno);   // login e retorno do operador (retorno.html) não pedem sessão
-    if (!livre && acc && acc.erro){ out.fail = 1; out.login = true; out.msgs.push(acc.erro); }
+    var chaves = (payload && !Array.isArray(payload) && typeof payload === 'object') ? Object.keys(payload).filter(function(k){ return k.indexOf('__') === 0; }) : [];
+    var livre = chaves.length === 1 && (chaves[0] === '__login' || chaves[0] === '__retorno');   // login e retorno do operador (retorno.html) não pedem sessão
+    if (chaves.length > 1){ out.fail = 1; out.msgs.push('pedido inválido: um tipo de gravação por vez'); semCache = true; }
+    else if (!livre && acc && acc.erro){ out.fail = 1; out.login = true; out.msgs.push(acc.erro); }
     else if (!livre && cfg.exigido && !(acc && acc.u)){ out.fail = 1; out.login = true; out.msgs.push('entre com seu login e PIN'); }
     else if (!livre && acc && acc.u && acessoPodeGravar_(acc, payload)){ out.fail = 1; out.msgs.push(acessoPodeGravar_(acc, payload)); }
     else if (payload && payload.__login){          // login + PIN → sessão
-      var lg = loginFaz_(payload.__login); out.ok = lg.ok ? 1 : 0; if (!lg.ok){ out.fail = 1; out.msgs.push(lg.erro); } else { out.token = lg.token; out.usuario = lg.usuario; out.exigido = lg.exigido; }
+      semCache = true; var lg = loginFaz_(payload.__login); out.ok = lg.ok ? 1 : 0; if (!lg.ok){ out.fail = 1; out.msgs.push(lg.erro); } else { out.token = lg.token; out.usuario = lg.usuario; out.exigido = lg.exigido; }
     } else if (payload && payload.__trocarPin){    // a própria pessoa troca o PIN
-      var tp = trocarPin_(acc, payload.__trocarPin); out.ok = tp.ok ? 1 : 0; if (!tp.ok){ out.fail = 1; out.msgs.push(tp.erro); } else out.token = tp.token;
+      semCache = true; var tp = trocarPin_(acc, payload.__trocarPin); out.ok = tp.ok ? 1 : 0; if (!tp.ok){ out.fail = 1; out.msgs.push(tp.erro); } else out.token = tp.token;
     } else if (payload && payload.__usuarios){     // tela Usuários (só ADMIN): criar/editar/excluir
       if (!(acc && acc.admin)){ out.fail = 1; out.msgs.push('só administrador'); }
       else { var us = usuariosSalva_(acc, payload.__usuarios); out.ok = us.rows; if (us.token) out.token = us.token; if (us.erro){ out.fail = 1; out.msgs.push(us.erro); } }

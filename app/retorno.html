@@ -160,7 +160,10 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   var nf=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
   var nf0=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:0});
   var nf1=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1});
-  function num(v){ return parseFloat(String(v==null?'':v).replace(/\./g,'').replace(',','.'))||0; }
+  // "2,5" → 2,5 · "2.5" → 2,5 · "1.500" → 1500 · "1.234,5" → 1234,5 (antes "2.5" virava 25)
+  function num(v){ var x=String(v==null?'':v).trim().replace(/\s/g,''); if(!x) return 0;
+    if(x.indexOf(',')>=0) x=x.replace(/\./g,'').replace(',','.'); else if(/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(x)) x=x.replace(/\./g,'');
+    return parseFloat(x)||0; }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 
   // ---- decodifica a recomendação do link (#) ----
@@ -198,7 +201,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   var TS=REC.ts||null;
   var SEM=ITENS.filter(function(i){return i.sem;})[0]||null, TSP=ITENS.filter(function(i){return !i.sem;});
   var SD=SEM?SEM.dose:0, BAT=TS?(+TS.b||1):1, BL=TS?(TS.bl||'bag'):'bag';
-  function B(n){ return nf.format(n)+' '+BL+(BL==='bag'&&n>=2?'s':''); }
+  function B(n){ return nf.format(n)+' '+esc(BL)+(BL==='bag'&&n>=2?'s':''); }
   function BLs(){ return BL==='bag'?'bags':(BL==='saco'?'sacos':BL); }
   var AREA=+REC.a||0, VAZAO=+REC.v||0;
   var OUT=PL?ITENS.filter(function(i){return !i.sem && !i.ts;}):ITENS;   // no plantio a semente/TS ficam na regulagem
@@ -221,7 +224,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     ? '🛈 São <b>'+(TS.n-1)+' batelada(s) cheia(s)</b> + 1 de <b>'+B(TS.ul)+'</b>: '+TSP.map(function(it){ return esc(it.produto)+' '+nf.format((SD?it.dose/SD:0)*TS.ul)+' '+esc(it.un); }).join(' · ')
     : '🛈 Meça a dose "por batelada" de cada produto em cada batelada.';
   var PSEM=PL?ITENS.filter(function(i){return i.sem;})[0]:null;
-  function PLB(n){ var b=PL.bl||'bag'; return nf.format(n)+' '+b+(b==='bag'&&n>=2?'s':''); }
+  function PLB(n){ var b=PL.bl||'bag'; return nf.format(n)+' '+esc(b)+(b==='bag'&&n>=2?'s':''); }
   // unidade do operador: tonelada vira kg (a baixa volta convertida para a unidade do estoque)
   function CONV(un){ var u=String(un||'').trim().toUpperCase();
     if(u==='T'||u==='TON'||u==='TONELADA'||u==='TONELADAS') return {f:1000, u:'kg'};
@@ -265,7 +268,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
         '<div class="c ro"><div class="c-lbl">Área</div><div class="val">'+nf.format(AREA)+'<span class="u"> ha</span></div></div>'+
       '</div>'+
       '<div class="tiles">'+
-        '<div class="tile"><div class="t-v">'+(TS.n||'—')+'</div><div class="t-l">bateladas</div></div>'+
+        '<div class="tile"><div class="t-v">'+(+TS.n?nf0.format(+TS.n):'—')+'</div><div class="t-l">bateladas</div></div>'+
         '<div class="tile alt"><div class="t-v">'+nf.format(SD*AREA)+'</div><div class="t-l">'+esc(BLs())+' de semente</div></div>'+
       '</div>'+
       '<div class="recipe">'+
@@ -321,7 +324,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
       '<div class="field"><label>Seu nome <span class="req">*</span></label><input id="operador" type="text" placeholder="ex.: José da Silva"></div>'+
       '<div class="field"><label>Observações (opcional)</label><textarea id="obs" placeholder="'+(TS?'ex.: sobrou meio bag tratado':(PL?'ex.: sobrou 1 bag; parei 1h por chuva':'ex.: sobrou meio tanque; parei 1h por chuva'))+'"></textarea></div>'+
     '</div>'+
-    '<p class="foot">'+(TS?'Ao enviar, a baixa da semente e dos produtos de TS<br>vai direto para o estoque da fazenda.':'Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.')+'</p>'+
+    '<p class="foot">'+(TS?'Ao enviar, a baixa da semente e dos produtos de TS vai para o planejamento,<br>onde o administrador confere e aprova.':'Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.')+'</p>'+
     '</section>';
 
   wrap.innerHTML =
@@ -377,8 +380,8 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
       var d=num(raw)-plan;
       if(!plan){ diff.className='diff none'; diff.innerHTML='<span class="dot"></span>Registrado'; }
       else if(Math.abs(d)<0.001){ diff.className='diff ok'; diff.innerHTML='<span class="dot"></span>Igual ao planejado'; }
-      else if(d<0){ diff.className='diff ok'; diff.innerHTML='<span class="dot"></span>'+nf.format(-d)+' '+un+' abaixo do planejado'; }
-      else{ diff.className='diff over'; diff.innerHTML='<span class="dot"></span>'+nf.format(d)+' '+un+' acima do planejado'; }
+      else if(d<0){ diff.className='diff ok'; diff.innerHTML='<span class="dot"></span>'+nf.format(-d)+' '+esc(un)+' abaixo do planejado'; }
+      else{ diff.className='diff over'; diff.innerHTML='<span class="dot"></span>'+nf.format(d)+' '+esc(un)+' acima do planejado'; }
     });
   });
 
@@ -394,7 +397,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     var itens=[]; document.querySelectorAll('.prod').forEach(function(card){
       var i=+card.dataset.i, it=ITENS[i], v=card.querySelector('input').value.trim();
       var f=(PL && !it.sem)?CONV(it.un).f:1;   // digitado em kg → volta em tonelada (unidade do estoque)
-      itens.push({produto:it.produto, un:it.un, plan:+(it.dose*AREA).toFixed(4), real:v===''?0:+(num(v)/f).toFixed(4)});
+      itens.push({i:i, produto:it.produto, un:it.un, plan:+(it.dose*AREA).toFixed(4), real:v===''?0:+(num(v)/f).toFixed(4)});   // i = linha (produto repetido em 2 linhas)
     });
     return {operador:operador, obs:obs, itens:itens};
   }
@@ -416,9 +419,12 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     sendBtn.disabled=true; sendBtn.textContent='Enviando…';
     var payload={__retorno:{ id:REC.id, talhao:REC.t, operador:dados.operador, obs:dados.obs, itens:dados.itens }};
     fetch(REC.u,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(payload)})
-      .then(function(r){ return r.json().catch(function(){ return {ok:1}; }); })
-      .then(function(){ done.classList.add('on'); window.scrollTo(0,0); })
-      .catch(function(){ fail.classList.add('on'); window.scrollTo(0,0); })
+      .then(function(r){ return r.json(); })
+      .then(function(j){   // só é "enviada" se a planilha ACEITOU (ocupada / erro = tentar de novo)
+        if(j && +j.ok>0 && !(+j.fail>0)){ done.classList.add('on'); window.scrollTo(0,0); return; }
+        document.getElementById('failMsg').textContent=(j && j.msgs && j.msgs[0]) ? ('A planilha respondeu: '+j.msgs[0]+'. Tente de novo em instantes.') : 'A planilha não confirmou. Tente de novo.';
+        fail.classList.add('on'); window.scrollTo(0,0); })
+      .catch(function(){ document.getElementById('failMsg').textContent='Verifique a internet e tente de novo.'; fail.classList.add('on'); window.scrollTo(0,0); })
       .then(function(){ sendBtn.disabled=false; sendBtn.textContent=SEND_TXT; });
   });
   document.getElementById('againOk').addEventListener('click',function(){ done.classList.remove('on'); });
