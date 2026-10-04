@@ -170,6 +170,22 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     else { var h=location.hash.slice(1); if(h) REC=JSON.parse(decodeURIComponent(h)); }  // compat: #fragmento
   }catch(e){ REC=null; }
   var wrap=document.getElementById('wrap');
+  // ---- link CURTO (PDF / QR Code): ?s=<implantação>&r=<id> → busca a recomendação na planilha ----
+  var QS={}; try{ var sp=new URLSearchParams(location.search); QS.s=sp.get('s'); QS.r=sp.get('r'); }catch(e){}
+  if(!REC && QS.s && QS.r){
+    wrap.innerHTML='<div class="err-page"><h2>Abrindo a recomendação…</h2><p>Buscando os dados na planilha da fazenda.</p></div>';
+    fetch('https://script.google.com/macros/s/'+encodeURIComponent(QS.s)+'/exec?acao=recom&id='+encodeURIComponent(QS.r))
+      .then(function(r){ return r.json(); })
+      .then(function(j){
+        if(j && j.ok && j.d){ REC=j.d; montar(); }
+        else wrap.innerHTML='<div class="err-page"><h2>Recomendação não encontrada</h2><p>'+esc((j&&j.erro)||'Peça para gerarem o PDF de novo pelo app.')+'</p></div>';
+      })
+      .catch(function(){ wrap.innerHTML='<div class="err-page"><h2>Sem conexão</h2><p>Não consegui buscar a recomendação. Verifique a internet e abra o link de novo.</p></div>'; });
+    return;
+  }
+  montar();
+
+  function montar(){
   if(!REC || !REC.it || !REC.it.length){
     wrap.innerHTML='<div class="err-page"><h2>Link incompleto</h2><p>Peça para reenviarem a recomendação pelo app. O link precisa vir completo do WhatsApp.</p></div>';
     return;
@@ -406,6 +422,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   });
   document.getElementById('againOk').addEventListener('click',function(){ done.classList.remove('on'); });
   document.getElementById('againFail').addEventListener('click',function(){ fail.classList.remove('on'); });
+  }   // montar()
 })();
 </script>
 </body>

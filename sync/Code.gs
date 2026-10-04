@@ -938,6 +938,30 @@ function readRetornos(){
   }
   return out;
 }
+/* --------- LINK CURTO das recomendações (PDF / QR Code) ---------
+   O link longo leva a recomendação inteira dentro dele (mais de 1.000 caracteres) e alguns
+   visualizadores de PDF não abrem. O app grava a recomendação aqui (aba "RECOM LINKS",
+   ID | JSON | ATUALIZADO) e o link fica só retorno.html?s=<implantação>&r=<id>; a página do
+   operador busca o resto em ?acao=recom&id=<id>. Regravar o mesmo id substitui a linha. */
+var RECLINK_SHEET = 'RECOM LINKS';
+function writeRecomLink_(p){
+  var id = S(p && p.id); if (!id || !p.d) return { rows:0, erro:'link sem id' };
+  var b = ss(), s = b.getSheetByName(RECLINK_SHEET);
+  if (!s){ s = b.insertSheet(RECLINK_SHEET); s.getRange(1,1,1,3).setValues([['ID','JSON','ATUALIZADO']]); try { s.setFrozenRows(1); } catch(e){} }
+  var last = s.getLastRow(), row = 0;
+  if (last >= 2){ var ids = s.getRange(2, 1, last - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++){ if (S(ids[i][0]) === id){ row = 2 + i; break; } } }
+  if (!row) row = _novaLinha_(s);
+  s.getRange(row, 1, 1, 3).setValues([[id, JSON.stringify(p.d), new Date()]]);
+  return { rows:1 };
+}
+function readRecomLink_(id){
+  id = S(id); var s = ss().getSheetByName(RECLINK_SHEET); if (!id || !s || s.getLastRow() < 2) return null;
+  var v = s.getRange(2, 1, s.getLastRow() - 1, 2).getValues();
+  for (var i = v.length - 1; i >= 0; i--){ if (S(v[i][0]) === id){ try { return JSON.parse(v[i][1]); } catch(e){ return null; } } }
+  return null;
+}
+
 function writeRetorno(ret){
   var s = retornosSheet(), when = new Date(), n = 0, itens = (ret && ret.itens) || [];
   for (var i = 0; i < itens.length; i++){
@@ -1443,7 +1467,7 @@ var MOD_DADOS = {
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
   __limites:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
-  __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'] };   // Receber nota é só do Administrativo
+  __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
   plantio:['campo','planejamento'], plantio_safrinha:['campo','planejamento'], dae:['campo','planejamento'], ciclo:['campo','planejamento'], ciclo_safrinha:['campo','planejamento'] };
@@ -1622,7 +1646,12 @@ function doGet(e){
     return json({ ok:false, erro:'a planilha deu erro: ' + (m || 'sem mensagem') }); }
 }
 function doGet_(e){
-  var prm = (e && e.parameter) || {}, acc = acessoDe_(prm.s);
+  var prm = (e && e.parameter) || {};
+  if (prm.acao === 'recom'){   // página do operador (retorno.html) abrindo pelo link curto — sem login
+    var rd = readRecomLink_(prm.id);
+    return json(rd ? { ok:true, d:rd } : { ok:false, erro:'recomendação não encontrada — peça para reenviarem' });
+  }
+  var acc = acessoDe_(prm.s);
   if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
     if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
     return json({ ok:true, usuarios:usuariosLista_() }); }
@@ -1656,7 +1685,7 @@ function doGet_(e){
 
 var _ACC_ = null;   // sessão do pedido atual (doPost)
 function doPost(e){
-  var out = { ok:0, fail:0, msgs:[] }, base = false;
+  var out = { ok:0, fail:0, msgs:[] }, base = false, semCache = false;
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
   // apagar a linha errada do razão ou perder uma compra na COMPRAS APP. Quem chega depois espera.
   var lock = LockService.getScriptLock();
@@ -1679,6 +1708,8 @@ function doPost(e){
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows; base = true;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
       var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows; base = true;
+    } else if (payload && payload.__recomLink){     // link curto da recomendação (PDF / QR Code)
+      var rk = writeRecomLink_(payload.__recomLink); out.ok = rk.rows; semCache = true; if (rk.erro){ out.fail = 1; out.msgs.push(rk.erro); }
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
       var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
     } else if (payload && payload.__entradas){       // VÁRIAS compras (e exclusões) numa requisição só
@@ -1714,7 +1745,7 @@ function doPost(e){
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
   finally {
     // invalida o cache: o próximo puxar traz o dado fresco. Só a parte APP, a não ser que mexeu na BASE.
-    if (base) cacheClear(); else cacheClearApp_();
+    if (base) cacheClear(); else if (!semCache) cacheClearApp_();   // link curto não muda o que o app puxa
     lock.releaseLock();
   }
   return json(out);

@@ -699,6 +699,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .rx-link{display:flex;align-items:center;gap:12px;margin:10px 0 6px;padding:8px 10px;border:2px solid #1a7f37;border-radius:8px;background:#effaf2;break-inside:avoid}
   #print-area .rx-link a{flex:none;display:inline-block;padding:8px 14px;border-radius:6px;background:#1a7f37;color:#fff!important;font-weight:700;font-size:13px;text-decoration:none}
   #print-area .rx-link span{font-size:10.5px;color:#222}
+  #print-area .rx-link-in{display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-width:0}
+  #print-area .rx-qr{flex:none;width:30mm;height:30mm;background:#fff;padding:2mm;border-radius:4px}
+  #print-area .rx-qr svg{width:100%;height:100%;display:block}
+  #print-area .rx-link .rx-url{font-size:8.5px;color:#444;word-break:break-all}
   #print-area .rx-big{display:flex;gap:10px}
   #print-area .rx-big div{flex:1;border:1.5px solid #333;border-radius:8px;padding:8px 10px;text-align:center}
   #print-area .rx-big b{display:block;font-size:26px;line-height:1.1}
@@ -1488,7 +1492,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-176';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-177';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5952,7 +5956,7 @@ function recomSetField(el){
 // base do site (mesma pasta do app) — para montar o link da página do operador
 function recomBase(){ try{ return location.origin + location.pathname.replace(/[^/]*$/,''); }catch(e){ return ''; } }
 // link da página "retorno.html" com a recomendação embutida (o operador dosa e dá baixa)
-function recomLink(r){
+function recomPayload(r){
   const t=findTalhao(r.talhao);
   let tanque=_mmC(r.tanque)||0;   // tanque definido na própria recomendação (junto com a vazão/calda)
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
@@ -5964,8 +5968,37 @@ function recomLink(r){
   if(pc){ payload.cd=''; payload.v=0; payload.tk=0;
     payload.pl={sm:+pc.semM.toFixed(2), sh:Math.round(pc.pop), kh:+(+pc.kgHa||0).toFixed(2), esp:pc.esp, bl:pc.bl, bags:+pc.bags.toFixed(3), ts:pc.temTS?(pc.tsSt||'pend'):''}; }
   if(r.tipo==='ts'){ const c=r.tsCfg||{}; payload.ts={b:+c.bat||1, bl:c.bl||'bag', n:c.nBat||0, ul:c.ult||0, sh:Math.round(c.semHa||0), kh:+(+c.kgHa||0).toFixed(2)}; }
-  // usa query string (?d=) em vez de #fragmento: sobrevive melhor ao WhatsApp/navegadores
-  return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(payload));
+  return payload;
+}
+// link LONGO: a recomendação inteira vai no link (?d=) — funciona sem a planilha (WhatsApp)
+function recomLink(r){ return recomBase()+'retorno.html?d='+encodeURIComponent(JSON.stringify(recomPayload(r))); }
+// link CURTO (PDF / QR Code): retorno.html?s=<implantação do Web App>&r=<id>; a recomendação fica na aba RECOM LINKS
+function recomExecId(){ const m=String(syncUrl()||'').match(/\/macros\/s\/([^/?#]+)\/exec/); return m?m[1]:''; }
+function recomLinkCurtoUrl(r){ return recomBase()+'retorno.html?s='+encodeURIComponent(recomExecId())+'&r='+encodeURIComponent(r.id); }
+let _qrLoading=null;
+function loadQR(){
+  if(window.qrcode) return Promise.resolve(window.qrcode);
+  if(_qrLoading) return _qrLoading;
+  _qrLoading=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src='https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+    sc.onload=()=>window.qrcode?res(window.qrcode):rej(new Error('QR indisponível')); sc.onerror=()=>{ _qrLoading=null; rej(new Error('sem internet')); }; document.head.appendChild(sc); });
+  return _qrLoading;
+}
+// prepara o link do PDF: grava a recomendação na planilha (link curto + QR Code); sem isso, usa o link longo
+let _PDFLINK=null;
+async function recomPdfPrep(r){
+  let curto=false, qr='';
+  if(recomExecId()){
+    const d=recomPayload(r), sig=JSON.stringify(d);
+    if(r.linkSig===sig && r.linkOk) curto=true;   // já gravado igual: não precisa regravar
+    else { toast('Preparando o link da baixa…');
+      try{ const j=await syncPost(syncUrl(), JSON.stringify({__recomLink:{id:r.id, d}}));
+        if(j && +j.ok>0 && !(+j.fail>0)){ r.linkSig=sig; r.linkOk=true; saveRecom(); curto=true; }
+        else { r.linkOk=false; setTimeout(()=>toast('Link curto indisponível — cole o Code.gs novo na planilha. O PDF vai com o link longo.'),1800); }
+      }catch(e){ setTimeout(()=>toast('Sem conexão com a planilha — o PDF vai com o link longo (sem QR Code).'),1800); } }
+  }
+  const link=curto?recomLinkCurtoUrl(r):recomLink(r);
+  if(curto){ try{ const Q=await loadQR(), q=Q(0,'M'); q.addData(link); q.make(); qr=q.createSvgTag(4,0); }catch(e){} }
+  return {link, curto, qr};
 }
 // mensagem de WhatsApp: resumo + link para o operador dosar no tanque e dar baixa
 // condições climáticas em texto: limites (T ≤ · UR ≥ · vento ≤) + observação livre
@@ -6169,9 +6202,10 @@ function recomCard(r,t){
 // impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
 // bloco do LINK de baixa no PDF (clicável no PDF salvo; no papel, o operador abre pelo WhatsApp)
 function recomPdfLink(r){
-  const link=recomLink(r);
-  return `<div class="rx-link"><a href="${esc(link)}">👉 ABRIR PARA DAR BAIXA</a>
-    <span>Toque no link (no celular ou no computador) para ver a recomendação e informar o que foi usado — a baixa vai direto para o estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span></div>`;
+  const L=_PDFLINK||{link:recomLink(r), curto:false, qr:''};
+  return `<div class="rx-link">${L.qr?`<div class="rx-qr">${L.qr}</div>`:''}<div class="rx-link-in"><a href="${esc(L.link)}">👉 ABRIR PARA DAR BAIXA</a>
+    <span>${L.qr?'<b>Aponte a câmera do celular para o QR Code</b> ou toque no botão':'Toque no botão'} para ver a recomendação e informar o que foi usado — a baixa vai direto para o estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span>
+    ${L.curto?`<span class="rx-url">${esc(L.link)}</span>`:''}</div></div>`;
 }
 const rxKv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
 function rxAssin(r){ return `<div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução</div></div>
@@ -6224,8 +6258,12 @@ function exportPlantioPDF(r){
   ${rxAssin(r)}`;
   printDoc(h); toast('Gerando PDF do plantio — escolha "Salvar como PDF"');
 }
-function exportRecomPDF(id){
+async function exportRecomPDF(id){
   const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
+  _PDFLINK=await recomPdfPrep(r);
+  try{ exportRecomPDF_(r); } finally { _PDFLINK=null; }
+}
+function exportRecomPDF_(r){
   if(r.tipo==='ts') return exportTsPDF(r);
   if(r.opKey && opTemSemente(r.opKey.split('|')[0], r.opKey.split('|')[1]||'') && plantioCalc(r.opKey)) return exportPlantioPDF(r);
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
