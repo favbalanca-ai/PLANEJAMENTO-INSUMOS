@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-177';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-178';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4741,7 +4741,7 @@ function exportTsPDF(r){
   <div class="rx-warn">Usar EPI (luvas, avental, máscara e óculos). Tratar em local ventilado e coberto, sobre lona. Misturar bem cada batelada até cobrir toda a semente. Semente tratada <b>não</b> pode ser usada para alimentação humana ou animal. Lavar o equipamento e devolver as embalagens vazias ao ponto de recebimento.</div>
   ${r.obs?`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
   ${rxAssin(r)}`;
-  printDoc(h); toast('Gerando PDF do TS — escolha "Salvar como PDF"');
+  return h;
 }
 // PDF da recomendação de PLANTIO — população, sementes por metro (linhas a 50 cm), fertilizantes e líquidos por ha
 function exportPlantioPDF(r){
@@ -4766,12 +4766,81 @@ function exportPlantioPDF(r){
   <div class="rx-warn">Conferir a regulagem da plantadeira (sementes por metro) no início e a cada troca de lote. Usar EPI ao manusear semente tratada e produtos. Semente tratada <b>não</b> pode ser usada para alimentação. Devolver as embalagens vazias ao ponto de recebimento.</div>
   ${r.obs?`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
   ${rxAssin(r)}`;
-  printDoc(h); toast('Gerando PDF do plantio — escolha "Salvar como PDF"');
+  return h;
 }
 async function exportRecomPDF(id){
   const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
   _PDFLINK=await recomPdfPrep(r);
-  try{ exportRecomPDF_(r); } finally { _PDFLINK=null; }
+  let h; try{ h=exportRecomPDF_(r); } finally { _PDFLINK=null; }
+  if(!h) return;
+  const t=findTalhao(r.talhao), tipo=r.tipo==='ts'?'TS':((r.opKey&&plantioCalc(r.opKey))?'Plantio':'Aplicacao');
+  const nome=`Recomendacao_${tipo}_${(t?tNome(t):r.talhao)}_${r.data||''}.pdf`.replace(/[\\/:*?"<>|\s]+/g,'_');
+  pdfAguarde(true);
+  try{ const blob=await pdfArquivo(h); pdfPronto(blob, nome, h); }
+  catch(e){ pdfAguarde(false); toast('Não consegui montar o arquivo ('+(e&&e.message||e)+') — abrindo a impressão'); printDoc(h); }
+}
+// ---- PDF montado no próprio app (html2canvas + jsPDF) ----
+// "Imprimir → Salvar como PDF" do celular PERDE os links (o botão aparece mas não abre). Aqui o PDF é
+// gerado pelo app: a página vira imagem (mesmo visual da impressão) e o link é colocado por cima do botão
+// e do QR Code como link de verdade do PDF.
+const H2C_URL='https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+const JSPDF_URL='https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+const _scripts={};
+function loadScriptOnce(src){ return _scripts[src]||(_scripts[src]=new Promise((res,rej)=>{ const sc=document.createElement('script'); sc.src=src;
+  sc.onload=()=>res(); sc.onerror=()=>{ delete _scripts[src]; rej(new Error('sem internet para baixar o gerador de PDF')); }; document.head.appendChild(sc); })); }
+// mesmas regras de estilo da impressão (#print-area), aplicadas na tela a uma área escondida (#pdf-render)
+function pdfRenderCss(){
+  if(document.getElementById('pdf-render-css')) return;
+  let css='';
+  for(const sh of document.styleSheets){ let rules; try{ rules=sh.cssRules; }catch(e){ continue; }
+    for(const r of rules||[]){ if(r.media && /print/.test(r.media.mediaText)){
+      for(const rr of r.cssRules){ if(rr.selectorText && rr.selectorText.indexOf('#print-area')>=0) css+=rr.cssText.replace(/#print-area/g,'#pdf-render')+'\n'; } } } }
+  const st=document.createElement('style'); st.id='pdf-render-css';
+  st.textContent='#pdf-render{position:absolute;left:-10000px;top:0;width:688px;background:#fff;color:#000;font:12px/1.45 Arial,Helvetica,sans-serif}\n'+css;
+  document.head.appendChild(st);
+}
+async function pdfArquivo(html){
+  await Promise.all([loadScriptOnce(H2C_URL), loadScriptOnce(JSPDF_URL)]);
+  pdfRenderCss();
+  const box=document.createElement('div'); box.id='pdf-render'; box.innerHTML=html; document.body.appendChild(box);
+  try{
+    await new Promise(r=>setTimeout(r,60));
+    const W=box.offsetWidth, br=box.getBoundingClientRect();
+    const rel=el=>{ const q=el.getBoundingClientRect(); return {x:q.left-br.left, y:q.top-br.top, w:q.width, h:q.height}; };
+    const links=[...box.querySelectorAll('a[href]')].map(a=>Object.assign(rel(a),{url:a.href}));
+    const qr=box.querySelector('.rx-qr'); if(qr && links[0]) links.push(Object.assign(rel(qr),{url:links[0].url}));   // o QR Code também é clicável
+    const ESC=2, canvas=await window.html2canvas(box,{scale:ESC, backgroundColor:'#ffffff', logging:false});
+    const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'mm', format:'a4'});
+    const M=14, pw=210-2*M, mm=pw/W, pagPx=Math.floor((297-2*M)/mm), totH=canvas.height/ESC, nPag=Math.max(1, Math.ceil(totH/pagPx-0.02));
+    for(let i=0;i<nPag;i++){ if(i) doc.addPage();
+      const y0=i*pagPx, hPx=Math.min(pagPx, totH-y0), c=document.createElement('canvas');
+      c.width=canvas.width; c.height=Math.ceil(hPx*ESC); c.getContext('2d').drawImage(canvas, 0, y0*ESC, canvas.width, c.height, 0, 0, canvas.width, c.height);
+      doc.addImage(c.toDataURL('image/png'), 'PNG', M, M, pw, hPx*mm, undefined, 'FAST');   // PNG comprimido: texto e QR nítidos, arquivo leve
+      links.filter(l=>l.y>=y0 && l.y<y0+pagPx).forEach(l=>doc.link(M+l.x*mm, M+(l.y-y0)*mm, l.w*mm, l.h*mm, {url:l.url})); }
+    return doc.output('blob');
+  } finally { box.remove(); }
+}
+// janelinha "gerando…" e depois "PDF pronto" com Enviar (WhatsApp…) / Baixar / Abrir / Imprimir
+let _pdfPronto=null;
+function pdfAguarde(on){ const old=document.getElementById('pdf-ov'); if(old) old.remove(); if(!on) return;
+  const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box" style="width:min(420px,100%)"><div class="modal-head"><h3>📄 Gerando o PDF…</h3></div><p class="mut" style="font-size:13px;margin:0">Montando o arquivo com o link de baixa e o QR Code.</p></div>`;
+  document.body.appendChild(ov); }
+function pdfPronto(blob, nome, html){
+  if(_pdfPronto && _pdfPronto.url) URL.revokeObjectURL(_pdfPronto.url);
+  const file=new File([blob], nome, {type:'application/pdf'}), url=URL.createObjectURL(blob);
+  let podeEnviar=false; try{ podeEnviar=!!(navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
+  _pdfPronto={file, url, nome, html};
+  pdfAguarde(false);
+  const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box" style="width:min(440px,100%)"><div class="modal-head"><h3>📄 PDF pronto</h3><button class="icon-btn" data-act="pdfFechar" title="Fechar">✕</button></div>
+    <p class="mut" style="font-size:13px;margin:0 0 12px">${esc(nome)} · ${Math.max(1,Math.round(blob.size/1024))} KB<br>No PDF, o botão <b>ABRIR PARA DAR BAIXA</b> e o <b>QR Code</b> abrem a página do operador.</p>
+    <div class="pdf-acts">${podeEnviar?'<button class="btn btn-wa" data-act="pdfEnviar">📲 Enviar o PDF (WhatsApp…)</button>':''}
+      <a class="btn btn-primary" href="${url}" download="${esc(nome)}">⬇️ Baixar PDF</a>
+      <a class="btn btn-outline" href="${url}" target="_blank" rel="noopener">👁 Abrir</a>
+      <button class="btn btn-ghost" data-act="pdfImprimir">🖨 Imprimir</button></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
 }
 function exportRecomPDF_(r){
   if(r.tipo==='ts') return exportTsPDF(r);
@@ -4805,7 +4874,7 @@ function exportRecomPDF_(r){
   ${recomPdfLink(r)}
   <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
   <div class="pdf-foot">Planejamento de Safra 26/27 · gerado em ${fmtDataBR(new Date().toISOString().slice(0,10))} · status: ${esc((RECOM_ST[r.status]||{}).lbl||r.status)}</div>`;
-  printDoc(h); toast('Gerando recomendação técnica — escolha "Salvar como PDF"');
+  return h;
 }
 V.recomendacao=function(arg){
   const all=talhoesAll();
@@ -6249,6 +6318,9 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
+    else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
+    else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
+    else if(a.act==='pdfEnviar'){ if(_pdfPronto) navigator.share({files:[_pdfPronto.file], title:_pdfPronto.nome}).catch(e=>{ if(e&&e.name!=='AbortError') toast('Não deu para enviar daqui — use "Baixar PDF"'); }); }
     else if(a.act==='pdfTs'){ const r=tsRecomFromOp(a.key);
       if(!r){ toast('Esta operação não tem semente com produtos de TS'); return; }
       const rl=realEnsure(a.key); rl.ts=rl.ts||{}; if(rl.ts.st!=='feito') rl.ts.st='enviada'; rl.ts.recom=r.id; stampReal(a.key);
