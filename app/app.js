@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-180';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-181';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -403,7 +403,7 @@ function prListaApply(){
   if(syncUrl()&&autoOn()) schedulePrecosPush();
 }
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
-function saveDataCache(d){ try{ localStorage.setItem(DATA_KEY, JSON.stringify(d)); }catch(e){} }
+function saveDataCache(d, raw){ try{ localStorage.setItem(DATA_KEY, raw||JSON.stringify(d)); }catch(e){} }
 function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' | 'admin' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -1034,13 +1034,14 @@ function toast(msg){
 }
 function ask(m){ try{ return window.confirm(m); }catch(e){ return true; } }
 // quantidade de produto (dose, total, por tanque): até 3 casas, sem zeros à toa — 0,26 · 0,04 · 6,25 · 12
-const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);
+const _nfDose=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}), _nfBrl4=new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4});
+const fmtDose=v=>_nfDose.format(+v||0);   // formatador criado UMA vez (antes: um novo a cada número)
+// selo + faixa de sincronização: agrupa várias chamadas seguidas numa só (1x por quadro de tela)
+let _syncBarRaf=0;
 function updateEditBadge(){
-  // selo = só o que FALTA sincronizar (ajustes que vivem só no app — máquina, DRE, diesel… — não contam)
-  const b=$('#edit-badge'); if(!b) return;
-  const pi=(typeof pendingInfo==='function')?pendingInfo():{total:0,parts:[]}, n=pi.total;
-  b.hidden=n===0; b.textContent=n+(n===1?' pendente':' pendentes'); b.title=(pi.parts.join(' · ')||'')+' — toque para sincronizar agora';
-  if(typeof updateSyncBar==='function') updateSyncBar();
+  if(_syncBarRaf) return;
+  const run=()=>{ _syncBarRaf=0; if(typeof updateSyncBar==='function') updateSyncBar(); };
+  _syncBarRaf=(typeof requestAnimationFrame==='function' && document.visibilityState==='visible') ? requestAnimationFrame(run) : setTimeout(run,0);
 }
 const PILL={COMPRAR:['pill-buy','Comprar'],SEM_PRECO:['pill-noprice','Sem preço'],
   ESTOQUE:['pill-stock','Em estoque'],SEM_DEMANDA:['pill-none','Sem demanda'],CAMINHO:['pill-stock','A caminho']};
@@ -1051,7 +1052,8 @@ const V = {};
 
 V.dashboard = function(){
   // filtro por empreendimento (afeta o painel todo) — inclui 1ª safra e safrinha (2ª safra)
-  const empsAll=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'))].sort();
+  const CV=cultivos();   // calculado UMA vez para o painel inteiro (antes: 3x)
+  const empsAll=[...new Set(CV.map(cv=>cv.emp).filter(e=>e&&e!=='—'))].sort();
   const fEmp = painelEmpSel.size ? painelEmpSel : null;
   // safras de um talhão que batem com o filtro (principal e/ou safrinha)
   const safrasSel = t => {
@@ -1070,7 +1072,7 @@ V.dashboard = function(){
   const semPreco=compras.filter(r=>r.comprar>0&&r.preco<=0).length;
   // custo por cultura
   const porCultura={};
-  cultivos().filter(cv=>!fEmp||fEmp.has(cv.emp)).forEach(cv=>{ porCultura[cv.emp]=(porCultura[cv.emp]||0)+cv.ins; });
+  CV.filter(cv=>!fEmp||fEmp.has(cv.emp)).forEach(cv=>{ porCultura[cv.emp]=(porCultura[cv.emp]||0)+cv.ins; });
   const culturas=Object.entries(porCultura).sort((a,b)=>b[1]-a[1]);
   const maxC=Math.max(1,...culturas.map(c=>c[1]));
   // custo por classe (insumo)
@@ -1079,7 +1081,7 @@ V.dashboard = function(){
   const classes=Object.entries(porClasse).filter(c=>c[1]>0).sort((a,b)=>b[1]-a[1]).slice(0,8);
   const maxK=Math.max(1,...classes.map(c=>c[1]));
   // maiores demandas de compra por empreendimento (valor da demanda = dose × área × preço)
-  const empsD=[...new Set(cultivos().map(cv=>cv.emp).filter(e=>e&&e!=='—'&&(!fEmp||fEmp.has(e))))];
+  const empsD=[...new Set(CV.map(cv=>cv.emp).filter(e=>e&&e!=='—'&&(!fEmp||fEmp.has(e))))];
   const demEmp=empsD.map(e=>{ const dem=calcDemanda(new Set([e])); let v=0; for(const pr in dem) v+=dem[pr]*precoDe(pr); return [e,v]; })
     .filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   const maxE=Math.max(1,...demEmp.map(x=>x[1]));
@@ -1476,10 +1478,11 @@ function pushSaidasPendentes(){
   const url=syncUrl(); if(!url) return Promise.resolve();
   const tasks=[];
   // recoms avulsas aprovadas (sem operação de campo)
-  (RECOM.registros||[]).filter(r=>!r.opKey && recomNorm(r).status==='aprovada' && !r.saidaPushed).forEach(r=>tasks.push(pushSaida(r)));
+  (RECOM.registros||[]).filter(r=>!r.opKey && recomNorm(r).status==='aprovada' && !r.saidaPushed).forEach(r=>tasks.push(()=>pushSaida(r)));
   // baixas de operações de campo concluídas ainda não enviadas
-  const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(pushOpSaida(k)); }
-  return tasks.length?Promise.all(tasks):Promise.resolve();
+  const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(()=>pushOpSaida(k)); }
+  // uma de cada vez: a planilha grava uma por vez (em paralelo davam "planilha ocupada")
+  return tasks.reduce((p,f)=>p.then(()=>f().catch(()=>false)), Promise.resolve());
 }
 function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
 function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
@@ -1552,9 +1555,9 @@ V.entradas=function(){
   const draftRows=d.itens.map((it,i)=>`<tr>
     <td class="c-full"><input list="prodlist" class="txt prod-in" data-cmpi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="produto"></td>
     <td class="num"><input class="cell" inputmode="decimal" data-cmpi="qtd" data-i="${i}" value="${it.qtd||''}" placeholder="0"></td>
-    <td>${esc(it.un||(PROD[it.produto]&&PROD[it.produto].un)||'')}</td>
+    <td data-cmpu="${i}">${esc(it.un||(PROD[it.produto]&&PROD[it.produto].un)||'')}</td>
     <td class="num"><input class="cell" inputmode="decimal" data-cmpi="preco" data-i="${i}" value="${it.preco||''}" placeholder="0"></td>
-    <td class="num">${brl0((+it.qtd||0)*(+it.preco||0))}</td>
+    <td class="num" data-cmpv="${i}">${brl0((+it.qtd||0)*(+it.preco||0))}</td>
     <td><button class="icon-btn del" data-act="cmpDelItem" data-i="${i}" title="Remover">🗑</button></td></tr>`).join('');
   const total=compraTotal(d);
   const regs=(COMPRAS.registros||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
@@ -1571,7 +1574,7 @@ V.entradas=function(){
     </div>
     <div class="table-wrap"><table><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th></th></tr></thead>
       <tbody>${draftRows}</tbody>
-      <tfoot class="tfoot"><tr><td colspan="4">Total da nota</td><td class="num">${brl0(total)}</td><td></td></tr></tfoot></table></div>
+      <tfoot class="tfoot"><tr><td colspan="4">Total da nota</td><td class="num" data-cmptot>${brl0(total)}</td><td></td></tr></tfoot></table></div>
     <div style="padding:8px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <button class="btn btn-outline btn-sm" data-act="cmpAddItem">+ produto</button>
       <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
@@ -2981,8 +2984,8 @@ function classeKey(c){ let k=String(c||'').trim().toUpperCase(); if(!k) return '
 function classeLabels(rows){ const cnt={}; rows.forEach(r=>{ const k=classeKey(r.classe), l=String(r.classe||'').trim().toUpperCase()||'(sem classe)'; (cnt[k]=cnt[k]||{})[l]=((cnt[k]||{})[l]||0)+1; });
   const out={}; Object.keys(cnt).forEach(k=>{ out[k]=Object.entries(cnt[k]).sort((a,b)=>b[1]-a[1])[0][0]; }); return out; }
 // linhas da Demanda com TODOS os filtros da tela (empreendimento, talhão, classe, só a comprar)
-function comprasFiltradas(){
-  const base=calcCompras(comprasEmpSel.size?comprasEmpSel:null, comprasTalSel.size?comprasTalSel:null);
+function comprasFiltradas(base){
+  base=base||calcCompras(comprasEmpSel.size?comprasEmpSel:null, comprasTalSel.size?comprasTalSel:null);
   return base.filter(r=>(!comprasClsSel.size||comprasClsSel.has(classeKey(r.classe))) && (!comprasSoComprar||r.comprar>0));
 }
 V.compras = function(){
@@ -2990,7 +2993,7 @@ V.compras = function(){
   const emps=empList().filter(e=>e&&e!=='—');
   const talhoes=talhoesAll();
   const base=calcCompras(sel.size?sel:null, tsel.size?tsel:null), labels=classeLabels(base);
-  const all=comprasFiltradas();
+  const all=comprasFiltradas(base);   // reaproveita a conta (antes calculava a demanda 2x)
   const totalCompra=all.reduce((a,r)=>a+r.valor,0);
   const valDemanda=all.reduce((a,r)=>a+r.demanda*r.preco,0);
   const filtro=(sel.size||tsel.size||comprasClsSel.size||comprasSoComprar);
@@ -3433,7 +3436,7 @@ V.dre = function(){
   const av=v=>tR>0?nf1.format(v/tR*100)+'%':'—';
   const sgn=v=>`<b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b>`;
   // preço por unidade: mostra mais casas quando é fração (ex.: R$ 0,15 por ponto)
-  const brlU=v=>'R$ '+(Math.abs(v||0)>=1?nf2.format(v||0):new Intl.NumberFormat('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4}).format(v||0));
+  const brlU=v=>'R$ '+(Math.abs(v||0)>=1?nf2.format(v||0):_nfBrl4.format(v||0));
   // ---- premissas (inputs globais) ----
   const cfgInp=(field,val,suf,ph)=>`<label class="dre-cfg-it"><span>${ph}</span><span class="dre-cfg-in"><input class="cell ${val?'edited':''}" inputmode="decimal" data-edit="dreCfg" data-field="${field}" value="${val||''}" placeholder="0">${suf}</span></label>`;
   const premissas=`<div class="panel"><div class="panel-head"><h2>Premissas gerenciais</h2><span class="sub">valem para toda a operação (rateadas por cultura)</span></div>
@@ -3571,8 +3574,9 @@ function insumosDoEmp(emp){
   });
   return map;
 }
-function empList(){
-  const s=[]; cultivos().forEach(cv=>{ if(!s.includes(cv.emp)) s.push(cv.emp); });
+function empList(){   // só os NOMES das culturas (antes calculava todos os custos de todos os talhões)
+  const s=[], add=e=>{ if(!s.includes(e)) s.push(e); };
+  talhoesAll().forEach(t=>{ add(empDe(t)||'—'); if(temSafrinha(t)) add(empSafDe(t)); });
   return s;
 }
 V.empreendimentos = function(arg){
@@ -5717,6 +5721,37 @@ V.sync = function(){
 
 /* ================= ROUTER ================= */
 const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+// ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
+// Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
+// e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
+const MORPH_VIEWS=new Set(['estoque','talhao','talhoes','campo','compras','cotacao','dashboard','dre','resultados','maquinas','empreendimentos','recomendacao','precos','sync','entradas']);
+let _lastArg=null;
+function morphSyncField(o, nw){
+  if(o===document.activeElement) return;                       // não mexe no campo em que a pessoa está
+  if(o.tagName==='INPUT'){ if(o.type==='checkbox'||o.type==='radio'){ const c=nw.hasAttribute('checked'); if(o.checked!==c) o.checked=c; }
+    else if(o.type!=='file'){ const v=nw.getAttribute('value')||''; if(o.value!==v) o.value=v; } }
+  else if(o.tagName==='TEXTAREA'){ const v=nw.textContent; if(o.value!==v) o.value=v; }
+  else if(o.tagName==='SELECT'){ const v=nw.value; if(o.value!==v) o.value=v; }
+}
+function morphNode(o, nw){
+  if(o.nodeType!==nw.nodeType || o.nodeName!==nw.nodeName){ o.replaceWith(nw); return; }
+  if(o.nodeType!==1){ if(o.nodeValue!==nw.nodeValue) o.nodeValue=nw.nodeValue; return; }
+  if(o.isEqualNode(nw)){   // igual por fora: só confere os valores digitados (campos) lá dentro
+    if(/^(INPUT|TEXTAREA|SELECT)$/.test(o.tagName)) morphSyncField(o,nw);
+    else if(o.querySelector('input,textarea,select')){ const a=o.querySelectorAll('input,textarea,select'), b=nw.querySelectorAll('input,textarea,select'); for(let i=0;i<a.length&&i<b.length;i++) morphSyncField(a[i],b[i]); }
+    return; }
+  for(const at of [...o.attributes]) if(!nw.hasAttribute(at.name)) o.removeAttribute(at.name);
+  for(const at of [...nw.attributes]) if(o.getAttribute(at.name)!==at.value) o.setAttribute(at.name, at.value);
+  if(o.tagName==='SELECT'){ morphChildren(o,nw); morphSyncField(o,nw); return; }
+  if(o.tagName==='TEXTAREA'||o.tagName==='INPUT'){ morphSyncField(o,nw); return; }
+  morphChildren(o,nw);
+}
+function morphChildren(op, np){
+  const a=[...op.childNodes], b=[...np.childNodes];
+  for(let i=0;i<b.length;i++){ if(i<a.length) morphNode(a[i], b[i]); else op.appendChild(b[i]); }
+  for(let i=b.length;i<a.length;i++) a[i].remove();
+}
+function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
 function route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -5736,12 +5771,15 @@ function route(opts){
   document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
-  try{ $('#content').innerHTML = (EMBED&&view!=='login'?embedBarHtml(view):'') + (fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`); }
+  try{ const html=(EMBED&&view!=='login'?embedBarHtml(view):'') + (fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`);
+    if(!toTop && MORPH_VIEWS.has(view) && _lastView===view && _lastArg===(arg||'')) morphInto($('#content'), html);   // mesma tela: só o que mudou
+    else $('#content').innerHTML=html; }
   catch(e){ $('#content').innerHTML=`<div class="empty">Erro ao renderizar: ${esc(e.message)}</div>`; console.error(e); }
   if(toTop){ $('.main').scrollTop=0; window.scrollTo(0,0); }
   // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
   if(view==='precos' && (precoQ || precoSemPreco || precoClasse)) filterPrecos();
   if(view==='timeline' && (timelineTipo || timelineQ)) filterTimeline();
+  if(view==='estoque' && (estoqueQ || estoqueClasse || estoqueSoMov)) filterEstoque();   // antes: editar um número desfazia o filtro
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
@@ -5750,7 +5788,7 @@ function route(opts){
   if(view==='pendencias' && !PEND.lista){ pendCarregar(); }
   if(view==='contratos' && !NFE_CONTRATOS){ nfeContratosCarregar(true).then(()=>{ if(/#\/contratos/.test(location.hash)) route({keepScroll:true}); }); }
   try{ nfeNavBadge(); }catch(e){}   // inicializa o Leaflet após o HTML entrar no DOM
-  _lastView=view;
+  _lastView=view; _lastArg=arg||'';
 }
 let _lastView=null;
 // está editando? (campo focado ou digitou há pouco) — usado para não puxar/re-renderizar por cima
@@ -6371,9 +6409,12 @@ document.addEventListener('input',e=>{
   if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
   if(e.target.matches('[data-eqf]')){ equipeDraft[e.target.dataset.eqf]=e.target.value; return; }
   if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
-  if(e.target.matches('[data-cmpi]')){ const it=compraDraft&&compraDraft.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.cmpi;
+  if(e.target.matches('[data-cmpi]')){ const i=+e.target.dataset.i, it=compraDraft&&compraDraft.itens[i]; if(it){ const f=e.target.dataset.cmpi;
     if(f==='qtd'||f==='preco') it[f]=_mmC(e.target.value); else { it.produto=e.target.value.trim(); if(PROD[it.produto]) it.un=PROD[it.produto].un||it.un; }
-    route(); } return; }
+    // atualiza só a linha e o total (antes redesenhava a tela a cada letra e o campo perdia o foco)
+    const v=document.querySelector(`[data-cmpv="${i}"]`); if(v) v.textContent=brl0((+it.qtd||0)*(+it.preco||0));
+    const u=document.querySelector(`[data-cmpu="${i}"]`); if(u) u.textContent=it.un||(PROD[it.produto]&&PROD[it.produto].un)||'';
+    const tt=document.querySelector('[data-cmptot]'); if(tt) tt.textContent=brl0(compraTotal(compraDraft)); } return; }
 });
 // busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
 function filterPrecos(){
@@ -6628,7 +6669,6 @@ function exportDemandaEmpPDF(){
 // CRONOGRAMA DE PLANEJAMENTO (leve, para orientar a execução): por safra, uma tabela em ordem de data com
 // # · data prevista · DAE · operação · o que aplicar (insumo · dose/ha) · máquina · "realizado em" p/ anotar. Sem custos.
 function cronogramaTalhaoHtml(t){
-  const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);
   const area=areaDe(t), cult1=empDe(t), cult2=temSafrinha(t)?empSafDe(t):'';
   const datas=(seq)=>{ const prev=plantioPrevDe(t.id,seq), real=plantioRealDe(t.id,seq), ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq);
     return [real?`Plantio realizado <b>${fmtDataBR(real)}</b>`:(prev?`Plantio previsto <b>${fmtDataBR(prev)}</b>`:'<b>Plantio não definido</b> (datas por DAE)'), ciclo?`Ciclo <b>${ciclo} dias</b>`:'', col?`Colheita estimada <b>${fmtDataBR(col)}</b>`:''].filter(Boolean).join(' · '); };
@@ -6728,7 +6768,6 @@ function exportTalhaoPDF(id){
   const t=findTalhao(id); if(!t){ toast('Talhão não encontrado'); return; }
   const area=areaDe(t), c=custoTalhao(t), maqHa=custoOpTalhaoHa(t), totHa=c.ha+maqHa;
   const hoje=fmtDataBR(new Date().toISOString().slice(0,10));
-  const fmtDose=v=>new Intl.NumberFormat('pt-BR',{maximumFractionDigits:3}).format(+v||0);   // dose com até 3 casas (0,26 · 0,04 · 0,005)
   // datas da safra: plantio previsto/realizado, ciclo e colheita estimada (mesmo cálculo do app)
   const seqInfo=(seq)=>{ const prev=plantioPrevDe(t.id,seq), real=plantioRealDe(t.id,seq), ciclo=cicloDe(t.id,seq), col=colheitaPrevDe(t.id,seq);
     return [prev?`Plantio previsto <b>${fmtDataBR(prev)}</b>`:'', real?`Plantio realizado <b>${fmtDataBR(real)}</b>`:'', ciclo?`Ciclo <b>${ciclo} dias</b>`:'',
@@ -6786,6 +6825,7 @@ const POLL_MS=45000;                        // intervalo do puxar automático (q
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
 let syncBusy=false, pushTimer=null, pollTimer=null;
 let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
+let lastPullTs=0;   // último puxar que trouxe dados
 let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false, lastServerHash='';
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
@@ -6968,9 +7008,9 @@ function buildFieldEdits(){
   for(const id in (OV.talhaoRemoved||{})){ if(OV.talhaoRemoved[id] && isBase(id)) eds.push({type:'deltalhao', talhao:id}); }
   return eds;
 }
-function applyPulledData(d){
+function applyPulledData(d, raw){
   DATA=d; dadosDaPlanilha=true; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  saveDataCache(d);   // guarda p/ abrir com o dado mais recente na próxima vez
+  saveDataCache(d, raw);   // guarda p/ abrir com o dado mais recente na próxima vez
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // NÃO apaga as edições cegamente: só descarta o override que JÁ está igual na planilha
   // (ou seja, que já foi salvo). O que ainda não foi salvo é PRESERVADO — evita "minhas edições somem".
@@ -7074,17 +7114,19 @@ async function syncPull(opts){
   if(!opts.auto) syncLog('⏳ Puxando da planilha…');
   const t0=Date.now(), seg=()=>((Date.now()-t0)/1000).toFixed(1).replace('.',',')+' s';
   try{
+    const hP=getServerHash(url).catch(()=>null);   // hash pedido ANTES dos dados: se a planilha mudar no meio, a próxima checagem percebe
     const d=await syncGet(url,opts);
     if(d && d.login){ syncBusy=false; setSyncStatus('err','Entrar'); acessoPrecisaLogin(d); return false; }
     if(!d||!d.produtos) throw new Error('resposta inesperada da planilha');
-    getServerHash(url).then(h=>{ if(h) lastServerHash=h; });   // registra o hash atual p/ as próximas checagens
-    const raw=JSON.stringify(d);
+    hP.then(h=>{ if(h) lastServerHash=h; });   // registra o hash p/ as próximas checagens
+    delete d._srv;   // tempo de leitura da planilha (já foi pro log): muda a cada leitura — fora da comparação
+    const raw=JSON.stringify(d); lastPullTs=Date.now();
     markSynced();
     if(raw===lastRawSig && !opts.force){          // nada mudou na planilha: não re-renderiza (evita piscar)
       if(!opts.auto){ syncLog('✔ Já estava atualizado (sem mudanças) · '+seg()); toast('Já sincronizado'); addHist('pull',true,'Sem mudanças · '+seg()); }
       syncBusy=false; setSyncStatus('ok'); return true;
     }
-    lastRawSig=raw; applyPulledData(d);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
+    lastRawSig=raw; applyPulledData(d, raw);   // NÃO mexe em lastPushSig: edições ainda não salvas continuam pendentes p/ reenvio
     addHist('pull',true,`${d.produtos.length} produtos, ${d.talhoes.length} talhões · ${seg()}`);
     if(!opts.auto) syncLog(`✔ Atualizado: ${d.produtos.length} produtos, ${d.talhoes.length} talhões · ${seg()}.`);
     if(!opts.silentToast) toast('Dados atualizados da planilha');
@@ -7181,8 +7223,9 @@ async function syncPush(opts){
       logAindaPendentes(eds); return true;
     }
     syncBusy=false; setSyncStatus('ok'); updateSyncBar();
-    // gravou sem falhas: puxa a planilha p/ reconciliar (as edições só somem quando a planilha devolve o mesmo valor)
-    if(res.fail===0){ await syncPull({auto:true, force:true, silentToast:true}); logAindaPendentes(eds); }
+    // gravou sem falhas: puxa a planilha p/ reconciliar (as edições só somem quando a planilha devolve o mesmo valor).
+    // Automático: espera uns segundos SEM novas edições e puxa UMA vez (antes: baixava a planilha inteira a cada número editado)
+    if(res.fail===0){ if(opts.auto) scheduleReconcile(eds); else { await syncPull({auto:true, force:true, silentToast:true}); logAindaPendentes(eds); } }
     return lastPushOk;
   }catch(e){ syncBusy=false; setSyncStatus('err'); lastPushOk=false; updateSyncBar();
     const aborted=/abort|failed to fetch/i.test(e&&e.message||'');
@@ -7362,7 +7405,7 @@ function pollTick(){
   // com edições pendentes: ENVIA primeiro. Mas se o último envio FALHOU, puxa também (o que não foi salvo
   // continua guardado — o puxar não apaga edição pendente). Antes: edição presa = o aparelho nunca mais puxava.
   const fe=buildFieldEdits(), vivas=fe.length-edicoesOrfas(fe).length;
-  if(vivas>0){ scheduleAutoPush(); if(lastPushOk) return; }
+  if(vivas>0){ scheduleAutoPush(); if(lastPushOk && Date.now()-lastPullTs<90000) return; }   // mesmo assim puxa a cada ~1,5 min
   syncPull({auto:true, silentToast:true});
 }
 function startPolling(){
@@ -7457,12 +7500,12 @@ function logAindaPendentes(enviadas){
 }
 // há algo local ainda não enviado? (edições de campo, compras/baixas offline, tarefas/execução/resultados alterados)
 // o que REALMENTE falta ir para a planilha (não confundir com countEdits, que inclui ajustes que só existem no app)
-function pendingInfo(){
+function pendingInfo(fe0){
   const parts=[]; let total=0;
   const add=(n,lbl)=>{ if(n>0){ parts.push(`${n} ${lbl}`); total+=n; } };
   try{
     if(!DATA||!OV) return {total:0, parts:[]};
-    { const fe=buildFieldEdits(), orf=edicoesOrfas(fe); add(fe.length-orf.length, 'edição(ões) de campo'); add(orf.length, 'edição(ões) de talhão SEM ABA na planilha'); }
+    { const fe=fe0||buildFieldEdits(), orf=edicoesOrfas(fe); add(fe.length-orf.length, 'edição(ões) de campo'); add(orf.length, 'edição(ões) de talhão SEM ABA na planilha'); }
     if(COMPRAS) add((COMPRAS.registros||[]).filter(c=>!c.pushed).length, 'compra(s)');
     if(COMPRAS) add((COMPRAS.excluidas||[]).filter(e=>!e.ok).length, 'exclusão(ões) de compra');
     let bx=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey && r.status==='aprovada' && !r.saidaPushed) bx++; });
@@ -7481,18 +7524,20 @@ function hasPending(){ return pendingInfo().total>0; }
 // faixa no topo: "N edições não sincronizadas — Sincronizar agora" (ou "sem internet")
 function updateSyncBar(){
   // tela Sincronizar e selo do topo sempre com o número ATUAL (antes ficavam com o valor de quando a tela abriu)
-  try{ const eds=DATA?buildFieldEdits():[]; const bp=document.querySelector('[data-act="sync-push"]'); if(bp) bp.textContent=`⬆ Enviar agora (${eds.length})`;
+  let eds=[], pi={total:0,parts:[]};
+  try{ eds=DATA?buildFieldEdits():[]; pi=pendingInfo(eds); }catch(e){}   // UMA vez (antes: 5 montagens de edições a cada gravação)
+  try{ const bp=document.querySelector('[data-act="sync-push"]'); if(bp) bp.textContent=`⬆ Enviar agora (${eds.length})`;
     const pd=$('#sync-pend'); if(pd){ const html=pendingPanelHtml(eds); if(pd.dataset.h!==html){ pd.innerHTML=html; pd.dataset.h=html; } }
-    const bd=$('#edit-badge'); if(bd && typeof pendingInfo==='function'){ const n=pendingInfo().total; bd.hidden=n===0; bd.textContent=n+(n===1?' pendente':' pendentes'); } }catch(e){}
+    const bd=$('#edit-badge'); if(bd){ const n=pi.total; bd.hidden=n===0; bd.textContent=n+(n===1?' pendente':' pendentes'); bd.title=(pi.parts.join(' · ')||'')+' — toque para sincronizar agora'; } }catch(e){}
   const bar=$('#sync-bar'); if(!bar) return;
   if(!syncUrl()||!DATA){ bar.hidden=true; return; }
-  const pi=pendingInfo(), off=(typeof navigator!=='undefined' && navigator.onLine===false);
+  const off=(typeof navigator!=='undefined' && navigator.onLine===false);
   if(!pi.total && !off){ bar.hidden=true; return; }
   bar.hidden=false;
   const det=pi.parts.join(' · ');
   if(off){ bar.className='sync-bar off'; bar.innerHTML=`📴 Sem internet — ${pi.total?`guardado no aparelho: ${esc(det)}; `:''}sincroniza sozinho quando a conexão voltar.`; return; }
   bar.className='sync-bar '+(lastPushOk?'warn':'err');
-  let fdet=''; try{ const fe=buildFieldEdits(); if(fe.length && fe.length<=2) fdet=' ('+fe.map(e=>{ const d=editDesc(e); return d.lbl+(d.txt?': '+d.txt:''); }).join('; ')+')'; }catch(e){}
+  let fdet=''; try{ const fe=eds; if(fe.length && fe.length<=2) fdet=' ('+fe.map(e=>{ const d=editDesc(e); return d.lbl+(d.txt?': '+d.txt:''); }).join('; ')+')'; }catch(e){}
   bar.innerHTML=`${lastPushOk?'⏳':'⚠️'} Falta sincronizar: ${esc(det)}${esc(fdet)}${lastPushOk?'':' — a última tentativa falhou'}${autoOn()?'':' (sincronização automática desligada)'} <button class="btn btn-sm btn-primary" data-act="syncNow">🔄 Sincronizar agora</button>`;
 }
 // portão de sincronização (modal): envia pendentes -> puxa a planilha; se falhar, deixa tentar de novo ou seguir offline
@@ -7537,10 +7582,17 @@ async function syncGate(mode){
 }
 // voltou ao app (aba visível de novo / internet voltou): envia o pendente e puxa a última versão
 let lastHiddenTs=0;
+let reconTimer=null;
+function scheduleReconcile(eds){
+  clearTimeout(reconTimer);
+  reconTimer=setTimeout(async()=>{ if(syncBusy){ scheduleReconcile(eds); return; }
+    await syncPull({auto:true, force:true, silentToast:true}); logAindaPendentes(eds); }, 8000);
+}
 async function syncOnReturn(){
   if(!syncUrl()||!autoOn()||syncBusy) return;
   if(hasPending()){ await syncPush({auto:true}); }
-  if(!isEditing()) await syncPull({auto:true, force:true, silentToast:true});
+  // sem force: confere o "hash" (resposta minúscula) e só baixa tudo se a planilha mudou
+  if(!isEditing()) await syncPull({auto:true, silentToast:true});
   updateSyncBar();
 }
 // saindo do app (aba escondida / fechando): envia o pendente na hora, com keepalive

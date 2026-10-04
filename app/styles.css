@@ -1392,3 +1392,6 @@ body[data-embed] .content{padding:10px 10px 24px}
 }
 .cp-ret{margin:8px 12px 0;padding:10px 12px;border-radius:10px;background:var(--amber-soft);color:#5b4410;font-size:13px;line-height:1.45}
 .cp-ret .cp-btns{margin-top:8px}
+
+/* listas longas no celular: o navegador só desenha o que aparece (rolagem e edição mais leves) */
+@media (max-width:640px){ .cp-card,.op-block{content-visibility:auto;contain-intrinsic-size:auto 220px} }

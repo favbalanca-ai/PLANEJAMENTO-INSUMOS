@@ -121,6 +121,22 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - Números digitados: `numBR` — "2,5" e "2.5" = 2,5; "1.500" = 1500.
 - Operação concluída / TS feito: PDF e WhatsApp não criam outro link de baixa (o PDF diz "Baixa já registrada").
 
+## Desempenho (v181)
+
+- **Redesenho parcial** (`morphInto`): na MESMA tela (edição, sincronização) o app compara a tela nova
+  com a atual e troca só o que mudou — o campo em que a pessoa está não é tocado (não perde o foco).
+  Vale para Estoque, Talhão, Talhões, Campo, Demanda, Cotação, Painel, DRE, Resultados, Máquinas,
+  Empreendimentos, Recomendação, Preços, Sincronizar e Compras. Mapa e câmera: redesenho completo.
+  Celular médio (CPU 4×): editar 1 número no Estoque 2,0 s → 0,6 s; Talhão 0,42 s → 0,15 s.
+- Compras: digitar quantidade/preço atualiza só a linha e o total (antes perdia o foco a cada letra).
+- Puxar sem mudança na planilha não redesenha (o `_srv` — tempo de leitura — ficava fora da comparação).
+- Envio automático de edições simples: confere com a planilha **uma vez**, 8 s depois da última edição
+  (antes baixava a planilha inteira a cada número). Voltar ao app usa a checagem leve (hash), pedido
+  antes dos dados. O puxar automático não fica parado por uma edição sem eco (puxa a cada ~1,5 min).
+- Faixa/selo de sincronização calculados 1x por quadro; baixas pendentes enviadas uma de cada vez;
+  formatadores de número criados uma vez; Painel e Demanda sem contas repetidas;
+  `content-visibility` nos cartões do Campo/Talhão no celular.
+
 ## iPhone: zoom e girar a tela
 
 - No celular, todo campo (input/select/textarea) tem letra de **16px**: com menos, o Safari do iPhone dá
