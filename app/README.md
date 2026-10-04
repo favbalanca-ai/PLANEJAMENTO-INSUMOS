@@ -81,12 +81,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   TS faz o contrário (`tsMarca`). O custo realizado do talhão soma a baixa do TS. Unidades em branco no
   PORTIFÓLIO aparecem como aviso (preencher na planilha).
 - **Campo → Recomendação de plantio** — na operação com semente, a seção 🚿 de aplicação vira
-  🌱 *Recomendação de plantio*: **espaçamento** (padrão 0,50 m), sementes por bag, PMS, plantadeira,
-  tanque e vazão **no sulco**. Calcula **sementes por metro** (`sementes/ha × espaçamento ÷ 10.000`; semente
-  em kg → gramas por metro), sementes/ha, kg/ha, total no talhão, produtos do sulco por tanque e adubo.
-  O WhatsApp e o `retorno.html` (modo plantio) mostram a **regulagem da plantadeira** e o operador dá
-  baixa da semente plantada, do sulco e do adubo — ao concluir, o plantio vira realizado (dia 0 do DAE).
-  Mostra se o TS já foi feito; depois de enviar o TS, os produtos de TS saem da recomendação de plantio.
+  🌱 *Recomendação de plantio*: **população (sementes/ha)** — já vem a do planejamento (bags/ha × sementes
+  por bag) e pode ser informada —, plantadeira, início e fim. **Linhas sempre a 50 cm** (fixo):
+  `sementes por metro = população × 0,5 ÷ 10.000` (200.000/ha → 10 por metro). Fertilizantes e líquidos
+  só **por ha** (kg/ha ou L/ha; tonelada aparece em kg), sem conta de tanque. O WhatsApp e o
+  `retorno.html` (modo plantio) mostram "200.000 sementes por ha · 10 por metro" e as doses por ha; na
+  baixa, o adubo é digitado em kg e volta para a planilha na unidade do estoque (t). Ao concluir, o
+  plantio vira realizado (dia 0 do DAE). Mostra se o TS já foi feito; depois de enviar o TS, os
+  produtos de TS saem da recomendação de plantio.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
   **preço do diesel** editáveis; calcula custo de máquina/ha, diesel/ha e custo
   total/ha, além do custo médio por passada.
