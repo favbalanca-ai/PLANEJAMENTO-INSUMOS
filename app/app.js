@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-178';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-179';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6488,6 +6488,15 @@ function exportCotacaoCSV(){
   toast('CSV de cotação exportado');
 }
 /* ---- exportar PDF (via impressão do navegador -> "Salvar como PDF") ---- */
+// iPhone: depois de girar a tela (ou de um zoom ao tocar num campo) a página pode ficar ampliada e a barra
+// de baixo vai para o meio da tela. Ao girar, trava a escala em 1 por um instante e solta (zoom de dedo continua).
+(function(){
+  function resetZoom(){ const m=document.querySelector('meta[name=viewport]'); if(!m) return; const orig=m.getAttribute('content');
+    if(/maximum-scale/.test(orig)) return;
+    m.setAttribute('content', orig+', maximum-scale=1'); setTimeout(()=>m.setAttribute('content', orig), 400); }
+  window.addEventListener('orientationchange', ()=>setTimeout(resetZoom, 250));
+  if(window.screen && screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', ()=>setTimeout(resetZoom, 250));
+})();
 function printDoc(html){
   let el=document.getElementById('print-area');
   if(!el){ el=document.createElement('div'); el.id='print-area'; document.body.appendChild(el); }

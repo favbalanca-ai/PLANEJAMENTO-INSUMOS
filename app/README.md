@@ -110,6 +110,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   insumos + **máquinas** (somadas por operação) + **arrendamento/outros**
   (R$/ha editável). Preço de venda, custo de máquinas e arrendamento editáveis.
 
+## iPhone: zoom e girar a tela
+
+- No celular, todo campo (input/select/textarea) tem letra de **16px**: com menos, o Safari do iPhone dá
+  **zoom sozinho** ao tocar e a página fica ampliada (a barra de baixo ia parar no meio da tela).
+- `text-size-adjust:100%`: o iPhone não aumenta a letra ao girar a tela.
+- Ao girar a tela, o app trava a escala em 1 por um instante e solta (desfaz zoom que tenha ficado;
+  o zoom com os dedos continua funcionando).
+
 ## Botões
 
 - **Exportar** — baixa suas edições em JSON.
