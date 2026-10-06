@@ -54,6 +54,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Demanda de Compras** — consolida a demanda de todos os talhões e subtrai o
   **estoque** (editável): `A comprar = máx(0; Demanda − Estoque)`. Itens sem
   preço podem ter o preço preenchido ali.
+- **Estoque (também no Administrativo)** — a mesma tela aparece nos módulos Planejamento e
+  Administrativo (`VIEW_MOD.estoque='both'`, `TELA_MODS.estoque`); abrir por um módulo não troca de módulo.
+  Operador com acesso ao Administrativo vê e edita o estoque inicial e o "em pedido".
 - **Cotação** — itens a comprar agrupados por fornecedor, com exportação CSV.
 - **Compras (entradas)** — compras registradas à mão, por XML de NF-e ou pelo
   Receber nota. A lista **sincroniza entre aparelhos** pela aba `COMPRAS APP` da
