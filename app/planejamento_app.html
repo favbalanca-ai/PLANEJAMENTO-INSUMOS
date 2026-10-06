@@ -1507,7 +1507,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-182';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-183';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5956,8 +5956,11 @@ function recomFromCampoOp(opKey){
     r.itens=recomItensFromOp(t, opKey);
     r.calda=''; r.tanque='';                                // plantio: fertilizantes e líquidos por ha (sem conta de tanque)
     const mq=opMaqCampo(t, {key:opKey, tag:opKey[i+1], oi:+opKey.slice(i+2), op:opFromKey(opKey).op}, rl||{}); if(mq) r.maquina=mq; }
-  if(!ehPlantio && rl && rl.app && rl.app.vazao!=null && rl.app.vazao!=='' && !r.calda) r.calda=String(rl.app.vazao);
-  if(!ehPlantio && rl && rl.app && rl.app.tanque!=null && rl.app.tanque!=='' && !r.tanque) r.tanque=String(rl.app.tanque);
+  // tanque e vazão: SEMPRE os atuais do Campo enquanto o operador não respondeu
+  // (antes copiava só na 1ª vez — corrigir o tanque no Campo não mudava o PDF/WhatsApp)
+  if(!ehPlantio && !r.retorno && rl && rl.app){
+    if(rl.app.vazao!=null && rl.app.vazao!=='') r.calda=String(rl.app.vazao);
+    if(rl.app.tanque!=null && rl.app.tanque!=='') r.tanque=String(rl.app.tanque); }
   if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
   saveRecom(); return r;
 }
@@ -5973,7 +5976,9 @@ function recomSetField(el){
   else if(f==='itCar'){ r.itens[+i].car=v; }
   else if(f==='retQuem'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.quem=v; }
   else if(f==='retObs'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.obs=v; }
-  else if(f==='calda'||f==='tanque'){ r[f]=v; rerender=true; }   // recalcula a calda por tanque
+  else if(f==='calda'||f==='tanque'){ r[f]=v; rerender=true;   // recalcula a calda por tanque
+    if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{};   // e leva para o Campo (os dois ficam iguais)
+      rl.app[f==='calda'?'vazao':'tanque']=String(v).trim()===''?null:numBR(v); stampReal(r.opKey); } }
   else if(f==='resp'||f==='crea'){ r[f]=v; try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); d[f]=v; localStorage.setItem(RECOM_TEC_KEY, JSON.stringify(d)); }catch(e){} }
   else { r[f]=v; }
   saveRecom();
