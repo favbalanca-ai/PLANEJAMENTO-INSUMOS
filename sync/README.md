@@ -72,6 +72,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   criada ao lado da planilha no Drive. O arquivo fica com **“qualquer pessoa com o link pode ver”** (para os
   outros celulares abrirem a foto); o link vai na coluna FOTOS. Uma foto por pedido.
 
+## Estimativa de produtividade (aba `PRODUTIVIDADE APP`)
+- **`__produtividade`** (Campo e Planejamento), formato KEY|JSON|ATUALIZADO + colunas **DATA · TALHÃO · ATIVIDADE ·
+  ESTÁDIO · AMOSTRAGEM · PMS (g) · FATOR CORREÇÃO (%) · PL/HA ESTABELECIDAS · PL/HA PRODUTIVAS · GRÃOS/PLANTA ·
+  PLANTAS · SC/HA · QUEM · REGISTRO**. As plantas amostradas (nós, vagens, grãos / fileiras × grãos) ficam no
+  JSON. Volta como **`produtividade_app`**.
+
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
 2. **Extensões → Apps Script**.
