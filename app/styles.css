@@ -1673,9 +1673,16 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-tl-hoje b{position:absolute;top:16px;left:4px;white-space:nowrap;font-size:10.5px;color:#fff;background:#d32f2f;border-radius:6px;padding:1px 5px}
 .oq-tl-vazio{font-size:13px}
 /* marca de HOJE na linha de cada talhão (no vão entre os cartões; não mexe nas colunas) */
-.oq-card.oq-hoje-antes::before,.oq-card.oq-hoje-depois::after{content:'';position:absolute;top:-6px;bottom:-6px;width:2px;background:#d32f2f;border-radius:2px;pointer-events:none}
+.oq-card.oq-hoje-antes::before,.oq-card.oq-hoje-depois::after{content:'';position:absolute;top:-11px;bottom:-11px;width:3px;background:#d32f2f;pointer-events:none;z-index:1}
 .oq-card.oq-hoje-antes::before{left:-6px}
-.oq-card.oq-hoje-depois::after{right:-6px}
-.oq-card.oq-hoje-antes::before,.oq-card.oq-hoje-depois::after{box-shadow:0 0 0 1px rgba(255,255,255,.7)}
-@media (max-width:640px){ .oq-card.oq-hoje-antes::before{left:-5px} .oq-card.oq-hoje-depois::after{right:-5px} }
+.oq-card.oq-hoje-depois::after{right:-7px}
+@media (max-width:640px){ .oq-card.oq-hoje-antes::before{left:-5px} .oq-card.oq-hoje-depois::after{right:-6px} }
+/* etiqueta HOJE no cabeçalho "Mais detalhes", no vão onde cai o hoje da maioria dos talhões */
+.oq-colbtn{position:relative}
+.oq-colbtn.oq-hoje-hd::before,.oq-colbtn.oq-hoje-hd-fim::after{content:'';position:absolute;top:50%;bottom:-7px;width:3px;background:#d32f2f}
+.oq-colbtn.oq-hoje-hd::before{left:-6px}
+.oq-colbtn.oq-hoje-hd-fim::after{right:-7px}
+.oq-colbtn.oq-hoje-hd::after,.oq-colbtn.oq-hoje-hd-fim::before{content:'HOJE';position:absolute;top:-2px;font-size:9.5px;font-weight:800;color:#fff;background:#d32f2f;border-radius:6px;padding:1px 5px;letter-spacing:.3px}
+.oq-colbtn.oq-hoje-hd::after{left:-23px}
+.oq-colbtn.oq-hoje-hd-fim::before{right:-24px}
 @media print{ .oq-tl{break-inside:avoid} .oq-tl *,.oq-card::before,.oq-card::after{-webkit-print-color-adjust:exact;print-color-adjust:exact} }

@@ -138,7 +138,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   - **Linha do tempo** acima do quadro: régua com os meses, um traço colorido por operação (cor da situação),
     parte já passada listrada, os próximos 7 dias em amarelo e a marca vermelha **Hoje dd/mm**; ao lado, quantas
     estão atrasadas e quantas vencem nos próximos 7 dias. Em cada talhão, uma **linha vermelha** no vão entre os
-    cartões mostra onde fica o hoje (depois da última operação com data até hoje). Sai também na impressão.
+    cartões mostra onde fica o hoje (depois da última operação com data até hoje); a linha ocupa a altura toda e
+    emenda com a do talhão de baixo, formando uma linha vertical contínua onde os talhões estão no mesmo ponto, e o
+    cabeçalho "Mais detalhes" ganha a etiqueta **HOJE** no vão da maioria dos talhões. Sai também na impressão.
   - **⚠** no cartão = aplicada em data diferente da estimada · **🔔** = retorno do operador esperando aprovação.
   - **Mais detalhes** (acima de cada coluna): a mesma operação em todos os talhões do quadro — situação,
     estimada, efetiva, DAA e produtos (dose/ha · total), com **+** para abrir cada uma.
