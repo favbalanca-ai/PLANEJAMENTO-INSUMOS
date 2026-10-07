@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-186';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-187';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3830,7 +3830,7 @@ function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status
 function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
   && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)
-  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!==''))) delete OV.realizado[key]; }
+  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!=='')) && r.ord==null) delete OV.realizado[key]; }
 // localiza operação a partir da chave "TL|tagOp"
 function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), tagoi=key.slice(i+1);
   const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
@@ -5517,7 +5517,26 @@ function campoOpsDoTalhao(t){
       const tagoi=`${tag}${oi}`, key=`${t.id}|${tagoi}`, items=effItems(t.id,tagoi,op.itens).filter(it=>it.produto);
       if(!items.length && !realOf(key) && !(opMaqKey(t.id,tagoi) in OV.opMaq)) return;   // posição vazia do modelo: fora do campo
       out.push({seq,tag,oi,op,tagoi,key,items,cultura:seq==='safrinha'?empSafDe(t):empDe(t)}); }); });
-  return out;
+  return opOrdemCampo(out);
+}
+// ORDEM DE EXIBIÇÃO do Campo (Recuar/Avançar no quadro): posição "ord" gravada no registro da operação
+// (vai para a planilha junto com a execução). Só muda a ordem em que aparece — não mexe na aba do talhão nem nas baixas.
+// Sem "ord" vale a ordem do planejamento.
+function opOrdemCampo(ops){
+  const R=OV.realizado||{}, pos=(o,i)=>{ const r=R[o.key]; return (r && typeof r.ord==='number')?r.ord:i; };
+  const porSeq=seq=>ops.filter(o=>o.seq===seq).map((o,i)=>({o,i,p:pos(o,i)})).sort((a,b)=>a.p-b.p||a.i-b.i).map(x=>x.o);
+  return porSeq('principal').concat(porSeq('safrinha'));
+}
+function oqVizinhos(key){ const x=oqFind(key); if(!x) return null;
+  const lista=campoOpsDoTalhao(x.t).filter(o=>o.seq===x.o.seq), i=lista.findIndex(o=>o.key===key);
+  return {t:x.t, lista, i}; }
+function oqMover(key, dir){
+  const v=oqVizinhos(key); if(!v||v.i<0) return; const j=v.i+dir;
+  if(j<0||j>=v.lista.length){ toast(dir<0?'Já é a primeira operação':'Já é a última operação'); return; }
+  const l=v.lista.slice(); [l[v.i],l[j]]=[l[j],l[v.i]];
+  l.forEach((o,p)=>{ const r=realEnsure(o.key); if(r.ord!==p){ r.ord=p; stampReal(o.key); } });
+  oqPopClose(); route({keepScroll:true});
+  const c=document.querySelector(`.oq-card[data-key="${key}"]`); if(c){ oqPopOpen(c); c.scrollIntoView({block:'nearest',inline:'nearest'}); }   // segue com a janelinha aberta
 }
 // ===== QUADRO de operações (visão geral): uma linha por talhão, um cartão por operação =====
 let oqSeq='principal', oqAtiv='', oqTal='';
@@ -5568,7 +5587,7 @@ function oqPopClose(){ const p=document.getElementById('oq-pop'); if(p) p.remove
 function oqPopOpen(card){
   const key=card.dataset.key, was=document.getElementById('oq-pop'), same=was&&was.dataset.key===key;
   oqPopClose(); if(same) return;                       // tocar de novo no mesmo cartão fecha
-  const x=oqFind(key); if(!x) return; const {t,o}=x, f=oqInfo(t,o,+card.dataset.n||1), pr=oqProdutos(t,o,f.r);
+  const x=oqFind(key); if(!x) return; const {t,o}=x, f=oqInfo(t,o,+card.dataset.n||1), pr=oqProdutos(t,o,f.r), viz=oqVizinhos(key);
   const pop=document.createElement('div'); pop.id='oq-pop'; pop.className='oq-pop'; pop.dataset.key=key; pop.setAttribute('role','dialog');
   pop.innerHTML=`<div class="oq-pop-h"><b>${esc(f.nome)}</b><span>${esc(tNome(t))}</span><button class="icon-btn" data-act="oqPopClose" title="Fechar">✕</button></div>
     <div class="oq-pop-b">
@@ -5579,7 +5598,10 @@ function oqPopOpen(card){
       ${pr.length?`<table class="oq-pop-t"><thead><tr><th>Produto</th><th class="num">Dose</th><th class="num">Total</th></tr></thead><tbody>
         ${pr.map(x=>`<tr><td>${esc(x.produto)}${x.extra?' <small class="mut">(extra)</small>':''}</td><td class="num">${esc(x.dose)}</td><td class="num">${esc(x.total)}</td></tr>`).join('')}</tbody></table>
         <div class="mut" style="font-size:11px">Total para ${num(areaDe(t))} ha${f.feita||Object.keys(f.r.doses||{}).length?' · doses realizadas quando informadas':''}.</div>`:'<div class="mut">Sem produtos nesta operação.</div>'}
-      <a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a>
+      <div class="oq-pop-f">
+        <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="-1" data-key="${esc(key)}"${viz&&viz.i>0?'':' disabled'} title="Passar para antes da operação anterior">‹ Recuar</button>
+        <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="1" data-key="${esc(key)}"${viz&&viz.i<viz.lista.length-1?'':' disabled'} title="Passar para depois da próxima operação">Avançar ›</button>
+        <span class="spacer"></span><a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a></div>
     </div>`;
   document.body.appendChild(pop); card.classList.add('oq-sel');
   if(innerWidth>640){                                    // computador: embaixo do cartão (ou em cima, se não couber)
@@ -6307,6 +6329,7 @@ document.addEventListener('click',e=>{
       setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
     else if(a.act==='oqPop'){ oqPopOpen(act); return; }
     else if(a.act==='oqPopClose'){ oqPopClose(); return; }
+    else if(a.act==='oqMover'){ oqMover(a.key, +a.dir||0); return; }
     else if(a.act==='oqCol'){ oqPopClose(); oqColModal(+a.col||0); return; }
     else if(a.act==='oqColClose'){ oqFecharTudo(); return; }
     else if(a.act==='oqImprimir'){ const w=document.querySelector('.oq-wrap'); printDoc(`<div class="rx-title"><h1>Quadro de operações de campo</h1><span class="n">${fmtDataBR(_hojeISO())} · Safra 2026/2027</span></div><div class="oq-legs">${document.querySelector('.oq-legs').innerHTML}</div>${w?w.outerHTML:''}`); return; }
