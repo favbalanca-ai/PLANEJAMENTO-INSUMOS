@@ -79,8 +79,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Cores: verde = aplicado · listrado = em andamento · amarelo = faltam até 3 dias · vermelho = atrasado ·
   cinza = dentro do prazo · riscado = *não será realizada*. Filtros de safra (1ª, 2ª, ambas), atividade
   (pela classe dos produtos: Herbicida, Fungicida, Plantio…) e talhão; botão 🖨 Imprimir. O **+** do cartão
-  abre o talhão já com a operação aberta; ⚠ = retorno do operador esperando aprovação. No celular a coluna
-  do talhão fica fixa e os cartões rolam de lado.
+  abre o talhão já com a operação aberta. No celular a coluna do talhão fica fixa e os cartões rolam de lado.
+  - **Tocar no cartão** abre uma janelinha: data estimada, data efetiva (em vermelho com ⚠ e quantos dias
+    antes/depois, se diferente da estimada), dias após aplicado, situação e a tabela **Produto · Dose/ha ·
+    Total** no talhão (dose realizada quando informada, senão a do plano; extras incluídos) + *Ver aplicação ›*.
+    No celular ela aparece presa embaixo; fecha no ✕, tocando fora ou com Esc.
+  - **⚠** no cartão = aplicada em data diferente da estimada · **🔔** = retorno do operador esperando aprovação.
+  - **Mais detalhes** (acima de cada coluna): a mesma operação em todos os talhões do quadro — situação,
+    estimada, efetiva, DAA e produtos (dose/ha · total), com **+** para abrir cada uma.
 - **Status "Não será realizada"** — 4º botão no registro da operação (além de Pendente / Em andamento /
   Concluída). Não conta como atrasada nem como próxima, sai da % de conclusão e tem o chip *Não realizadas*;
   "↩ Voltar a pendente" desfaz.

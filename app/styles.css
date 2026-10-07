@@ -1445,3 +1445,49 @@ body[data-embed] .content{padding:10px 10px 24px}
 @media print{ .oq-wrap{overflow:visible;border:0} .oq-hd{position:static;box-shadow:none} .oq-plus{display:none}
   .oq-row{break-inside:avoid;min-width:0} .oq-cards{flex-wrap:wrap} .oq-card{padding-right:10px}
   .oq-card,.oq-sw{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+/* Quadro: cabeçalho "Mais detalhes", janelinha do cartão e tabela da coluna */
+.oq-card{cursor:pointer}
+.oq-card.oq-sel{outline:2px solid var(--ink2);outline-offset:1px}
+.oq-dif{color:#c62828}
+.oq-red{color:#c62828}
+.oq-colrow{background:#f7f9fa}
+.oq-hd-blank{padding:0;background:#f7f9fa}
+.oq-colrow .oq-cards{padding-top:6px;padding-bottom:6px}
+.oq-colbtn{flex:0 0 auto;width:132px;border:0;background:none;color:var(--ink);font-size:12.5px;font-weight:600;cursor:pointer;padding:4px 0;border-radius:6px}
+.oq-colbtn:hover{background:var(--teal-soft);color:var(--ink2)}
+.oq-pop{position:absolute;z-index:60;width:340px;max-width:calc(100vw - 16px);background:var(--card);border:1px solid var(--line);
+  border-radius:12px;box-shadow:0 12px 34px rgba(20,50,60,.22);font-size:13px;color:var(--ink)}
+.oq-pop-h{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 14px;background:#f4f6f8;border-bottom:1px solid var(--line);border-radius:12px 12px 0 0}
+.oq-pop-h b{font-size:14px}
+.oq-pop-h span{flex:1;font-size:12px;color:var(--muted)}
+.oq-pop-b{padding:10px 14px 12px;display:flex;flex-direction:column;gap:6px}
+.oq-pop-t{width:100%;border-collapse:collapse;margin-top:4px;font-size:12.5px}
+.oq-pop-t th{text-align:left;font-weight:700;padding:6px 6px;border-bottom:1px solid var(--line)}
+.oq-pop-t td{padding:7px 6px;border-bottom:1px solid #eef1f3}
+.oq-pop-t tbody tr:nth-child(odd){background:#f8fafb}
+.oq-pop-t .num{text-align:right;white-space:nowrap}
+.oq-pop-ver{align-self:flex-end;color:var(--teal);font-weight:700;cursor:pointer;text-decoration:none;margin-top:2px}
+.oq-col-t{width:100%;border-collapse:collapse;font-size:12.5px}
+.oq-col-t th{text-align:left;padding:7px 8px;border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card)}
+.oq-col-t td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.oq-col-t .oq-plus{position:static;background:var(--teal-soft)}
+.oq-col-pr small{color:var(--muted);white-space:nowrap}
+.oq-st{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.oq-st.oq-canc{text-decoration:line-through}
+@media (max-width:640px){
+  .oq-colbtn{width:118px;font-size:11.5px}
+  /* "Mais detalhes" no celular: cada talhão vira um bloco (sem tabela larga) */
+  .oq-col-t thead{display:none}
+  .oq-col-t,.oq-col-t tbody{display:block}
+  .oq-col-t tr{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:4px 8px;padding:10px 2px;border-bottom:1px solid var(--line)}
+  .oq-col-t td{border:0;padding:0}
+  .oq-col-t td:nth-child(1){grid-column:1/4}
+  .oq-col-t td:nth-child(2){grid-column:4;text-align:right}
+  .oq-col-t td[data-l]::before{content:attr(data-l);display:block;font-size:10.5px;color:var(--muted);font-weight:700}
+  .oq-col-t td:nth-child(6){grid-column:1/4}
+  .oq-col-t td:nth-child(7){grid-column:4;grid-row:2;align-self:center}
+  /* celular: a janelinha vira uma folha presa embaixo, acima da barra de navegação */
+  .oq-pop{position:fixed;left:8px!important;right:8px;top:auto!important;width:auto;max-width:none;
+    bottom:calc(74px + env(safe-area-inset-bottom,0px));max-height:65vh;overflow:auto}
+}
+@media print{ .oq-colrow{display:none} .oq-card.oq-sel{outline:0} }
