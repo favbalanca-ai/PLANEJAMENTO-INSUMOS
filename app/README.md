@@ -135,6 +135,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
     não reescreve a aba do talhão nem mexe em baixas. Fica no registro da operação (`ord`) e sobe para a
     planilha junto com a execução do Campo (aba REALIZADO APP), então aparece igual nos outros aparelhos.
     Sem `ord`, vale a ordem do planejamento.
+  - **Visualizar: Por data (semanas)** (padrão) — as colunas são **semanas, iguais para todos os talhões**: cada
+    cartão cai na coluna da semana da sua data (mesma semana no mesmo talhão = cartões empilhados); semanas sem
+    operação viram colunas estreitas (o mês aparece na virada); coluna "Sem data" no fim para quem não tem
+    plantio. A **linha vermelha de HOJE é reta** de cima a baixo, no dia certo dentro da semana, com a etiqueta
+    HOJE no cabeçalho; o quadro abre rolado com a semana de hoje no meio. O cabeçalho da semana (*Mais detalhes*)
+    lista as operações daquela semana. **Por operação** mantém o quadro antigo (colunas = ordem das operações).
+    A escolha fica guardada no aparelho.
   - **Linha do tempo** acima do quadro: régua com os meses, um traço colorido por operação (cor da situação),
     parte já passada listrada, os próximos 7 dias em amarelo e a marca vermelha **Hoje dd/mm**; ao lado, quantas
     estão atrasadas e quantas vencem nos próximos 7 dias. Em cada talhão, uma **linha vermelha** no vão entre os
