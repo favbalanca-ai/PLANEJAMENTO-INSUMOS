@@ -73,6 +73,24 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Pesagem v2, mesmo site `favbalanca-ai.github.io` → mesmo login no aparelho): sem menus, só as abas
   **Receber** e **Pendências** (conforme a permissão), além de Entrar / Minha conta / ⚙️ Sincronizar.
   Não troca o módulo salvo do app normal.
+- **Mapa → Nova Ação** — tocar no talhão do mapa (ou ➕ *Ação* na lista de limites / ➕ *Nova ação* na tela
+  do talhão no Campo) abre a folha **Nova Ação**: Ocorrência e Outras ocorrências → Monitoramento;
+  Recomendação; **Aferição**; Aplicação → operações do talhão; Stand; Anotação e Estimativa de
+  produtividade aparecem como *em breve*. Embaixo, links para Operações e Timeline.
+- **Campo → Aferição** (`#/afericao/<tipo>~<talhão>`, menu *Aferir*) — abas **Dados** e **Histórico**
+  (histórico filtrado pela máquina escolhida). O resumo é recalculado enquanto digita:
+  - **Aplicação (pulverizador):** comprimento, largura da barra, espaçamento entre bicos, volume (mL) de
+    cada bico no tempo do percurso → **L/ha = média × 10 ÷ (comprimento × espaçamento)**, total na barra,
+    CV entre bicos, bicos fora de ±10%, diferença da vazão alvo.
+  - **Colheita (perda):** comprimento × largura (m²), peso (g) ou nº de grãos × PMS → **kg/ha = g ÷ m² × 10**
+    e sc/ha.
+  - **Semeadura: adubo:** g por linha → kg/m e **kg/ha = média × 10 ÷ (comprimento × espaçamento)**; alvo
+    sugerido pelo adubo da operação de plantio.
+  - **Semeadura: sementes:** contagem (ou peso + PMS) por linha → sementes/m e **sementes/ha**; alvo
+    sugerido pela população do plantio.
+  - Velocidade: digitada ou calculada pelo **tempo do percurso** (comprimento ÷ tempo × 3,6).
+  - Salva na planilha (aba **AFERICOES APP**, ver `sync/README.md`); depois de salvar, a próxima aferição
+    já vem com a mesma máquina e medidas. Excluir marca como excluída (some em todos os aparelhos).
 - **Campo → Quadro de operações** — ao abrir *Operação de Campo* sem escolher talhão aparece o quadro:
   uma **linha por talhão** (nome, cultura · cultivar, área, *Detalhes ›*) e um **cartão por operação**
   (nome, atividade, data, **DAA** = dias desde a aplicação, **Pos. Ciclo** = dias depois do plantio).

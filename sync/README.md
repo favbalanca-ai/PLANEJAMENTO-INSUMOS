@@ -49,6 +49,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   valores vêm de fórmulas/cadastro, então gravá-los quebraria as fórmulas.
   (No sentido planilha → app, tudo isso é lido normalmente.)
 
+## Aferições do Campo (aba `AFERICOES APP`)
+- Tipo de gravação **`__afericao`** (módulos Campo e Planejamento): o app manda todas as aferições e a
+  planilha guarda por chave (KEY|JSON|ATUALIZADO, o `_u` mais novo vence), criando a aba se faltar.
+- Colunas legíveis ao lado: **DATA · TALHÃO · TIPO · MÁQUINA · IMPLEMENTO · RESULTADO · SITUAÇÃO**
+  (o RESULTADO é o resumo calculado no app, ex.: `200 L/ha · 6 bico(s) · CV 2,8%`). Excluídas ficam com
+  SITUAÇÃO = **EXCLUÍDA** (para não voltarem de outro aparelho).
+- Vem de volta no puxar como **`afericoes_app`** (parte APP). Enquanto o Code.gs antigo estiver publicado,
+  o app guarda as aferições no aparelho e mostra o aviso para atualizar; depois sobem sozinhas.
+
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
 2. **Extensões → Apps Script**.
