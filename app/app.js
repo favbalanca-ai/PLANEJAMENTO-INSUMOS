@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-192';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-193';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6194,9 +6194,9 @@ function oqInfo(t,o,n){
 }
 const OQ_ICO_DIF='<span class="oq-alert oq-dif" title="Data efetiva diferente da estimada">⚠</span>';
 const OQ_ICO_RET='<span class="oq-alert" title="Retorno do operador aguardando aprovação">🔔</span>';
-function oqCard(t,o,n){
-  const f=oqInfo(t,o,n);
-  return `<div class="oq-card oq-${f.st}" data-act="oqPop" data-key="${esc(o.key)}" data-n="${n}" title="${esc(OQ_ST[f.st])}${f.difer?' · data efetiva diferente da estimada':''}${f.ret?' · retorno do operador aguardando aprovação':''}">
+function oqCard(t,o,n,f,hoje){
+  f=f||oqInfo(t,o,n);
+  return `<div class="oq-card oq-${f.st}${hoje?' oq-hoje-'+hoje:''}" data-act="oqPop" data-key="${esc(o.key)}" data-n="${n}" title="${esc(OQ_ST[f.st])}${f.difer?' · data efetiva diferente da estimada':''}${f.ret?' · retorno do operador aguardando aprovação':''}">
     <div class="oq-c-tx"><div class="oq-c-n">${esc(f.nome)}${f.difer?' '+OQ_ICO_DIF:''}${f.ret?' '+OQ_ICO_RET:''}</div>
       ${f.at.length?`<div class="oq-c-at">${esc(f.at.join(' · '))}</div>`:''}
       <div>${f.dt?fmtDataBR(f.dt).slice(0,5):'—'}</div>${f.daa!=null?`<div>DAA: ${f.daa}</div>`:''}<div>Pos. Ciclo: ${f.pos!=null?f.pos:'—'}</div></div>
@@ -6268,12 +6268,41 @@ function oqFecharTudo(){ oqPopClose(); const ov=document.getElementById('oq-col-
 window.addEventListener('hashchange', oqFecharTudo);
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') oqFecharTudo(); });
 document.addEventListener('click', e=>{ if(document.getElementById('oq-pop') && !e.target.closest('#oq-pop,[data-act="oqPop"]')) oqPopClose(); }, true);
+// cartões da linha do talhão + marca vermelha de HOJE entre o último cartão até hoje e o próximo (sem mexer no alinhamento das colunas)
+function oqCardsComHoje(t,vis,tlItens){ const hj=_hojeISO(), fs=vis.map(v=>oqInfo(t,v.o,v.n));
+  fs.forEach(f=>{ if(f.dt) tlItens.push({dt:f.dt, st:f.st, nome:f.nome, tal:tNome(t)}); });
+  const comData=fs.map((f,i)=>({i,dt:f.dt})).filter(x=>x.dt);
+  let marca=null;   // {i, lado:'antes'|'depois'}
+  if(comData.length){ const passados=comData.filter(x=>x.dt<=hj);
+    if(!passados.length) marca={i:comData[0].i, lado:'antes'};
+    else { const ult=passados[passados.length-1], prox=comData.find(x=>x.i>ult.i && x.dt>hj); marca=prox?{i:prox.i,lado:'antes'}:{i:ult.i,lado:'depois'}; } }
+  return vis.map((v,i)=>oqCard(t,v.o,v.n,fs[i], marca&&marca.i===i?marca.lado:'')).join(''); }
+// LINHA DO TEMPO acima do quadro: régua de datas (meses), cada operação como um traço colorido e a marca de HOJE
+function oqLinhaTempo(itens){ const hj=_hojeISO(), hjBR=fmtDataBR(hj);
+  if(!itens.length) return `<div class="oq-tl oq-tl-vazio"><span class="oq-tl-tit">📅 Hoje: <b>${hjBR}</b></span></div>`;
+  const dia=86400000, ms=iso=>new Date(iso+'T12:00:00').getTime(), ds=itens.map(x=>ms(x.dt));
+  let ini=Math.min(...ds, ms(hj)-7*dia), fim=Math.max(...ds, ms(hj)+14*dia); ini-=2*dia; fim+=2*dia;
+  const pos=t=>((t-ini)/(fim-ini)*100).toFixed(2)+'%', ph=ms(hj);
+  const meses=[]; const d=new Date(ini); d.setDate(1); d.setHours(12); if(d.getTime()<ini) d.setMonth(d.getMonth()+1);
+  const NM=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+  while(d.getTime()<=fim){ meses.push(`<span class="oq-tl-m" style="left:${pos(d.getTime())}">${NM[d.getMonth()]}${d.getMonth()===0?'/'+String(d.getFullYear()).slice(2):''}</span>`); d.setMonth(d.getMonth()+1); }
+  const cont={late:0,breve:0,prox7:0}; itens.forEach(x=>{ if(x.st==='late') cont.late++; if(x.st==='breve') cont.breve++; const dd=_dias(x.dt,hj); if(dd>=0&&dd<=7&&x.st!=='ok'&&x.st!=='canc') cont.prox7++; });
+  const marcas=itens.map(x=>`<i class="oq-tl-d oq-${x.st}" style="left:${pos(ms(x.dt))}" title="${esc(x.tal)} · ${esc(x.nome)} · ${fmtDataBR(x.dt).slice(0,5)}"></i>`).join('');
+  return `<div class="oq-tl" role="img" aria-label="Linha do tempo das operações; hoje ${hjBR}">
+    <div class="oq-tl-cab"><span class="oq-tl-tit">📅 Linha do tempo · hoje <b>${hjBR}</b></span>
+      <span class="oq-tl-res">${cont.late?`<b class="oq-red">${cont.late} atrasada(s)</b> · `:''}${cont.prox7} nos próximos 7 dias</span></div>
+    <div class="oq-tl-bar">
+      <div class="oq-tl-past" style="width:${pos(ph)}"></div>
+      <div class="oq-tl-7" style="left:${pos(ph)};width:${((7*dia)/(fim-ini)*100).toFixed(2)}%"></div>
+      ${meses.join('')}${marcas}
+      <div class="oq-tl-hoje" style="left:${pos(ph)}"><b>Hoje ${hjBR.slice(0,5)}</b></div>
+    </div></div>`; }
 function campoQuadro(){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   const tals=all.filter(t=>!oqTal||t.id===oqTal);
   const ativs=new Set(); all.forEach(t=>campoOpsDoTalhao(t).forEach(o=>oqAtividades(t,o).forEach(a=>ativs.add(a))));
-  oqCols=[];
+  oqCols=[]; const tlItens=[];
   const rows=tals.map(t=>{
     const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
     const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq));
@@ -6286,7 +6315,7 @@ function campoQuadro(){
     return `<div class="oq-row"><div class="oq-hd"><a class="oq-nome" data-go="#/campo/${esc(t.id)}">${esc(tNome(t))}</a>
         <div class="oq-sub">${esc(cult||'—')}${pc?' · '+esc(pc.sem.produto):''}</div><div class="oq-area">${num(areaDe(t))} ha</div>
         <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>
-      <div class="oq-cards">${vis.map(v=>oqCard(t,v.o,v.n)).join('')}</div></div>`; }).join('');
+      <div class="oq-cards">${oqCardsComHoje(t,vis,tlItens)}</div></div>`; }).join('');
   const colRow=oqCols.length?`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`:'';
   const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
   return `<div class="oq-top">
@@ -6296,6 +6325,7 @@ function campoQuadro(){
       <button class="btn btn-outline btn-sm oq-print" data-act="oqImprimir" title="Imprimir o quadro">🖨 Imprimir</button>
     </div>
     <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div>
+    ${oqLinhaTempo(tlItens)}
     <div class="oq-wrap">${rows?colRow+rows:'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no cartão para ver datas e produtos · <b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ aplicada em data diferente da estimada · 🔔 retorno do operador aguardando aprovação.</p>`;
 }
@@ -7000,7 +7030,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='oqMover'){ oqMover(a.key, +a.dir||0); return; }
     else if(a.act==='oqCol'){ oqPopClose(); oqColModal(+a.col||0); return; }
     else if(a.act==='oqColClose'){ oqFecharTudo(); return; }
-    else if(a.act==='oqImprimir'){ const w=document.querySelector('.oq-wrap'); printDoc(`<div class="rx-title"><h1>Quadro de operações de campo</h1><span class="n">${fmtDataBR(_hojeISO())} · Safra 2026/2027</span></div><div class="oq-legs">${document.querySelector('.oq-legs').innerHTML}</div>${w?w.outerHTML:''}`); return; }
+    else if(a.act==='oqImprimir'){ const w=document.querySelector('.oq-wrap'); printDoc(`<div class="rx-title"><h1>Quadro de operações de campo</h1><span class="n">${fmtDataBR(_hojeISO())} · Safra 2026/2027</span></div><div class="oq-legs">${document.querySelector('.oq-legs').innerHTML}</div>${(document.querySelector('.oq-tl')||{}).outerHTML||''}${w?w.outerHTML:''}`); return; }
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
       const r=realEnsure(a.key); const was=r.status; r.status=a.val;
       if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }

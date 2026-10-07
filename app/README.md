@@ -135,6 +135,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
     não reescreve a aba do talhão nem mexe em baixas. Fica no registro da operação (`ord`) e sobe para a
     planilha junto com a execução do Campo (aba REALIZADO APP), então aparece igual nos outros aparelhos.
     Sem `ord`, vale a ordem do planejamento.
+  - **Linha do tempo** acima do quadro: régua com os meses, um traço colorido por operação (cor da situação),
+    parte já passada listrada, os próximos 7 dias em amarelo e a marca vermelha **Hoje dd/mm**; ao lado, quantas
+    estão atrasadas e quantas vencem nos próximos 7 dias. Em cada talhão, uma **linha vermelha** no vão entre os
+    cartões mostra onde fica o hoje (depois da última operação com data até hoje). Sai também na impressão.
   - **⚠** no cartão = aplicada em data diferente da estimada · **🔔** = retorno do operador esperando aprovação.
   - **Mais detalhes** (acima de cada coluna): a mesma operação em todos os talhões do quadro — situação,
     estimada, efetiva, DAA e produtos (dose/ha · total), com **+** para abrir cada uma.
