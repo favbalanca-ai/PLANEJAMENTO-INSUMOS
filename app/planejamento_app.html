@@ -1512,6 +1512,77 @@ body[data-embed] .content{padding:10px 10px 24px}
 }
 @media print{ .oq-colrow{display:none} .oq-card.oq-sel{outline:0} }
 
+/* ===== Nova Ação (tocar no talhão no mapa) — folha que sobe de baixo ===== */
+.na-ov{position:fixed;inset:0;z-index:120;background:rgba(20,40,48,.38);display:flex;align-items:flex-end;justify-content:center}
+.na-sheet{background:var(--card);width:min(560px,100%);max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.25);
+  padding:8px 18px calc(16px + env(safe-area-inset-bottom,0px));animation:naUp .18s ease-out}
+@keyframes naUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.na-grab{width:42px;height:5px;border-radius:3px;background:#d5dde1;margin:2px auto 8px}
+.na-h{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}
+.na-h h3{text-align:center;font-size:20px;font-weight:800;color:var(--ink)}
+.na-sub{text-align:center;font-size:14.5px;color:var(--ink);margin:6px 0 10px;line-height:1.4}
+.na-sub small{color:var(--muted);font-size:12px}
+.na-list{display:flex;flex-direction:column}
+.na-item{display:flex;align-items:center;gap:14px;padding:12px 2px;border-top:1px solid var(--line);text-decoration:none;color:var(--ink);cursor:pointer}
+.na-item:hover{background:#f7fafb}
+.na-tx{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.na-tx b{font-size:16px}
+.na-tx span{font-size:13px;color:var(--muted);line-height:1.3}
+.na-seta{font-size:22px;color:#b0bec5}
+.na-off{opacity:.55;cursor:default}
+.na-breve{font-size:10.5px;font-weight:700;background:#eef2f4;color:var(--muted);border-radius:8px;padding:1px 6px;margin-left:4px;vertical-align:middle}
+.na-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;font-size:22px}
+.na-azul{background:#e3edfc}.na-rosa{background:#fbe1ea}.na-ciano{background:#dff6fb}.na-verde{background:#dcf7ec}.na-amarelo{background:#fdf9d7}
+.na-links{text-align:center;font-size:13px;padding:12px 0 2px;border-top:1px solid var(--line)}
+.cp-topbtns{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+/* ===== Aferições ===== */
+.af-head{display:flex;align-items:center;gap:10px;margin:4px 0 8px}
+.af-head h2{display:flex;align-items:center;gap:10px;font-size:18px;color:var(--ink)}
+.af-head .na-ico{width:38px;height:38px;font-size:19px;border-radius:10px}
+.af-tabs{display:flex;background:var(--teal-soft);border-radius:12px 12px 0 0;overflow:hidden}
+.af-tabs button{flex:1;border:0;background:none;padding:12px;font-size:15px;color:var(--ink);cursor:pointer;border-bottom:3px solid transparent}
+.af-tabs button.on{border-bottom-color:var(--teal);font-weight:700;background:rgba(255,255,255,.4)}
+.af-panel{border-top-left-radius:0;border-top-right-radius:0;margin-top:0}
+.af-form{padding:14px 16px}
+.af-req{color:#c62828;font-style:normal}
+.af-sec{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.af-sec-h{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:13px;color:var(--ink)}
+.af-n{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.af-n .cell{width:80px}
+.af-ams{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 14px;margin-bottom:8px}
+.af-am{display:flex;align-items:center;gap:6px}
+.af-am span{font-size:12.5px;color:var(--muted);width:58px;flex:none}
+.af-am .cell{flex:1;min-width:0}
+.af-obs{display:flex;flex-direction:column;gap:3px;font-size:12px;font-weight:700;color:var(--muted);margin-top:12px}
+.af-res{margin-top:14px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.af-res::before{content:'Resumo';display:block;background:var(--teal-soft);padding:8px 14px;font-weight:800;color:var(--ink)}
+.af-res>div{display:flex;justify-content:space-between;gap:10px;padding:7px 14px;border-top:1px solid #eef2f4;font-size:14px}
+.af-res>div span{color:var(--muted)}
+.af-ok{color:var(--green)}.af-bad{color:#c62828}
+.af-falta{font-size:12.5px;color:#b45309;margin-top:8px;min-height:1em}
+.af-acts{display:flex;align-items:center;gap:8px;margin-top:12px}
+.af-hist-top{padding:12px 16px;border-bottom:1px solid var(--line);font-size:14px;display:flex;flex-direction:column;gap:4px}
+.af-tbl-w{overflow-x:auto}
+.af-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.af-tbl th{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);font-weight:700;color:var(--ink);white-space:nowrap}
+.af-tbl td{padding:8px 10px;border-bottom:1px solid #eef2f4;vertical-align:top}
+.af-tbl .num{text-align:right;white-space:nowrap}
+.af-ult{display:flex;align-items:center;gap:12px;padding:10px 14px;border-top:1px solid var(--line);font-size:13.5px}
+.af-ult>div{flex:1;min-width:0}
+.af-ult .mut{font-size:12px}
+.af-ult .na-ico{width:38px;height:38px;font-size:18px}
+.panel .na-list{padding:0 14px 6px}
+.af-form .app-grid .cell,.af-form .app-grid .txt,.af-form .app-grid .sel{width:100%}
+.af-am .icon-btn{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;font-size:13px}
+@media (max-width:640px){
+  .af-tbl{font-size:12px}
+  .af-tbl th,.af-tbl td{padding:7px 6px}
+  .af-tbl th{white-space:normal;font-size:11px}
+  .af-tbl td .mut{display:none}
+  .af-ams{grid-template-columns:1fr 1fr;gap:6px 10px}
+  .af-am span{width:48px;font-size:12px}
+}
+
 </style>
 </head>
 <body>
@@ -1552,6 +1623,7 @@ body[data-embed] .content{padding:10px 10px 24px}
       <a href="#/mapa" data-view="mapa" data-mod="campo"><span class="ico">🗺️</span><span class="lbl">Mapa</span><span class="lbl-s">Mapa</span></a>
       <a href="#/chuva" data-view="chuva" data-mod="campo"><span class="ico">🌧️</span><span class="lbl">Chuva</span><span class="lbl-s">Chuva</span></a>
       <a href="#/stand" data-view="stand" data-mod="campo"><span class="ico">🌱</span><span class="lbl">Contagem de Stand</span><span class="lbl-s">Stand</span></a>
+      <a href="#/afericao" data-view="afericao" data-mod="campo"><span class="ico">🧮</span><span class="lbl">Aferição</span><span class="lbl-s">Aferir</span></a>
       <a href="#/recomendacao" data-view="recomendacao" data-mod="campo"><span class="ico">💊</span><span class="lbl">Recomendação</span><span class="lbl-s">Recom.</span></a>
       <a href="#/relatorios" data-view="relatorios" data-mod="campo"><span class="ico">📄</span><span class="lbl">Relatórios</span><span class="lbl-s">Relat.</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
@@ -1607,7 +1679,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-187';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-188';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2016,7 +2088,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -5973,6 +6045,234 @@ V.stand=function(arg){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">População = (média de plantas ÷ comprimento ÷ espaçamento) × 10.000. Salvo <b>no aparelho</b>.</p>`;
 };
 
+/* ============ AFERIÇÕES (pulverizador · perda na colheita · semeadura adubo/sementes) ============
+   Um registro por aferição, guardado por id e sincronizado com a planilha (aba "AFERICOES APP", merge pelo _u).
+   Excluir = marcar del (para não voltar de outro aparelho). */
+const AFER_KEY='planejamento_afericoes';
+let AFER=null, afTipoSel='', afAba='dados', afTal='', afForm={};
+const AF_TIPOS={
+  aplicacao:{lbl:'Aplicação',sub:'Pulverizador: vazão por bico',ico:'🚿',cls:'na-azul',am:'Bico',un:'mL'},
+  colheita:{lbl:'Colheita',sub:'Perda na colheita',ico:'🌾',cls:'na-verde'},
+  adubo:{lbl:'Semeadura: adubo',sub:'Adubo por linha da plantadeira',ico:'🧂',cls:'na-amarelo',am:'Linha',un:'g'},
+  sementes:{lbl:'Semeadura: sementes',sub:'Sementes por linha da plantadeira',ico:'🌱',cls:'na-amarelo',am:'Linha',un:'sementes'} };
+function loadAfer(){ try{ const d=JSON.parse(localStorage.getItem(AFER_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
+function saveAfer(){ try{ localStorage.setItem(AFER_KEY, JSON.stringify(AFER)); }catch(e){} scheduleAferPush(); }
+function aferLista(){ return Object.values((AFER&&AFER.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
+// ---- sincronização (aba "AFERICOES APP"; só envia se o Code.gs já tiver o ramo __afericao) ----
+let aferPushTimer=null, lastAferSig='';
+function aferSig(){ return JSON.stringify((AFER&&AFER.reg)||{}); }
+function aferServerOk(){ return !!(DATA && DATA.afericoes_app && typeof DATA.afericoes_app==='object'); }
+function scheduleAferPush(){ if(!syncUrl()||!autoOn()||!aferServerOk()) return; clearTimeout(aferPushTimer);
+  aferPushTimer=setTimeout(()=>{ if(aferSig()===lastAferSig) return; aferPush({auto:true}); }, 1500); }
+async function aferPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!aferServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleAferPush(); return; }
+  const sig=aferSig(); if(opts.auto && sig===lastAferSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__afericao:(AFER.reg||{})}));
+    if(postOk(r)) lastAferSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Aferições: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+function aferApplyPulled(map){
+  if(!map || typeof map!=='object' || !AFER) return false;
+  let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=AFER.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>lu){ AFER.reg[k]=inc; changed=true; } }
+  const pend=aferSig()!==lastAferSig && !!lastAferSig;
+  if(changed){ try{ localStorage.setItem(AFER_KEY, JSON.stringify(AFER)); }catch(e){} if(!pend) lastAferSig=aferSig(); }
+  if(pend) scheduleAferPush();
+  return changed;
+}
+// ---- cálculos ----
+const afN=(v,d)=>(v==null||!isFinite(v))?'—':(+v).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:d==null?2:d});
+function _afStats(vals){ const n=vals.length; if(!n) return {n:0,media:0,soma:0,cv:null};
+  const soma=vals.reduce((a,b)=>a+b,0), media=soma/n;
+  const dp=n>1?Math.sqrt(vals.reduce((a,v)=>a+(v-media)*(v-media),0)/(n-1)):0;
+  return {n,media,soma,cv:media?dp/media*100:null}; }
+function afCalc(f){
+  const tp=f.tipo, comp=numBR(f.comp), larg=numBR(f.larg), esp=numBR(f.esp), tempo=numBR(f.tempo);
+  const vel=(tempo>0&&comp>0)?comp/tempo*3.6:(numBR(f.vel)||null);
+  const vals=(f.am||[]).map(v=>String(v).trim()===''?null:numBR(v)).filter(v=>v!=null&&v>=0), st=_afStats(vals), alvo=numBR(f.alvo)||null;
+  const o={vel, n:st.n, cv:st.cv, media:st.media, soma:st.soma, alvo, falta:[]};
+  if(!String(f.maq||'').trim()) o.falta.push('máquina');
+  if(!(comp>0)) o.falta.push('comprimento');
+  if(tp==='aplicacao'){
+    if(!(esp>0)) o.falta.push('espaçamento entre bicos'); if(!st.n) o.falta.push('volume de pelo menos 1 bico');
+    o.lha=(comp>0&&esp>0&&st.n)?st.media*10/(comp*esp):null;                       // mL no percurso ÷ (comprimento × espaçamento) → L/ha
+    o.bicos=(larg>0&&esp>0)?Math.round(larg/esp):null; o.totalBarra=o.bicos?st.media*o.bicos:null;
+    o.fora=st.n?vals.filter(v=>st.media&&Math.abs(v/st.media-1)>0.10).length:0;       // bicos a mais de ±10% da média
+    o.res=o.lha; o.resumo=o.lha!=null?`${afN(o.lha,1)} L/ha · ${st.n} bico(s) · CV ${afN(st.cv,1)}%`:''; }
+  else if(tp==='colheita'){
+    if(!(larg>0)) o.falta.push('largura');
+    const pms=numBR(f.pms), gr=numBR(f.graos); o.peso=numBR(f.peso)||((gr>0&&pms>0)?gr*pms/1000:0);
+    if(!(o.peso>0)) o.falta.push('peso (ou nº de grãos + PMS)');
+    o.area=(comp>0&&larg>0)?comp*larg:null; o.perda=(o.area&&o.peso>0)?o.peso/o.area*10:null;  // g/m² × 10 = kg/ha
+    o.sc=o.perda!=null?o.perda/60:null; o.res=o.perda;
+    o.resumo=o.perda!=null?`Perda ${afN(o.perda,1)} kg/ha (${afN(o.sc,2)} sc/ha) em ${afN(o.area,1)} m²`:''; }
+  else if(tp==='adubo'){
+    if(!(esp>0)) o.falta.push('espaçamento entre linhas'); if(!st.n) o.falta.push('adubo de pelo menos 1 linha');
+    o.kgM=(comp>0&&st.n)?st.media/1000/comp:null; o.kgHa=(comp>0&&esp>0&&st.n)?st.media*10/(comp*esp):null;   // g ÷ (comp × esp) × 10 = kg/ha
+    o.res=o.kgHa; o.resumo=o.kgHa!=null?`${afN(o.kgHa,0)} kg/ha · ${st.n} linha(s) · CV ${afN(st.cv,1)}%`:''; }
+  else if(tp==='sementes'){
+    if(!(esp>0)) o.falta.push('espaçamento entre linhas'); if(!st.n) o.falta.push('sementes de pelo menos 1 linha');
+    const pms=numBR(f.pms), peso=f.medida==='peso';
+    if(peso && !(pms>0)) o.falta.push('PMS');
+    const nMed=peso?(pms>0?st.media*1000/pms:0):st.media;                                 // peso (g) → nº de sementes pelo PMS
+    o.semM=(comp>0&&st.n)?nMed/comp:null; o.semHa=(o.semM!=null&&esp>0)?o.semM*10000/esp:null;
+    o.res=o.semHa; o.resumo=o.semHa!=null?`${afN(o.semM,1)} sem/m · ${afN(o.semHa,0)} sem/ha · CV ${afN(st.cv,1)}%`:''; }
+  o.desv=(o.alvo&&o.res!=null)?(o.res/o.alvo-1)*100:null;
+  if(o.resumo && o.desv!=null) o.resumo+=` · ${o.desv>=0?'+':''}${afN(o.desv,1)}% do alvo`;
+  if(o.resumo && vel) o.resumo+=` · ${afN(vel,1)} km/h`;
+  o.ok=!o.falta.length; return o;
+}
+// meta sugerida: população (sementes) ou adubo (kg/ha) da operação de plantio do talhão
+function afAlvoSugerido(tid,tipo){ const t=findTalhao(tid); if(!t) return '';
+  const seq=talSafraAtual(t), pc=campoOpsDoTalhao(t).filter(o=>o.seq===seq).map(o=>plantioCalc(o.key)).find(Boolean);
+  if(!pc) return '';
+  if(tipo==='sementes') return pc.pop?String(pc.pop):'';
+  if(tipo==='adubo'){ const kg=(pc.outros||[]).map(x=>doseHaUn(x.dose,x.un)).filter(x=>x.u==='kg').sort((a,b)=>b.v-a.v)[0]; return kg?String(Math.round(kg.v)):''; }
+  return ''; }
+function afFormNovo(tipo,tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal';
+  const n=tipo==='aplicacao'?6:tipo==='colheita'?0:4;
+  return {tipo, talhao:tid, data:_hojeISO(), ativ:t?((seq==='safrinha'?empSafDe(t):empDe(t))||''):'', maq:'', impl:'', comp:'', larg:'', esp:(tipo==='adubo'||tipo==='sementes')?'0,5':'',
+    tempo:'', vel:'', alvo:afAlvoSugerido(tid,tipo), medida:'contagem', pms:'', graos:'', peso:'', obs:'', am:Array(n).fill('')}; }
+function afFormDe(tipo,tid){ const k=tipo+'|'+tid; if(!afForm[k]) afForm[k]=afFormNovo(tipo,tid); return afForm[k]; }
+// ---- telas ----
+function afMaqOpts(campo){ const set=new Set(); maquinasAll().forEach(m=>{ const v=String(m[campo]||'').trim(); if(v&&v!=='-') set.add(v); });
+  return [...set].sort((a,b)=>a.localeCompare(b,'pt')).map(v=>`<option value="${esc(v)}">`).join(''); }
+function afResHtml(f){ const c=afCalc(f), tp=f.tipo, li=(l,v)=>`<div><span>${l}</span><b>${v}</b></div>`;
+  let h='';
+  if(tp==='aplicacao') h=li('Vazão',c.lha!=null?afN(c.lha,1)+' L/ha':'—')+li('Média por bico',st0(c)?afN(c.media,1)+' mL':'—')+li('Total na barra',c.totalBarra!=null?afN(c.totalBarra,0)+' mL ('+c.bicos+' bicos)':'—')
+    +li('CV entre bicos',c.cv!=null?afN(c.cv,1)+' %':'—')+li('Bicos fora de ±10%',st0(c)?String(c.fora):'—');
+  else if(tp==='colheita') h=li('Área',c.area!=null?afN(c.area,2)+' m²':'—')+li('Peso considerado',c.peso>0?afN(c.peso,1)+' g':'—')+li('Perda estimada',c.perda!=null?afN(c.perda,1)+' kg/ha':'—')+li('Em sacas',c.sc!=null?afN(c.sc,2)+' sc/ha':'—');
+  else if(tp==='adubo') h=li('Linhas',String(c.n))+li('Média de adubo/m',c.kgM!=null?afN(c.kgM,3)+' kg':'—')+li('Dose',c.kgHa!=null?afN(c.kgHa,0)+' kg/ha':'—')+li('CV entre linhas',c.cv!=null?afN(c.cv,1)+' %':'—');
+  else h=li('Linhas',String(c.n))+li('Sementes/m',c.semM!=null?afN(c.semM,1):'—')+li('Sementes/ha',c.semHa!=null?afN(c.semHa,0):'—')+li('CV entre linhas',c.cv!=null?afN(c.cv,1)+' %':'—');
+  if(c.alvo) h+=li('Alvo',afN(c.alvo,tp==='aplicacao'?1:0)+(tp==='aplicacao'?' L/ha':tp==='adubo'?' kg/ha':tp==='sementes'?' sem/ha':''))+li('Diferença do alvo',c.desv!=null?`<span class="${Math.abs(c.desv)>5?'af-bad':'af-ok'}">${c.desv>=0?'+':''}${afN(c.desv,1)} %</span>`:'—');
+  if(c.vel) h+=li('Velocidade',afN(c.vel,1)+' km/h');
+  return h; }
+function st0(c){ return c.n>0; }
+function afAmostrasHtml(f){ const T=AF_TIPOS[f.tipo]; if(!T.am) return '';
+  const un=f.tipo==='sementes'&&f.medida==='peso'?'g':T.un;
+  const rows=f.am.map((v,i)=>`<div class="af-am"><span>${T.am} ${i+1}</span><input class="cell" inputmode="decimal" data-afam="${i}" value="${esc(v)}" placeholder="${un}"><button class="icon-btn" data-act="afAmDel" data-i="${i}" title="Remover">✕</button></div>`).join('');
+  const tit=f.tipo==='aplicacao'?'Volume coletado em cada bico (mL), no tempo de percorrer o comprimento':
+    f.tipo==='adubo'?'Adubo coletado em cada linha (g), no comprimento percorrido':
+    f.medida==='peso'?'Peso das sementes de cada linha (g), no comprimento percorrido':'Sementes contadas em cada linha, no comprimento percorrido';
+  return `<div class="af-sec"><div class="af-sec-h"><b>${tit}</b>
+      <label class="af-n">Nº de ${f.tipo==='aplicacao'?'bicos':'linhas'}<input class="cell" inputmode="numeric" data-af="nAm" value="${f.am.length}"></label></div>
+    <div class="af-ams">${rows}</div><button class="btn btn-outline btn-sm" data-act="afAmAdd">+ ${T.am.toLowerCase()}</button></div>`; }
+function afCampo(l,k,f,o){ o=o||{}; return `<label${o.cls?` class="${o.cls}"`:''}><span>${l}${o.req?' <i class="af-req">*</i>':''}</span><input class="${o.txt?'txt':'cell'}"${o.list?` list="${o.list}"`:''} ${o.txt?'':'inputmode="decimal"'} data-af="${k}" value="${esc(f[k]==null?'':f[k])}" placeholder="${esc(o.ph||'')}"></label>`; }
+function afHistHtml(tipo,tid,maq){
+  const regs=aferLista().filter(r=>r.tipo===tipo && (!maq||r.maq===maq));
+  const cab={aplicacao:['Data','Talhão','Bicos','Média (mL)','Total barra (mL)','L/ha'],colheita:['Data','Talhão','Área (m²)','Peso (g)','Perda (kg/ha)','Velocidade (km/h)'],
+    adubo:['Data','Talhão','Linhas','Média adubo/m (kg)','Kg/ha','Velocidade (km/h)'],sementes:['Data','Talhão','Linhas','Sementes/m','Sementes/ha','Velocidade (km/h)']}[tipo];
+  const lin=regs.map(r=>{ const c=afCalc(r), t=findTalhao(r.talhao);
+    const v={aplicacao:[c.n,afN(c.media,1),c.totalBarra!=null?afN(c.totalBarra,0):'—',afN(c.lha,1)],colheita:[afN(c.area,1),afN(c.peso,1),afN(c.perda,1),afN(c.vel,1)],
+      adubo:[c.n,afN(c.kgM,3),afN(c.kgHa,0),afN(c.vel,1)],sementes:[c.n,afN(c.semM,1),afN(c.semHa,0),afN(c.vel,1)]}[tipo];
+    return `<tr><td>${esc(fmtDataBR(r.data).slice(0,5))}</td><td>${esc(t?tNome(t):r.talhaoNome||r.talhao)}<div class="mut" style="font-size:11px">${esc(r.maq||'')}${r.impl?' · '+esc(r.impl):''}${r.quem?' · '+esc(r.quem):''}</div></td>${v.map(x=>`<td class="num">${x}</td>`).join('')}
+      <td><button class="icon-btn del" data-act="afDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></td></tr>`; }).join('');
+  return `<div class="af-hist-top"><div><b>Máquina:</b> ${maq?esc(maq):'todas'}</div>${tipo!=='colheita'&&afFormDe(tipo,tid).impl?`<div><b>Implemento:</b> ${esc(afFormDe(tipo,tid).impl)}</div>`:''}</div>
+    <div class="af-tbl-w"><table class="af-tbl"><thead><tr>${cab.map((h,i)=>`<th${i>1?' class="num"':''}>${h}</th>`).join('')}<th></th></tr></thead>
+    <tbody>${lin||`<tr><td colspan="${cab.length+1}" class="mut" style="text-align:center;padding:16px">Nenhuma aferição${maq?' desta máquina':''} ainda.</td></tr>`}</tbody></table></div>`; }
+V.afericao=function(arg){
+  const all=talhoesAll(); if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
+  const [tp0,tid0]=decodeURIComponent(String(arg||'')).split('~'); const tipo=AF_TIPOS[tp0]?tp0:'';
+  const tid=(tid0&&all.some(t=>t.id===tid0))?tid0:((afTal&&all.some(t=>t.id===afTal))?afTal:all[0].id); afTal=tid;
+  const t=findTalhao(tid), tOpt=all.map(x=>`<option value="${esc(x.id)}"${x.id===tid?' selected':''}>${esc(tNome(x))}</option>`).join('');
+  const topo=`<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="af-tal" data-tipo="${tipo}">${tOpt}</select></div></div>`;
+  if(!tipo){
+    const cards=Object.keys(AF_TIPOS).map(k=>{ const T=AF_TIPOS[k], n=aferLista().filter(r=>r.tipo===k&&r.talhao===tid).length;
+      return `<a class="na-item" data-go="#/afericao/${k}~${encodeURIComponent(tid)}"><span class="na-ico ${T.cls}">${T.ico}</span><span class="na-tx"><b>${T.lbl}</b><span>${T.sub}${n?` · ${n} neste talhão`:''}</span></span><span class="na-seta">›</span></a>`; }).join('');
+    const ult=aferLista().slice(0,12).map(r=>{ const T=AF_TIPOS[r.tipo]||{}, tt=findTalhao(r.talhao);
+      return `<div class="af-ult"><span class="na-ico ${T.cls||''}">${T.ico||'📐'}</span><div><b>${esc(T.lbl||r.tipo)}</b> · ${esc(tt?tNome(tt):r.talhao)} · ${esc(fmtDataBR(r.data).slice(0,5))}<div class="mut">${esc(r.resumo||'')}</div></div>
+        <button class="icon-btn del" data-act="afDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`; }).join('');
+    return `${topo}<div class="panel"><div class="panel-head"><h2>Nova aferição</h2><span class="sub">${esc(tNome(t))}</span></div><div class="na-list">${cards}</div></div>
+      <div class="panel"><div class="panel-head"><h2>Últimas aferições</h2><span class="sub">todos os talhões</span></div>${ult||'<p class="mut" style="padding:14px">Nenhuma aferição ainda.</p>'}</div>
+      ${afAvisoSync()}`;
+  }
+  const T=AF_TIPOS[tipo], f=afFormDe(tipo,tid);
+  const dados=`<div class="af-form">
+      <div class="app-grid">
+        <label>Data<input type="date" data-af="data" value="${esc(f.data)}"></label>
+        ${afCampo('Atividade','ativ',f,{txt:1,ph:'ex.: MILHO SEMENTE'})}
+        ${afCampo(tipo==='colheita'?'Máquina (colheitadeira)':tipo==='aplicacao'?'Máquina (pulverizador)':'Máquina (trator)','maq',f,{txt:1,req:1,list:'af-maqs',ph:'Selecionar'})}
+        ${tipo!=='aplicacao'?afCampo(tipo==='colheita'?'Plataforma':'Implemento (plantadeira)','impl',f,{txt:1,req:tipo!=='colheita',list:'af-impls',ph:'Selecionar'}):''}
+        ${afCampo('Comprimento (m)','comp',f,{req:1,ph:'ex.: 50'})}
+        ${tipo==='aplicacao'||tipo==='colheita'?afCampo(tipo==='aplicacao'?'Largura da barra (m)':'Largura (m)','larg',f,{req:tipo==='colheita',ph:tipo==='aplicacao'?'ex.: 36':'ex.: 2'}):''}
+        ${tipo==='aplicacao'?afCampo('Espaçamento entre bicos (m)','esp',f,{req:1,ph:'ex.: 0,5'}):''}
+        ${tipo==='adubo'||tipo==='sementes'?afCampo('Espaçamento entre linhas (m)','esp',f,{req:1,ph:'ex.: 0,5'}):''}
+        ${tipo==='sementes'?`<label><span>Tipo de medida <i class="af-req">*</i></span><select class="sel" data-af="medida"><option value="contagem"${f.medida!=='peso'?' selected':''}>Contagem de sementes</option><option value="peso"${f.medida==='peso'?' selected':''}>Peso das sementes (g)</option></select></label>`:''}
+        ${tipo==='colheita'||(tipo==='sementes'&&f.medida==='peso')?afCampo('PMS (g)','pms',f,{ph:'peso de mil sementes'}):''}
+        ${tipo==='colheita'?afCampo('Nº de grãos','graos',f,{ph:'opcional'})+afCampo('Peso (g)','peso',f,{req:1,ph:'grãos recolhidos'}):''}
+        ${tipo!=='colheita'?afCampo(tipo==='aplicacao'?'Vazão alvo (L/ha)':tipo==='adubo'?'Dose alvo (kg/ha)':'População alvo (sem/ha)','alvo',f,{ph:'opcional'}):''}
+        ${afCampo('Tempo do percurso (s)','tempo',f,{ph:'calcula a velocidade'})}
+        ${afCampo('Velocidade (km/h)','vel',f,{ph:numBR(f.tempo)>0?'calculada pelo tempo':'ex.: 6'})}
+      </div>
+      ${afAmostrasHtml(f)}
+      <label class="af-obs">Observações<input class="txt" data-af="obs" value="${esc(f.obs)}" placeholder="opcional"></label>
+      <div class="af-res" id="af-res">${afResHtml(f)}</div>
+      <div class="af-falta" id="af-falta">${(c=>c.ok?'':'Falta: '+c.falta.join(', '))(afCalc(f))}</div>
+      <div class="af-acts"><button class="btn btn-ghost btn-sm" data-act="afLimpar">Limpar</button><span class="spacer"></span><button class="btn btn-primary" data-act="afSalvar">💾 Salvar aferição</button></div>
+    </div>`;
+  return `${topo}
+    <div class="af-head"><a class="btn btn-ghost btn-sm" data-go="#/afericao/~${encodeURIComponent(tid)}">‹ Aferições</a><h2><span class="na-ico ${T.cls}">${T.ico}</span> ${T.lbl}</h2></div>
+    <div class="af-tabs"><button class="${afAba==='dados'?'on':''}" data-act="afAba" data-val="dados">Dados</button><button class="${afAba==='hist'?'on':''}" data-act="afAba" data-val="hist">Histórico</button></div>
+    <datalist id="af-maqs">${afMaqOpts('maquina')}</datalist><datalist id="af-impls">${afMaqOpts('implemento')}</datalist>
+    <div class="panel af-panel">${afAba==='hist'?afHistHtml(tipo,tid,String(f.maq||'').trim()):dados}</div>
+    ${afAvisoSync()}
+    <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">${{aplicacao:'Vazão (L/ha) = média dos bicos (mL) × 10 ÷ (comprimento × espaçamento entre bicos). Colete todos os bicos no tempo de percorrer o comprimento.',
+      colheita:'Perda (kg/ha) = peso dos grãos (g) ÷ área (comprimento × largura, m²) × 10. Sem o peso, usa nº de grãos × PMS ÷ 1000.',
+      adubo:'Dose (kg/ha) = média das linhas (g) × 10 ÷ (comprimento × espaçamento entre linhas).',
+      sementes:'Sementes/ha = (média de sementes por linha ÷ comprimento) × 10.000 ÷ espaçamento. Por peso: nº = g × 1000 ÷ PMS.'}[tipo]}</p>`;
+};
+function afAvisoSync(){ if(!syncUrl()) return '<p class="lt-aviso">Sincronização não configurada: as aferições ficam só neste aparelho.</p>';
+  if(!aferServerOk()) return '<p class="lt-aviso">⚠️ As aferições ainda <b>não vão para a planilha</b>: cole o <b>Code.gs</b> novo no Apps Script e crie uma <b>Nova versão</b> (aba “AFERICOES APP”). Até lá ficam neste aparelho e sobem depois.</p>';
+  return ''; }
+function afAtualizaRes(f){ const r=document.getElementById('af-res'); if(r) r.innerHTML=afResHtml(f);
+  const fl=document.getElementById('af-falta'); if(fl){ const c=afCalc(f); fl.textContent=c.ok?'':'Falta: '+c.falta.join(', '); } }
+function afFormAtual(){ const m=String((location.hash.split('/')[2])||''), [tp,tid]=decodeURIComponent(m).split('~'); return AF_TIPOS[tp]?afFormDe(tp,tid||afTal):null; }
+function afSalvar(){ const f=afFormAtual(); if(!f) return; const c=afCalc(f);
+  if(!c.ok){ toast('Falta: '+c.falta.join(', ')); return; }
+  const id='af'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario();
+  const rec=Object.assign({}, f, {id, am:(f.am||[]).filter(v=>String(v).trim()!==''), talhaoNome:t?tNome(t):f.talhao, resumo:c.resumo, quem:(u&&u.nome)||'', ts:Date.now(), _u:Date.now()});
+  AFER.reg[id]=rec; saveAfer();
+  const nv=afFormNovo(f.tipo,f.talhao); ['maq','impl','comp','larg','esp','medida','pms','alvo','ativ'].forEach(k=>nv[k]=f[k]); nv.am=Array(f.am.length).fill('');   // próxima amostra: mesma máquina e medidas
+  afForm[f.tipo+'|'+f.talhao]=nv; afAba='hist'; route({keepScroll:true}); toast('Aferição salva: '+c.resumo);
+}
+/* ============ NOVA AÇÃO (tocar no talhão no mapa) ============ */
+const NA_ITENS=[
+  {k:'anot',lbl:'Anotação',sub:'Registrar anotações sobre a situação atual do talhão.',ico:'📝',cls:'na-azul',breve:1},
+  {k:'ocor',lbl:'Ocorrência',sub:'Registrar ocorrências (pragas, doenças, daninhas) no talhão.',ico:'⚠️',cls:'na-rosa',go:t=>'#/monitoramento/'+t},
+  {k:'recom',lbl:'Recomendação',sub:'Registrar recomendações de aplicação.',ico:'📋',cls:'na-ciano',go:t=>'#/recomendacao/'+t},
+  {k:'afer',lbl:'Aferição',sub:'Pulverizador, perda na colheita e semeadura (adubo/sementes).',ico:'🧮',cls:'na-verde',sub2:1},
+  {k:'apl',lbl:'Aplicação',sub:'Operações do talhão: registrar a execução.',ico:'🚿',cls:'na-ciano',go:t=>'#/campo/'+t},
+  {k:'stand',lbl:'Stand',sub:'Registrar contagens de stand.',ico:'📏',cls:'na-ciano',go:t=>'#/stand/'+t},
+  {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',breve:1},
+  {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',go:t=>'#/monitoramento/'+t} ];
+function novaAcaoFechar(){ const o=document.getElementById('na-ov'); if(o) o.remove(); }
+function novaAcaoOpen(tid, sub){
+  const t=findTalhao(tid); if(!t){ toast('Talhão não encontrado'); return; }
+  novaAcaoFechar(); const id=encodeURIComponent(tid);
+  const so=talStatusOps(t), sc=OPST[so.nivel], emp=(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t))||'';
+  const item=x=>x.breve?`<div class="na-item na-off"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl} <small class="na-breve">em breve</small></b><span>${x.sub}</span></span></div>`
+    :x.sub2?`<a class="na-item" data-act="naAfer" data-id="${esc(tid)}"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl}</b><span>${x.sub}</span></span><span class="na-seta">›</span></a>`
+    :`<a class="na-item" data-go="${x.go(id)}"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl}</b><span>${x.sub}</span></span><span class="na-seta">›</span></a>`;
+  const corpo=sub==='afer'
+    ? `<div class="na-h"><button class="icon-btn" data-act="naVoltar" data-id="${esc(tid)}" title="Voltar">‹</button><h3>Aferição</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+       <div class="na-list">${Object.keys(AF_TIPOS).map(k=>{ const T=AF_TIPOS[k]; return `<a class="na-item" data-go="#/afericao/${k}~${id}"><span class="na-ico ${T.cls}">${T.ico}</span><span class="na-tx"><b>${T.lbl}</b><span>${T.sub}</span></span><span class="na-seta">›</span></a>`; }).join('')}</div>`
+    : `<div class="na-h"><span></span><h3>Nova Ação</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+       <p class="na-sub">Adicionar nova ação a <b>${esc(tNome(t))}</b><br><small>${esc(emp||'sem cultura')} · ${num(areaDe(t))} ha · ${sc.ico} ${so.nivel==='late'?`${so.late.length} operação(ões) atrasada(s)`:esc(sc.lbl)}</small></p>
+       <div class="na-list">${NA_ITENS.map(item).join('')}</div>
+       <div class="na-links"><a class="link" data-go="#/campo/${id}">Operações</a> · <a class="link" data-go="#/timeline/${id}">Timeline</a></div>`;
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet" role="dialog"><div class="na-grab"></div>${corpo}</div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); });
+  document.body.appendChild(ov);
+}
+window.addEventListener('hashchange', novaAcaoFechar);
+document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
+  if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
+  else if(el.matches('[data-afam]')){ const f=afFormAtual(); if(f){ f.am[+el.dataset.afam]=el.value; afAtualizaRes(f); } } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') novaAcaoFechar(); });
 /* ============ RECOMENDAÇÃO DE APLICAÇÃO (receituário → envio → retorno → aprovação) ============
    Fluxo: rascunho → enviada (WhatsApp ao operador) → retorno (Adm registra o volume utilizado)
    → aprovada (vira histórico de aplicação no talhão / timeline). Tudo salvo no aparelho. */
@@ -6727,12 +7027,7 @@ async function mapaInit(){
     const pg=L.polygon(lm.coords,{color:sc.cor,weight:3,fillColor:sc.cor,fillOpacity:.38}).addTo(_map);
     pg.bindTooltip(`${esc(tNome(t||tid))}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
     const li=(arr,fn)=>arr.slice(0,4).map(fn).join('')+(arr.length>4?`<li class="mut">+${arr.length-4}…</li>`:'');
-    pg.bindPopup(`<b>${esc(tNome(t||tid))}</b><br>${esc(emp||'sem cultura')} · ${nf2.format(haLim)} ha${st?`<br>🌿 hoje: <b>${esc(st.cod)}</b> · ${esc(st.desc)}`:''}
-      <div class="mp-st mp-${so.nivel}">${sc.ico} <b>${so.nivel==='late'?`${so.late.length} operação(ões) atrasada(s)`:so.nivel==='soon'?'Operação nos próximos dias':sc.lbl}</b></div>
-      ${so.late.length?`<ul class="mp-ul">${li(so.late,x=>`<li>${esc(x.nome)} — <b class="mp-red">${-x.dd} d atrasada</b></li>`)}</ul>`:''}
-      ${so.soon.length?`<ul class="mp-ul">${li(so.soon,x=>`<li>${esc(x.nome)} — ${x.and?'em andamento':x.dd===0?'<b>hoje</b>':`em ${x.dd} d (${_dtBRc(x.dp).slice(0,5)})`}</li>`)}</ul>`:''}
-      ${so.nivel==='ok'&&so.prox?`<div class="mut" style="font-size:12px">Próxima: ${esc(so.prox.nome)} em ${so.prox.dd} d (${_dtBRc(so.prox.dp).slice(0,5)})</div>`:''}
-      <a class="link" data-go="#/campo/${encodeURIComponent(tid)}">Operações</a> · <a class="link" data-go="#/timeline/${encodeURIComponent(tid)}">Timeline</a> · <a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Monitorar</a>`);
+    pg.on('click', ()=>novaAcaoOpen(tid));   // tocar no talhão: menu Nova Ação (ocorrência, aferição, stand…)
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
   pts.forEach(r=>{
@@ -7027,7 +7322,7 @@ V.mapa=function(){
   const lista=comLim.map(t=>{ const lm=lims[t.id], ha=lm.ha||limAreaHa(lm.coords), dif=areaDe(t)?(ha/areaDe(t)-1)*100:null;
     const so=talStatusOps(t);
     return `<div class="lim-row"><div><b>${OPST[so.nivel].ico} ${esc(tNome(t))}</b>${so.late.length?` <span class="cp-tag late">${so.late.length} atrasada(s)</span>`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
-      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
+      <div class="lim-acts"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(t.id)}">➕ Ação</button><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
@@ -7416,7 +7711,7 @@ V.campo = function(arg){
   const plantio=plantioEffDe(t.id,'principal'), col=colheitaPrevDe(t.id,'principal');
   return `${prodDatalist()}
   <div class="cp-top">
-    <a class="btn btn-ghost btn-sm" data-go="#/campo" style="margin-bottom:8px">← Quadro de operações</a>
+    <div class="cp-topbtns"><a class="btn btn-ghost btn-sm" data-go="#/campo">← Quadro de operações</a><button class="btn btn-outline btn-sm" data-act="naOpen" data-id="${esc(t.id)}">➕ Nova ação</button></div>
     <div class="cp-sel"><select class="sel" id="camp-talhao">${tOpt}</select></div>
     <div class="cp-tinfo"><b>${esc(tNome(t))}</b> <span>${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
       ${(plantio||col)?`<span>${plantio?`🌱 plantio ${fmtDataBR(plantio)}`:''}${col?` · 🌾 colheita ${fmtDataBR(col)}`:''}</span>`:''}</div>
@@ -7484,7 +7779,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -7782,6 +8077,9 @@ function copiaMaquinas(srcId,dstId,plano){
 
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); while(f.am.length<n) f.am.push(''); f.am.length=n; route({keepScroll:true}); } return; }
+  if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
@@ -7933,6 +8231,16 @@ document.addEventListener('click',e=>{
     else if(a.act==='oqAbrir'){ oqFecharTudo(); const i=a.key.indexOf('|'); campoOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
       setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
     else if(a.act==='oqPop'){ oqPopOpen(act); return; }
+    else if(a.act==='naOpen'){ novaAcaoOpen(a.id); return; }
+    else if(a.act==='naAfer'){ novaAcaoOpen(a.id,'afer'); return; }
+    else if(a.act==='naVoltar'){ novaAcaoOpen(a.id); return; }
+    else if(a.act==='naFechar'){ novaAcaoFechar(); return; }
+    else if(a.act==='afAba'){ afAba=a.val==='hist'?'hist':'dados'; route({keepScroll:true}); return; }
+    else if(a.act==='afAmAdd'){ const f=afFormAtual(); if(f){ f.am.push(''); route({keepScroll:true}); const ins=document.querySelectorAll('[data-afam]'); if(ins.length) ins[ins.length-1].focus(); } return; }
+    else if(a.act==='afAmDel'){ const f=afFormAtual(); if(f){ f.am.splice(+a.i,1); route({keepScroll:true}); } return; }
+    else if(a.act==='afSalvar'){ afSalvar(); return; }
+    else if(a.act==='afLimpar'){ const f=afFormAtual(); if(f && confirm('Limpar os dados desta aferição?')){ afForm[f.tipo+'|'+f.talhao]=afFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
+    else if(a.act==='afDel'){ const r=AFER.reg[a.id]; if(r && confirm('Excluir esta aferição?')){ r.del=true; r._u=Date.now(); saveAfer(); route({keepScroll:true}); toast('Aferição excluída'); } return; }
     else if(a.act==='oqPopClose'){ oqPopClose(); return; }
     else if(a.act==='oqMover'){ oqMover(a.key, +a.dir||0); return; }
     else if(a.act==='oqCol'){ oqPopClose(); oqColModal(+a.col||0); return; }
@@ -8610,7 +8918,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
@@ -8800,6 +9108,7 @@ function applyPulledData(d, raw){
   try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
+  try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
@@ -8949,6 +9258,7 @@ async function syncPush(opts){
   try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
+  try{ if(aferServerOk() && aferSig()!==lastAferSig) await aferPush({auto:true}); }catch(e){}   // aferições do Campo
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
@@ -9291,6 +9601,7 @@ function pendingInfo(fe0){
     if(lastRealizadoSig!=='' && realizadoSig()!==lastRealizadoSig) add(1, 'alteração na execução');
     if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
     if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
+    if(aferServerOk() && aferSig()!==lastAferSig) add(1, 'aferição(ões)');
     if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
     add(nfePend().length, 'nota(s) NF-e a enviar');
   }catch(e){}
@@ -9421,7 +9732,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
