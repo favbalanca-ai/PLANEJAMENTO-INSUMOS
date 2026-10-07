@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-191';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-192';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6054,8 +6054,9 @@ V.mapa=function(){
       <div class="spacer"></div>
       <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
       <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
-      <button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button></div>
-    <div id="mapa-canvas" class="mapa-canvas"></div>
+      <button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button>
+      <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div>
+    <div id="mapa-canvas" class="mapa-canvas${mapaNomesOn()?'':' mapa-sem-nome'}"></div>
     <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
       <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
       <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
@@ -6069,6 +6070,12 @@ V.mapa=function(){
     ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(tNome(t))).join(' · ')}</p>`:''}
     <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Aceita <b>KML, KMZ, GeoJSON, ZIP</b> e <b>Shapefile</b> (escolha juntos o .shp, o .dbf e o .prj de cada área). Pode selecionar vários arquivos de uma vez — ou a pasta inteira no computador. O talhão é reconhecido pelo nome do polígono/arquivo (ex.: “AREA 1” → ÁREA 1); confira antes de salvar.</p></div>`;
 };
+// nomes dos talhões no mapa: liga/desliga (lembrado neste aparelho)
+const MAPA_NOMES_KEY='planejamento_mapa_nomes';
+function mapaNomesOn(){ try{ return localStorage.getItem(MAPA_NOMES_KEY)!=='0'; }catch(e){ return true; } }
+function mapaNomesAlternar(btn){ const on=!mapaNomesOn(); try{ localStorage.setItem(MAPA_NOMES_KEY, on?'1':'0'); }catch(e){}
+  const c=document.getElementById('mapa-canvas'); if(c) c.classList.toggle('mapa-sem-nome', !on);   // sem redesenhar o mapa (não perde o zoom)
+  if(btn){ btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); btn.textContent=on?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'; } }
 function limZoom(tid){ const lm=limitesAll()[tid]; if(!_map||!lm||!window.L) return; try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); document.getElementById('mapa-canvas').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
 
 /* --- Execução da operação: baixa de estoque por operação (id estável = op:<talhão|op>) --- */
@@ -7038,6 +7045,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
+    else if(a.act==='mapaNomes'){ mapaNomesAlternar(act); }
     else if(a.act==='pendDiscardOrfas'){ const orf=edicoesOrfas(buildFieldEdits());
       if(orf.length && confirm(`Descartar ${orf.length} edição(ões) de talhões sem aba na planilha?\nElas voltam a valer o que está na planilha.`)){ let n=0; orf.forEach(e=>{ try{ if(discardEdit(e)) n++; }catch(err){} }); saveOverrides(); toast(n+' edição(ões) descartada(s)'); updateEditBadge(); route({keepScroll:true}); } }
     else if(a.act==='pendDiscard'){ let e=null; try{ e=JSON.parse(decodeURIComponent(a.sig||'')); }catch(err){}

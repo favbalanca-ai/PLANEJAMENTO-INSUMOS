@@ -73,6 +73,8 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Pesagem v2, mesmo site `favbalanca-ai.github.io` → mesmo login no aparelho): sem menus, só as abas
   **Receber** e **Pendências** (conforme a permissão), além de Entrar / Minha conta / ⚙️ Sincronizar.
   Não troca o módulo salvo do app normal.
+- **Mapa → 🏷️ Mostrar/Ocultar nomes** — botão no topo do mapa que liga/desliga o nome dos talhões sobre os
+  contornos (sem redesenhar o mapa: mantém o zoom). A escolha fica guardada no aparelho.
 - **Mapa → Nova Ação** — tocar no talhão do mapa (ou ➕ *Ação* na lista de limites / ➕ *Nova ação* na tela
   do talhão no Campo) abre a folha **Nova Ação**: Ocorrência e Outras ocorrências → Monitoramento;
   Recomendação; **Aferição**; Aplicação → operações do talhão; Stand; Anotação e Estimativa de
