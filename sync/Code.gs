@@ -112,7 +112,7 @@ function readAppPart_(){
     if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
     return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
       result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
-      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), ocorrencias_app:readMapApp(OCOR_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
   } finally { _CTR_MEMO_ = null; _LER_MEMO_ = null; }
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
@@ -238,7 +238,7 @@ function writeMapApp(name, map){
 // ---- AFERIÇÕES do Campo (pulverizador, perda na colheita, semeadura adubo/sementes) ----
 // Mesmo formato KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis para consulta.
 // O app manda o resumo pronto (campo "resumo"); excluídas ficam marcadas (del) para não voltarem de outro aparelho.
-var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP';
+var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP', OCOR_SHEET = 'OCORRENCIAS APP';
 // mapa KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis calculadas por linhaFn(registro)
 function writeMapAppLeg_(name, map, cab, linhaFn){
   map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
@@ -254,6 +254,25 @@ function writeAfericoesApp(map){
   var TIPO = { aplicacao:'Aplicação (pulverizador)', colheita:'Colheita (perda)', adubo:'Semeadura: adubo', sementes:'Semeadura: sementes' };
   return writeMapAppLeg_(AFER_SHEET, map, ['DATA','TALHÃO','TIPO','MÁQUINA','IMPLEMENTO','RESULTADO','SITUAÇÃO'], function(r){
     return [T_(r.data), T_(r.talhaoNome||r.talhao), TIPO[r.tipo]||T_(r.tipo), T_(r.maq), T_(r.impl), T_(r.resumo), r.del ? 'EXCLUÍDA' : '']; });
+}
+// ---- ANOTAÇÕES e OCORRÊNCIAS do Campo (climáticas, manutenção/melhorias, solo/fertilidade) ----
+function writeOcorrenciasApp(map){
+  var TIPO = { anotacao:'Anotação', climatica:'Climática', manutencao:'Manutenção/Melhorias', solo:'Solo/Fertilidade' };
+  return writeMapAppLeg_(OCOR_SHEET, map, ['DATA','TALHÃO','TIPO','ATIVIDADE','EVENTO','SITUAÇÃO','AÇÃO / ANOTAÇÃO','ESTÁDIO','PERÍODO','FOTOS','QUEM','REGISTRO'], function(r){
+    var fotos = (r.fotos || []).map(function(f){ return S(f && f.url); }).filter(String).join(' ');
+    var per = r.ini ? (S(r.ini) + (r.fim && r.fim !== r.ini ? ' a ' + S(r.fim) : '')) : '';
+    return [T_(r.data), T_(r.talhaoNome||r.talhao), TIPO[r.tipo]||T_(r.tipo), T_(r.ativ), T_(r.evento), T_(r.situacao), T_(r.acao||r.texto),
+      T_(r.estadio), T_(per), T_(fotos), T_(r.quem), r.del ? 'EXCLUÍDA' : '']; });
+}
+// foto do Campo → pasta "Fotos do Campo" ao lado da planilha (link de visualização para quem tiver o link)
+function campoFoto_(f){
+  if (!f || !f.b64) return { url:'' };
+  var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
+  var pasta = _pasta(base, 'Fotos do Campo');
+  var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || 'image/jpeg', S(f.nome) || ('campo-' + Date.now() + '.jpg'));
+  var file = pasta.createFile(blob);
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}   // os outros celulares abrem a foto pelo link
+  return { url:file.getUrl(), id:file.getId() };
 }
 // ---- CONTAGEM DE STAND (linhas, dominadas/duplas/ausentes, distâncias na trena) ----
 function writeStandApp(map){
@@ -1535,15 +1554,15 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','compras_app','nfe_estados'],
-  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app'],
+  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','compras_app','nfe_estados'],
+  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app'],
   precos:['precos_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -1820,6 +1839,10 @@ function doPost(e){
       var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
     } else if (payload && payload.__afericao){        // aferições do Campo (pulverizador, colheita, semeadura) — merge por chave
       var af = writeAfericoesApp(payload.__afericao); out.ok = af.rows;
+    } else if (payload && payload.__ocorrencia){      // anotações e ocorrências do Campo — merge por chave
+      var oc = writeOcorrenciasApp(payload.__ocorrencia); out.ok = oc.rows;
+    } else if (payload && payload.__campoFoto){       // foto de ocorrência/anotação → Drive (pasta "Fotos do Campo")
+      out.foto = campoFoto_(payload.__campoFoto); out.ok = out.foto && out.foto.url ? 1 : 0; semCache = true;
     } else if (payload && payload.__stand){           // contagens de stand do Campo — merge por chave
       var stn = writeStandApp(payload.__stand); out.ok = stn.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
