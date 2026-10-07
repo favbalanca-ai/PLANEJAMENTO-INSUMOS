@@ -1655,3 +1655,6 @@ body[data-embed] .content{padding:10px 10px 24px}
 .pr-k.pr-ok{font-size:24px}
 .pr-k.pr-limpar{background:#c0392b;font-size:22px;grid-column:span 2}
 @media (max-width:380px){ .pr-k{min-height:54px;font-size:24px} .pr-k.pr-cat{font-size:14px} }
+/* mapa: esconder o nome dos talhões */
+.mapa-sem-nome .leaflet-tooltip.mapa-lbl{display:none}
+.mapa-nomes.on{background:var(--teal-soft)}
