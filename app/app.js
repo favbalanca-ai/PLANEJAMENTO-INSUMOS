@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-188';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-189';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4304,70 +4304,169 @@ const STAND_KEY='planejamento_stand';
 let STAND=null;
 const nfpop=n=>Math.round(+n||0).toLocaleString('pt-BR');
 function loadStand(){ try{ const d=JSON.parse(localStorage.getItem(STAND_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveStand(){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} }
+function saveStand(){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} scheduleStandPush(); }
+function standLista(){ return ((STAND&&STAND.registros)||[]).filter(r=>r&&!r.del); }
 function parsePontos(s){ return String(s||'').split(/[,;\s]+/).filter(Boolean); }
-// população/ha = (média de plantas por ponto / comprimento avaliado) / espaçamento × 10000
-function standCompute(esp,comp,pontos,meta){
-  const nums=pontos.map(_numc).filter(n=>n!=null&&n>=0);
-  esp=_numc(esp); comp=_numc(comp); meta=_numc(meta);
-  if(!nums.length||!(esp>0)||!(comp>0)) return null;
-  const media=nums.reduce((a,b)=>a+b,0)/nums.length, pop=(media/comp)/esp*10000;
-  return {media, pop, n:nums.length, pctMeta:meta>0?pop/meta*100:null, falha:meta>0?Math.max(0,(1-pop/meta)*100):null};
+// ---- sincronização (aba "STAND APP"; só envia se o Code.gs já tiver o ramo __stand) ----
+let standPushTimer=null, lastStandSig='';
+function standMapa(){ const m={}; ((STAND&&STAND.registros)||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); return m; }
+function standSig(){ return JSON.stringify(standMapa()); }
+function standServerOk(){ return !!(DATA && DATA.stand_app && typeof DATA.stand_app==='object'); }
+function scheduleStandPush(){ if(!syncUrl()||!autoOn()||!standServerOk()) return; clearTimeout(standPushTimer);
+  standPushTimer=setTimeout(()=>{ if(standSig()===lastStandSig) return; standPush({auto:true}); }, 1500); }
+async function standPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!standServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleStandPush(); return; }
+  const sig=standSig(); if(opts.auto && sig===lastStandSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__stand:standMapa()}));
+    if(postOk(r)) lastStandSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Stand: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
 }
-function standPreview(){
-  const g=id=>{const el=document.getElementById(id);return el?el.value:'';};
-  const c=standCompute(g('stand-esp'),g('stand-comp'),parsePontos(g('stand-pontos')),g('stand-meta'));
-  const el=document.getElementById('stand-prev'); if(!el) return;
-  el.innerHTML=c?`População estimada: <b>${nfpop(c.pop)} plantas/ha</b>${c.pctMeta!=null?` · ${Math.round(c.pctMeta)}% da meta`:''}${c.falha!=null&&c.falha>0?` · <span style="color:var(--amber);font-weight:700">falha ${Math.round(c.falha)}%</span>`:''} <span class="mut">(média ${Math.round(c.media*10)/10} em ${c.n} ponto(s))</span>`:'';
+function standApplyPulled(map){
+  if(!map || typeof map!=='object' || !STAND) return false;
+  let changed=false; const idx={}; STAND.registros.forEach((r,i)=>{ if(r&&r.id) idx[r.id]=i; });
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const i=idx[k], loc=i!=null?STAND.registros[i]:null, iu=+inc._u||0, lu=+(loc&&(loc._u||loc.ts))||0;
+    if(!loc){ STAND.registros.push(inc); changed=true; } else if(iu>lu){ STAND.registros[i]=inc; changed=true; } }
+  const pend=standSig()!==lastStandSig && !!lastStandSig;
+  if(changed){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} if(!pend) lastStandSig=standSig(); }
+  if(pend) scheduleStandPush();
+  return changed;
 }
-function standSave(talhao){
-  const g=id=>{const el=document.getElementById(id);return el?el.value.trim():'';};
-  const pontos=parsePontos(g('stand-pontos'));
-  const c=standCompute(g('stand-esp'),g('stand-comp'),pontos,g('stand-meta'));
-  if(!c){ toast('Preencha espaçamento, comprimento e ao menos 1 ponto'); return; }
-  STAND.registros.push({ id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), talhao,
-    data:g('stand-data')||new Date().toISOString().slice(0,10), cultura:g('stand-cult'),
-    esp:g('stand-esp'), comp:g('stand-comp'), meta:g('stand-meta'), pontos:pontos.join(', '),
-    pop:Math.round(c.pop), pctMeta:c.pctMeta!=null?Math.round(c.pctMeta):null, falha:c.falha!=null?Math.round(c.falha):null,
-    obs:g('stand-obs'), ts:Date.now() });
-  saveStand(); route(); toast('Contagem salva');
+// ---- cálculo ----
+// densidade = média de plantas por linha ÷ comprimento ÷ espaçamento × 10.000 · CV = variação entre as linhas
+// com distâncias (trena, cm): espaçamento ideal Xref = 100 ÷ plantas/m da meta (sem meta: a média medida);
+// dupla = espaçamento < 0,5·Xref · ausente = espaçamento > 1,5·Xref (conta quantas plantas faltaram no vão)
+function _stPos(l){ return (l.pos||[]).map(v=>String(v).trim()===''?null:numBR(v)).filter(v=>v!=null).sort((a,b)=>a-b); }
+function standCalc(f){
+  const comp=numBR(f.comp), esp=numBR(f.esp), meta=numBR(f.meta)||0;
+  const ls=(f.linhas||[]).map(l=>{ const pos=_stPos(l), comPos=pos.length>=2;
+    return {pos, comPos, n:comPos?pos.length:numBR(l.n), dom:numBR(l.dom), dup:numBR(l.dup), aus:numBR(l.aus)}; }).filter(l=>l.n>0);
+  const o={linhas:ls.length, comp, esp, meta, falta:[]};
+  if(!(comp>0)) o.falta.push('comprimento'); if(!(esp>0)) o.falta.push('espaçamento'); if(!ls.length) o.falta.push('plantas de pelo menos 1 linha');
+  const st=_afStats(ls.map(l=>l.n)); o.media=st.media; o.cv=ls.length>1?st.cv:null;
+  o.plm=(comp>0&&ls.length)?st.media/comp:null; o.dens=(o.plm!=null&&esp>0)?o.plm*10000/esp:null;
+  o.pctMeta=(meta>0&&o.dens!=null)?o.dens/meta*100:null;
+  if(f.dist){
+    const todos=[]; ls.forEach(l=>{ if(l.comPos) for(let i=1;i<l.pos.length;i++) todos.push(l.pos[i]-l.pos[i-1]); });
+    const pmMeta=(meta>0&&esp>0)?meta*esp/10000:0, xs=_afStats(todos);
+    o.xref=pmMeta?100/pmMeta:(xs.n?xs.media:null); o.esps=todos.length;
+    o.cvDist=xs.n>1?xs.cv:null;
+    ls.forEach(l=>{ if(!l.comPos||!o.xref) return; let d=0,a=0;
+      for(let i=1;i<l.pos.length;i++){ const x=l.pos[i]-l.pos[i-1]; if(x<0.5*o.xref) d++; else if(x>1.5*o.xref) a+=Math.max(1,Math.round(x/o.xref)-1); }
+      l.dup=d; l.aus=a; });
+    o.inconf=(todos.length&&o.xref)?todos.filter(x=>x<0.5*o.xref||x>1.5*o.xref).length/todos.length*100:null;
+    const sn=ls.reduce((s,l)=>s+l.n,0), sd=ls.reduce((s,l)=>s+l.dom,0), sp=ls.reduce((s,l)=>s+l.dup,0), sa=ls.reduce((s,l)=>s+l.aus,0);
+    o.pdom=sn?sd/sn*100:null; o.pdup=sn?sp/sn*100:null; o.paus=(sn+sa)?sa/(sn+sa)*100:null; o.calcLinhas=ls;
+  }
+  o.resumo=o.dens!=null?`${nfpop(o.dens)} pl/ha · ${afN(o.plm,1)} pl/m · ${o.linhas} linha(s)${o.cv!=null?` · CV ${afN(o.cv,1)}%`:''}${o.pctMeta!=null?` · ${Math.round(o.pctMeta)}% da meta`:''}`
+    +(f.dist&&o.cvDist!=null?` · CV distrib. ${afN(o.cvDist,1)}%`:'')+(f.dist&&o.inconf!=null?` · inconformes ${afN(o.inconf,1)}%`:''):'';
+  o.ok=!o.falta.length; return o;
 }
+// ---- formulário (estado por talhão, sobrevive a redesenhos) ----
+let standForm={}, standTrena=null;
+function standFormNovo(tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal';
+  return {talhao:tid, data:_hojeISO(), ativ:t?((seq==='safrinha'?empSafDe(t):empDe(t))||''):'', comp:'10', esp:'0,5', meta:afAlvoSugerido(tid,'sementes'), dist:false, obs:'',
+    linhas:[0,1,2].map(()=>({n:'',dom:'',dup:'',aus:'',pos:[]}))}; }
+function standFormDe(tid){ if(!standForm[tid]) standForm[tid]=standFormNovo(tid); return standForm[tid]; }
+function standFormAtual(){ const tid=decodeURIComponent(String(location.hash.split('/')[2]||'')); const all=talhoesAll();
+  return standFormDe(all.some(t=>t.id===tid)?tid:(all[0]&&all[0].id)); }
+function standResHtml(f){ const c=standCalc(f), t=findTalhao(f.talhao), li=(l,v)=>`<div><span>${l}</span><b>${v}</b></div>`;
+  let h=li('Talhão',esc(t?tNome(t):f.talhao))+li('Linhas',String(c.linhas))+li('Densidade',c.dens!=null?nfpop(c.dens)+' pl/ha':'—')
+    +li('Coeficiente de variação',c.cv!=null?afN(c.cv,1)+' %':'—')+li('Plantas/metro linear',c.plm!=null?afN(c.plm,2):'—');
+  if(c.meta) h+=li('Meta',nfpop(c.meta)+' pl/ha')+li('% da meta',c.pctMeta!=null?`<span class="${c.pctMeta<95?'af-bad':'af-ok'}">${Math.round(c.pctMeta)} %</span>`:'—');
+  if(f.dist) h+=li('C.V. de distribuição',c.cvDist!=null?afN(c.cvDist,1)+' %':'—')+li('Plantas inconformes pos. ideal',c.inconf!=null?afN(c.inconf,1)+' %':'—')
+    +li('Plantas dominadas',c.pdom!=null?afN(c.pdom,1)+' %':'—')+li('Plantas duplas',c.pdup!=null?afN(c.pdup,1)+' %':'—')+li('Plantas ausentes',c.paus!=null?afN(c.paus,1)+' %':'—')
+    +(c.xref?li('Espaçamento ideal',afN(c.xref,1)+' cm'):'');
+  return h; }
+function standLinhasHtml(f){ const c=standCalc(f), cl=c.calcLinhas||[];
+  const rows=f.linhas.map((l,i)=>{ const pos=_stPos(l), comPos=pos.length>=2, calc=comPos?cl.find(x=>x.pos===undefined?false:JSON.stringify(x.pos)===JSON.stringify(pos)):null;
+    const inp=(k,ph,dis,val)=>`<label class="st-l"><small>${ph}${dis?' (trena)':''}</small><input class="cell" inputmode="numeric" data-sl="${i}|${k}" value="${esc(val!=null?val:(l[k]||''))}" placeholder="${ph}"${dis?' disabled':''}></label>`;
+    if(!f.dist) return `<div class="st-lin st-lin1"><span>Linha ${i+1}</span>${inp('n','Nº de plantas')}<button class="icon-btn" data-act="stLinDel" data-i="${i}" title="Remover">✕</button></div>`;
+    return `<div class="st-lin"><span>Linha ${i+1}</span>
+      <div class="st-lin-g">${inp('n','Nº de plantas',comPos,comPos?pos.length:null)}${inp('dom','Dominadas')}${inp('dup','Duplas',comPos,comPos&&calc?calc.dup:null)}${inp('aus','Ausentes',comPos,comPos&&calc?calc.aus:null)}</div>
+      <div class="st-lin-b"><button class="btn btn-primary btn-sm st-trena" data-act="stTrena" data-i="${i}" title="Informar a posição de cada planta na trena">📏${comPos?` ${pos.length}`:''}</button><button class="icon-btn" data-act="stLinDel" data-i="${i}" title="Remover linha">✕</button></div></div>`; }).join('');
+  return `<div class="af-sec"><div class="af-sec-h"><b>Linhas</b><label class="af-n">Nº de linhas<input class="cell" inputmode="numeric" data-sf="nLin" value="${f.linhas.length}"></label></div>
+    <div class="st-lins">${rows}</div><button class="btn btn-outline btn-sm" data-act="stLinAdd">+ linha</button>
+    ${f.dist?'<p class="mut" style="font-size:11.5px;margin-top:6px">Com 📏 (posição de cada planta na trena) o app conta sozinho as plantas, as duplas e as ausentes da linha. Dominadas: conte no campo.</p>':''}</div>`; }
+function standCampo(l,k,f,o){ o=o||{}; return `<label><span>${l}</span><input class="${o.txt?'txt':'cell'}" ${o.txt?'':'inputmode="decimal"'} data-sf="${k}" value="${esc(f[k]==null?'':f[k])}" placeholder="${esc(o.ph||'')}"></label>`; }
 V.stand=function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para contar.</div>`;
-  const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
-  const regs=STAND.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const tOpt=all.map(x=>{ const n=STAND.registros.filter(r=>r.talhao===x.id).length;
+  const a0=decodeURIComponent(String(arg||'')), selId=(a0&&all.some(t=>t.id===a0))?a0:all[0].id, t=all.find(x=>x.id===selId), f=standFormDe(selId);
+  const regs=standLista().filter(r=>r.talhao===selId).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0));
+  const tOpt=all.map(x=>{ const n=standLista().filter(r=>r.talhao===x.id).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n}`:''}</option>`; }).join('');
-  const hoje=new Date().toISOString().slice(0,10);
-  const cards=regs.map(r=>`<div class="monit-card${r.falha!=null&&r.falha>=10?' monit-alert':''}">
+  const cards=regs.map(r=>{ const novo=Array.isArray(r.linhas), bad=r.pctMeta!=null&&r.pctMeta<90;
+    return `<div class="monit-card${bad?' monit-alert':''}">
     <div class="monit-card-top"><b>${nfpop(r.pop)} plantas/ha</b>
-      ${r.pctMeta!=null?`<span class="monit-efic ${r.falha>=10?'ef-bad':(r.falha>0?'ef-parc':'ef-ok')}">${r.pctMeta}% da meta</span>`:''}
-      <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}${r.cultura?` · ${esc(r.cultura)}`:''}</span>
+      ${r.pctMeta!=null?`<span class="monit-efic ${r.pctMeta<90?'ef-bad':(r.pctMeta<100?'ef-parc':'ef-ok')}">${Math.round(r.pctMeta)}% da meta</span>`:''}
+      <span class="mut" style="font-size:12px">${esc(fmtData(r.data))}${(r.ativ||r.cultura)?` · ${esc(r.ativ||r.cultura)}`:''}${r.quem?` · ${esc(r.quem)}`:''}</span>
       <span class="spacer"></span><button class="icon-btn del" data-act="standDel" data-id="${esc(r.id)}">🗑</button></div>
-    <div class="monit-card-body"><span>Espaç.: <b>${esc(r.esp)}</b> m</span><span>Compr.: <b>${esc(r.comp)}</b> m</span><span>Meta: <b>${r.meta?nfpop(r.meta):'—'}</b>/ha</span>${r.falha!=null&&r.falha>0?`<span class="monit-flag">⚠️ falha ${r.falha}%</span>`:''}</div>
-    <div class="monit-obs mut">Pontos: ${esc(r.pontos)}${r.obs?` · ${esc(r.obs)}`:''}</div></div>`).join('')||'<div class="mut" style="padding:14px">Sem contagens neste talhão ainda.</div>';
+    <div class="monit-card-body"><span>Espaç.: <b>${esc(r.esp)}</b> m</span><span>Compr.: <b>${esc(r.comp)}</b> m</span>${novo?`<span>Linhas: <b>${r.linhas.length}</b></span><span>Pl/m: <b>${afN(r.plm,2)}</b></span>${r.cv!=null?`<span>CV: <b>${afN(r.cv,1)}%</b></span>`:''}`:`<span>Meta: <b>${r.meta?nfpop(r.meta):'—'}</b>/ha</span>`}</div>
+    ${novo&&r.dist?`<div class="monit-card-body"><span>CV distrib.: <b>${afN(r.cvDist,1)}%</b></span><span>Inconformes: <b>${afN(r.inconf,1)}%</b></span><span>Dominadas: <b>${afN(r.pdom,1)}%</b></span><span>Duplas: <b>${afN(r.pdup,1)}%</b></span><span>Ausentes: <b>${afN(r.paus,1)}%</b></span></div>`:''}
+    ${!novo||r.obs?`<div class="monit-obs mut">${!novo?`Pontos: ${esc(r.pontos)}`:''}${r.obs?`${!novo?' · ':''}${esc(r.obs)}`:''}</div>`:''}</div>`; }).join('')||'<div class="mut" style="padding:14px">Sem contagens neste talhão ainda.</div>';
   return `<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="stand-talhao">${tOpt}</select></div></div>
-  <div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
-  <div class="panel"><div class="panel-head"><h2>Nova contagem</h2><span class="sub">população de plantas</span></div>
-    <div class="app-grid" style="padding:14px 16px">
-      <label>Data<input type="date" id="stand-data" value="${hoje}"></label>
-      <label>Cultura/variedade<input class="txt" id="stand-cult" placeholder="opcional"></label>
-      <label>Espaçamento (m)<input class="cell stand-f" inputmode="decimal" id="stand-esp" placeholder="ex.: 0,5"></label>
-      <label>Comprimento avaliado (m)<input class="cell stand-f" inputmode="decimal" id="stand-comp" value="5" placeholder="ex.: 5"></label>
-      <label>Meta (plantas/ha)<input class="cell stand-f" inputmode="numeric" id="stand-meta" placeholder="ex.: 300000"></label>
-      <label>Plantas por ponto<input class="txt stand-f" id="stand-pontos" placeholder="ex.: 18, 20, 17, 19"></label>
-    </div>
-    <div style="padding:0 16px 8px"><label style="font-size:12px;font-weight:700;color:var(--muted)">Observações</label>
-      <input class="txt" id="stand-obs" placeholder="opcional" style="width:100%"></div>
-    <div style="padding:0 16px 6px;font-size:13px" id="stand-prev"></div>
-    <div style="padding:0 16px 14px;display:flex;justify-content:flex-end"><button class="btn btn-primary btn-sm" data-act="standSave" data-t="${esc(selId)}">Salvar contagem</button></div>
-  </div>
+  <div class="panel"><div class="panel-head"><h2>Novo Stand</h2><span class="sub">${esc(tNome(t))} · ${num(areaDe(t))} ha</span></div>
+    <div class="af-form">
+      <div class="app-grid">
+        <label><span>Data</span><input type="date" data-sf="data" value="${esc(f.data)}"></label>
+        ${standCampo('Atividade <i class="af-req">*</i>','ativ',f,{txt:1,ph:'ex.: MILHO SEMENTE'})}
+        ${standCampo('Comprimento (m)','comp',f,{ph:'ex.: 10'})}
+        ${standCampo('Espaçamento (m)','esp',f,{ph:'ex.: 0,5'})}
+        ${standCampo('Meta (plantas/ha)','meta',f,{ph:'opcional'})}
+      </div>
+      <div class="af-res st-res" id="st-res">${standResHtml(f)}</div>
+      <label class="st-tog"><span>Informar distâncias</span><input type="checkbox" data-sf="dist"${f.dist?' checked':''}><i></i></label>
+      ${standLinhasHtml(f)}
+      <label class="af-obs">Observações<input class="txt" data-sf="obs" value="${esc(f.obs)}" placeholder="opcional"></label>
+      <div class="af-falta" id="st-falta">${(c=>c.ok?'':'Falta: '+c.falta.join(', '))(standCalc(f))}</div>
+      <div class="af-acts"><button class="btn btn-ghost btn-sm" data-act="stLimpar">Limpar</button><span class="spacer"></span><button class="btn btn-primary" data-act="standSave" data-t="${esc(selId)}">💾 Salvar contagem</button></div>
+    </div></div>
+  ${!syncUrl()?'<p class="lt-aviso">Sincronização não configurada: as contagens ficam só neste aparelho.</p>':!standServerOk()?'<p class="lt-aviso">⚠️ As contagens ainda <b>não vão para a planilha</b>: cole o <b>Code.gs</b> novo e crie uma <b>Nova versão</b> (aba “STAND APP”). Até lá ficam neste aparelho e sobem depois.</p>':''}
   <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} contagem(ns)</span></div>
     <div class="monit-list">${cards}</div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">População = (média de plantas ÷ comprimento ÷ espaçamento) × 10.000. Salvo <b>no aparelho</b>.</p>`;
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Densidade = (média de plantas por linha ÷ comprimento) ÷ espaçamento × 10.000. Com distâncias: espaçamento ideal = 100 ÷ plantas/m da meta; dupla &lt; 0,5× e ausente &gt; 1,5× o ideal.</p>`;
 };
-
+function standAtualizaRes(f){ const r=document.getElementById('st-res'); if(r) r.innerHTML=standResHtml(f);
+  const fl=document.getElementById('st-falta'); if(fl){ const c=standCalc(f); fl.textContent=c.ok?'':'Falta: '+c.falta.join(', '); } }
+function standSave(talhao){
+  const f=standFormDe(talhao), c=standCalc(f);
+  if(!String(f.ativ||'').trim()) c.falta.unshift('atividade');
+  if(c.falta.length){ toast('Falta: '+c.falta.join(', ')); return; }
+  const t=findTalhao(talhao), u=sessUsuario(), now=Date.now(), r1=v=>v==null?null:Math.round(v*10)/10;
+  const linhas=f.linhas.map(l=>({n:numBR(l.n)||0, dom:numBR(l.dom)||0, dup:numBR(l.dup)||0, aus:numBR(l.aus)||0, pos:_stPos(l)}))
+    .map(l=>{ if(l.pos.length>=2){ l.n=l.pos.length; const cl=(c.calcLinhas||[]).find(x=>JSON.stringify(x.pos)===JSON.stringify(l.pos)); if(cl){ l.dup=cl.dup; l.aus=cl.aus; } } return l; })
+    .filter(l=>l.n>0);
+  STAND.registros.push({ id:'s'+now.toString(36)+Math.random().toString(36).slice(2,6), talhao, talhaoNome:t?tNome(t):talhao,
+    data:f.data||_hojeISO(), ativ:f.ativ, cultura:f.ativ, esp:f.esp, comp:f.comp, meta:f.meta, dist:!!f.dist, linhas,
+    pontos:linhas.map(l=>l.n).join(', '), pop:Math.round(c.dens), plm:r1(c.plm), cv:r1(c.cv),
+    pctMeta:c.pctMeta!=null?Math.round(c.pctMeta):null, falha:c.pctMeta!=null?Math.max(0,Math.round(100-c.pctMeta)):null,
+    cvDist:f.dist?r1(c.cvDist):null, inconf:f.dist?r1(c.inconf):null, pdom:f.dist?r1(c.pdom):null, pdup:f.dist?r1(c.pdup):null, paus:f.dist?r1(c.paus):null,
+    resumo:c.resumo, obs:f.obs, quem:(u&&u.nome)||'', ts:now, _u:now });
+  saveStand();
+  const nv=standFormNovo(talhao); ['ativ','comp','esp','meta','dist'].forEach(k=>nv[k]=f[k]); nv.linhas=f.linhas.map(()=>({n:'',dom:'',dup:'',aus:'',pos:[]}));
+  standForm[talhao]=nv; route({keepScroll:true}); toast('Contagem salva: '+c.resumo);
+}
+// ---- trena: posição de cada planta (cm) ----
+function standTrenaAbrir(i){ const f=standFormAtual(), l=f&&f.linhas[i]; if(!l) return;
+  const pos=(l.pos&&l.pos.length)?l.pos.map(String):['0'].concat(Array(Math.max(0,(numBR(l.n)||10)-1)).fill(''));
+  standTrena={i, pos}; standTrenaRender(); }
+function standTrenaRender(){ const tr=standTrena; if(!tr) return; let ov=document.getElementById('st-tr-ov');
+  if(!ov){ ov=document.createElement('div'); ov.id='st-tr-ov'; ov.className='modal-ov'; document.body.appendChild(ov); }
+  ov.innerHTML=`<div class="modal-box st-tr">
+    <div class="modal-head"><button class="icon-btn" data-act="stTrFechar" title="Cancelar">✕</button><h3>Posição das Plantas (em cm) · linha ${tr.i+1}</h3><button class="icon-btn st-ok" data-act="stTrOk" title="Confirmar">✓</button></div>
+    <p class="mut" style="font-size:13px;margin:0 0 8px">Informe a medida na trena em que cada uma das plantas foi encontrada. A primeira planta está preenchida no início da trena.</p>
+    <label class="af-n" style="margin-bottom:8px">Número de plantas<input class="cell" inputmode="numeric" id="st-tr-n" value="${tr.pos.length}"></label>
+    <div class="st-tr-list">${tr.pos.map((v,k)=>`<div class="st-tr-p"><span class="st-tr-ico">🌱</span><span>Planta ${k+1}</span><input class="cell" inputmode="decimal" data-trp="${k}" value="${esc(v)}" placeholder="Medida na trena">${k?`<button class="icon-btn" data-act="stTrDel" data-k="${k}" title="Remover">✕</button>`:'<span style="width:30px"></span>'}</div>`).join('')}</div>
+  </div>`; }
+function standTrenaFechar(){ standTrena=null; const ov=document.getElementById('st-tr-ov'); if(ov) ov.remove(); }
+function standTrenaOk(){ const tr=standTrena, f=standFormAtual(); if(!tr||!f) return;
+  const vals=tr.pos.map(v=>String(v).trim()===''?null:numBR(v));
+  const preenchidos=vals.filter(v=>v!=null);
+  for(let k=1;k<preenchidos.length;k++) if(preenchidos[k]<preenchidos[k-1]){ toast('As medidas precisam crescer: planta '+(k+1)+' está antes da anterior'); return; }
+  const l=f.linhas[tr.i]; l.pos=preenchidos.length>=2?preenchidos:[]; if(l.pos.length) l.n=String(l.pos.length);
+  standTrenaFechar(); route({keepScroll:true}); }
 /* ============ AFERIÇÕES (pulverizador · perda na colheita · semeadura adubo/sementes) ============
    Um registro por aferição, guardado por id e sincronizado com a planilha (aba "AFERICOES APP", merge pelo _u).
    Excluir = marcar del (para não voltar de outro aparelho). */
@@ -4595,7 +4694,7 @@ window.addEventListener('hashchange', novaAcaoFechar);
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
   if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
   else if(el.matches('[data-afam]')){ const f=afFormAtual(); if(f){ f.am[+el.dataset.afam]=el.value; afAtualizaRes(f); } } });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape') novaAcaoFechar(); });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ novaAcaoFechar(); standTrenaFechar(); } });
 /* ============ RECOMENDAÇÃO DE APLICAÇÃO (receituário → envio → retorno → aprovação) ============
    Fluxo: rascunho → enviada (WhatsApp ao operador) → retorno (Adm registra o volume utilizado)
    → aprovada (vira histórico de aplicação no talhão / timeline). Tudo salvo no aparelho. */
@@ -5392,7 +5491,7 @@ function camposEventos(){
     titulo:(r.categoria?_capf(r.categoria):'Monitoramento'), resumo:[r.alvo, r.nivel?('nível '+r.nivel+(r.unidade?' '+r.unidade:'')):'', r.acao].filter(Boolean).join(' · ')}));
   (CHUVA&&CHUVA.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'chuva',talhao:'',
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
-  (STAND&&STAND.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
+  (STAND?standLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
     titulo:'Contagem de stand'+(r.cultura?' · '+r.cultura:''), resumo:[r.pop?nf0.format(r.pop)+' pl/ha':'', r.pctMeta!=null?r.pctMeta+'% da meta':''].filter(Boolean).join(' · ')}));
   (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0);
     const prods=(r.itens||[]).filter(it=>it.produto).map(it=>it.produto).join(', ');
@@ -5425,7 +5524,7 @@ V.campopainel = function(){
   const monit=(MONIT&&MONIT.registros||[]), monit30=monit.filter(r=>_tsC(r)>=d30);
   const chuva=(CHUVA&&CHUVA.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
   const mm30=(CHUVA&&CHUVA.registros||[]).filter(r=>_tsC(r)>=d30).reduce((a,r)=>a+_mmC(r.mm),0);
-  const stand=(STAND&&STAND.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const stand=(STAND?standLista():[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
   const recom=(RECOM&&RECOM.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
   const talAtiv=new Set(ev.filter(e=>e.talhao).map(e=>e.talhao)).size;
   const ult=ev[0];
@@ -6400,8 +6499,11 @@ function copiaMaquinas(srcId,dstId,plano){
 
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches&&e.target.matches('input[data-sf="dist"]')){ const f=standFormAtual(); if(f){ f.dist=e.target.checked; route({keepScroll:true}); } return; }
+  if(e.target.matches&&e.target.matches('[data-sf="nLin"]')){ const f=standFormAtual(); if(f){ const n=Math.max(1,Math.min(40,Math.round(numBR(e.target.value))||1)); if(n===f.linhas.length) return; while(f.linhas.length<n) f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); f.linhas.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
+  if(e.target.id==='st-tr-n' && standTrena){ const n=Math.max(1,Math.min(200,Math.round(numBR(e.target.value))||1)); if(n===standTrena.pos.length) return; while(standTrena.pos.length<n) standTrena.pos.push(''); standTrena.pos.length=n; setTimeout(standTrenaRender,0); return; }
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
-  if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); while(f.am.length<n) f.am.push(''); f.am.length=n; route({keepScroll:true}); } return; }
+  if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); if(n===f.am.length) return; while(f.am.length<n) f.am.push(''); f.am.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
@@ -6440,7 +6542,10 @@ document.addEventListener('change',e=>{
   if(e.target.matches('input[data-edit], select[data-edit], textarea[data-edit]')) applyEdit(e.target);
 });
 document.addEventListener('keydown',e=>{ if(e.target.matches('input[data-edit]')&&e.key==='Enter') e.target.blur(); });
-document.addEventListener('input',e=>{ if(e.target.classList&&e.target.classList.contains('stand-f')) standPreview(); });
+document.addEventListener('input',e=>{ const el=e.target; if(!el.matches) return;
+  if(el.matches('input[data-sf]') && el.type!=='checkbox' && el.dataset.sf!=='nLin'){ const f=standFormAtual(); if(f){ f[el.dataset.sf]=el.value; standAtualizaRes(f); } }
+  else if(el.matches('[data-sl]')){ const f=standFormAtual(), [i,k]=el.dataset.sl.split('|'); if(f&&f.linhas[+i]){ f.linhas[+i][k]=el.value; standAtualizaRes(f); } }
+  else if(el.matches('[data-trp]') && standTrena){ standTrena.pos[+el.dataset.trp]=el.value; } });
 document.addEventListener('input',e=>{ if(e.target.id!=='rec-44') return;
   const d=e.target.value.replace(/\D/g,'').slice(0,44); REC.digitos=d; const st=document.getElementById('rec-44-st'); if(st){ st.textContent=recChaveMsg(d); st.className='rec-44-st'+(/^✔/.test(st.textContent)?' ok':(/^✘/.test(st.textContent)?' err':'')); }
   if(d.length===44 && nfeChaveOk(d)) recAbrirChave(d); });
@@ -6628,7 +6733,14 @@ document.addEventListener('click',e=>{
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }
-    else if(a.act==='standDel'){ if(ask('Remover esta contagem?')){ STAND.registros=STAND.registros.filter(r=>r.id!==a.id); saveStand(); route(); toast('Removido'); } }
+    else if(a.act==='standDel'){ const r=STAND.registros.find(x=>x.id===a.id); if(r && ask('Remover esta contagem?')){ r.del=true; r._u=Date.now(); saveStand(); route({keepScroll:true}); toast('Removido'); } }
+    else if(a.act==='stLinAdd'){ const f=standFormAtual(); if(f){ f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); route({keepScroll:true}); } }
+    else if(a.act==='stLinDel'){ const f=standFormAtual(); if(f){ f.linhas.splice(+a.i,1); route({keepScroll:true}); } }
+    else if(a.act==='stLimpar'){ const f=standFormAtual(); if(f && ask('Limpar os dados desta contagem?')){ standForm[f.talhao]=standFormNovo(f.talhao); route({keepScroll:true}); } }
+    else if(a.act==='stTrena'){ standTrenaAbrir(+a.i); }
+    else if(a.act==='stTrFechar'){ standTrenaFechar(); }
+    else if(a.act==='stTrOk'){ standTrenaOk(); }
+    else if(a.act==='stTrDel'){ if(standTrena){ standTrena.pos.splice(+a.k,1); standTrenaRender(); } }
     else if(a.act==='recomFromOp'){ if(recomCreate(a.t,a.op)){ route(); toast('Recomendação criada do planejamento'); } }
     else if(a.act==='recomNova'){ if(recomCreate(a.t,'')){ route(); toast('Recomendação em branco criada'); } }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
@@ -7241,7 +7353,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
@@ -7432,6 +7544,7 @@ function applyPulledData(d, raw){
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
+  try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
@@ -7582,6 +7695,7 @@ async function syncPush(opts){
   try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   try{ if(aferServerOk() && aferSig()!==lastAferSig) await aferPush({auto:true}); }catch(e){}   // aferições do Campo
+  try{ if(standServerOk() && standSig()!==lastStandSig) await standPush({auto:true}); }catch(e){}   // contagens de stand
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
@@ -7925,6 +8039,7 @@ function pendingInfo(fe0){
     if(lastResultSig!=='' && resultSig()!==lastResultSig) add(1, 'alteração em resultados');
     if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
     if(aferServerOk() && aferSig()!==lastAferSig) add(1, 'aferição(ões)');
+    if(standServerOk() && standSig()!==lastStandSig) add(1, 'contagem(ns) de stand');
     if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
     add(nfePend().length, 'nota(s) NF-e a enviar');
   }catch(e){}

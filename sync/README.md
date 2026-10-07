@@ -58,6 +58,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - Vem de volta no puxar como **`afericoes_app`** (parte APP). Enquanto o Code.gs antigo estiver publicado,
   o app guarda as aferições no aparelho e mostra o aviso para atualizar; depois sobem sozinhas.
 
+## Contagem de stand (aba `STAND APP`)
+- Tipo de gravação **`__stand`** (Campo e Planejamento), mesmo formato das aferições (KEY|JSON|ATUALIZADO,
+  `_u` mais novo vence) + colunas **DATA · TALHÃO · ATIVIDADE · DENSIDADE (pl/ha) · PLANTAS/M · CV (%) ·
+  % DA META · RESULTADO · SITUAÇÃO**. Volta no puxar como **`stand_app`**. As contagens antigas, que antes
+  ficavam só no aparelho, sobem na primeira sincronização depois de atualizar o Code.gs.
+
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
 2. **Extensões → Apps Script**.
