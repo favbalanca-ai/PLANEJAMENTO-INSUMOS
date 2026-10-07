@@ -1466,7 +1466,10 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-pop-t td{padding:7px 6px;border-bottom:1px solid #eef1f3}
 .oq-pop-t tbody tr:nth-child(odd){background:#f8fafb}
 .oq-pop-t .num{text-align:right;white-space:nowrap}
-.oq-pop-ver{align-self:flex-end;color:var(--teal);font-weight:700;cursor:pointer;text-decoration:none;margin-top:2px}
+.oq-pop-ver{color:var(--teal);font-weight:700;cursor:pointer;text-decoration:none}
+.oq-pop-f{display:flex;align-items:center;gap:6px;margin-top:4px}
+.oq-pop-f .spacer{flex:1}
+.oq-pop-f .btn[disabled]{opacity:.4;cursor:default}
 .oq-col-t{width:100%;border-collapse:collapse;font-size:12.5px}
 .oq-col-t th{text-align:left;padding:7px 8px;border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0;background:var(--card)}
 .oq-col-t td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}

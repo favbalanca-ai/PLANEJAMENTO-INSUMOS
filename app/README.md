@@ -84,6 +84,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
     antes/depois, se diferente da estimada), dias após aplicado, situação e a tabela **Produto · Dose/ha ·
     Total** no talhão (dose realizada quando informada, senão a do plano; extras incluídos) + *Ver aplicação ›*.
     No celular ela aparece presa embaixo; fecha no ✕, tocando fora ou com Esc.
+  - **‹ Recuar / Avançar ›** (na janelinha): troca a operação de lugar com a anterior/próxima da mesma safra
+    do talhão. É só a **ordem de exibição** (quadro e tela do talhão) — vale mesmo com operações concluídas,
+    não reescreve a aba do talhão nem mexe em baixas. Fica no registro da operação (`ord`) e sobe para a
+    planilha junto com a execução do Campo (aba REALIZADO APP), então aparece igual nos outros aparelhos.
+    Sem `ord`, vale a ordem do planejamento.
   - **⚠** no cartão = aplicada em data diferente da estimada · **🔔** = retorno do operador esperando aprovação.
   - **Mais detalhes** (acima de cada coluna): a mesma operação em todos os talhões do quadro — situação,
     estimada, efetiva, DAA e produtos (dose/ha · total), com **+** para abrir cada uma.
