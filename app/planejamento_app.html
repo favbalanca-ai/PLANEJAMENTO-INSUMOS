@@ -755,7 +755,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
   .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
   /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
-  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px}.safra-chip{display:none}
+  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px;flex-wrap:wrap}.safra-chip{display:none}
+  .topbar-right{margin-left:auto}   /* sincronização + edições não empurram a tela para o lado */
   /* Preços no celular: cada produto vira um CARTÃO (sem rolar de lado) */
   .pr-pct{display:none!important}
   .pr-imp-txt{min-height:200px}
@@ -1413,6 +1414,55 @@ body[data-embed] .content{padding:10px 10px 24px}
 /* listas longas no celular: o navegador só desenha o que aparece (rolagem e edição mais leves) */
 @media (max-width:640px){ .cp-card,.op-block{content-visibility:auto;contain-intrinsic-size:auto 220px} }
 
+/* ===== Campo: QUADRO de operações (talhões × operações, cartões coloridos) ===== */
+.oq-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-bottom:8px}
+.oq-top label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.oq-top .sel{width:100%}
+.oq-legs{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 10px;font-size:12px;color:var(--ink)}
+.oq-leg{display:inline-flex;align-items:center;gap:6px}
+.oq-sw{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,.08)}
+.oq-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.oq-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);min-width:max-content}
+.oq-row:last-child{border-bottom:0}
+.oq-hd{position:sticky;left:0;z-index:2;flex:0 0 150px;width:150px;background:var(--card);border-right:1px solid var(--line);
+  padding:10px;display:flex;flex-direction:column;gap:2px;box-shadow:2px 0 4px rgba(20,50,60,.05)}
+.oq-nome{font-weight:800;color:var(--ink);font-size:14px;cursor:pointer;text-decoration:none;line-height:1.2}
+.oq-sub{font-size:11.5px;color:var(--muted);line-height:1.25}
+.oq-area{font-size:12px;color:var(--ink2);font-weight:600}
+.oq-det{margin-top:auto;font-size:12px;font-weight:700;color:var(--teal);cursor:pointer;text-decoration:none}
+.oq-cards{display:flex;gap:8px;padding:10px}
+.oq-card{position:relative;flex:0 0 auto;width:132px;min-height:92px;border-radius:10px;padding:8px 30px 8px 10px;
+  font-size:12px;line-height:1.35;color:#24343a;border:1px solid rgba(0,0,0,.06)}
+.oq-c-n{font-weight:800;font-size:12.5px;margin-bottom:2px;line-height:1.2}
+.oq-c-at{font-size:10.5px;font-weight:600;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.oq-print{height:38px;white-space:nowrap}
+.oq-plus{position:absolute;right:6px;bottom:6px;width:24px;height:24px;border-radius:50%;border:0;cursor:pointer;
+  background:rgba(255,255,255,.85);color:var(--ink);font-size:17px;font-weight:700;line-height:24px;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.oq-plus:hover{background:#fff}
+.oq-alert{color:#b45309}
+/* cores (cartão e legenda) */
+.oq-ok{background:#d9f2e3}
+.oq-and{background:repeating-linear-gradient(135deg,#d9f2e3 0 7px,#eef9f2 7px 14px)}
+.oq-breve{background:#fff3c4}
+.oq-late{background:#f9d6d5;color:#a61b1b}
+.oq-late .oq-c-n{color:#a61b1b}
+.oq-prazo{background:#eceff1}
+.oq-sem{background:#fff;border:1px dashed #c4cdd2;color:var(--muted)}
+.oq-canc{background:#f3f4f5;color:#8a979d}
+.oq-card.oq-canc .oq-c-tx{text-decoration:line-through}
+@media (max-width:640px){
+  .oq-top{grid-template-columns:1fr 1fr}
+  .oq-print{align-self:end}
+  .oq-hd{flex-basis:112px;width:112px;padding:8px}
+  .oq-nome{font-size:13px}
+  .oq-cards{gap:6px;padding:8px}
+  .oq-card{width:118px;min-height:86px;font-size:11.5px}
+  .oq-plus{width:28px;height:28px;line-height:28px}
+}
+@media print{ .oq-wrap{overflow:visible;border:0} .oq-hd{position:static;box-shadow:none} .oq-plus{display:none}
+  .oq-row{break-inside:avoid;min-width:0} .oq-cards{flex-wrap:wrap} .oq-card{padding-right:10px}
+  .oq-card,.oq-sw{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+
 </style>
 </head>
 <body>
@@ -1508,7 +1558,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-184';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-185';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4266,7 +4316,7 @@ function _today0(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 function tarefaStatusEff(t){
   if(t && t.opKey && OV && OV.realizado && OV.realizado[t.opKey]){
     const st=OV.realizado[t.opKey].status;
-    if(st==='concluido') return 'concluida'; if(st==='andamento') return 'andamento'; return 'afazer';
+    if(st==='concluido'||st==='cancelado') return 'concluida'; if(st==='andamento') return 'andamento'; return 'afazer';
   }
   return (t&&t.status)||'afazer';
 }
@@ -5321,7 +5371,9 @@ async function usuSalvar(){
   catch(err){ toast('Não salvou: '+err.message); }
 }
 /* ================= MODO CAMPO (planejado × realizado) ================= */
-const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'} };
+const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'}, cancelado:{lbl:'Não será realizada',cls:'st-canc'} };
+// operação ENCERRADA: concluída ou "não será realizada" (não conta como atrasada nem aberta)
+function opEncerrada(r){ return !!r && (r.status==='concluido' || r.status==='cancelado'); }
 function opsDoTalhao(t){
   const out=[];
   ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P';
@@ -5639,7 +5691,7 @@ function campoAppMsg(key){
 }
 function campoProgress(){
   let total=0, done=0, running=0;
-  talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ total++; const r=realOf(o.key);
+  talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='cancelado') return; total++;
     if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento') running++; } }));
   return {total,done,running};
 }
@@ -6599,7 +6651,7 @@ function limitesApplyPulled(map){
 const OPST={late:{cor:'#e53935',lbl:'Operação atrasada',ico:'🔴'},soon:{cor:'#fdd835',lbl:'Próximos 7 dias',ico:'🟡'},ok:{cor:'#43a047',lbl:'Em dia',ico:'🟢'},none:{cor:'#b0bec5',lbl:'Sem programação',ico:'⚪'}};
 function talStatusOps(t){
   const hj=new Date(_hojeISO()+'T00:00:00'), late=[], soon=[]; let prox=null, tem=false;
-  campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='concluido') return;
+  campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(opEncerrada(r)) return;
     const dp=opDataPlan(t.id,o.tagoi,o.op.dap); if(!dp) return; tem=true;
     const dd=Math.round((new Date(dp+'T00:00:00')-hj)/86400000), and=r&&r.status==='andamento', it={nome:o.op.nome+(o.seq==='safrinha'?' (2ª)':''),dd,dp,and};
     if(dd<0 && !and) late.push(it); else if(dd<=7 || and) soon.push(it);
@@ -6788,14 +6840,14 @@ V.timeline = function(arg){
     const it=[];
     if(pl) it.push({tipo:'marco',data:pl,ord:0,titulo:'🌱 Plantio'+(plReal?' realizado':' previsto'),resumo:esc(emp||''),cls:plReal?'':'fut'});
     fe.list.forEach(s=>it.push({tipo:'estadio',data:s.data,ord:1,cod:s.cod,titulo:s.cod,resumo:esc(s.desc),cls:s.data>hojeIso?'fut':''}));
-    ops.filter(o=>o.seq===seq).forEach(o=>{ const r=realOf(o.key), done=r&&r.status==='concluido', and=r&&r.status==='andamento';
+    ops.filter(o=>o.seq===seq).forEach(o=>{ const r=realOf(o.key), done=r&&r.status==='concluido', and=r&&r.status==='andamento', canc=r&&r.status==='cancelado';
       const dp=opDataPlan(t.id,o.tagoi,o.op.dap), dae=opDaeDe(t.id,o.tagoi,o.op.dap), dt=(done&&r.data)?String(r.data).slice(0,10):dp;
       const pr=o.items.map(x=>x.produto), prTxt=pr.slice(0,4).join(', ')+(pr.length>4?` +${pr.length-4}`:'');
       const dd=dt?Math.round((new Date(dt+'T00:00:00')-new Date(hojeIso+'T00:00:00'))/86400000):null;
-      const tag=done?'<span class="cp-tag ok">✓ concluída</span>':and?'<span class="cp-tag today">em andamento</span>':
+      const tag=done?'<span class="cp-tag ok">✓ concluída</span>':canc?'<span class="cp-tag">🚫 não será realizada</span>':and?'<span class="cp-tag today">em andamento</span>':
         dd==null?'<span class="cp-tag">sem data</span>':dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:dd===0?'<span class="cp-tag today">hoje</span>':`<span class="cp-tag">em ${dd} d</span>`;
       const ref=`DAE ${dae||0}${done&&dp&&dp!==dt?` · previsto ${_dtBRc(dp)}`:''}`;
-      it.push({tipo:done?'operacao':'prevista',data:dt,ord:2,titulo:o.op.nome,tag,ref,resumo:esc(prTxt),cls:done?'':(dd!=null&&dd<0&&!and?'late':'fut'),
+      it.push({tipo:done?'operacao':'prevista',data:dt,ord:2,titulo:o.op.nome,tag,ref,resumo:esc(prTxt),cls:done?'':canc?'fut':(dd!=null&&dd<0&&!and?'late':'fut'),
         estad:estadioEm(fe,dt)}); });
     histAll.filter(e=>seqDoEv(e)===seq).forEach(e=>{ const ti=CAMPO_TIPOS[e.tipo]||{}; it.push({tipo:e.tipo,data:_isoEv(e),ord:3,titulo:e.titulo,resumo:esc(e.resumo||''),estad:estadioEm(fe,_isoEv(e))}); });
     const col=colheitaPrevDe(t.id,seq);
@@ -7023,9 +7075,63 @@ function campoOpsDoTalhao(t){
       out.push({seq,tag,oi,op,tagoi,key,items,cultura:seq==='safrinha'?empSafDe(t):empDe(t)}); }); });
   return out;
 }
+// ===== QUADRO de operações (visão geral): uma linha por talhão, um cartão por operação =====
+let oqSeq='principal', oqAtiv='', oqTal='';
+const OQ_ST={ok:'Aplicado', and:'Em andamento', breve:'3 dias para a aplicação', late:'Atrasado', prazo:'Dentro do prazo', canc:'Não será realizada a aplicação', sem:'Sem data (defina o plantio)'};
+function _dias(a,b){ return Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/86400000); }
+// atividade da operação, pelos produtos: Plantio (semente) · Herbicida · Fungicida · …
+function oqAtividades(t,o){ const s=new Set(); effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto).forEach(it=>{
+    if(_isSemente(it)) s.add('Plantio'); else if(_isTS(it)) s.add('Tratamento de sementes');
+    else { const c=String(it.classe||((PROD[it.produto]||{}).classe)||'').trim().toUpperCase().replace(/S$/,''); if(c && !/ADJUVANTE|MÁQUINA/.test(c)) s.add(c.charAt(0)+c.slice(1).toLowerCase()); } });
+  return [...s]; }
+function oqCard(t,o,n){
+  const r=realOf(o.key)||{}, hoje=_hojeISO(), dp=opDataPlan(t.id,o.tagoi,o.op.dap), pl=plantioEffDe(t.id,o.seq);
+  const feita=r.status==='concluido', dt=(feita&&_isISO(r.data))?String(r.data).slice(0,10):dp;
+  let st='prazo';
+  if(r.status==='cancelado') st='canc'; else if(feita) st='ok'; else if(r.status==='andamento') st='and';
+  else if(!dp) st='sem'; else { const dd=_dias(dp,hoje); st=dd<0?'late':(dd<=3?'breve':'prazo'); }
+  const daa=(feita&&dt)?_dias(hoje,dt):null, pos=(dt&&pl)?_dias(dt,pl):null;
+  const ret=RECOM.registros.some(x=>(x.opKey===o.key||(x.tipo==='ts'&&x.tsOp===o.key)) && x.status==='retorno');
+  const at=oqAtividades(t,o);
+  const nome=/^opera[cç][aã]o\s*\d+$/i.test(String(o.op.nome||'').trim())?`Operação ${n}`:(o.op.nome||`Operação ${n}`);
+  return `<div class="oq-card oq-${st}" title="${esc(OQ_ST[st])}${ret?' · retorno do operador aguardando aprovação':''}">
+    <div class="oq-c-tx"><div class="oq-c-n">${esc(nome)}${ret?' <span class="oq-alert" title="Retorno do operador aguardando aprovação">⚠</span>':''}</div>
+      ${at.length?`<div class="oq-c-at" title="${esc(at.join(' · '))}">${esc(at.join(' · '))}</div>`:''}
+      <div>${dt?fmtDataBR(dt).slice(0,5):'—'}</div>${daa!=null?`<div>DAA: ${daa}</div>`:''}<div>Pos. Ciclo: ${pos!=null?pos:'—'}</div></div>
+    <button class="oq-plus" data-act="oqAbrir" data-key="${esc(o.key)}" title="Abrir a operação">+</button></div>`;
+}
+function campoQuadro(){
+  const all=talhoesAll();
+  if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
+  const tals=all.filter(t=>!oqTal||t.id===oqTal);
+  const ativs=new Set(); all.forEach(t=>campoOpsDoTalhao(t).forEach(o=>oqAtividades(t,o).forEach(a=>ativs.add(a))));
+  const rows=tals.map(t=>{
+    const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
+    const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq));
+    if(!ops.length) return '';
+    let n={principal:0,safrinha:0};
+    const cards=ops.map(o=>{ n[o.seq]++; if(oqAtiv && !oqAtividades(t,o).includes(oqAtiv)) return ''; return oqCard(t,o,n[o.seq]); }).join('');
+    if(!cards) return '';
+    const cult=seqs.length===1&&seqs[0]==='safrinha'?empSafDe(t):empDe(t), pc=ops.map(o=>plantioCalc(o.key)).find(Boolean);
+    return `<div class="oq-row"><div class="oq-hd"><a class="oq-nome" data-go="#/campo/${esc(t.id)}">${esc(tNome(t))}</a>
+        <div class="oq-sub">${esc(cult||'—')}${pc?' · '+esc(pc.sem.produto):''}</div><div class="oq-area">${num(areaDe(t))} ha</div>
+        <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>
+      <div class="oq-cards">${cards}</div></div>`; }).join('');
+  const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
+  return `<div class="oq-top">
+      <label>Safra<select class="sel" id="oq-seq"><option value="principal"${oqSeq==='principal'?' selected':''}>1ª cultura</option><option value="safrinha"${oqSeq==='safrinha'?' selected':''}>2ª cultura (safrinha)</option><option value="ambas"${oqSeq==='ambas'?' selected':''}>Ambas</option></select></label>
+      <label>Atividade<select class="sel" id="oq-ativ"><option value="">Todas</option>${[...ativs].sort((a,b)=>a.localeCompare(b,'pt')).map(a=>`<option${a===oqAtiv?' selected':''}>${esc(a)}</option>`).join('')}</select></label>
+      <label>Talhão<select class="sel" id="oq-tal"><option value="">Todos</option>${all.map(t=>`<option value="${esc(t.id)}"${t.id===oqTal?' selected':''}>${esc(tNome(t))}</option>`).join('')}</select></label>
+      <button class="btn btn-outline btn-sm oq-print" data-act="oqImprimir" title="Imprimir o quadro">🖨 Imprimir</button>
+    </div>
+    <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div>
+    <div class="oq-wrap">${rows||'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
+    <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ retorno do operador aguardando aprovação.</p>`;
+}
 V.campo = function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
+  if(!arg || !all.some(t=>t.id===arg)) return campoQuadro();   // sem talhão: quadro de todas as operações
   const selId=(arg && all.some(t=>t.id===arg))?arg:all[0].id;
   const t=all.find(x=>x.id===selId);
   const tOpt=all.map(x=>{ const ops=campoOpsDoTalhao(x);
@@ -7033,12 +7139,12 @@ V.campo = function(arg){
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))} — ${d}/${ops.length} ok</option>`; }).join('');
   const ops=campoOpsDoTalhao(t);
   const stOf=o=>((realOf(o.key)||{}).status)||'pendente';
-  const cnt={pendente:0,andamento:0,concluido:0}; ops.forEach(o=>cnt[stOf(o)]++);
-  const pct=ops.length?Math.round(cnt.concluido/ops.length*100):0;
+  const cnt={pendente:0,andamento:0,concluido:0,cancelado:0}; ops.forEach(o=>cnt[stOf(o)]=(cnt[stOf(o)]||0)+1);
+  const nValidas=ops.length-cnt.cancelado, pct=nValidas?Math.round(cnt.concluido/nValidas*100):0;
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   const diasAte=iso=>{ if(!iso) return null; const d=new Date(iso+'T00:00:00'); return Math.round((d-hoje)/86400000); };
   // PRÓXIMA = a não concluída de data mais cedo (sem data: a primeira na ordem)
-  const abertas=ops.filter(o=>stOf(o)!=='concluido');
+  const abertas=ops.filter(o=>stOf(o)!=='concluido' && stOf(o)!=='cancelado');
   const prox=abertas.slice().sort((a,b)=>{ const da=opDataPlan(t.id,a.tagoi,a.op.dap)||'9999', db=opDataPlan(t.id,b.tagoi,b.op.dap)||'9999'; return da<db?-1:da>db?1:0; })[0];
   if(!campoOpenInit.has(t.id)){ campoOpenInit.add(t.id); if(prox) campoOpen.add(prox.key); }
   const nPos={}; let nP=0, nS=0; ops.forEach(o=>{ nPos[o.key]=(o.seq==='safrinha')?++nS:++nP; });
@@ -7074,11 +7180,13 @@ V.campo = function(arg){
     let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
     let prazo='';
     if(r.status==='concluido') prazo=`<span class="cp-tag ok">✔ ${r.data?fmtDataBR(r.data):'concluída'}</span>`;
+    else if(r.status==='cancelado') prazo=`<span class="cp-tag">🚫 não será realizada</span>`;
     else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
     const resumo=(o.items||[]).map(it=>`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join(' · ');
     // ação principal do cartão, conforme o status
     const tsBtn=(tc && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
-    const acao= r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 ${pc?'Enviar plantio':'Enviar ao operador'}</button>`
+    const acao= r.status==='cancelado' ? `<span class="cp-baixa">🚫 Não será realizada</span><button class="btn btn-ghost btn-sm" data-act="realStatus" data-key="${esc(o.key)}" data-val="pendente">↩ Voltar a pendente</button>`
+      : r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 ${pc?'Enviar plantio':'Enviar ao operador'}</button>`
       : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Reenviar</button>`
       : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
     const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · baixa da semente e do TS ✓</div>`
@@ -7105,7 +7213,7 @@ V.campo = function(arg){
       <details class="cp-det" data-key="${esc(o.key)}"${campoOpen.has(o.key)?' open':''}>
         <summary><span>Detalhes · registrar execução</span><span class="panel-chevron">▸</span></summary>
         <div class="cp-det-in">
-      <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}</div>
+      <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}${sbtn('cancelado')}</div>
       ${r.status==='concluido'?`<div class="camp-actbar"><span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
       ${(()=>{ const col=colheitaPrevDe(t.id,o.seq); return col?`<div class="camp-plan">🌾 Colheita estimada: <b>${fmtDataBR(col)}</b></div>`:''; })()}
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
@@ -7160,15 +7268,16 @@ V.campo = function(arg){
         </div>
       </details>
     </div>`;
-  }).join('') || (ops.length?`<div class="cp-empty">Nenhuma operação ${campoFiltro==='concluido'?'concluída':campoFiltro==='andamento'?'em andamento':'pendente'} neste talhão.</div>`:'<div class="cp-empty">Este talhão não tem operações planejadas.</div>');
+  }).join('') || (ops.length?`<div class="cp-empty">Nenhuma operação ${campoFiltro==='concluido'?'concluída':campoFiltro==='andamento'?'em andamento':campoFiltro==='cancelado'?'marcada como não realizada':'pendente'} neste talhão.</div>`:'<div class="cp-empty">Este talhão não tem operações planejadas.</div>');
   const plantio=plantioEffDe(t.id,'principal'), col=colheitaPrevDe(t.id,'principal');
   return `${prodDatalist()}
   <div class="cp-top">
+    <a class="btn btn-ghost btn-sm" data-go="#/campo" style="margin-bottom:8px">← Quadro de operações</a>
     <div class="cp-sel"><select class="sel" id="camp-talhao">${tOpt}</select></div>
     <div class="cp-tinfo"><b>${esc(tNome(t))}</b> <span>${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
       ${(plantio||col)?`<span>${plantio?`🌱 plantio ${fmtDataBR(plantio)}`:''}${col?` · 🌾 colheita ${fmtDataBR(col)}`:''}</span>`:''}</div>
     <div class="cp-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span><b>${cnt.concluido}</b>/${ops.length} concluídas · ${pct}%</span></div>
-    <div class="cp-chips">${chip('todas','Todas',ops.length)}${chip('pendente','Pendentes',cnt.pendente)}${chip('andamento','Em andamento',cnt.andamento)}${chip('concluido','Concluídas',cnt.concluido)}</div>
+    <div class="cp-chips">${chip('todas','Todas',ops.length)}${chip('pendente','Pendentes',cnt.pendente)}${chip('andamento','Em andamento',cnt.andamento)}${chip('concluido','Concluídas',cnt.concluido)}${cnt.cancelado?chip('cancelado','Não realizadas',cnt.cancelado):''}</div>
   </div>
   ${opsHtml}
   <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">Toque em <b>Detalhes</b> para registrar data, doses realizadas (em branco = conforme o plano), insumos extras e a recomendação de aplicação. Salvo no aparelho e sincronizado com a planilha.</p>`;
@@ -7529,6 +7638,9 @@ function copiaMaquinas(srcId,dstId,plano){
 
 document.addEventListener('change',e=>{
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
+  if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
+  if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
@@ -7674,6 +7786,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='slogLimpar'){ if(confirm('Limpar o log detalhado?')){ try{ localStorage.removeItem(SYNC_LOG_KEY); }catch(e){} renderSyncLogDet(); } }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     else if(a.act==='campoFiltro'){ campoFiltro=a.val||'todas'; route({keepScroll:true}); }
+    else if(a.act==='oqAbrir'){ const i=a.key.indexOf('|'); campoOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
+      setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
+    else if(a.act==='oqImprimir'){ const w=document.querySelector('.oq-wrap'); printDoc(`<div class="rx-title"><h1>Quadro de operações de campo</h1><span class="n">${fmtDataBR(_hojeISO())} · Safra 2026/2027</span></div><div class="oq-legs">${document.querySelector('.oq-legs').innerHTML}</div>${w?w.outerHTML:''}`); return; }
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
       const r=realEnsure(a.key); const was=r.status; r.status=a.val;
       if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }
