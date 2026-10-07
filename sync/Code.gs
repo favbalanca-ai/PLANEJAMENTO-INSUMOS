@@ -112,7 +112,7 @@ function readAppPart_(){
     if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
     return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
       result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
-      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
   } finally { _CTR_MEMO_ = null; _LER_MEMO_ = null; }
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
@@ -238,19 +238,28 @@ function writeMapApp(name, map){
 // ---- AFERIÇÕES do Campo (pulverizador, perda na colheita, semeadura adubo/sementes) ----
 // Mesmo formato KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis para consulta.
 // O app manda o resumo pronto (campo "resumo"); excluídas ficam marcadas (del) para não voltarem de outro aparelho.
-var AFER_SHEET = 'AFERICOES APP';
-function writeAfericoesApp(map){
-  map = map || {}; var b = ss(), s = b.getSheetByName(AFER_SHEET) || b.insertSheet(AFER_SHEET);
-  var cur = readMapApp(AFER_SHEET);
+var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP';
+// mapa KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis calculadas por linhaFn(registro)
+function writeMapAppLeg_(name, map, cab, linhaFn){
+  map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
+  var cur = readMapApp(name);
   for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
-  var TIPO = { aplicacao:'Aplicação (pulverizador)', colheita:'Colheita (perda)', adubo:'Semeadura: adubo', sementes:'Semeadura: sementes' };
-  var rows = [['KEY','JSON','ATUALIZADO','DATA','TALHÃO','TIPO','MÁQUINA','IMPLEMENTO','RESULTADO','SITUAÇÃO']];
-  for (var kk in cur){ var r = cur[kk] || {};
-    rows.push([kk, JSON.stringify(r), r._u||'', T_(r.data), T_(r.talhaoNome||r.talhao), TIPO[r.tipo]||T_(r.tipo),
-      T_(r.maq), T_(r.impl), T_(r.resumo), r.del ? 'EXCLUÍDA' : '']); }
-  regrava_(s, rows, 10); try { s.setFrozenRows(1); } catch(e){}
+  var rows = [['KEY','JSON','ATUALIZADO'].concat(cab)];
+  for (var kk in cur){ var r = cur[kk] || {}; rows.push([kk, JSON.stringify(r), r._u||''].concat(linhaFn(r))); }
+  regrava_(s, rows, 3 + cab.length); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
+}
+function writeAfericoesApp(map){
+  var TIPO = { aplicacao:'Aplicação (pulverizador)', colheita:'Colheita (perda)', adubo:'Semeadura: adubo', sementes:'Semeadura: sementes' };
+  return writeMapAppLeg_(AFER_SHEET, map, ['DATA','TALHÃO','TIPO','MÁQUINA','IMPLEMENTO','RESULTADO','SITUAÇÃO'], function(r){
+    return [T_(r.data), T_(r.talhaoNome||r.talhao), TIPO[r.tipo]||T_(r.tipo), T_(r.maq), T_(r.impl), T_(r.resumo), r.del ? 'EXCLUÍDA' : '']; });
+}
+// ---- CONTAGEM DE STAND (linhas, dominadas/duplas/ausentes, distâncias na trena) ----
+function writeStandApp(map){
+  return writeMapAppLeg_(STAND_SHEET, map, ['DATA','TALHÃO','ATIVIDADE','DENSIDADE (pl/ha)','PLANTAS/M','CV (%)','% DA META','RESULTADO','SITUAÇÃO'], function(r){
+    return [T_(r.data), T_(r.talhaoNome||r.talhao), T_(r.ativ||r.cultura), +r.pop||'', r.plm!=null?+r.plm:'', r.cv!=null?+r.cv:'',
+      r.pctMeta!=null?+r.pctMeta:'', T_(r.resumo), r.del ? 'EXCLUÍDA' : '']; });
 }
 // ---- Módulo Tarefas: equipe + tarefas (sincroniza entre aparelhos) ----
 var EQUIPE_SHEET = 'EQUIPE APP', TAREFAS_SHEET_APP = 'TAREFAS APP';
@@ -1526,15 +1535,15 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','compras_app','nfe_estados'],
-  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app'],
+  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','compras_app','nfe_estados'],
+  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app'],
   precos:['precos_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -1811,6 +1820,8 @@ function doPost(e){
       var dp = writeDeParaNfe(payload.__nfeDepara.itens); out.ok = dp.rows;
     } else if (payload && payload.__afericao){        // aferições do Campo (pulverizador, colheita, semeadura) — merge por chave
       var af = writeAfericoesApp(payload.__afericao); out.ok = af.rows;
+    } else if (payload && payload.__stand){           // contagens de stand do Campo — merge por chave
+      var stn = writeStandApp(payload.__stand); out.ok = stn.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
       var lim = writeMapApp('LIMITES APP', payload.__limites); out.ok = lim.rows;
     } else if (payload && payload.__opplan){          // ordem + nomes das operações (merge por chave)

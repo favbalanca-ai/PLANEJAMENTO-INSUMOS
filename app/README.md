@@ -91,6 +91,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   - Velocidade: digitada ou calculada pelo **tempo do percurso** (comprimento ÷ tempo × 3,6).
   - Salva na planilha (aba **AFERICOES APP**, ver `sync/README.md`); depois de salvar, a próxima aferição
     já vem com a mesma máquina e medidas. Excluir marca como excluída (some em todos os aparelhos).
+- **Campo → Contagem de Stand** (modelo novo) — atividade, comprimento, espaçamento e meta (sugerida pela
+  população do plantio); uma linha por fileira contada. Quadro **Informações**: linhas, **densidade**
+  (média ÷ comprimento ÷ espaçamento × 10.000), **CV entre linhas**, plantas/metro, % da meta.
+  - **Informar distâncias** (chave): cada linha ganha dominadas, duplas, ausentes e o botão 📏 — a tela
+    **Posição das Plantas (cm)** recebe a medida na trena de cada planta (a 1ª no 0). Com a trena o app
+    conta sozinho plantas, duplas (< 0,5× o espaçamento ideal) e ausentes (> 1,5×; conta as que faltaram no
+    vão). Espaçamento ideal = 100 ÷ plantas/m da meta (sem meta: a média medida). Mostra **CV de
+    distribuição**, **% inconformes**, % dominadas/duplas/ausentes.
+  - Sincroniza com a planilha (aba **STAND APP**); excluir marca como excluída. Contagens antigas continuam
+    aparecendo (e sobem para a planilha).
 - **Campo → Quadro de operações** — ao abrir *Operação de Campo* sem escolher talhão aparece o quadro:
   uma **linha por talhão** (nome, cultura · cultivar, área, *Detalhes ›*) e um **cartão por operação**
   (nome, atividade, data, **DAA** = dias desde a aplicação, **Pos. Ciclo** = dias depois do plantio).
