@@ -1415,7 +1415,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 @media (max-width:640px){ .cp-card,.op-block{content-visibility:auto;contain-intrinsic-size:auto 220px} }
 
 /* ===== Campo: QUADRO de operações (talhões × operações, cartões coloridos) ===== */
-.oq-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-bottom:8px}
+.oq-top{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-bottom:8px}
 .oq-top label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
 .oq-top .sel{width:100%}
 .oq-legs{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 10px;font-size:12px;color:var(--ink)}
@@ -1703,6 +1703,26 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-colbtn.oq-hoje-hd::after{left:-23px}
 .oq-colbtn.oq-hoje-hd-fim::before{right:-24px}
 @media print{ .oq-tl{break-inside:avoid} .oq-tl *,.oq-card::before,.oq-card::after{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+/* ===== Quadro POR DATA: colunas = semanas (iguais para todos os talhões) ===== */
+.oq-cards-data{align-items:stretch}
+.oq-cell{position:relative;flex:0 0 132px;width:132px;display:flex;flex-direction:column;gap:6px}
+.oq-cell .oq-card{width:100%}
+.oq-cell-v{flex-basis:16px;width:16px}
+.oq-cell-v::after{content:'';position:absolute;left:50%;top:0;bottom:0;border-left:1px dashed #dde3e6}
+.oq-cell-sem{border-left:1px dashed #cfd8dc;padding-left:6px;flex-basis:138px;width:138px}
+.oq-cell-hoje::before{content:'';position:absolute;left:var(--hoje,50%);top:-11px;bottom:-11px;width:3px;margin-left:-1.5px;background:#d32f2f;z-index:3;pointer-events:none;box-shadow:0 0 0 1px rgba(255,255,255,.6)}
+.oq-colbtn.oq-wk{width:auto;display:flex;flex-direction:column;align-items:center;gap:0;line-height:1.15;padding:4px 0;position:relative}
+.oq-colbtn.oq-wk b{font-size:13px;color:var(--ink)}
+.oq-colbtn.oq-wk small{font-size:10.5px;font-weight:600;color:var(--teal)}
+.oq-colbtn.oq-wk i{font-style:normal;font-size:10px;font-weight:800;text-transform:uppercase;color:var(--muted);letter-spacing:.4px}
+.oq-colbtn.oq-wk.oq-cell-v{padding:0;cursor:default}
+.oq-colbtn.oq-wk.oq-cell-v i{position:absolute;top:2px;left:2px;writing-mode:vertical-rl;transform:rotate(180deg)}
+.oq-colbtn.oq-mes{box-shadow:inset 2px 0 0 #cfd8dc}
+.oq-colrow .oq-cell-hoje::before{top:auto;bottom:-7px;height:14px}
+.oq-colrow .oq-cell-hoje::after{content:'HOJE';position:absolute;left:var(--hoje,50%);bottom:4px;transform:translateX(-50%);font-size:9.5px;font-weight:800;color:#fff;background:#d32f2f;border-radius:6px;padding:1px 5px;letter-spacing:.3px;z-index:4}
+.oq-colrow .oq-cell-hoje small{visibility:hidden}
+@media (max-width:640px){ .oq-cell{flex-basis:118px;width:118px} .oq-cell-v{flex-basis:14px;width:14px} .oq-cell-sem{flex-basis:124px;width:124px} }
+@media print{ .oq-cell-hoje::before{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
 
 </style>
 </head>
@@ -1800,7 +1820,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-194';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-195';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8057,7 +8077,7 @@ function oqColModal(col){
   const old=document.getElementById('oq-col-ov'); if(old) old.remove();
   const ov=document.createElement('div'); ov.id='oq-col-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(920px,100%)">
-    <div class="modal-head"><h3>${esc(nomes.length===1?nomes[0]:'Coluna '+(col+1))} · ${keys.length} talhão(ões)</h3><button class="icon-btn" data-act="oqColClose" title="Fechar">✕</button></div>
+    <div class="modal-head"><h3>${esc(oqColsTit[col]||(nomes.length===1?nomes[0]:'Coluna '+(col+1)))} · ${keys.length} operação(ões)</h3><button class="icon-btn" data-act="oqColClose" title="Fechar">✕</button></div>
     <div style="overflow:auto;max-height:70vh"><table class="oq-col-t"><thead><tr><th>Talhão</th><th>Situação</th><th>Estimada</th><th>Efetiva</th><th>DAA</th><th>Produtos (dose/ha · total)</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
   </div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
@@ -8069,7 +8089,7 @@ document.addEventListener('keydown', e=>{ if(e.key==='Escape') oqFecharTudo(); }
 document.addEventListener('click', e=>{ if(document.getElementById('oq-pop') && !e.target.closest('#oq-pop,[data-act="oqPop"]')) oqPopClose(); }, true);
 // cartões da linha do talhão + marca vermelha de HOJE entre o último cartão até hoje e o próximo (sem mexer no alinhamento das colunas)
 let oqHojeCols=[];   // em que vão (coluna) caiu o hoje de cada talhão — o mais comum ganha a etiqueta HOJE no cabeçalho
-function oqCardsComHoje(t,vis,tlItens){ const hj=_hojeISO(), fs=vis.map(v=>oqInfo(t,v.o,v.n));
+function oqCardsComHoje(t,vis,tlItens,fs0){ const hj=_hojeISO(), fs=fs0||vis.map(v=>oqInfo(t,v.o,v.n));
   fs.forEach(f=>{ if(f.dt) tlItens.push({dt:f.dt, st:f.st, nome:f.nome, tal:tNome(t)}); });
   const comData=fs.map((f,i)=>({i,dt:f.dt})).filter(x=>x.dt);
   let marca=null;   // {i, lado:'antes'|'depois'}
@@ -8098,39 +8118,72 @@ function oqLinhaTempo(itens){ const hj=_hojeISO(), hjBR=fmtDataBR(hj);
       ${meses.join('')}${marcas}
       <div class="oq-tl-hoje" style="left:${pos(ph)}"><b>Hoje ${hjBR.slice(0,5)}</b></div>
     </div></div>`; }
+let oqModo=(()=>{ try{ return localStorage.getItem('planejamento_oq_modo')||'data'; }catch(e){ return 'data'; } })(), oqColsTit=[];
+function _semIni(iso){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.toISOString().slice(0,10); }   // segunda-feira da semana
+const _MES3=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+// QUADRO POR DATA: uma coluna por semana, igual para todos os talhões (semanas sem nada ficam estreitas);
+// cartões da mesma semana no mesmo talhão ficam empilhados; a linha de HOJE é reta, no dia certo da semana.
+function oqLinhasPorData(dados, hdHtml){ const hj=_hojeISO(), sHj=_semIni(hj), dia=86400000;
+  const datas=[]; dados.forEach(d=>d.fs.forEach(f=>{ if(f.dt) datas.push(_semIni(f.dt)); })); datas.push(sHj);
+  const ini=datas.reduce((a,b)=>a<b?a:b), fim=datas.reduce((a,b)=>a>b?a:b);
+  const semanas=[]; for(let t=new Date(ini+'T12:00:00'); t.toISOString().slice(0,10)<=fim; t=new Date(t.getTime()+7*dia)) semanas.push(t.toISOString().slice(0,10));
+  const cheia=new Set(); dados.forEach(d=>d.fs.forEach(f=>{ if(f.dt) cheia.add(_semIni(f.dt)); })); cheia.add(sHj);
+  const semData=dados.some(d=>d.fs.some(f=>!f.dt));
+  const cols=semanas.map(w=>({w, cheia:cheia.has(w), hoje:w===sHj})).concat(semData?[{w:'', cheia:true, sem:true}]:[]);
+  const pctHoje=((((new Date(hj+'T12:00:00').getDay()+6)%7)+0.5)/7*100).toFixed(1);
+  oqCols=cols.map(()=>[]); oqColsTit=cols.map(c=>c.sem?'Sem data (defina o plantio)':`Semana de ${fmtDataBR(c.w).slice(0,5)} a ${fmtDataBR(new Date(new Date(c.w+'T12:00:00').getTime()+6*dia).toISOString().slice(0,10)).slice(0,5)}`);
+  const cls=c=>`oq-cell${c.cheia?'':' oq-cell-v'}${c.hoje?' oq-cell-hoje':''}${c.sem?' oq-cell-sem':''}`, st=c=>c.hoje?` style="--hoje:${pctHoje}%"`:'';
+  let mesAnt='';
+  const hdr=cols.map((c,i)=>{ if(c.sem) return `<button class="oq-colbtn oq-wk ${cls(c)}" data-act="oqCol" data-col="${i}" title="${esc(oqColsTit[i])}"><b>Sem data</b></button>`;
+    const m=+c.w.slice(5,7)-1, novoMes=_MES3[m]!==mesAnt; mesAnt=_MES3[m];
+    if(!c.cheia) return `<button class="oq-colbtn oq-wk ${cls(c)}${novoMes?' oq-mes':''}" data-act="oqCol" data-col="${i}" title="${esc(oqColsTit[i])} · sem operações" tabindex="-1">${novoMes?`<i>${_MES3[m]}</i>`:''}</button>`;
+    return `<button class="oq-colbtn oq-wk ${cls(c)}${novoMes?' oq-mes':''}"${st(c)} data-act="oqCol" data-col="${i}" title="${esc(oqColsTit[i])}">${novoMes?`<i>${_MES3[m]}</i>`:''}<b>${fmtDataBR(c.w).slice(0,5)}</b><small>Mais detalhes</small></button>`; }).join('');
+  const linhas=dados.map(d=>{ const porCol=cols.map(()=>[]);
+    d.vis.forEach((v,k)=>{ const f=d.fs[k], ci=f.dt?cols.findIndex(c=>c.w===_semIni(f.dt)):cols.length-1; porCol[ci].push(oqCard(d.t,v.o,v.n,f)); oqCols[ci].push({key:v.o.key,n:v.n}); });
+    return `<div class="oq-row">${hdHtml(d)}<div class="oq-cards oq-cards-data">${cols.map((c,i)=>`<div class="${cls(c)}"${st(c)}>${porCol[i].join('')}</div>`).join('')}</div></div>`; }).join('');
+  return `<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards oq-cards-data">${hdr}</div></div>${linhas}`;
+}
+function oqRolarHoje(){ setTimeout(()=>{ const w=document.querySelector('.oq-wrap'), c=w&&w.querySelector('.oq-colrow .oq-cell-hoje'), hd=w&&w.querySelector('.oq-colrow .oq-hd');
+  if(!w||!c||w.dataset.rolou===oqModo) return; w.dataset.rolou=oqModo;
+  const wr=w.getBoundingClientRect(), cr=c.getBoundingClientRect(), hdw=hd?hd.offsetWidth:0, util=wr.width-hdw;   // semana de hoje no meio da área visível
+  w.scrollLeft=Math.max(0, w.scrollLeft+(cr.left-wr.left)-hdw-Math.max(0,(util-cr.width)/2)); }, 0); }
 function campoQuadro(){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   const tals=all.filter(t=>!oqTal||t.id===oqTal);
   const ativs=new Set(); all.forEach(t=>campoOpsDoTalhao(t).forEach(o=>oqAtividades(t,o).forEach(a=>ativs.add(a))));
-  oqCols=[]; oqHojeCols=[]; const tlItens=[];
-  const rows=tals.map(t=>{
-    const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
-    const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq));
-    if(!ops.length) return '';
+  oqCols=[]; oqColsTit=[]; oqHojeCols=[]; const tlItens=[];
+  const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
+  const dados=tals.map(t=>{ const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq)); if(!ops.length) return null;
     const n={principal:0,safrinha:0}, vis=[];
     ops.forEach(o=>{ n[o.seq]++; if(!oqAtiv || oqAtividades(t,o).includes(oqAtiv)) vis.push({o,n:n[o.seq]}); });
-    if(!vis.length) return '';
-    vis.forEach((v,i)=>{ (oqCols[i]=oqCols[i]||[]).push({key:v.o.key,n:v.n}); });
-    const cult=seqs.length===1&&seqs[0]==='safrinha'?empSafDe(t):empDe(t), pc=ops.map(o=>plantioCalc(o.key)).find(Boolean);
-    return `<div class="oq-row"><div class="oq-hd"><a class="oq-nome" data-go="#/campo/${esc(t.id)}">${esc(tNome(t))}</a>
+    if(!vis.length) return null;
+    return {t, ops, vis, fs:vis.map(v=>oqInfo(t,v.o,v.n))}; }).filter(Boolean);
+  const hdHtml=d=>{ const t=d.t, cult=seqs.length===1&&seqs[0]==='safrinha'?empSafDe(t):empDe(t), pc=d.ops.map(o=>plantioCalc(o.key)).find(Boolean);
+    return `<div class="oq-hd"><a class="oq-nome" data-go="#/campo/${esc(t.id)}">${esc(tNome(t))}</a>
         <div class="oq-sub">${esc(cult||'—')}${pc?' · '+esc(pc.sem.produto):''}</div><div class="oq-area">${num(areaDe(t))} ha</div>
-        <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>
-      <div class="oq-cards">${oqCardsComHoje(t,vis,tlItens)}</div></div>`; }).join('');
-  const freq={}; oqHojeCols.forEach(c=>freq[c]=(freq[c]||0)+1);
-  const hojeCol=Object.keys(freq).length?+Object.keys(freq).sort((a,b)=>freq[b]-freq[a]||a-b)[0]:-1;
-  const hojeHd=i=>hojeCol===i?' oq-hoje-hd':(hojeCol===oqCols.length&&i===oqCols.length-1?' oq-hoje-hd-fim':'');
-  const colRow=oqCols.length?`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn${hojeHd(i)}" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`:'';
+        <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>`; };
+  dados.forEach(d=>d.fs.forEach(f=>{ if(f.dt) tlItens.push({dt:f.dt, st:f.st, nome:f.nome, tal:tNome(d.t)}); }));
+  let corpo='';
+  if(dados.length && oqModo==='data'){ corpo=oqLinhasPorData(dados, hdHtml); oqRolarHoje(); }
+  else if(dados.length){
+    const rows=dados.map(d=>{ d.vis.forEach((v,i)=>{ (oqCols[i]=oqCols[i]||[]).push({key:v.o.key,n:v.n}); });
+      return `<div class="oq-row">${hdHtml(d)}<div class="oq-cards">${oqCardsComHoje(d.t,d.vis,[],d.fs)}</div></div>`; }).join('');
+    const freq={}; oqHojeCols.forEach(c=>freq[c]=(freq[c]||0)+1);
+    const hojeCol=Object.keys(freq).length?+Object.keys(freq).sort((a,b)=>freq[b]-freq[a]||a-b)[0]:-1;
+    const hojeHd=i=>hojeCol===i?' oq-hoje-hd':(hojeCol===oqCols.length&&i===oqCols.length-1?' oq-hoje-hd-fim':'');
+    corpo=`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn${hojeHd(i)}" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`+rows; }
   const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
   return `<div class="oq-top">
       <label>Safra<select class="sel" id="oq-seq"><option value="principal"${oqSeq==='principal'?' selected':''}>1ª cultura</option><option value="safrinha"${oqSeq==='safrinha'?' selected':''}>2ª cultura (safrinha)</option><option value="ambas"${oqSeq==='ambas'?' selected':''}>Ambas</option></select></label>
       <label>Atividade<select class="sel" id="oq-ativ"><option value="">Todas</option>${[...ativs].sort((a,b)=>a.localeCompare(b,'pt')).map(a=>`<option${a===oqAtiv?' selected':''}>${esc(a)}</option>`).join('')}</select></label>
+      <label>Visualizar<select class="sel" id="oq-modo"><option value="data"${oqModo==='data'?' selected':''}>Por data (semanas)</option><option value="op"${oqModo!=='data'?' selected':''}>Por operação</option></select></label>
       <label>Talhão<select class="sel" id="oq-tal"><option value="">Todos</option>${all.map(t=>`<option value="${esc(t.id)}"${t.id===oqTal?' selected':''}>${esc(tNome(t))}</option>`).join('')}</select></label>
       <button class="btn btn-outline btn-sm oq-print" data-act="oqImprimir" title="Imprimir o quadro">🖨 Imprimir</button>
     </div>
     <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div>
     ${oqLinhaTempo(tlItens)}
-    <div class="oq-wrap">${rows?colRow+rows:'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
+    <div class="oq-wrap${oqModo==='data'?' oq-wrap-data':''}">${corpo||'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no cartão para ver datas e produtos · <b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ aplicada em data diferente da estimada · 🔔 retorno do operador aguardando aprovação.</p>`;
 }
 V.campo = function(arg){
@@ -8655,6 +8708,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); if(n===f.am.length) return; while(f.am.length<n) f.am.push(''); f.am.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
+  if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
