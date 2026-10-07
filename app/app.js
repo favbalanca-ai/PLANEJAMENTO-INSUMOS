@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-185';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-186';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5528,39 +5528,112 @@ function oqAtividades(t,o){ const s=new Set(); effItems(t.id,o.tagoi,o.op.itens)
     if(_isSemente(it)) s.add('Plantio'); else if(_isTS(it)) s.add('Tratamento de sementes');
     else { const c=String(it.classe||((PROD[it.produto]||{}).classe)||'').trim().toUpperCase().replace(/S$/,''); if(c && !/ADJUVANTE|MÁQUINA/.test(c)) s.add(c.charAt(0)+c.slice(1).toLowerCase()); } });
   return [...s]; }
-function oqCard(t,o,n){
+// tudo o que o cartão e a janelinha mostram de uma operação
+function oqInfo(t,o,n){
   const r=realOf(o.key)||{}, hoje=_hojeISO(), dp=opDataPlan(t.id,o.tagoi,o.op.dap), pl=plantioEffDe(t.id,o.seq);
-  const feita=r.status==='concluido', dt=(feita&&_isISO(r.data))?String(r.data).slice(0,10):dp;
+  const feita=r.status==='concluido', de=(feita&&_isISO(r.data))?String(r.data).slice(0,10):'', dt=de||dp;
   let st='prazo';
   if(r.status==='cancelado') st='canc'; else if(feita) st='ok'; else if(r.status==='andamento') st='and';
   else if(!dp) st='sem'; else { const dd=_dias(dp,hoje); st=dd<0?'late':(dd<=3?'breve':'prazo'); }
   const daa=(feita&&dt)?_dias(hoje,dt):null, pos=(dt&&pl)?_dias(dt,pl):null;
   const ret=RECOM.registros.some(x=>(x.opKey===o.key||(x.tipo==='ts'&&x.tsOp===o.key)) && x.status==='retorno');
-  const at=oqAtividades(t,o);
+  const difer=!!(de && dp && de!==dp);   // aplicada em data diferente da estimada
   const nome=/^opera[cç][aã]o\s*\d+$/i.test(String(o.op.nome||'').trim())?`Operação ${n}`:(o.op.nome||`Operação ${n}`);
-  return `<div class="oq-card oq-${st}" title="${esc(OQ_ST[st])}${ret?' · retorno do operador aguardando aprovação':''}">
-    <div class="oq-c-tx"><div class="oq-c-n">${esc(nome)}${ret?' <span class="oq-alert" title="Retorno do operador aguardando aprovação">⚠</span>':''}</div>
-      ${at.length?`<div class="oq-c-at" title="${esc(at.join(' · '))}">${esc(at.join(' · '))}</div>`:''}
-      <div>${dt?fmtDataBR(dt).slice(0,5):'—'}</div>${daa!=null?`<div>DAA: ${daa}</div>`:''}<div>Pos. Ciclo: ${pos!=null?pos:'—'}</div></div>
+  return {r,st,dp,de,dt,feita,daa,pos,ret,difer,nome,at:oqAtividades(t,o)};
+}
+const OQ_ICO_DIF='<span class="oq-alert oq-dif" title="Data efetiva diferente da estimada">⚠</span>';
+const OQ_ICO_RET='<span class="oq-alert" title="Retorno do operador aguardando aprovação">🔔</span>';
+function oqCard(t,o,n){
+  const f=oqInfo(t,o,n);
+  return `<div class="oq-card oq-${f.st}" data-act="oqPop" data-key="${esc(o.key)}" data-n="${n}" title="${esc(OQ_ST[f.st])}${f.difer?' · data efetiva diferente da estimada':''}${f.ret?' · retorno do operador aguardando aprovação':''}">
+    <div class="oq-c-tx"><div class="oq-c-n">${esc(f.nome)}${f.difer?' '+OQ_ICO_DIF:''}${f.ret?' '+OQ_ICO_RET:''}</div>
+      ${f.at.length?`<div class="oq-c-at">${esc(f.at.join(' · '))}</div>`:''}
+      <div>${f.dt?fmtDataBR(f.dt).slice(0,5):'—'}</div>${f.daa!=null?`<div>DAA: ${f.daa}</div>`:''}<div>Pos. Ciclo: ${f.pos!=null?f.pos:'—'}</div></div>
     <button class="oq-plus" data-act="oqAbrir" data-key="${esc(o.key)}" title="Abrir a operação">+</button></div>`;
 }
+// produtos da operação: dose/ha (realizada, se informada; senão a do plano) e total no talhão
+const _oqN=(v,d)=>(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:d});
+function oqProdutos(t,o,r){
+  const area=areaDe(t), out=[];
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+    const dose=(r.doses&&(iid in r.doses)&&r.doses[iid]!=='')?+r.doses[iid]:(+it.dose||0);
+    out.push({p:it.produto, dh:doseHaUn(dose,it.un||'')}); });
+  (r.extras||[]).forEach(ex=>{ if(ex.produto) out.push({p:ex.produto, extra:1, dh:doseHaUn(+ex.dose||0,(PROD[ex.produto]&&PROD[ex.produto].un)||'')}); });
+  return out.map(x=>({produto:x.p, extra:x.extra, dose:`${_oqN(x.dh.v,3)} ${x.dh.u}/ha`, total:`${_oqN(x.dh.v*area,2)} ${x.dh.u}`}));
+}
+function oqFind(key){ const i=key.indexOf('|'), t=findTalhao(key.slice(0,i)); if(!t) return null;
+  const o=campoOpsDoTalhao(t).find(x=>x.key===key); return o?{t,o}:null; }
+function oqPopClose(){ const p=document.getElementById('oq-pop'); if(p) p.remove(); document.querySelectorAll('.oq-card.oq-sel').forEach(c=>c.classList.remove('oq-sel')); }
+// janelinha do cartão: datas, dias após aplicado e produtos (dose e total)
+function oqPopOpen(card){
+  const key=card.dataset.key, was=document.getElementById('oq-pop'), same=was&&was.dataset.key===key;
+  oqPopClose(); if(same) return;                       // tocar de novo no mesmo cartão fecha
+  const x=oqFind(key); if(!x) return; const {t,o}=x, f=oqInfo(t,o,+card.dataset.n||1), pr=oqProdutos(t,o,f.r);
+  const pop=document.createElement('div'); pop.id='oq-pop'; pop.className='oq-pop'; pop.dataset.key=key; pop.setAttribute('role','dialog');
+  pop.innerHTML=`<div class="oq-pop-h"><b>${esc(f.nome)}</b><span>${esc(tNome(t))}</span><button class="icon-btn" data-act="oqPopClose" title="Fechar">✕</button></div>
+    <div class="oq-pop-b">
+      <div>Data estimada: <b>${f.dp?fmtDataBR(f.dp):'— (defina o plantio)'}</b></div>
+      ${f.feita?`<div class="${f.difer?'oq-red':''}">Data efetiva: <b>${f.de?fmtDataBR(f.de):'—'}</b>${f.difer?` ${OQ_ICO_DIF} <small>(${_dias(f.de,f.dp)>0?_dias(f.de,f.dp)+' dia(s) depois':(-_dias(f.de,f.dp))+' dia(s) antes'})</small>`:''}</div>`:''}
+      ${f.daa!=null?`<div>Dias após aplicado: <b>${f.daa}</b></div>`:''}
+      <div>Situação: <b>${esc(OQ_ST[f.st])}</b>${f.ret?` · ${OQ_ICO_RET} retorno aguardando aprovação`:''}</div>
+      ${pr.length?`<table class="oq-pop-t"><thead><tr><th>Produto</th><th class="num">Dose</th><th class="num">Total</th></tr></thead><tbody>
+        ${pr.map(x=>`<tr><td>${esc(x.produto)}${x.extra?' <small class="mut">(extra)</small>':''}</td><td class="num">${esc(x.dose)}</td><td class="num">${esc(x.total)}</td></tr>`).join('')}</tbody></table>
+        <div class="mut" style="font-size:11px">Total para ${num(areaDe(t))} ha${f.feita||Object.keys(f.r.doses||{}).length?' · doses realizadas quando informadas':''}.</div>`:'<div class="mut">Sem produtos nesta operação.</div>'}
+      <a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a>
+    </div>`;
+  document.body.appendChild(pop); card.classList.add('oq-sel');
+  if(innerWidth>640){                                    // computador: embaixo do cartão (ou em cima, se não couber)
+    const rc=card.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight;
+    const left=Math.max(8, Math.min(rc.left+rc.width/2-w/2, innerWidth-w-8));
+    const top=(rc.bottom+8+h>innerHeight && rc.top-8-h>0)?rc.top-8-h:rc.bottom+8;
+    pop.style.left=(left+scrollX)+'px'; pop.style.top=(top+scrollY)+'px'; }
+}
+// "Mais detalhes" da coluna: a mesma posição de operação em todos os talhões do quadro
+let oqCols=[];
+function oqColModal(col){
+  const keys=(oqCols[col]||[]).filter(Boolean); if(!keys.length) return;
+  const linhas=keys.map(c=>{ const x=oqFind(c.key); if(!x) return ''; const {t,o}=x, f=oqInfo(t,o,c.n), pr=oqProdutos(t,o,f.r);
+    return `<tr><td><b>${esc(tNome(t))}</b><div class="mut" style="font-size:11px">${esc(f.nome)} · ${num(areaDe(t))} ha</div></td>
+      <td><span class="oq-st oq-${f.st}">${esc(OQ_ST[f.st])}</span></td>
+      <td data-l="Estimada">${f.dp?fmtDataBR(f.dp).slice(0,5):'—'}</td>
+      <td data-l="Efetiva" class="${f.difer?'oq-red':''}">${f.de?fmtDataBR(f.de).slice(0,5):'—'}${f.difer?' '+OQ_ICO_DIF:''}</td>
+      <td data-l="DAA">${f.daa!=null?f.daa:'—'}</td>
+      <td class="oq-col-pr">${pr.map(p=>`${esc(p.produto)} <small>${esc(p.dose)} · ${esc(p.total)}</small>`).join('<br>')||'—'}</td>
+      <td><button class="oq-plus" data-act="oqAbrir" data-key="${esc(c.key)}" title="Abrir a operação">+</button></td></tr>`; }).join('');
+  const nomes=[...new Set(keys.map(c=>{ const x=oqFind(c.key); return x?oqInfo(x.t,x.o,c.n).nome:''; }))];
+  const old=document.getElementById('oq-col-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='oq-col-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box" style="width:min(920px,100%)">
+    <div class="modal-head"><h3>${esc(nomes.length===1?nomes[0]:'Coluna '+(col+1))} · ${keys.length} talhão(ões)</h3><button class="icon-btn" data-act="oqColClose" title="Fechar">✕</button></div>
+    <div style="overflow:auto;max-height:70vh"><table class="oq-col-t"><thead><tr><th>Talhão</th><th>Situação</th><th>Estimada</th><th>Efetiva</th><th>DAA</th><th>Produtos (dose/ha · total)</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+  </div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+  document.body.appendChild(ov);
+}
+function oqFecharTudo(){ oqPopClose(); const ov=document.getElementById('oq-col-ov'); if(ov) ov.remove(); }
+window.addEventListener('hashchange', oqFecharTudo);
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') oqFecharTudo(); });
+document.addEventListener('click', e=>{ if(document.getElementById('oq-pop') && !e.target.closest('#oq-pop,[data-act="oqPop"]')) oqPopClose(); }, true);
 function campoQuadro(){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   const tals=all.filter(t=>!oqTal||t.id===oqTal);
   const ativs=new Set(); all.forEach(t=>campoOpsDoTalhao(t).forEach(o=>oqAtividades(t,o).forEach(a=>ativs.add(a))));
+  oqCols=[];
   const rows=tals.map(t=>{
     const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
     const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq));
     if(!ops.length) return '';
-    let n={principal:0,safrinha:0};
-    const cards=ops.map(o=>{ n[o.seq]++; if(oqAtiv && !oqAtividades(t,o).includes(oqAtiv)) return ''; return oqCard(t,o,n[o.seq]); }).join('');
-    if(!cards) return '';
+    const n={principal:0,safrinha:0}, vis=[];
+    ops.forEach(o=>{ n[o.seq]++; if(!oqAtiv || oqAtividades(t,o).includes(oqAtiv)) vis.push({o,n:n[o.seq]}); });
+    if(!vis.length) return '';
+    vis.forEach((v,i)=>{ (oqCols[i]=oqCols[i]||[]).push({key:v.o.key,n:v.n}); });
     const cult=seqs.length===1&&seqs[0]==='safrinha'?empSafDe(t):empDe(t), pc=ops.map(o=>plantioCalc(o.key)).find(Boolean);
     return `<div class="oq-row"><div class="oq-hd"><a class="oq-nome" data-go="#/campo/${esc(t.id)}">${esc(tNome(t))}</a>
         <div class="oq-sub">${esc(cult||'—')}${pc?' · '+esc(pc.sem.produto):''}</div><div class="oq-area">${num(areaDe(t))} ha</div>
         <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>
-      <div class="oq-cards">${cards}</div></div>`; }).join('');
+      <div class="oq-cards">${vis.map(v=>oqCard(t,v.o,v.n)).join('')}</div></div>`; }).join('');
+  const colRow=oqCols.length?`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`:'';
   const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
   return `<div class="oq-top">
       <label>Safra<select class="sel" id="oq-seq"><option value="principal"${oqSeq==='principal'?' selected':''}>1ª cultura</option><option value="safrinha"${oqSeq==='safrinha'?' selected':''}>2ª cultura (safrinha)</option><option value="ambas"${oqSeq==='ambas'?' selected':''}>Ambas</option></select></label>
@@ -5569,8 +5642,8 @@ function campoQuadro(){
       <button class="btn btn-outline btn-sm oq-print" data-act="oqImprimir" title="Imprimir o quadro">🖨 Imprimir</button>
     </div>
     <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div>
-    <div class="oq-wrap">${rows||'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
-    <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ retorno do operador aguardando aprovação.</p>`;
+    <div class="oq-wrap">${rows?colRow+rows:'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
+    <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no cartão para ver datas e produtos · <b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ aplicada em data diferente da estimada · 🔔 retorno do operador aguardando aprovação.</p>`;
 }
 V.campo = function(arg){
   const all=talhoesAll();
@@ -6230,8 +6303,12 @@ document.addEventListener('click',e=>{
     else if(a.act==='slogLimpar'){ if(confirm('Limpar o log detalhado?')){ try{ localStorage.removeItem(SYNC_LOG_KEY); }catch(e){} renderSyncLogDet(); } }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     else if(a.act==='campoFiltro'){ campoFiltro=a.val||'todas'; route({keepScroll:true}); }
-    else if(a.act==='oqAbrir'){ const i=a.key.indexOf('|'); campoOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
+    else if(a.act==='oqAbrir'){ oqFecharTudo(); const i=a.key.indexOf('|'); campoOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
       setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
+    else if(a.act==='oqPop'){ oqPopOpen(act); return; }
+    else if(a.act==='oqPopClose'){ oqPopClose(); return; }
+    else if(a.act==='oqCol'){ oqPopClose(); oqColModal(+a.col||0); return; }
+    else if(a.act==='oqColClose'){ oqFecharTudo(); return; }
     else if(a.act==='oqImprimir'){ const w=document.querySelector('.oq-wrap'); printDoc(`<div class="rx-title"><h1>Quadro de operações de campo</h1><span class="n">${fmtDataBR(_hojeISO())} · Safra 2026/2027</span></div><div class="oq-legs">${document.querySelector('.oq-legs').innerHTML}</div>${w?w.outerHTML:''}`); return; }
     else if(a.act==='realStatus'){ if(a.val==='concluido'){ finalizarOpModal(a.key); return; }
       const r=realEnsure(a.key); const was=r.status; r.status=a.val;
