@@ -73,6 +73,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Pesagem v2, mesmo site `favbalanca-ai.github.io` → mesmo login no aparelho): sem menus, só as abas
   **Receber** e **Pendências** (conforme a permissão), além de Entrar / Minha conta / ⚙️ Sincronizar.
   Não troca o módulo salvo do app normal.
+- **Campo → Quadro de operações** — ao abrir *Operação de Campo* sem escolher talhão aparece o quadro:
+  uma **linha por talhão** (nome, cultura · cultivar, área, *Detalhes ›*) e um **cartão por operação**
+  (nome, atividade, data, **DAA** = dias desde a aplicação, **Pos. Ciclo** = dias depois do plantio).
+  Cores: verde = aplicado · listrado = em andamento · amarelo = faltam até 3 dias · vermelho = atrasado ·
+  cinza = dentro do prazo · riscado = *não será realizada*. Filtros de safra (1ª, 2ª, ambas), atividade
+  (pela classe dos produtos: Herbicida, Fungicida, Plantio…) e talhão; botão 🖨 Imprimir. O **+** do cartão
+  abre o talhão já com a operação aberta; ⚠ = retorno do operador esperando aprovação. No celular a coluna
+  do talhão fica fixa e os cartões rolam de lado.
+- **Status "Não será realizada"** — 4º botão no registro da operação (além de Pendente / Em andamento /
+  Concluída). Não conta como atrasada nem como próxima, sai da % de conclusão e tem o chip *Não realizadas*;
+  "↩ Voltar a pendente" desfaz.
 - **Campo → Recomendação de TS** — toda operação com **semente + produtos de TS** ganha a seção
   🧪 *Recomendação de TS* e o botão **Enviar TS**. A batelada é medida em **bag** (a unidade da semente
   no planejamento, ex.: 5MM); as doses vêm do **planejamento** (por ha) e viram "por batelada"

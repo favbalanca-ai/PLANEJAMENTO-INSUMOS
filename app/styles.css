@@ -738,7 +738,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
   .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
   /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
-  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px}.safra-chip{display:none}
+  .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px;flex-wrap:wrap}.safra-chip{display:none}
+  .topbar-right{margin-left:auto}   /* sincronização + edições não empurram a tela para o lado */
   /* Preços no celular: cada produto vira um CARTÃO (sem rolar de lado) */
   .pr-pct{display:none!important}
   .pr-imp-txt{min-height:200px}
@@ -1395,3 +1396,52 @@ body[data-embed] .content{padding:10px 10px 24px}
 
 /* listas longas no celular: o navegador só desenha o que aparece (rolagem e edição mais leves) */
 @media (max-width:640px){ .cp-card,.op-block{content-visibility:auto;contain-intrinsic-size:auto 220px} }
+
+/* ===== Campo: QUADRO de operações (talhões × operações, cartões coloridos) ===== */
+.oq-top{display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;gap:8px;align-items:end;margin-bottom:8px}
+.oq-top label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--muted)}
+.oq-top .sel{width:100%}
+.oq-legs{display:flex;flex-wrap:wrap;gap:6px 14px;margin:4px 0 10px;font-size:12px;color:var(--ink)}
+.oq-leg{display:inline-flex;align-items:center;gap:6px}
+.oq-sw{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid rgba(0,0,0,.08)}
+.oq-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+.oq-row{display:flex;align-items:stretch;border-bottom:1px solid var(--line);min-width:max-content}
+.oq-row:last-child{border-bottom:0}
+.oq-hd{position:sticky;left:0;z-index:2;flex:0 0 150px;width:150px;background:var(--card);border-right:1px solid var(--line);
+  padding:10px;display:flex;flex-direction:column;gap:2px;box-shadow:2px 0 4px rgba(20,50,60,.05)}
+.oq-nome{font-weight:800;color:var(--ink);font-size:14px;cursor:pointer;text-decoration:none;line-height:1.2}
+.oq-sub{font-size:11.5px;color:var(--muted);line-height:1.25}
+.oq-area{font-size:12px;color:var(--ink2);font-weight:600}
+.oq-det{margin-top:auto;font-size:12px;font-weight:700;color:var(--teal);cursor:pointer;text-decoration:none}
+.oq-cards{display:flex;gap:8px;padding:10px}
+.oq-card{position:relative;flex:0 0 auto;width:132px;min-height:92px;border-radius:10px;padding:8px 30px 8px 10px;
+  font-size:12px;line-height:1.35;color:#24343a;border:1px solid rgba(0,0,0,.06)}
+.oq-c-n{font-weight:800;font-size:12.5px;margin-bottom:2px;line-height:1.2}
+.oq-c-at{font-size:10.5px;font-weight:600;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.oq-print{height:38px;white-space:nowrap}
+.oq-plus{position:absolute;right:6px;bottom:6px;width:24px;height:24px;border-radius:50%;border:0;cursor:pointer;
+  background:rgba(255,255,255,.85);color:var(--ink);font-size:17px;font-weight:700;line-height:24px;padding:0;box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.oq-plus:hover{background:#fff}
+.oq-alert{color:#b45309}
+/* cores (cartão e legenda) */
+.oq-ok{background:#d9f2e3}
+.oq-and{background:repeating-linear-gradient(135deg,#d9f2e3 0 7px,#eef9f2 7px 14px)}
+.oq-breve{background:#fff3c4}
+.oq-late{background:#f9d6d5;color:#a61b1b}
+.oq-late .oq-c-n{color:#a61b1b}
+.oq-prazo{background:#eceff1}
+.oq-sem{background:#fff;border:1px dashed #c4cdd2;color:var(--muted)}
+.oq-canc{background:#f3f4f5;color:#8a979d}
+.oq-card.oq-canc .oq-c-tx{text-decoration:line-through}
+@media (max-width:640px){
+  .oq-top{grid-template-columns:1fr 1fr}
+  .oq-print{align-self:end}
+  .oq-hd{flex-basis:112px;width:112px;padding:8px}
+  .oq-nome{font-size:13px}
+  .oq-cards{gap:6px;padding:8px}
+  .oq-card{width:118px;min-height:86px;font-size:11.5px}
+  .oq-plus{width:28px;height:28px;line-height:28px}
+}
+@media print{ .oq-wrap{overflow:visible;border:0} .oq-hd{position:static;box-shadow:none} .oq-plus{display:none}
+  .oq-row{break-inside:avoid;min-width:0} .oq-cards{flex-wrap:wrap} .oq-card{padding-right:10px}
+  .oq-card,.oq-sw{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
