@@ -1658,3 +1658,24 @@ body[data-embed] .content{padding:10px 10px 24px}
 /* mapa: esconder o nome dos talhões */
 .mapa-sem-nome .leaflet-tooltip.mapa-lbl{display:none}
 .mapa-nomes.on{background:var(--teal-soft)}
+/* ===== Quadro: linha do tempo com HOJE ===== */
+.oq-tl{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:8px 14px 10px;margin-bottom:10px}
+.oq-tl-cab{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--ink);margin-bottom:6px}
+.oq-tl-res{color:var(--muted)}
+.oq-tl-bar{position:relative;height:46px;border-radius:8px;background:#f4f7f8;overflow:hidden}
+.oq-tl-past{position:absolute;left:0;top:0;bottom:0;background:repeating-linear-gradient(135deg,#eceff1 0 6px,#f4f7f8 6px 12px)}
+.oq-tl-7{position:absolute;top:0;bottom:0;background:rgba(255,213,79,.35)}
+.oq-tl-m{position:absolute;top:2px;font-size:10.5px;font-weight:700;color:var(--muted);border-left:1px solid #cfd8dc;padding-left:3px;height:44px;text-transform:uppercase}
+.oq-tl-d{position:absolute;bottom:6px;width:3px;height:16px;margin-left:-1px;border-radius:2px;opacity:.85;border:0}
+.oq-tl-d.oq-ok{background:#43a047}.oq-tl-d.oq-and{background:#66bb6a}.oq-tl-d.oq-breve{background:#f9a825}.oq-tl-d.oq-late{background:#e53935}
+.oq-tl-d.oq-prazo{background:#90a4ae}.oq-tl-d.oq-canc{background:#cfd8dc}.oq-tl-d.oq-sem{background:#cfd8dc}
+.oq-tl-hoje{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#d32f2f;z-index:2}
+.oq-tl-hoje b{position:absolute;top:16px;left:4px;white-space:nowrap;font-size:10.5px;color:#fff;background:#d32f2f;border-radius:6px;padding:1px 5px}
+.oq-tl-vazio{font-size:13px}
+/* marca de HOJE na linha de cada talhão (no vão entre os cartões; não mexe nas colunas) */
+.oq-card.oq-hoje-antes::before,.oq-card.oq-hoje-depois::after{content:'';position:absolute;top:-6px;bottom:-6px;width:2px;background:#d32f2f;border-radius:2px;pointer-events:none}
+.oq-card.oq-hoje-antes::before{left:-6px}
+.oq-card.oq-hoje-depois::after{right:-6px}
+.oq-card.oq-hoje-antes::before,.oq-card.oq-hoje-depois::after{box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+@media (max-width:640px){ .oq-card.oq-hoje-antes::before{left:-5px} .oq-card.oq-hoje-depois::after{right:-5px} }
+@media print{ .oq-tl{break-inside:avoid} .oq-tl *,.oq-card::before,.oq-card::after{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
