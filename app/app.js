@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-193';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-194';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6270,6 +6270,7 @@ window.addEventListener('hashchange', oqFecharTudo);
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') oqFecharTudo(); });
 document.addEventListener('click', e=>{ if(document.getElementById('oq-pop') && !e.target.closest('#oq-pop,[data-act="oqPop"]')) oqPopClose(); }, true);
 // cartões da linha do talhão + marca vermelha de HOJE entre o último cartão até hoje e o próximo (sem mexer no alinhamento das colunas)
+let oqHojeCols=[];   // em que vão (coluna) caiu o hoje de cada talhão — o mais comum ganha a etiqueta HOJE no cabeçalho
 function oqCardsComHoje(t,vis,tlItens){ const hj=_hojeISO(), fs=vis.map(v=>oqInfo(t,v.o,v.n));
   fs.forEach(f=>{ if(f.dt) tlItens.push({dt:f.dt, st:f.st, nome:f.nome, tal:tNome(t)}); });
   const comData=fs.map((f,i)=>({i,dt:f.dt})).filter(x=>x.dt);
@@ -6277,6 +6278,7 @@ function oqCardsComHoje(t,vis,tlItens){ const hj=_hojeISO(), fs=vis.map(v=>oqInf
   if(comData.length){ const passados=comData.filter(x=>x.dt<=hj);
     if(!passados.length) marca={i:comData[0].i, lado:'antes'};
     else { const ult=passados[passados.length-1], prox=comData.find(x=>x.i>ult.i && x.dt>hj); marca=prox?{i:prox.i,lado:'antes'}:{i:ult.i,lado:'depois'}; } }
+  if(marca) oqHojeCols.push(marca.lado==='antes'?marca.i:marca.i+1);
   return vis.map((v,i)=>oqCard(t,v.o,v.n,fs[i], marca&&marca.i===i?marca.lado:'')).join(''); }
 // LINHA DO TEMPO acima do quadro: régua de datas (meses), cada operação como um traço colorido e a marca de HOJE
 function oqLinhaTempo(itens){ const hj=_hojeISO(), hjBR=fmtDataBR(hj);
@@ -6303,7 +6305,7 @@ function campoQuadro(){
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   const tals=all.filter(t=>!oqTal||t.id===oqTal);
   const ativs=new Set(); all.forEach(t=>campoOpsDoTalhao(t).forEach(o=>oqAtividades(t,o).forEach(a=>ativs.add(a))));
-  oqCols=[]; const tlItens=[];
+  oqCols=[]; oqHojeCols=[]; const tlItens=[];
   const rows=tals.map(t=>{
     const seqs=oqSeq==='ambas'?['principal','safrinha']:[oqSeq];
     const ops=campoOpsDoTalhao(t).filter(o=>seqs.includes(o.seq));
@@ -6317,7 +6319,10 @@ function campoQuadro(){
         <div class="oq-sub">${esc(cult||'—')}${pc?' · '+esc(pc.sem.produto):''}</div><div class="oq-area">${num(areaDe(t))} ha</div>
         <a class="oq-det" data-go="#/campo/${esc(t.id)}">Detalhes ›</a></div>
       <div class="oq-cards">${oqCardsComHoje(t,vis,tlItens)}</div></div>`; }).join('');
-  const colRow=oqCols.length?`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`:'';
+  const freq={}; oqHojeCols.forEach(c=>freq[c]=(freq[c]||0)+1);
+  const hojeCol=Object.keys(freq).length?+Object.keys(freq).sort((a,b)=>freq[b]-freq[a]||a-b)[0]:-1;
+  const hojeHd=i=>hojeCol===i?' oq-hoje-hd':(hojeCol===oqCols.length&&i===oqCols.length-1?' oq-hoje-hd-fim':'');
+  const colRow=oqCols.length?`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn${hojeHd(i)}" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`:'';
   const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
   return `<div class="oq-top">
       <label>Safra<select class="sel" id="oq-seq"><option value="principal"${oqSeq==='principal'?' selected':''}>1ª cultura</option><option value="safrinha"${oqSeq==='safrinha'?' selected':''}>2ª cultura (safrinha)</option><option value="ambas"${oqSeq==='ambas'?' selected':''}>Ambas</option></select></label>
