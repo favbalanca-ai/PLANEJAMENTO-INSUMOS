@@ -91,6 +91,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   - Velocidade: digitada ou calculada pelo **tempo do percurso** (comprimento ÷ tempo × 3,6).
   - Salva na planilha (aba **AFERICOES APP**, ver `sync/README.md`); depois de salvar, a próxima aferição
     já vem com a mesma máquina e medidas. Excluir marca como excluída (some em todos os aparelhos).
+- **Campo → Anotações e ocorrências** (`#/ocorrencia/<tipo>~<talhão>`) — pelo menu Nova Ação: **Anotação** e
+  **Outras ocorrências → Climáticas / Manutenção/Melhorias / Solo/Fertilidade**. Todas com **Tirar foto /
+  Selecionar imagem** (reduzida no aparelho e enviada ao Drive; sem sinal, fica na fila e sobe depois),
+  atividade e **Compartilhar** (abre o compartilhar do celular com o texto e a foto; sem suporte, WhatsApp).
+  Climática: evento, situação, estádio (lista dos estádios da cultura) e período. Manutenção: ação e **Gerar
+  tarefa** (cria a tarefa no quadro do módulo Tarefas). Solo: situação e ação. Aparecem na **Timeline** e
+  vão para a planilha (aba **OCORRENCIAS APP**). A "Ocorrência" (pragas/doenças) continua no Monitoramento.
 - **Campo → Contagem de Stand** (modelo novo) — atividade, comprimento, espaçamento e meta (sugerida pela
   população do plantio); uma linha por fileira contada. Quadro **Informações**: linhas, **densidade**
   (média ÷ comprimento ÷ espaçamento × 10.000), **CV entre linhas**, plantas/metro, % da meta.

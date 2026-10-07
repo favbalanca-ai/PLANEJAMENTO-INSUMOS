@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-189';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-190';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -411,7 +411,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -422,7 +422,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
-const TELA_PAI={talhao:'talhoes'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -4660,27 +4660,181 @@ function afSalvar(){ const f=afFormAtual(); if(!f) return; const c=afCalc(f);
   const nv=afFormNovo(f.tipo,f.talhao); ['maq','impl','comp','larg','esp','medida','pms','alvo','ativ'].forEach(k=>nv[k]=f[k]); nv.am=Array(f.am.length).fill('');   // próxima amostra: mesma máquina e medidas
   afForm[f.tipo+'|'+f.talhao]=nv; afAba='hist'; route({keepScroll:true}); toast('Aferição salva: '+c.resumo);
 }
+/* ============ ANOTAÇÕES e OUTRAS OCORRÊNCIAS (climáticas · manutenção/melhorias · solo/fertilidade) ============
+   Um registro por ocorrência (aba "OCORRENCIAS APP", merge pelo _u). Fotos: o app reduz e manda ao Drive (pasta
+   "Fotos do Campo"); enquanto não sobe, a foto fica numa fila no aparelho e o registro mostra "enviando". */
+const OCOR_KEY='planejamento_ocorrencias', FOTO_PEND_KEY='planejamento_fotos_pend';
+let OCOR=null, ocForm={}, fotoPend=[];
+const OC_TIPOS={
+  anotacao:{lbl:'Anotação',novo:'Nova anotação',ico:'📝',cls:'na-azul',sub:'Situação atual do talhão, com foto'},
+  climatica:{lbl:'Climáticas',novo:'Nova ocorrência climática',ico:'☁️',cls:'na-rosa',sub:'Granizo, geada, veranico, vendaval…'},
+  manutencao:{lbl:'Manutenção/Melhorias',novo:'Nova ocorrência de manutenção',ico:'🔧',cls:'na-rosa',sub:'Cerca, carreador, pivô, curva de nível…'},
+  solo:{lbl:'Solo/Fertilidade',novo:'Nova ocorrência de solo',ico:'🌄',cls:'na-rosa',sub:'Compactação, erosão, mancha de fertilidade…'} };
+const OC_EVENTOS=['Chuva excessiva','Granizo','Geada','Seca / veranico','Vendaval / acamamento','Alagamento','Temperatura alta','Raio / queimada','Outro'];
+function loadOcor(){ try{ const d=JSON.parse(localStorage.getItem(OCOR_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
+function saveOcor(){ try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} scheduleOcorPush(); }
+function loadFotoPend(){ try{ const a=JSON.parse(localStorage.getItem(FOTO_PEND_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveFotoPend(){ try{ localStorage.setItem(FOTO_PEND_KEY, JSON.stringify(fotoPend)); }catch(e){ toast('Memória do aparelho cheia: a foto não foi guardada'); } }
+function ocorLista(){ return Object.values((OCOR&&OCOR.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
+// ---- sincronização (aba "OCORRENCIAS APP"; só envia se o Code.gs já tiver o ramo __ocorrencia) ----
+let ocorPushTimer=null, lastOcorSig='', fotoEnviando=false;
+function ocorSig(){ return JSON.stringify((OCOR&&OCOR.reg)||{}); }
+function ocorServerOk(){ return !!(DATA && DATA.ocorrencias_app && typeof DATA.ocorrencias_app==='object'); }
+function scheduleOcorPush(){ if(!syncUrl()||!autoOn()||!ocorServerOk()) return; clearTimeout(ocorPushTimer);
+  ocorPushTimer=setTimeout(async()=>{ await ocorFotosEnviar(); if(ocorSig()===lastOcorSig) return; ocorPush({auto:true}); }, 1500); }
+async function ocorPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!ocorServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleOcorPush(); return; }
+  const sig=ocorSig(); if(opts.auto && sig===lastOcorSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__ocorrencia:(OCOR.reg||{})}));
+    if(postOk(r)) lastOcorSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Ocorrências: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+// sobe as fotos da fila, uma por vez; cada uma que chega vira link no registro
+async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length) return;
+  fotoEnviando=true;
+  try{ for(const p of fotoPend.slice()){ const rec=OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
+      let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
+      if(!(r&&r.foto&&r.foto.url)) break;                                  // sem sinal: tenta de novo na próxima sincronização
+      rec.fotos=(rec.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
+      fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} } }
+  finally{ fotoEnviando=false; }
+  if(document.body.dataset.view==='ocorrencia') route({keepScroll:true});
+}
+function ocorApplyPulled(map){
+  if(!map || typeof map!=='object' || !OCOR) return false;
+  let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=OCOR.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>lu){ OCOR.reg[k]=inc; changed=true; } }
+  const pend=ocorSig()!==lastOcorSig && !!lastOcorSig;
+  if(changed){ try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} if(!pend) lastOcorSig=ocorSig(); }
+  if(pend||fotoPend.length) scheduleOcorPush();
+  return changed;
+}
+// ---- formulário ----
+function ocFormNovo(tipo,tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal', hj=_hojeISO();
+  const est=t?estadioEm(estadiosDe(t,seq),hj):null;
+  return {tipo, talhao:tid, data:hj, ativ:t?((seq==='safrinha'?empSafDe(t):empDe(t))||''):'', evento:'', situacao:'', acao:'', texto:'',
+    estadio:est?`${est.cod} ${est.desc}`:'', ini:hj, fim:hj, tarefa:false, compartilhar:false, fotos:[]}; }
+function ocFormDe(tipo,tid){ const k=tipo+'|'+tid; if(!ocForm[k]) ocForm[k]=ocFormNovo(tipo,tid); return ocForm[k]; }
+function ocFormAtual(){ const [tp,tid]=decodeURIComponent(String(location.hash.split('/')[2]||'')).split('~'); return OC_TIPOS[tp]?ocFormDe(tp,tid||afTal):null; }
+function ocFalta(f){ const x=[]; if(!String(f.ativ||'').trim()) x.push('atividade');
+  if(f.tipo==='anotacao'&&!String(f.texto||'').trim()) x.push('anotação');
+  if(f.tipo==='climatica'){ if(!f.evento) x.push('evento'); if(!String(f.situacao||'').trim()) x.push('situação'); if(!String(f.estadio||'').trim()) x.push('estádio'); if(!f.ini||!f.fim) x.push('período'); else if(f.fim<f.ini) x.push('período (fim antes do início)'); }
+  if(f.tipo==='manutencao'&&!String(f.acao||'').trim()) x.push('ação');
+  if(f.tipo==='solo'){ if(!String(f.situacao||'').trim()) x.push('situação'); if(!String(f.acao||'').trim()) x.push('ação'); }
+  return x; }
+function ocFotoThumb(r){ const sub=(r.fotos||[]).map(fo=>`<a class="oc-th" href="${esc(fo.url)}" target="_blank" rel="noopener" title="Abrir a foto">${fo.id?`<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(fo.id)}&sz=w240" alt="foto" loading="lazy" onerror="this.replaceWith(document.createTextNode('📷'))">`:'📷'}</a>`).join('');
+  const pend=fotoPend.filter(p=>p.ocId===r.id).map(p=>`<span class="oc-th oc-th-pend" title="Foto aguardando envio"><img src="${p.dataUrl}" alt="foto"><i>⏳</i></span>`).join('');
+  return sub+pend; }
+function ocResumo(r){ const T=OC_TIPOS[r.tipo]||{};
+  return [r.tipo==='climatica'?r.evento:'', r.situacao, r.acao||r.texto, r.tipo==='climatica'&&r.estadio?'estádio '+r.estadio:'',
+    r.tipo==='climatica'&&r.ini?('período '+fmtDataBR(r.ini).slice(0,5)+(r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim).slice(0,5):'')):''].filter(Boolean).join(' · ')||T.lbl||''; }
+function ocCard(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao), nf=(r.fotos||[]).length+fotoPend.filter(p=>p.ocId===r.id).length;
+  return `<div class="oc-card"><span class="na-ico ${T.cls||''}">${T.ico||'📝'}</span><div class="oc-tx">
+      <div><b>${esc(T.lbl||r.tipo)}${r.tipo==='climatica'&&r.evento?' · '+esc(r.evento):''}</b> <span class="mut">${esc(fmtDataBR(r.data).slice(0,5))} · ${esc(t?tNome(t):r.talhaoNome||r.talhao)}${r.quem?' · '+esc(r.quem):''}</span></div>
+      <div class="oc-res">${esc(ocResumo(r))}</div>${r.tarefaId?'<div class="mut" style="font-size:11.5px">✅ tarefa criada no quadro de Tarefas</div>':''}
+      ${nf?`<div class="oc-ths">${ocFotoThumb(r)}</div>`:''}</div>
+    <button class="icon-btn del" data-act="ocDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`; }
+function ocTog(l,k,f){ return `<label class="st-tog"><span>${l}</span><input type="checkbox" data-oc="${k}"${f[k]?' checked':''}><i></i></label>`; }
+function ocTxt(l,k,f,o){ o=o||{}; return `<label class="oc-f"><span>${l} <i class="af-req">*</i></span>${o.area?`<textarea class="txt" rows="3" data-oc="${k}" placeholder="${esc(o.ph||l)}">${esc(f[k]||'')}</textarea>`:`<input class="txt" data-oc="${k}" value="${esc(f[k]||'')}" placeholder="${esc(o.ph||l)}">`}</label>`; }
+V.ocorrencia=function(arg){
+  const all=talhoesAll(); if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
+  const [tp0,tid0]=decodeURIComponent(String(arg||'')).split('~'); const tipo=OC_TIPOS[tp0]?tp0:'';
+  const tid=(tid0&&all.some(t=>t.id===tid0))?tid0:((afTal&&all.some(t=>t.id===afTal))?afTal:all[0].id); afTal=tid;
+  const t=findTalhao(tid), tOpt=all.map(x=>`<option value="${esc(x.id)}"${x.id===tid?' selected':''}>${esc(tNome(x))}</option>`).join('');
+  const topo=`<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="oc-tal" data-tipo="${tipo}">${tOpt}</select></div></div>`;
+  const aviso=!syncUrl()?'<p class="lt-aviso">Sincronização não configurada: os registros e as fotos ficam só neste aparelho.</p>':
+    !ocorServerOk()?'<p class="lt-aviso">⚠️ Ainda <b>não vão para a planilha</b>: cole o <b>Code.gs</b> novo e crie uma <b>Nova versão</b> (aba “OCORRENCIAS APP” e pasta “Fotos do Campo”). Até lá ficam neste aparelho e sobem depois.</p>':
+    fotoPend.length?`<p class="lt-aviso">⏳ ${fotoPend.length} foto(s) aguardando envio para o Drive (sobem sozinhas quando houver sinal).</p>`:'';
+  const regsTal=ocorLista().filter(r=>r.talhao===tid&&(!tipo||r.tipo===tipo));
+  if(!tipo){
+    const cards=Object.keys(OC_TIPOS).map(k=>{ const T=OC_TIPOS[k];
+      return `<a class="na-item" data-go="#/ocorrencia/${k}~${encodeURIComponent(tid)}"><span class="na-ico ${T.cls}">${T.ico}</span><span class="na-tx"><b>${T.lbl}</b><span>${T.sub}</span></span><span class="na-seta">›</span></a>`; }).join('');
+    return `${topo}<div class="panel"><div class="panel-head"><h2>Anotações e ocorrências</h2><span class="sub">${esc(tNome(t))}</span></div><div class="na-list">${cards}</div></div>
+      <div class="panel"><div class="panel-head"><h2>Registros do talhão</h2><span class="sub">${regsTal.length}</span></div>${regsTal.map(ocCard).join('')||'<p class="mut" style="padding:14px">Nenhum registro ainda.</p>'}</div>${aviso}`;
+  }
+  const T=OC_TIPOS[tipo], f=ocFormDe(tipo,tid), fe=estadiosDe(t,talSafraAtual(t));
+  const estSel=(fe.list||[]).length?`<select class="sel" data-oc="estadio"><option value="">Selecione</option>${fe.list.map(s=>{ const v=`${s.cod} ${s.desc}`; return `<option${v===f.estadio?' selected':''}>${esc(v)}</option>`; }).join('')}${f.estadio&&!fe.list.some(s=>`${s.cod} ${s.desc}`===f.estadio)?`<option selected>${esc(f.estadio)}</option>`:''}</select>`
+    :`<input class="txt" data-oc="estadio" value="${esc(f.estadio)}" placeholder="ex.: V6, R5.2">`;
+  const campos={
+    anotacao:ocTxt('Anotação','texto',f,{area:1,ph:'o que você viu no talhão'}),
+    climatica:`<label class="oc-f"><span>Evento <i class="af-req">*</i></span><select class="sel" data-oc="evento"><option value="">Selecione</option>${OC_EVENTOS.map(e=>`<option${e===f.evento?' selected':''}>${e}</option>`).join('')}</select></label>
+      ${ocTxt('Situação','situacao',f,{ph:'ex.: granizo leve, folhas rasgadas na bordadura'})}
+      <label class="oc-f"><span>Estádio <i class="af-req">*</i></span>${estSel}</label>
+      <div class="oc-f"><span>Período <i class="af-req">*</i></span><div class="oc-per"><input type="date" data-oc="ini" value="${esc(f.ini)}"><span>a</span><input type="date" data-oc="fim" value="${esc(f.fim)}"></div></div>`,
+    manutencao:ocTxt('Ação','acao',f,{area:1,ph:'ex.: refazer a cerca do carreador norte'})+ocTog('Gerar tarefa','tarefa',f),
+    solo:ocTxt('Situação','situacao',f,{ph:'ex.: compactação na entrada do pivô'})+ocTxt('Ação','acao',f,{area:1,ph:'ex.: subsolagem na próxima entressafra'}) }[tipo];
+  return `${topo}
+    <div class="af-head"><a class="btn btn-ghost btn-sm" data-go="#/ocorrencia/~${encodeURIComponent(tid)}">‹ Ocorrências</a><h2><span class="na-ico ${T.cls}">${T.ico}</span> ${T.novo}</h2></div>
+    <div class="panel"><div class="af-form">
+      <div class="oc-fotos"><label class="oc-fbtn">📷<span>Tirar foto</span><input type="file" accept="image/*" capture="environment" data-ocfoto hidden></label>
+        <label class="oc-fbtn">🖼️<span>Selecionar imagem</span><input type="file" accept="image/*" multiple data-ocfoto hidden></label></div>
+      ${f.fotos.length?`<div class="oc-ths oc-prev">${f.fotos.map((u,i)=>`<span class="oc-th"><img src="${u}" alt="foto"><button class="icon-btn" data-act="ocFotoDel" data-i="${i}" title="Tirar esta foto">✕</button></span>`).join('')}</div>`:''}
+      <label class="oc-f"><span>Data</span><input type="date" data-oc="data" value="${esc(f.data)}"></label>
+      ${ocTxt('Atividade','ativ',f,{ph:'ex.: SORGO - SEM SORGO NUGRAIN 430 P MAX'})}
+      ${campos}
+      ${ocTog('Compartilhar','compartilhar',f)}
+      <div class="af-falta" id="oc-falta">${(x=>x.length?'Falta: '+x.join(', '):'')(ocFalta(f))}</div>
+      <div class="af-acts"><button class="btn btn-ghost btn-sm" data-act="ocLimpar">Limpar</button><span class="spacer"></span><button class="btn btn-primary" data-act="ocSalvar">💾 Salvar</button></div>
+    </div></div>
+    ${aviso}
+    <div class="panel"><div class="panel-head"><h2>${T.lbl} — ${esc(tNome(t))}</h2><span class="sub">${regsTal.length}</span></div>${regsTal.map(ocCard).join('')||'<p class="mut" style="padding:14px">Nenhum registro ainda.</p>'}</div>`;
+};
+async function ocFotosAdd(files){ const f=ocFormAtual(); if(!f) return;
+  for(const fl of [...files].slice(0,6)){ try{ f.fotos.push(await recFotoReduzir(fl)); }catch(e){ toast('Não consegui ler a foto'); } }
+  route({keepScroll:true}); }
+function ocShareTexto(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao);
+  return [`🌾 ${T.lbl||'Ocorrência'} — ${t?tNome(t):r.talhao} (${fmtDataBR(r.data)})`, r.ativ?`Atividade: ${r.ativ}`:'', r.evento?`Evento: ${r.evento}`:'',
+    r.situacao?`Situação: ${r.situacao}`:'', r.acao?`Ação: ${r.acao}`:'', r.texto||'', r.estadio&&r.tipo==='climatica'?`Estádio: ${r.estadio}`:'',
+    r.tipo==='climatica'&&r.ini?`Período: ${fmtDataBR(r.ini)}${r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim):''}`:'', r.quem?`Registrado por ${r.quem}`:''].filter(Boolean).join('\n'); }
+function _dataUrlFile(u,nome){ const [h,b]=String(u).split(','), bin=atob(b||''), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return new File([arr], nome, {type:(h.match(/data:([^;]+)/)||[])[1]||'image/jpeg'}); }
+function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f);
+  if(falta.length){ toast('Falta: '+falta.join(', ')); return; }
+  const now=Date.now(), id='oc'+now.toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario();
+  const rec={id, tipo:f.tipo, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), quem:(u&&u.nome)||'', fotos:[], ts:now, _u:now};
+  if(f.tipo==='anotacao') rec.texto=f.texto.trim();
+  if(f.tipo==='climatica') Object.assign(rec,{evento:f.evento, situacao:f.situacao.trim(), estadio:f.estadio, ini:f.ini, fim:f.fim});
+  if(f.tipo==='manutencao') rec.acao=f.acao.trim();
+  if(f.tipo==='solo') Object.assign(rec,{situacao:f.situacao.trim(), acao:f.acao.trim()});
+  if(f.tipo==='manutencao' && f.tarefa && TAREFAS){       // vira tarefa no quadro do módulo Tarefas
+    const tf={ id:'t'+now.toString(36)+Math.random().toString(36).slice(2,6), titulo:'Manutenção: '+rec.acao.slice(0,70), talhaoId:f.talhao, funcionarioId:'',
+      inicio:_hojeISO(), dias:1, status:'afazer', obs:`Ocorrência de manutenção (${rec.talhaoNome})${rec.quem?' · '+rec.quem:''}`, ocId:id, ts:now };
+    TAREFAS.tarefas.push(tf); saveTarefas(); rec.tarefaId=tf.id; }
+  const nomeBase=`${(rec.talhaoNome||'talhao').replace(/[^\w-]+/g,'_')}-${rec.data}-${f.tipo}`;
+  f.fotos.forEach((d,i)=>fotoPend.push({ocId:id, nome:`${nomeBase}-${i+1}.jpg`, dataUrl:d}));
+  OCOR.reg[id]=rec; saveFotoPend(); saveOcor();
+  if(f.compartilhar){ const txt=ocShareTexto(rec);   // ainda no toque do botão: o celular abre o compartilhar
+    try{ const files=f.fotos.map((d,i)=>_dataUrlFile(d,`${nomeBase}-${i+1}.jpg`));
+      if(navigator.share && (!files.length || (navigator.canShare && navigator.canShare({files})))) navigator.share(files.length?{text:txt, files}:{text:txt}).catch(()=>{});
+      else window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); }catch(e){ window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank'); } }
+  ocForm[f.tipo+'|'+f.talhao]=Object.assign(ocFormNovo(f.tipo,f.talhao),{ativ:f.ativ});
+  route({keepScroll:true}); toast(`${OC_TIPOS[f.tipo].lbl} salva${rec.tarefaId?' · tarefa criada':''}${f.fotos.length?` · ${f.fotos.length} foto(s) enviando`:''}`);
+}
 /* ============ NOVA AÇÃO (tocar no talhão no mapa) ============ */
 const NA_ITENS=[
-  {k:'anot',lbl:'Anotação',sub:'Registrar anotações sobre a situação atual do talhão.',ico:'📝',cls:'na-azul',breve:1},
+  {k:'anot',lbl:'Anotação',sub:'Registrar anotações sobre a situação atual do talhão.',ico:'📝',cls:'na-azul',go:t=>'#/ocorrencia/anotacao~'+t},
   {k:'ocor',lbl:'Ocorrência',sub:'Registrar ocorrências (pragas, doenças, daninhas) no talhão.',ico:'⚠️',cls:'na-rosa',go:t=>'#/monitoramento/'+t},
   {k:'recom',lbl:'Recomendação',sub:'Registrar recomendações de aplicação.',ico:'📋',cls:'na-ciano',go:t=>'#/recomendacao/'+t},
-  {k:'afer',lbl:'Aferição',sub:'Pulverizador, perda na colheita e semeadura (adubo/sementes).',ico:'🧮',cls:'na-verde',sub2:1},
+  {k:'afer',lbl:'Aferição',sub:'Pulverizador, perda na colheita e semeadura (adubo/sementes).',ico:'🧮',cls:'na-verde',sub2:'afer'},
   {k:'apl',lbl:'Aplicação',sub:'Operações do talhão: registrar a execução.',ico:'🚿',cls:'na-ciano',go:t=>'#/campo/'+t},
   {k:'stand',lbl:'Stand',sub:'Registrar contagens de stand.',ico:'📏',cls:'na-ciano',go:t=>'#/stand/'+t},
   {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',breve:1},
-  {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',go:t=>'#/monitoramento/'+t} ];
+  {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',sub2:'outras'} ];
 function novaAcaoFechar(){ const o=document.getElementById('na-ov'); if(o) o.remove(); }
 function novaAcaoOpen(tid, sub){
   const t=findTalhao(tid); if(!t){ toast('Talhão não encontrado'); return; }
   novaAcaoFechar(); const id=encodeURIComponent(tid);
   const so=talStatusOps(t), sc=OPST[so.nivel], emp=(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t))||'';
   const item=x=>x.breve?`<div class="na-item na-off"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl} <small class="na-breve">em breve</small></b><span>${x.sub}</span></span></div>`
-    :x.sub2?`<a class="na-item" data-act="naAfer" data-id="${esc(tid)}"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl}</b><span>${x.sub}</span></span><span class="na-seta">›</span></a>`
+    :x.sub2?`<a class="na-item" data-act="naSub" data-sub="${x.sub2}" data-id="${esc(tid)}"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl}</b><span>${x.sub}</span></span><span class="na-seta">›</span></a>`
     :`<a class="na-item" data-go="${x.go(id)}"><span class="na-ico ${x.cls}">${x.ico}</span><span class="na-tx"><b>${x.lbl}</b><span>${x.sub}</span></span><span class="na-seta">›</span></a>`;
-  const corpo=sub==='afer'
-    ? `<div class="na-h"><button class="icon-btn" data-act="naVoltar" data-id="${esc(tid)}" title="Voltar">‹</button><h3>Aferição</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
-       <div class="na-list">${Object.keys(AF_TIPOS).map(k=>{ const T=AF_TIPOS[k]; return `<a class="na-item" data-go="#/afericao/${k}~${id}"><span class="na-ico ${T.cls}">${T.ico}</span><span class="na-tx"><b>${T.lbl}</b><span>${T.sub}</span></span><span class="na-seta">›</span></a>`; }).join('')}</div>`
+  const subLista=(tit,TIPOS,rota,ks)=>`<div class="na-h"><button class="icon-btn" data-act="naVoltar" data-id="${esc(tid)}" title="Voltar">‹</button><h3>${tit}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+       <div class="na-list">${ks.map(k=>{ const T=TIPOS[k]; return `<a class="na-item" data-go="#/${rota}/${k}~${id}"><span class="na-ico ${T.cls}">${T.ico}</span><span class="na-tx"><b>${T.lbl}</b><span>${T.sub}</span></span><span class="na-seta">›</span></a>`; }).join('')}</div>`;
+  const corpo=sub==='afer' ? subLista('Aferição',AF_TIPOS,'afericao',Object.keys(AF_TIPOS))
+    : sub==='outras' ? subLista('Ocorrência de',OC_TIPOS,'ocorrencia',['climatica','manutencao','solo'])
     : `<div class="na-h"><span></span><h3>Nova Ação</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
        <p class="na-sub">Adicionar nova ação a <b>${esc(tNome(t))}</b><br><small>${esc(emp||'sem cultura')} · ${num(areaDe(t))} ha · ${sc.ico} ${so.nivel==='late'?`${so.late.length} operação(ões) atrasada(s)`:esc(sc.lbl)}</small></p>
        <div class="na-list">${NA_ITENS.map(item).join('')}</div>
@@ -4693,6 +4847,7 @@ function novaAcaoOpen(tid, sub){
 window.addEventListener('hashchange', novaAcaoFechar);
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
   if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
+  else if(el.matches('[data-oc]') && el.type!=='checkbox' && el.tagName!=='SELECT'){ const f=ocFormAtual(); if(f){ f[el.dataset.oc]=el.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } }
   else if(el.matches('[data-afam]')){ const f=afFormAtual(); if(f){ f.am[+el.dataset.afam]=el.value; afAtualizaRes(f); } } });
 document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ novaAcaoFechar(); standTrenaFechar(); } });
 /* ============ RECOMENDAÇÃO DE APLICAÇÃO (receituário → envio → retorno → aprovação) ============
@@ -5483,7 +5638,7 @@ function numBR(v){ if(typeof v==='number') return isFinite(v)?v:0; let x=String(
 function _mmC(v){ return numBR(v); }
 const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicacao:{lbl:'Aplicação',ico:'🚿',cor:'#2e7d32'},
   monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
-  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
+  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, ocorrencia:{lbl:'Ocorrência',ico:'📝',cor:'#c2185b'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
 // lista unificada de eventos de campo (mais recentes primeiro)
 function camposEventos(){
   const ev=[];
@@ -5491,6 +5646,8 @@ function camposEventos(){
     titulo:(r.categoria?_capf(r.categoria):'Monitoramento'), resumo:[r.alvo, r.nivel?('nível '+r.nivel+(r.unidade?' '+r.unidade:'')):'', r.acao].filter(Boolean).join(' · ')}));
   (CHUVA&&CHUVA.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'chuva',talhao:'',
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
+  (OCOR?ocorLista():[]).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}, nf=(r.fotos||[]).length; ev.push({ts:_tsC(r),data:r.data,tipo:'ocorrencia',talhao:r.talhao,
+    titulo:(T.lbl||'Ocorrência')+(r.tipo==='climatica'&&r.evento?' · '+r.evento:''), resumo:ocResumo(r)+(nf?` · 📷 ${nf} foto(s)`:'')}); });
   (STAND?standLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
     titulo:'Contagem de stand'+(r.cultura?' · '+r.cultura:''), resumo:[r.pop?nf0.format(r.pop)+' pl/ha':'', r.pctMeta!=null?r.pctMeta+'% da meta':''].filter(Boolean).join(' · ')}));
   (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0);
@@ -6201,7 +6358,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -6502,6 +6659,10 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('input[data-sf="dist"]')){ const f=standFormAtual(); if(f){ f.dist=e.target.checked; route({keepScroll:true}); } return; }
   if(e.target.matches&&e.target.matches('[data-sf="nLin"]')){ const f=standFormAtual(); if(f){ const n=Math.max(1,Math.min(40,Math.round(numBR(e.target.value))||1)); if(n===f.linhas.length) return; while(f.linhas.length<n) f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); f.linhas.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.id==='st-tr-n' && standTrena){ const n=Math.max(1,Math.min(200,Math.round(numBR(e.target.value))||1)); if(n===standTrena.pos.length) return; while(standTrena.pos.length<n) standTrena.pos.push(''); standTrena.pos.length=n; setTimeout(standTrenaRender,0); return; }
+  if(e.target.id==='oc-tal'){ location.hash='#/ocorrencia/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches&&e.target.matches('input[data-ocfoto]')){ const fs=e.target.files; if(fs&&fs.length) ocFotosAdd(fs); e.target.value=''; return; }
+  if(e.target.matches&&e.target.matches('input[type="checkbox"][data-oc]')){ const f=ocFormAtual(); if(f) f[e.target.dataset.oc]=e.target.checked; return; }
+  if(e.target.matches&&e.target.matches('select[data-oc]')){ const f=ocFormAtual(); if(f){ f[e.target.dataset.oc]=e.target.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } return; }
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); if(n===f.am.length) return; while(f.am.length<n) f.am.push(''); f.am.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
@@ -6660,7 +6821,11 @@ document.addEventListener('click',e=>{
       setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
     else if(a.act==='oqPop'){ oqPopOpen(act); return; }
     else if(a.act==='naOpen'){ novaAcaoOpen(a.id); return; }
-    else if(a.act==='naAfer'){ novaAcaoOpen(a.id,'afer'); return; }
+    else if(a.act==='naSub'){ novaAcaoOpen(a.id,a.sub); return; }
+    else if(a.act==='ocSalvar'){ ocSalvar(); return; }
+    else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
+    else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
+    else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=Date.now(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
     else if(a.act==='naVoltar'){ novaAcaoOpen(a.id); return; }
     else if(a.act==='naFechar'){ novaAcaoFechar(); return; }
     else if(a.act==='afAba'){ afAba=a.val==='hist'?'hist':'dados'; route({keepScroll:true}); return; }
@@ -7353,7 +7518,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
@@ -7545,6 +7710,7 @@ function applyPulledData(d, raw){
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
+  try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
@@ -7696,6 +7862,7 @@ async function syncPush(opts){
   try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
   try{ if(aferServerOk() && aferSig()!==lastAferSig) await aferPush({auto:true}); }catch(e){}   // aferições do Campo
   try{ if(standServerOk() && standSig()!==lastStandSig) await standPush({auto:true}); }catch(e){}   // contagens de stand
+  try{ if(ocorServerOk()){ await ocorFotosEnviar(); if(ocorSig()!==lastOcorSig) await ocorPush({auto:true}); } }catch(e){}   // ocorrências + fotos
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
@@ -8040,6 +8207,8 @@ function pendingInfo(fe0){
     if(limitesServerOk() && lastLimitesSig!=='' && limitesSig()!==lastLimitesSig) add(1, 'alteração em limites');
     if(aferServerOk() && aferSig()!==lastAferSig) add(1, 'aferição(ões)');
     if(standServerOk() && standSig()!==lastStandSig) add(1, 'contagem(ns) de stand');
+    if(ocorServerOk() && ocorSig()!==lastOcorSig) add(1, 'ocorrência(s)');
+    add(fotoPend.length, 'foto(s) do campo');
     if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
     add(nfePend().length, 'nota(s) NF-e a enviar');
   }catch(e){}
@@ -8170,7 +8339,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();

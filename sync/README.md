@@ -64,6 +64,14 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   % DA META · RESULTADO · SITUAÇÃO**. Volta no puxar como **`stand_app`**. As contagens antigas, que antes
   ficavam só no aparelho, sobem na primeira sincronização depois de atualizar o Code.gs.
 
+## Anotações e ocorrências (aba `OCORRENCIAS APP`) e fotos do Campo
+- **`__ocorrencia`** (Campo e Planejamento): anotações e ocorrências climáticas, de manutenção/melhorias e de
+  solo/fertilidade, mesmo formato KEY|JSON|ATUALIZADO + colunas **DATA · TALHÃO · TIPO · ATIVIDADE · EVENTO ·
+  SITUAÇÃO · AÇÃO / ANOTAÇÃO · ESTÁDIO · PERÍODO · FOTOS · QUEM · REGISTRO**. Volta como **`ocorrencias_app`**.
+- **`__campoFoto`**: recebe a foto já reduzida pelo app (JPEG ~1280 px) e grava na pasta **“Fotos do Campo”**,
+  criada ao lado da planilha no Drive. O arquivo fica com **“qualquer pessoa com o link pode ver”** (para os
+  outros celulares abrirem a foto); o link vai na coluna FOTOS. Uma foto por pedido.
+
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
 2. **Extensões → Apps Script**.
