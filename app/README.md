@@ -98,6 +98,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Climática: evento, situação, estádio (lista dos estádios da cultura) e período. Manutenção: ação e **Gerar
   tarefa** (cria a tarefa no quadro do módulo Tarefas). Solo: situação e ação. Aparecem na **Timeline** e
   vão para a planilha (aba **OCORRENCIAS APP**). A "Ocorrência" (pragas/doenças) continua no Monitoramento.
+- **Campo → Estimativa de produtividade** (`#/produtividade/<talhão>`, pelo menu Nova Ação) — atividade, **PMS**,
+  **fator de correção** (padrão 20%), estádio e tipo de amostragem (**Planta**: nós improdutivos, nós, vagens,
+  grãos · **Espiga**: fileiras × grãos por fileira). Quadro Informações: talhão, cultura, cultivar (semente do
+  plantio), **amostras recomendadas** (1 a cada 5 ha), plantas **estabelecidas** (da última contagem de Stand,
+  pode corrigir) e **produtivas** (estabelecidas × (1 − fator)), média de grãos por planta, **sc/ha** e a
+  comparação com a produtividade planejada. Botão **+** abre o **teclado grande**: digite o número e toque no
+  que ele é; **OK** guarda a planta e já abre a próxima, mostrando o sc/ha da planta.
+  **sc/ha = produtivas × grãos/planta × PMS ÷ 1.000.000 ÷ 60.** Vai para a planilha (aba **PRODUTIVIDADE APP**)
+  e aparece na Timeline.
 - **Campo → Contagem de Stand** (modelo novo) — atividade, comprimento, espaçamento e meta (sugerida pela
   população do plantio); uma linha por fileira contada. Quadro **Informações**: linhas, **densidade**
   (média ÷ comprimento ÷ espaçamento × 10.000), **CV entre linhas**, plantas/metro, % da meta.

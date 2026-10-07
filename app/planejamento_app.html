@@ -1643,6 +1643,35 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oc-res{margin-top:2px;color:var(--ink)}
 .oc-card .na-ico{width:40px;height:40px;font-size:19px}
 .oc-f input[type=date],.oc-per input[type=date]{padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:inherit;font-weight:400;min-height:42px}
+/* ===== Estimativa de produtividade ===== */
+.pr-info::before{content:'Informações'}
+.pr-info .pr-sub{background:none!important;border-top:1px solid #eef2f4;padding:7px 14px 2px!important}
+.pr-info .pr-sub span{font-weight:700;color:var(--ink)!important}
+.pr-info .pr-in{padding-left:30px!important}
+.af-res .pr-sc{font-size:17px;color:var(--green)}
+.pr-add{width:44px;height:40px;font-size:24px;padding:0;line-height:1}
+.pr-pl{display:grid;grid-template-columns:24px 1fr auto 30px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #eef2f4;font-size:13px}
+.pr-pl>b{color:var(--muted)}
+.pr-pl-sc{font-weight:700;color:var(--green);white-space:nowrap}
+.pr-pl .icon-btn{width:30px;height:30px;min-width:30px;min-height:30px;padding:0;font-size:13px}
+.pr-tec-ov{position:fixed;inset:0;z-index:130;background:rgba(20,40,48,.38);display:flex;align-items:flex-end;justify-content:center}
+.pr-tec{background:var(--card);width:min(480px,100%);max-height:100vh;overflow:auto;border-radius:18px 18px 0 0;padding:10px 16px calc(14px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+.pr-tec-h{display:grid;grid-template-columns:40px 1fr 40px;align-items:center}
+.pr-tec-h h3{text-align:center;font-size:18px;color:var(--ink)}
+.pr-tec-h small{color:var(--muted);font-weight:600}
+.pr-tec-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0}
+.pr-tec-chips span{background:#eef2f4;border-radius:14px;padding:4px 10px;font-size:12.5px;color:var(--muted)}
+.pr-tec-chips span.on{background:#dcf7ec;color:var(--ink)}
+.pr-tec-vis{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid var(--line);padding:6px 4px 8px;margin-bottom:10px}
+.pr-tec-num{font-size:38px;color:var(--ink);font-variant-numeric:tabular-nums}
+.pr-tec-sc{font-size:28px;color:var(--muted)}
+.pr-tec-g{display:grid;grid-template-columns:1fr 1fr 1fr 1.45fr;gap:10px}
+.pr-k{border:0;border-radius:14px;background:#4fa9bf;color:#fff;font-size:28px;font-weight:600;min-height:62px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.pr-k:active{filter:brightness(.9)}
+.pr-k.pr-cat,.pr-k.pr-ok{background:#6c9bdc;font-size:17px;font-weight:600;line-height:1.15;padding:4px}
+.pr-k.pr-ok{font-size:24px}
+.pr-k.pr-limpar{background:#c0392b;font-size:22px;grid-column:span 2}
+@media (max-width:380px){ .pr-k{min-height:54px;font-size:24px} .pr-k.pr-cat{font-size:14px} }
 
 </style>
 </head>
@@ -1740,7 +1769,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-190';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-191';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2149,7 +2178,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -2160,7 +2189,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -6551,6 +6580,148 @@ function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f
   ocForm[f.tipo+'|'+f.talhao]=Object.assign(ocFormNovo(f.tipo,f.talhao),{ativ:f.ativ});
   route({keepScroll:true}); toast(`${OC_TIPOS[f.tipo].lbl} salva${rec.tarefaId?' · tarefa criada':''}${f.fotos.length?` · ${f.fotos.length} foto(s) enviando`:''}`);
 }
+/* ============ ESTIMATIVA DE PRODUTIVIDADE (amostra de plantas no talhão) ============
+   sc/ha = plantas produtivas/ha × grãos por planta × PMS (g) ÷ 1.000.000 (kg/ha) ÷ 60.
+   Plantas estabelecidas: última contagem de Stand do talhão (ou digitada); produtivas = estabelecidas × (1 − fator de correção).
+   Amostragem "Planta" (soja/feijão: nós improdutivos, nós, vagens, grãos) ou "Espiga" (milho/sorgo: fileiras × grãos por fileira). */
+const PROD_KEY='planejamento_produtividade';
+let PRODE=null, prForm={}, prTec=null;
+function loadProdE(){ try{ const d=JSON.parse(localStorage.getItem(PROD_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
+function saveProdE(){ try{ localStorage.setItem(PROD_KEY, JSON.stringify(PRODE)); }catch(e){} schedulePrPush(); }
+function prLista(){ return Object.values((PRODE&&PRODE.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
+// ---- sincronização (aba "PRODUTIVIDADE APP"; só envia se o Code.gs já tiver o ramo __produtividade) ----
+let prPushTimer=null, lastPrSig='';
+function prSig(){ return JSON.stringify((PRODE&&PRODE.reg)||{}); }
+function prServerOk(){ return !!(DATA && DATA.produtividade_app && typeof DATA.produtividade_app==='object'); }
+function schedulePrPush(){ if(!syncUrl()||!autoOn()||!prServerOk()) return; clearTimeout(prPushTimer);
+  prPushTimer=setTimeout(()=>{ if(prSig()===lastPrSig) return; prPush({auto:true}); }, 1500); }
+async function prPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!prServerOk()) return;
+  if(syncBusy){ if(opts.auto) schedulePrPush(); return; }
+  const sig=prSig(); if(opts.auto && sig===lastPrSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__produtividade:(PRODE.reg||{})}));
+    if(postOk(r)) lastPrSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Produtividade: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+function prApplyPulled(map){
+  if(!map || typeof map!=='object' || !PRODE) return false;
+  let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=PRODE.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>lu){ PRODE.reg[k]=inc; changed=true; } }
+  const pend=prSig()!==lastPrSig && !!lastPrSig;
+  if(changed){ try{ localStorage.setItem(PROD_KEY, JSON.stringify(PRODE)); }catch(e){} if(!pend) lastPrSig=prSig(); }
+  if(pend) schedulePrPush();
+  return changed;
+}
+// ---- cálculo ----
+const PR_CAMPOS={ planta:[['nosImp','Nós improdutivos'],['nos','Nós'],['vagens','Vagens'],['graos','Grãos']], espiga:[['fileiras','Fileiras'],['grFil','Grãos por fileira']] };
+function prGraosPl(p,am){ return am==='espiga'?(numBR(p.fileiras)*numBR(p.grFil)):numBR(p.graos); }
+function prScHa(prod,graos,pms){ return (prod>0&&graos>0&&pms>0)?prod*graos*pms/1e6/60:null; }
+function prStandDe(tid){ const r=standLista().filter(x=>x.talhao===tid&&+x.pop>0).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0))[0]; return r||null; }
+function prCalc(f){ const pms=numBR(f.pms), fator=Math.min(100,Math.max(0,numBR(f.fator))), estab=numBR(f.estab);
+  const prod=estab>0?estab*(1-fator/100):0, gs=(f.plantas||[]).map(p=>prGraosPl(p,f.amostragem)).filter(g=>g>0);
+  const graosPl=gs.length?gs.reduce((a,b)=>a+b,0)/gs.length:null, sc=graosPl!=null?prScHa(prod,graosPl,pms):null;
+  const falta=[]; if(!String(f.ativ||'').trim()) falta.push('atividade'); if(!(pms>0)) falta.push('PMS'); if(!String(f.estadio||'').trim()) falta.push('estádio');
+  if(!(estab>0)) falta.push('plantas estabelecidas (faça o Stand ou digite)'); if(!gs.length) falta.push('pelo menos 1 planta');
+  return {pms, fator, estab, prod, graosPl, sc, kgHa:sc!=null?sc*60:null, n:gs.length, falta, ok:!falta.length}; }
+// ---- formulário ----
+function prFormNovo(tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal', hj=_hojeISO(), emp=t?((seq==='safrinha'?empSafDe(t):empDe(t))||''):'', ck=culturaKey(emp);
+  const est=t?estadioEm(estadiosDe(t,seq),hj):null, st=prStandDe(tid), ult=prLista().find(r=>r.talhao===tid);
+  return {talhao:tid, data:hj, ativ:emp, pms:ult?String(ult.pms):'', fator:ult&&ult.fator!=null?String(ult.fator):'20', estadio:est?`${est.cod} ${est.desc}`:'',
+    amostragem:(ck==='milho'||ck==='sorgo')?'espiga':'planta', estab:st?String(st.pop):'', estabStand:!!st, plantas:[]}; }
+function prFormDe(tid){ if(!prForm[tid]) prForm[tid]=prFormNovo(tid); return prForm[tid]; }
+function prFormAtual(){ const tid=decodeURIComponent(String(location.hash.split('/')[2]||'')); const all=talhoesAll(); return prFormDe(all.some(t=>t.id===tid)?tid:(afTal||(all[0]&&all[0].id))); }
+function prInfoHtml(f){ const c=prCalc(f), t=findTalhao(f.talhao), seq=t?talSafraAtual(t):'principal', li=(l,v,cls)=>`<div${cls?` class="${cls}"`:''}><span>${l}</span><b>${v}</b></div>`;
+  const pc=t?campoOpsDoTalhao(t).filter(o=>o.seq===seq).map(o=>plantioCalc(o.key)).find(Boolean):null;
+  const nRec=t?Math.max(1,Math.ceil((areaDe(t)||0)/5)):1, nFeitas=prLista().filter(r=>r.talhao===f.talhao&&r.data>=_dISO(Date.now()-60*86400000)).length;
+  const plan=t?(seq==='safrinha'?prodSafDe(t):prodvDe(t)):0;
+  return li('Talhão',esc(t?tNome(t):f.talhao))+li('Cultura',esc((culturaKey(f.ativ)||'—').toUpperCase()))+li('Cultivar',esc(pc&&pc.sem?pc.sem.produto:'—'))
+    +li('Amostras',`${nFeitas+1}/${nRec} <small>(1 a cada 5 ha)</small>`)
+    +`<div class="pr-sub"><span>Densidade de plantas</span></div>`
+    +li('Estabelecidas',c.estab>0?nfpop(c.estab)+' pl/ha':'—','pr-in')+li('Produtivas',c.prod>0?`${nfpop(c.prod)} pl/ha · ${afN(100-c.fator,0)}%`:'—','pr-in')
+    +li('Média de grãos por planta',c.graosPl!=null?afN(c.graosPl,1):'0')
+    +li('Produtividade estimada',`<span class="pr-sc">${c.sc!=null?afN(c.sc,1):'0'} sc/ha</span>`)
+    +(plan?li('Planejada',`${afN(plan,1)} sc/ha${c.sc!=null?` <small class="${c.sc<plan?'af-bad':'af-ok'}">(${c.sc>=plan?'+':''}${afN((c.sc/plan-1)*100,1)}%)</small>`:''}`):'')
+    +li('Quantidade de plantas informadas',String(c.n)); }
+function prPlantasHtml(f){ const cs=PR_CAMPOS[f.amostragem], c=prCalc(f);
+  const rows=f.plantas.map((p,i)=>{ const g=prGraosPl(p,f.amostragem), sc=prScHa(c.prod,g,c.pms);
+    return `<div class="pr-pl"><b>${i+1}</b><span>${cs.map(([k,l])=>`${l}: <b>${p[k]!=null&&p[k]!==''?esc(String(p[k])):'—'}</b>`).join(' · ')}${f.amostragem==='espiga'?` · Grãos: <b>${afN(g,0)}</b>`:''}</span><span class="pr-pl-sc">${sc!=null?afN(sc,1)+' sc/ha':''}</span>
+      <button class="icon-btn" data-act="prPlDel" data-i="${i}" title="Remover planta">✕</button></div>`; }).join('');
+  return `<div class="af-sec"><div class="af-sec-h"><b>${f.amostragem==='espiga'?'Espigas':'Plantas'}:</b><button class="btn btn-primary pr-add" data-act="prTecAbrir" title="Adicionar planta">+</button></div>
+    ${rows||`<p class="mut" style="text-align:center;padding:10px 0">Nenhuma ${f.amostragem==='espiga'?'espiga':'planta'} adicionada.</p>`}</div>`; }
+V.produtividade=function(arg){
+  const all=talhoesAll(); if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
+  const a0=decodeURIComponent(String(arg||'')), tid=(a0&&all.some(t=>t.id===a0))?a0:((afTal&&all.some(t=>t.id===afTal))?afTal:all[0].id); afTal=tid;
+  const t=findTalhao(tid), f=prFormDe(tid), fe=estadiosDe(t,talSafraAtual(t));
+  const tOpt=all.map(x=>`<option value="${esc(x.id)}"${x.id===tid?' selected':''}>${esc(tNome(x))}</option>`).join('');
+  const estSel=(fe.list||[]).length?`<select class="sel" data-pr="estadio"><option value="">Selecione</option>${fe.list.map(s=>{ const v=`${s.cod} ${s.desc}`; return `<option${v===f.estadio?' selected':''}>${esc(v)}</option>`; }).join('')}${f.estadio&&!fe.list.some(s=>`${s.cod} ${s.desc}`===f.estadio)?`<option selected>${esc(f.estadio)}</option>`:''}</select>`
+    :`<input class="txt" data-pr="estadio" value="${esc(f.estadio)}" placeholder="ex.: R5.2 Enchimento de grão">`;
+  const regs=prLista().filter(r=>r.talhao===tid), media=regs.length?regs.reduce((a,r)=>a+(+r.scHa||0),0)/regs.length:null;
+  const hist=regs.map(r=>`<div class="oc-card"><span class="na-ico na-amarelo">💰</span><div class="oc-tx"><div><b>${afN(r.scHa,1)} sc/ha</b> <span class="mut">${esc(fmtDataBR(r.data).slice(0,5))}${r.estadio?' · '+esc(r.estadio):''}${r.quem?' · '+esc(r.quem):''}</span></div>
+      <div class="oc-res">${(r.plantas||[]).length} ${r.amostragem==='espiga'?'espiga(s)':'planta(s)'} · ${afN(r.graosPl,1)} grãos/planta · PMS ${esc(r.pms)} g · ${nfpop(r.produtivas)} pl/ha produtivas</div></div>
+      <button class="icon-btn del" data-act="prDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`).join('');
+  const c=prCalc(f);
+  return `<div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="pr-tal">${tOpt}</select></div></div>
+  <div class="panel"><div class="panel-head"><h2>Nova Estimativa de Produtividade</h2><span class="sub">${esc(tNome(t))} · ${num(areaDe(t))} ha</span></div>
+    <div class="af-form">
+      <div class="app-grid">
+        <label><span>Data</span><input type="date" data-pr="data" value="${esc(f.data)}"></label>
+        <label><span>Atividade <i class="af-req">*</i></span><input class="txt" data-pr="ativ" value="${esc(f.ativ)}" placeholder="ex.: SOJA - SEM SOJA 80IX81"></label>
+        <label><span>PMS (g) <i class="af-req">*</i></span><input class="cell" inputmode="decimal" data-pr="pms" value="${esc(f.pms)}" placeholder="peso de mil sementes"></label>
+        <label><span>Fator de correção (%)</span><input class="cell" inputmode="decimal" data-pr="fator" value="${esc(f.fator)}" placeholder="ex.: 20"></label>
+        <label><span>Estádio <i class="af-req">*</i></span>${estSel}</label>
+        <label><span>Tipo de amostragem <i class="af-req">*</i></span><select class="sel" data-pr="amostragem"><option value="planta"${f.amostragem!=='espiga'?' selected':''}>Planta (nós, vagens, grãos)</option><option value="espiga"${f.amostragem==='espiga'?' selected':''}>Espiga (fileiras × grãos)</option></select></label>
+        <label><span>Plantas estabelecidas (pl/ha) <i class="af-req">*</i></span><input class="cell" inputmode="numeric" data-pr="estab" value="${esc(f.estab)}" placeholder="faça o Stand ou digite"></label>
+      </div>
+      ${f.estabStand?'<p class="mut" style="font-size:11.5px;margin:4px 0 0">Plantas estabelecidas: da última contagem de Stand do talhão (pode corrigir).</p>':''}
+      <div class="af-res pr-info" id="pr-info">${prInfoHtml(f)}</div>
+      ${prPlantasHtml(f)}
+      <div class="af-falta" id="pr-falta">${c.ok?'':'Falta: '+c.falta.join(', ')}</div>
+      <div class="af-acts"><button class="btn btn-ghost btn-sm" data-act="prLimpar">Limpar</button><span class="spacer"></span><button class="btn btn-primary" data-act="prSalvar">💾 Salvar estimativa</button></div>
+    </div></div>
+  ${!syncUrl()?'<p class="lt-aviso">Sincronização não configurada: as estimativas ficam só neste aparelho.</p>':!prServerOk()?'<p class="lt-aviso">⚠️ As estimativas ainda <b>não vão para a planilha</b>: cole o <b>Code.gs</b> novo e crie uma <b>Nova versão</b> (aba “PRODUTIVIDADE APP”). Até lá ficam neste aparelho e sobem depois.</p>':''}
+  <div class="panel"><div class="panel-head"><h2>Estimativas do talhão</h2><span class="sub">${regs.length}${media!=null?` · média ${afN(media,1)} sc/ha`:''}</span></div>${hist||'<p class="mut" style="padding:14px">Nenhuma estimativa ainda.</p>'}</div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">sc/ha = plantas produtivas/ha × grãos por planta × PMS (g) ÷ 1.000.000 ÷ 60. Produtivas = estabelecidas × (1 − fator de correção).</p>`;
+};
+function prAtualiza(f){ const i=document.getElementById('pr-info'); if(i) i.innerHTML=prInfoHtml(f);
+  const fl=document.getElementById('pr-falta'); if(fl){ const c=prCalc(f); fl.textContent=c.ok?'':'Falta: '+c.falta.join(', '); } }
+function prSalvar(){ const f=prFormAtual(); if(!f) return; const c=prCalc(f);
+  if(!c.ok){ toast('Falta: '+c.falta.join(', ')); return; }
+  const now=Date.now(), id='pr'+now.toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario(), r1=v=>Math.round(v*10)/10;
+  PRODE.reg[id]={id, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), pms:numBR(f.pms), fator:c.fator, estadio:f.estadio,
+    amostragem:f.amostragem, estab:Math.round(c.estab), produtivas:Math.round(c.prod), graosPl:r1(c.graosPl), scHa:r1(c.sc), plantas:f.plantas.map(p=>Object.assign({},p)),
+    quem:(u&&u.nome)||'', ts:now, _u:now};
+  saveProdE(); const nv=prFormNovo(f.talhao); ['ativ','pms','fator','estadio','amostragem','estab','estabStand'].forEach(k=>nv[k]=f[k]); prForm[f.talhao]=nv;
+  route({keepScroll:true}); toast(`Estimativa salva: ${afN(c.sc,1)} sc/ha`); }
+// ---- teclado "Adicionar planta" (números grandes; o botão da categoria guarda o número digitado) ----
+function prTecAbrir(){ const f=prFormAtual(); if(!f) return; prTec={buf:'', p:{}}; prTecRender(); }
+function prTecFechar(){ prTec=null; const o=document.getElementById('pr-tec-ov'); if(o) o.remove(); }
+function prTecRender(){ const f=prFormAtual(); if(!prTec||!f) return; const c=prCalc(f), cs=PR_CAMPOS[f.amostragem];
+  const g=prGraosPl(prTec.p,f.amostragem), sc=prScHa(c.prod,g,c.pms);
+  let ov=document.getElementById('pr-tec-ov'); if(!ov){ ov=document.createElement('div'); ov.id='pr-tec-ov'; ov.className='pr-tec-ov'; document.body.appendChild(ov); }
+  const k=(v,cls,act,extra)=>`<button class="pr-k ${cls||''}" data-act="${act||'prTecDig'}" data-v="${v}"${extra||''}>${v==='⌫'?'⌫':v}</button>`;
+  ov.innerHTML=`<div class="pr-tec" role="dialog">
+    <div class="pr-tec-h"><button class="icon-btn" data-act="prTecFechar" title="Fechar">✕</button><h3>Adicionar ${f.amostragem==='espiga'?'espiga':'planta'} <small>(${f.plantas.length+1})</small></h3><span></span></div>
+    <div class="pr-tec-chips">${cs.map(([key,l])=>`<span class="${prTec.p[key]!=null?'on':''}">${l}: <b>${prTec.p[key]!=null?esc(String(prTec.p[key])):'—'}</b></span>`).join('')}</div>
+    <div class="pr-tec-vis"><span class="pr-tec-num">${esc(prTec.buf||'0')}</span><span class="pr-tec-sc">${sc!=null?afN(sc,1):'0'} sc/ha</span></div>
+    <div class="pr-tec-g ${f.amostragem}">
+      ${k('7')}${k('8')}${k('9')}${f.amostragem==='planta'?k('Nós improdutivos','pr-cat','prTecCat',' data-k="nosImp"'):k('Fileiras','pr-cat','prTecCat',' data-k="fileiras"')}
+      ${k('4')}${k('5')}${k('6')}${f.amostragem==='planta'?k('Nós','pr-cat','prTecCat',' data-k="nos"'):k('Grãos por fileira','pr-cat','prTecCat',' data-k="grFil"')}
+      ${k('1')}${k('2')}${k('3')}${f.amostragem==='planta'?k('Vagens','pr-cat','prTecCat',' data-k="vagens"'):'<span></span>'}
+      ${k(',')}${k('0')}${k('OK','pr-ok','prTecOk')}${f.amostragem==='planta'?k('Grãos','pr-cat','prTecCat',' data-k="graos"'):'<span></span>'}
+      ${k('⌫','','prTecBs')}${k('Limpar','pr-limpar','prTecLimpar')}
+    </div>
+    <p class="mut" style="font-size:11.5px;text-align:center;margin:6px 0 0">Digite o número e toque no que ele é (${cs.map(x=>x[1]).join(', ')}). <b>OK</b> guarda e já abre a próxima.</p></div>`; }
+function prTecAcao(a){ const f=prFormAtual(); if(!prTec||!f) return;
+  if(a.act==='prTecDig'){ if(a.v===','){ if(!prTec.buf.includes(',')) prTec.buf=(prTec.buf||'0')+','; } else if(prTec.buf.length<7) prTec.buf=(prTec.buf==='0'?'':prTec.buf)+a.v; }
+  else if(a.act==='prTecBs') prTec.buf=prTec.buf.slice(0,-1);
+  else if(a.act==='prTecLimpar'){ prTec.buf=''; prTec.p={}; }
+  else if(a.act==='prTecCat'){ if(prTec.buf===''){ toast('Digite o número primeiro'); return; } prTec.p[a.k]=prTec.buf; prTec.buf=''; }
+  else if(a.act==='prTecOk'){ if(prTec.buf!==''){ toast('Toque no que é o número '+prTec.buf+' antes do OK'); return; }
+    if(!(prGraosPl(prTec.p,f.amostragem)>0)){ toast(f.amostragem==='espiga'?'Informe fileiras e grãos por fileira':'Informe os grãos da planta'); return; }
+    f.plantas.push(prTec.p); prTec={buf:'',p:{}}; prAtualiza(f); const l=document.querySelector('.af-sec'); if(l) l.outerHTML=prPlantasHtml(f); }
+  prTecRender(); }
 /* ============ NOVA AÇÃO (tocar no talhão no mapa) ============ */
 const NA_ITENS=[
   {k:'anot',lbl:'Anotação',sub:'Registrar anotações sobre a situação atual do talhão.',ico:'📝',cls:'na-azul',go:t=>'#/ocorrencia/anotacao~'+t},
@@ -6559,7 +6730,7 @@ const NA_ITENS=[
   {k:'afer',lbl:'Aferição',sub:'Pulverizador, perda na colheita e semeadura (adubo/sementes).',ico:'🧮',cls:'na-verde',sub2:'afer'},
   {k:'apl',lbl:'Aplicação',sub:'Operações do talhão: registrar a execução.',ico:'🚿',cls:'na-ciano',go:t=>'#/campo/'+t},
   {k:'stand',lbl:'Stand',sub:'Registrar contagens de stand.',ico:'📏',cls:'na-ciano',go:t=>'#/stand/'+t},
-  {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',breve:1},
+  {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',go:t=>'#/produtividade/'+t},
   {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',sub2:'outras'} ];
 function novaAcaoFechar(){ const o=document.getElementById('na-ov'); if(o) o.remove(); }
 function novaAcaoOpen(tid, sub){
@@ -6586,8 +6757,10 @@ window.addEventListener('hashchange', novaAcaoFechar);
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
   if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
   else if(el.matches('[data-oc]') && el.type!=='checkbox' && el.tagName!=='SELECT'){ const f=ocFormAtual(); if(f){ f[el.dataset.oc]=el.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } }
+  else if(el.matches('input[data-pr]')){ const f=prFormAtual(); if(f){ f[el.dataset.pr]=el.value; if(el.dataset.pr==='estab') f.estabStand=false; prAtualiza(f); } }
   else if(el.matches('[data-afam]')){ const f=afFormAtual(); if(f){ f.am[+el.dataset.afam]=el.value; afAtualizaRes(f); } } });
-document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ novaAcaoFechar(); standTrenaFechar(); } });
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ novaAcaoFechar(); standTrenaFechar(); prTecFechar(); } });
+window.addEventListener('hashchange', ()=>{ prTecFechar(); standTrenaFechar(); });
 /* ============ RECOMENDAÇÃO DE APLICAÇÃO (receituário → envio → retorno → aprovação) ============
    Fluxo: rascunho → enviada (WhatsApp ao operador) → retorno (Adm registra o volume utilizado)
    → aprovada (vira histórico de aplicação no talhão / timeline). Tudo salvo no aparelho. */
@@ -7376,7 +7549,7 @@ function numBR(v){ if(typeof v==='number') return isFinite(v)?v:0; let x=String(
 function _mmC(v){ return numBR(v); }
 const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicacao:{lbl:'Aplicação',ico:'🚿',cor:'#2e7d32'},
   monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
-  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, ocorrencia:{lbl:'Ocorrência',ico:'📝',cor:'#c2185b'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
+  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, ocorrencia:{lbl:'Ocorrência',ico:'📝',cor:'#c2185b'}, produtividade:{lbl:'Produtividade',ico:'💰',cor:'#b7791f'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
 // lista unificada de eventos de campo (mais recentes primeiro)
 function camposEventos(){
   const ev=[];
@@ -7384,6 +7557,8 @@ function camposEventos(){
     titulo:(r.categoria?_capf(r.categoria):'Monitoramento'), resumo:[r.alvo, r.nivel?('nível '+r.nivel+(r.unidade?' '+r.unidade:'')):'', r.acao].filter(Boolean).join(' · ')}));
   (CHUVA&&CHUVA.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'chuva',talhao:'',
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
+  (PRODE?prLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'produtividade',talhao:r.talhao,
+    titulo:`Estimativa de produtividade · ${afN(r.scHa,1)} sc/ha`, resumo:`${(r.plantas||[]).length} amostra(s) · ${afN(r.graosPl,1)} grãos/planta · PMS ${r.pms} g${r.estadio?' · '+r.estadio:''}`}));
   (OCOR?ocorLista():[]).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}, nf=(r.fotos||[]).length; ev.push({ts:_tsC(r),data:r.data,tipo:'ocorrencia',talhao:r.talhao,
     titulo:(T.lbl||'Ocorrência')+(r.tipo==='climatica'&&r.evento?' · '+r.evento:''), resumo:ocResumo(r)+(nf?` · 📷 ${nf} foto(s)`:'')}); });
   (STAND?standLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
@@ -8096,11 +8271,11 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
-const MORPH_VIEWS=new Set(['estoque','talhao','talhoes','campo','compras','cotacao','dashboard','dre','resultados','maquinas','empreendimentos','recomendacao','precos','sync','entradas']);
+const MORPH_VIEWS=new Set(['estoque','talhao','talhoes','campo','compras','cotacao','dashboard','dre','resultados','maquinas','empreendimentos','recomendacao','precos','sync','entradas','afericao','stand','ocorrencia','produtividade']);
 let _lastArg=null;
 function morphSyncField(o, nw){
   if(o===document.activeElement) return;                       // não mexe no campo em que a pessoa está
@@ -8397,6 +8572,8 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('input[data-sf="dist"]')){ const f=standFormAtual(); if(f){ f.dist=e.target.checked; route({keepScroll:true}); } return; }
   if(e.target.matches&&e.target.matches('[data-sf="nLin"]')){ const f=standFormAtual(); if(f){ const n=Math.max(1,Math.min(40,Math.round(numBR(e.target.value))||1)); if(n===f.linhas.length) return; while(f.linhas.length<n) f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); f.linhas.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.id==='st-tr-n' && standTrena){ const n=Math.max(1,Math.min(200,Math.round(numBR(e.target.value))||1)); if(n===standTrena.pos.length) return; while(standTrena.pos.length<n) standTrena.pos.push(''); standTrena.pos.length=n; setTimeout(standTrenaRender,0); return; }
+  if(e.target.id==='pr-tal'){ location.hash='#/produtividade/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.matches&&e.target.matches('select[data-pr]')){ const f=prFormAtual(); if(f){ const k=e.target.dataset.pr; f[k]=e.target.value; if(k==='amostragem'){ f.plantas=[]; route({keepScroll:true}); } else prAtualiza(f); } return; }
   if(e.target.id==='oc-tal'){ location.hash='#/ocorrencia/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('input[data-ocfoto]')){ const fs=e.target.files; if(fs&&fs.length) ocFotosAdd(fs); e.target.value=''; return; }
   if(e.target.matches&&e.target.matches('input[type="checkbox"][data-oc]')){ const f=ocFormAtual(); if(f) f[e.target.dataset.oc]=e.target.checked; return; }
@@ -8561,6 +8738,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='naOpen'){ novaAcaoOpen(a.id); return; }
     else if(a.act==='naSub'){ novaAcaoOpen(a.id,a.sub); return; }
     else if(a.act==='ocSalvar'){ ocSalvar(); return; }
+    else if(a.act==='prSalvar'){ prSalvar(); return; }
+    else if(a.act==='prLimpar'){ const f=prFormAtual(); if(f && confirm('Limpar esta estimativa?')){ prForm[f.talhao]=prFormNovo(f.talhao); route({keepScroll:true}); } return; }
+    else if(a.act==='prPlDel'){ const f=prFormAtual(); if(f){ f.plantas.splice(+a.i,1); route({keepScroll:true}); } return; }
+    else if(a.act==='prDel'){ const r=PRODE.reg[a.id]; if(r && confirm('Excluir esta estimativa?')){ r.del=true; r._u=Date.now(); saveProdE(); route({keepScroll:true}); toast('Estimativa excluída'); } return; }
+    else if(a.act==='prTecAbrir'){ prTecAbrir(); return; }
+    else if(a.act==='prTecFechar'){ prTecFechar(); return; }
+    else if(/^prTec/.test(a.act)){ prTecAcao(a); return; }
     else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
     else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=Date.now(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
@@ -9256,7 +9440,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
@@ -9449,6 +9633,7 @@ function applyPulledData(d, raw){
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
+  try{ prApplyPulled(d.produtividade_app); }catch(e){}      // estimativas de produtividade
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
@@ -9601,6 +9786,7 @@ async function syncPush(opts){
   try{ if(aferServerOk() && aferSig()!==lastAferSig) await aferPush({auto:true}); }catch(e){}   // aferições do Campo
   try{ if(standServerOk() && standSig()!==lastStandSig) await standPush({auto:true}); }catch(e){}   // contagens de stand
   try{ if(ocorServerOk()){ await ocorFotosEnviar(); if(ocorSig()!==lastOcorSig) await ocorPush({auto:true}); } }catch(e){}   // ocorrências + fotos
+  try{ if(prServerOk() && prSig()!==lastPrSig) await prPush({auto:true}); }catch(e){}   // estimativas de produtividade
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
@@ -9947,6 +10133,7 @@ function pendingInfo(fe0){
     if(standServerOk() && standSig()!==lastStandSig) add(1, 'contagem(ns) de stand');
     if(ocorServerOk() && ocorSig()!==lastOcorSig) add(1, 'ocorrência(s)');
     add(fotoPend.length, 'foto(s) do campo');
+    if(prServerOk() && prSig()!==lastPrSig) add(1, 'estimativa(s) de produtividade');
     if(deparaServerOk()) add(deparaPendentes().length, 'de-para de NF-e');
     add(nfePend().length, 'nota(s) NF-e a enviar');
   }catch(e){}
@@ -10077,7 +10264,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
