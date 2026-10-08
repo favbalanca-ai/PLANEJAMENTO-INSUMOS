@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-195';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-196';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6233,14 +6233,16 @@ function oqPopOpen(card){
       <div class="oq-pop-f">
         <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="-1" data-key="${esc(key)}"${viz&&viz.i>0?'':' disabled'} title="Passar para antes da operação anterior">‹ Recuar</button>
         <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="1" data-key="${esc(key)}"${viz&&viz.i<viz.lista.length-1?'':' disabled'} title="Passar para depois da próxima operação">Avançar ›</button>
-        <span class="spacer"></span><a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a></div>
+        <span class="spacer"></span>${podeTela('talhao')?`<a class="oq-pop-ver" data-act="oqPlan" data-key="${esc(key)}" title="Abrir esta operação no planejamento do talhão (insumos, doses, DAE)">Ver planejamento ›</a>`:''}<a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a></div>
     </div>`;
   document.body.appendChild(pop); card.classList.add('oq-sel');
   if(innerWidth>640){                                    // computador: embaixo do cartão (ou em cima, se não couber)
     const rc=card.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight;
-    const left=Math.max(8, Math.min(rc.left+rc.width/2-w/2, innerWidth-w-8));
-    let top=rc.bottom+8;                                                     // embaixo do cartão
-    if(top+h>innerHeight-8) top=(rc.top-8-h>=8)?rc.top-8-h:Math.max(8,innerHeight-h-8);   // senão em cima; senão o mais alto que couber
+    let left=Math.max(8, Math.min(rc.left+rc.width/2-w/2, innerWidth-w-8)), top=rc.bottom+8;   // embaixo do cartão
+    if(top+h>innerHeight-8){
+      if(rc.top-8-h>=8) top=rc.top-8-h;                                       // senão em cima
+      else { top=Math.max(8, Math.min(rc.top, innerHeight-h-8));              // senão AO LADO (sem cobrir o cartão)
+        left=(rc.right+8+w<=innerWidth-8)?rc.right+8:Math.max(8, rc.left-8-w); } }
     pop.style.left=(left+scrollX)+'px'; pop.style.top=(top+scrollY)+'px'; }
 }
 // "Mais detalhes" da coluna: a mesma posição de operação em todos os talhões do quadro
@@ -7067,6 +7069,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='afLimpar'){ const f=afFormAtual(); if(f && confirm('Limpar os dados desta aferição?')){ afForm[f.tipo+'|'+f.talhao]=afFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='afDel'){ const r=AFER.reg[a.id]; if(r && confirm('Excluir esta aferição?')){ r.del=true; r._u=Date.now(); saveAfer(); route({keepScroll:true}); toast('Aferição excluída'); } return; }
     else if(a.act==='oqPopClose'){ oqPopClose(); return; }
+    else if(a.act==='oqPlan'){ oqFecharTudo(); const i=a.key.indexOf('|'); collapsedOps.delete(a.key); location.hash='#/talhao/'+encodeURIComponent(a.key.slice(0,i));
+      const ir=fim=>{ const b=document.querySelector(`[data-optoggle="${a.key}"]`), blk=b&&b.closest('.op-block'); if(!blk) return;
+        blk.scrollIntoView({block:'start'}); if(fim){ blk.classList.add('op-flash'); setTimeout(()=>blk.classList.remove('op-flash'), 2400); } };
+      setTimeout(()=>ir(false), 250); setTimeout(()=>ir(true), 650); return; }   // 2ª vez: no celular os blocos acima terminam de se desenhar e mudam a altura
     else if(a.act==='oqMover'){ oqMover(a.key, +a.dir||0); return; }
     else if(a.act==='oqCol'){ oqPopClose(); oqColModal(+a.col||0); return; }
     else if(a.act==='oqColClose'){ oqFecharTudo(); return; }
