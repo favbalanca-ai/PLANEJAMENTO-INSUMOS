@@ -130,6 +130,8 @@ arquivo único `planejamento_app.html` para abrir localmente.
     antes/depois, se diferente da estimada), dias após aplicado, situação e a tabela **Produto · Dose/ha ·
     Total** no talhão (dose realizada quando informada, senão a do plano; extras incluídos) + *Ver aplicação ›*.
     No celular ela aparece presa embaixo; fecha no ✕, tocando fora ou com Esc.
+  - **Ver planejamento ›** (na janelinha; só para quem tem o Planejamento): abre o talhão no Planejamento, já
+    na operação (aberta e destacada em vermelho por alguns segundos) — insumos, doses, DAE e máquina.
   - **‹ Recuar / Avançar ›** (na janelinha): troca a operação de lugar com a anterior/próxima da mesma safra
     do talhão. É só a **ordem de exibição** (quadro e tela do talhão) — vale mesmo com operações concluídas,
     não reescreve a aba do talhão nem mexe em baixas. Fica no registro da operação (`ord`) e sobe para a

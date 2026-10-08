@@ -1467,7 +1467,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-pop-t tbody tr:nth-child(odd){background:#f8fafb}
 .oq-pop-t .num{text-align:right;white-space:nowrap}
 .oq-pop-ver{color:var(--teal);font-weight:700;cursor:pointer;text-decoration:none}
-.oq-pop-f{display:flex;align-items:center;gap:6px;margin-top:4px}
+.oq-pop-f{display:flex;align-items:center;gap:6px 12px;margin-top:4px;flex-wrap:wrap}
 .oq-pop-f .spacer{flex:1}
 .oq-pop-f .btn[disabled]{opacity:.4;cursor:default}
 .oq-col-t{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -1706,3 +1706,8 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-colrow .oq-cell-hoje small{visibility:hidden}
 @media (max-width:640px){ .oq-cell{flex-basis:118px;width:118px} .oq-cell-v{flex-basis:14px;width:14px} .oq-cell-sem{flex-basis:124px;width:124px} }
 @media print{ .oq-cell-hoje::before{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+
+/* "Ver planejamento" do quadro: a operação aberta no talhão pisca para ser achada */
+.op-block{scroll-margin-top:84px}
+.op-block.op-flash{animation:opFlash 2.4s ease-out}
+@keyframes opFlash{0%,40%{box-shadow:0 0 0 3px #d32f2f;background:#fff5f5}100%{box-shadow:none}}
