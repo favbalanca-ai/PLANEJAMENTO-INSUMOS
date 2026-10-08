@@ -6238,9 +6238,11 @@ function oqPopOpen(card){
   document.body.appendChild(pop); card.classList.add('oq-sel');
   if(innerWidth>640){                                    // computador: embaixo do cartão (ou em cima, se não couber)
     const rc=card.getBoundingClientRect(), w=pop.offsetWidth, h=pop.offsetHeight;
-    const left=Math.max(8, Math.min(rc.left+rc.width/2-w/2, innerWidth-w-8));
-    let top=rc.bottom+8;                                                     // embaixo do cartão
-    if(top+h>innerHeight-8) top=(rc.top-8-h>=8)?rc.top-8-h:Math.max(8,innerHeight-h-8);   // senão em cima; senão o mais alto que couber
+    let left=Math.max(8, Math.min(rc.left+rc.width/2-w/2, innerWidth-w-8)), top=rc.bottom+8;   // embaixo do cartão
+    if(top+h>innerHeight-8){
+      if(rc.top-8-h>=8) top=rc.top-8-h;                                       // senão em cima
+      else { top=Math.max(8, Math.min(rc.top, innerHeight-h-8));              // senão AO LADO (sem cobrir o cartão)
+        left=(rc.right+8+w<=innerWidth-8)?rc.right+8:Math.max(8, rc.left-8-w); } }
     pop.style.left=(left+scrollX)+'px'; pop.style.top=(top+scrollY)+'px'; }
 }
 // "Mais detalhes" da coluna: a mesma posição de operação em todos os talhões do quadro
