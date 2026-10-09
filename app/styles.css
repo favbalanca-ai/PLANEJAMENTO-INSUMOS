@@ -1711,3 +1711,5 @@ body[data-embed] .content{padding:10px 10px 24px}
 .op-block{scroll-margin-top:84px}
 .op-block.op-flash{animation:opFlash 2.4s ease-out}
 @keyframes opFlash{0%,40%{box-shadow:0 0 0 3px #d32f2f;background:#fff5f5}100%{box-shadow:none}}
+.est-saldo-f{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.est-saldo-f .sel{min-width:150px}

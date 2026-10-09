@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-196';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-197';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1649,7 +1649,17 @@ function _unBase(u){ u=String(u||'').toUpperCase().replace(/\./g,'');
   if(/^(KG|KGS|QUILO|QUILOS)$/.test(u)) return ['KG',1]; if(u==='G'||u==='GR') return ['KG',0.001]; if(/^(T|TN|TON)$/.test(u)) return ['KG',1000];
   if(/^(L|LT|LTS|LITRO|LITROS)$/.test(u)) return ['L',1]; if(u==='ML') return ['L',0.001]; return null; }
 const _paraUnApp=(q,base,unApp)=>(/^(T|TN|TON)$/i.test(String(unApp||''))&&base==='KG')?q/1000:q;
+// SEMENTES: quantas sementes tem 1 embalagem da nota, lido da descrição ("BIG BAG 5.000.000 SEM", "SC 200.000 SEMENTES",
+// "5MM", "200 MIL SEM"); 0 = não achou. Ex.: app em 5MM e nota "200.000 SEM" → 0,04 bag por embalagem.
+function nfeSementesDe(xprod){ const s=String(xprod||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+  let m=s.match(/(\d{1,3}(?:\.\d{3})+|\d{4,})\s*(?:SEM\b|SEMENTES?\b|SMT\b|SEMEN|S\b|UNID\w*\s*SEM)/);   // 5.000.000 SEM · 200000 SEMENTES
+  if(m) return +m[1].replace(/\./g,'');
+  m=s.match(/(\d+(?:[.,]\d+)?)\s*(?:MM|MILHOES|MILHAO|MI)\b/); if(m) return parseFloat(m[1].replace(',','.'))*1e6;   // 5MM · 5 MILHOES
+  m=s.match(/(\d+(?:[.,]\d+)?)\s*(?:MIL)\b/); if(m) return parseFloat(m[1].replace(',','.'))*1e3;                      // 200 MIL
+  m=s.match(/(\d{1,3}(?:\.\d{3})+)\b/); if(m && +m[1].replace(/\./g,'')>=10000) return +m[1].replace(/\./g,'');   // só o número grande (200.000)
+  return 0; }
 function nfeFatorDe(xprod,ucom,unApp){
+  const sp=semPorUn(unApp); if(sp){ const n=nfeSementesDe(xprod); return n?+(n/sp).toFixed(6):1; }   // semente em bag de N sementes
   const b=_unBase(ucom); if(b) return +_paraUnApp(b[1],b[0],unApp).toFixed(6);          // a nota já vem em kg/L (ou g/mL/t)
   const s=String(xprod||'').toUpperCase().replace(/(\d),(\d)/g,'$1.$2');
   let m=s.match(/(\d+)\s*X\s*(\d+(?:\.\d+)?)\s*(KG|GR|G|LTS|LT|L|ML)\b/);             // CX 10X1KG / 4 X 5 L
@@ -1671,7 +1681,9 @@ function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(
 // ---- estado de cada item na conferência ----
 function nfeItemInicial(nota,it){
   const dp=deparaDe(nota.cnpj,it.cprod);
-  if(dp && (dp.ignorar || PROD[dp.produto])) return Object.assign({},it,{fonte:'auto',produto:dp.ignorar?'':dp.produto,ignorar:!!dp.ignorar,fator:+dp.fator||1,ok:true});
+  if(dp && (dp.ignorar || PROD[dp.produto])){ let fat=+dp.fator||1;
+    if(!dp.ignorar && fat===1 && semPorUn((PROD[dp.produto]||{}).un)) fat=nfeFatorDe(it.xprod,it.ucom,PROD[dp.produto].un);   // semente gravada com fator 1 (antes contava embalagem de 200 mil como bag de 5 milhões)
+    return Object.assign({},it,{fonte:'auto',produto:dp.ignorar?'':dp.produto,ignorar:!!dp.ignorar,fator:fat,ok:true}); }
   const sug=nfeSugereProduto(it.xprod);
   if(sug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
   return Object.assign({},it,{fonte:'novo',produto:'',fator:nfeFatorDe(it.xprod,it.ucom,''),ignorar:false,ok:false}); }
@@ -2399,7 +2411,11 @@ function estoqueSaidas(){
   }
   return m;
 }
-let estoqueQ='', estoqueClasse='', estoqueSoMov=false;
+let estoqueQ='', estoqueClasse='', estoqueSoMov=false, estoqueSaldo='';   // saldo: '' todos · nz não zerado · pos · neg · zero
+const EST_SALDO={'':'Todos os saldos', nz:'Não zerado', pos:'Positivo', neg:'Negativo', zero:'Zerado'};
+const _estSaldoTipo=v=>v>0.0001?'pos':(v<-0.0001?'neg':'zero');
+function estSaldoPassaK(k,tipo){ return !k || (k==='nz'?tipo!=='zero':tipo===k); }
+function estSaldoPassa(tipo){ return estSaldoPassaK(estoqueSaldo,tipo); }
 V.estoque=function(){
   const saidas=estoqueSaidas(), entradas=estoqueEntradas();
   const nomes=new Set();
@@ -2422,7 +2438,7 @@ V.estoque=function(){
   const body=rows.map(r=>{
     const cls=r.saldo<-0.0001?'neg':(r.saldo>0?'ok':'');
     const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0;
-    return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}">
+    return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
       <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
       <td class="num" data-th="Entradas">${r.ent?num(r.ent):'·'}</td>
@@ -2442,6 +2458,7 @@ V.estoque=function(){
     <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
+    <label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
@@ -2462,7 +2479,7 @@ function exportEstoquePDF(){
     const rest=c?Math.max(0,(c.demanda||0)-(c.saida||0)):0, saldo=ini+ent-sai;
     return {produto:n, classe:(p.classe||'').trim()||'—', ativos:p.ativos||'', un:p.un||'', ini, ent, sai, saldo, ped, preco, rest, comprar:c?c.comprar:0}; })
     .filter(r=>!/^MÁQUINA/i.test(r.classe));
-  rows=rows.filter(r=>(!q||(r.produto+' '+r.classe).toLowerCase().includes(q)) && (!estoqueClasse||r.classe===estoqueClasse) && (!estoqueSoMov||r.ini||r.ent||r.sai||r.ped));
+  rows=rows.filter(r=>(!q||(r.produto+' '+r.classe).toLowerCase().includes(q)) && (!estoqueClasse||r.classe===estoqueClasse) && (!estoqueSoMov||r.ini||r.ent||r.sai||r.ped) && estSaldoPassa(_estSaldoTipo(r.saldo)));
   rows=rows.filter(r=>r.ini||r.ent||r.sai||r.ped||r.rest>0);   // no PDF: sem produto parado sem uso
   if(!rows.length){ toast('Nada para o filtro atual'); return; }
   const labels=classeLabels(rows), lbl=r=>labels[classeKey(r.classe)]||r.classe;
@@ -2473,7 +2490,7 @@ function exportEstoquePDF(){
   const g={}; rows.forEach(r=>{ const k=lbl(r); (g[k]=g[k]||[]).push(r); });
   const cls=Object.keys(g).map(k=>({k, rs:g[k], v:g[k].reduce((a,r)=>a+val(r),0), neg:g[k].filter(r=>r.saldo<-0.0001).length, buy:g[k].filter(r=>r.comprar>0.0001).length})).sort((a,b)=>b.v-a.v||a.k.localeCompare(b.k,'pt'));
   const maxV=Math.max(1,...cls.map(c=>c.v)), hoje=fmtDataBR(_hojeISO());
-  const filtros=[estoqueClasse?`Classe: ${estoqueClasse}`:'Todas as classes', q?`Busca: “${estoqueQ}”`:'', estoqueSoMov?'Só com movimento':'Com movimento ou demanda'].filter(Boolean);
+  const filtros=[estoqueClasse?`Classe: ${estoqueClasse}`:'Todas as classes', q?`Busca: “${estoqueQ}”`:'', estoqueSoMov?'Só com movimento':'Com movimento ou demanda', estoqueSaldo?`Saldo: ${EST_SALDO[estoqueSaldo]}`:''].filter(Boolean);
   let h=`<div class="dm">
   <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027</div><h1>Posição de estoque</h1><div class="dm-sub">posição em ${hoje}</div></div>
     <div class="dm-filt">${filtros.map(f=>`<span>${esc(f)}</span>`).join('')}</div></div>
@@ -2507,7 +2524,7 @@ function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
   document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
     const s=tr.getAttribute('data-search')||'', cl=tr.getAttribute('data-classe')||'', mv=tr.getAttribute('data-mov')==='1';
-    const show=(!q||s.includes(q)) && (!estoqueClasse||cl===estoqueClasse) && (!estoqueSoMov||mv);
+    const show=(!q||s.includes(q)) && (!estoqueClasse||cl===estoqueClasse) && (!estoqueSoMov||mv) && estSaldoPassa(tr.getAttribute('data-saldo')||'zero');
     tr.style.display=show?'':'none'; });
 }
 
@@ -6641,7 +6658,7 @@ function route(opts){
   // Preços: re-aplica a busca/filtro do Portfólio após re-renderizar (ex.: ao editar um preço)
   if(view==='precos' && (precoQ || precoSemPreco || precoClasse)) filterPrecos();
   if(view==='timeline' && (timelineTipo || timelineQ)) filterTimeline();
-  if(view==='estoque' && (estoqueQ || estoqueClasse || estoqueSoMov)) filterEstoque();   // antes: editar um número desfazia o filtro
+  if(view==='estoque' && (estoqueQ || estoqueClasse || estoqueSoMov || estoqueSaldo)) filterEstoque();   // antes: editar um número desfazia o filtro
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
@@ -6892,6 +6909,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); if(n===f.am.length) return; while(f.am.length<n) f.am.push(''); f.am.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
+  if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }

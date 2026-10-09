@@ -54,6 +54,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Demanda de Compras** — consolida a demanda de todos os talhões e subtrai o
   **estoque** (editável): `A comprar = máx(0; Demanda − Estoque)`. Itens sem
   preço podem ter o preço preenchido ali.
+- **Estoque → filtro de Saldo** — seletor ao lado da busca: *Todos os saldos · Não zerado · Positivo · Negativo ·
+  Zerado* (com a contagem de cada um); combina com a classe, a busca e "só com movimento", e vale também para
+  o **Relatório PDF**.
+- **NF-e de SEMENTE** — quando a unidade do produto no app é de sementes (**5MM**, 60MIL…), o fator de conversão
+  sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
+  SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
+  Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
 - **Estoque (também no Administrativo)** — a mesma tela aparece nos módulos Planejamento e
   Administrativo (`VIEW_MOD.estoque='both'`, `TELA_MODS.estoque`); abrir por um módulo não troca de módulo.
   Operador com acesso ao Administrativo vê e edita o estoque inicial e o "em pedido".
