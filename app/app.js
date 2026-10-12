@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-197';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-198';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4081,12 +4081,12 @@ function campoAppOut(talId, tagoi, opItens, r){
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
   const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
     return `<tr><td>${esc(x.produto)}</td>
-      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td>
-      <td class="num">${haPorTanque?num(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
+      <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
+      <td class="num">${haPorTanque?fmtDose(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
     return `<tr><td>${esc(x.produto)}</td>
-      <td class="num">${num(x.dose)}<small> ${esc(x.un)}/ha</small></td>
-      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
+      <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
+      <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
   let html=`<div class="app-stats">
       ${stat('Área do talhão',num(area)+' ha')}
       ${liq.length?stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—'):''}
@@ -4472,7 +4472,7 @@ function standTrenaAbrir(i){ const f=standFormAtual(), l=f&&f.linhas[i]; if(!l) 
 function standTrenaRender(){ const tr=standTrena; if(!tr) return; let ov=document.getElementById('st-tr-ov');
   if(!ov){ ov=document.createElement('div'); ov.id='st-tr-ov'; ov.className='modal-ov'; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="modal-box st-tr">
-    <div class="modal-head"><button class="icon-btn" data-act="stTrFechar" title="Cancelar">✕</button><h3>Posição das Plantas (em cm) · linha ${tr.i+1}</h3><button class="icon-btn st-ok" data-act="stTrOk" title="Confirmar">✓</button></div>
+    <div class="modal-head"><button class="icon-btn" data-act="stTrFechar" title="Cancelar">✕</button><h3>Posição das Plantas (em cm) · linha ${tr.i+1}</h3><button class="icon-btn st-tr-ok" data-act="stTrOk" title="Confirmar">✓</button></div>
     <p class="mut" style="font-size:13px;margin:0 0 8px">Informe a medida na trena em que cada uma das plantas foi encontrada. A primeira planta está preenchida no início da trena.</p>
     <label class="af-n" style="margin-bottom:8px">Número de plantas<input class="cell" inputmode="numeric" id="st-tr-n" value="${tr.pos.length}"></label>
     <div class="st-tr-list">${tr.pos.map((v,k)=>`<div class="st-tr-p"><span class="st-tr-ico">🌱</span><span>Planta ${k+1}</span><input class="cell" inputmode="decimal" data-trp="${k}" value="${esc(v)}" placeholder="Medida na trena">${k?`<button class="icon-btn" data-act="stTrDel" data-k="${k}" title="Remover">✕</button>`:'<span style="width:30px"></span>'}</div>`).join('')}</div>
@@ -6419,8 +6419,8 @@ V.campo = function(arg){
       const diff=rv!=='' && +rv!==+it.dose;
       return `<tr>
         <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b></td>
-        <td class="num ci-plan">${num(it.dose)}<small> ${esc(it.un||'')}</small></td>
-        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${num(it.dose)}"></td>
+        <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
+        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}"></td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">

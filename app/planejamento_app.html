@@ -24,6 +24,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
+/* iPhone: sem o "elástico" ao rolar até o fim — ele levava o menu de baixo junto */
+html,body{overscroll-behavior-y:none}
 /* iPhone: não aumenta a letra sozinho ao girar a tela (deitado) */
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -754,6 +756,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
   .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
+  /* menu de baixo preso no rodapé: camada própria (o Safari do iPhone não o arrasta na rolagem rápida) */
+  .sidebar{transform:translate3d(0,0,0);-webkit-transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden}
   /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
   .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px;flex-wrap:wrap}.safra-chip{display:none}
   .topbar-right{margin-left:auto}   /* sincronização + edições não empurram a tela para o lado */
@@ -1604,7 +1608,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 .st-trena{min-width:44px;white-space:nowrap}
 .st-tr{width:min(520px,100%)}
 .st-tr .modal-head h3{text-align:center;font-size:16px}
-.st-ok{color:var(--green);font-weight:800;font-size:18px}
+.st-tr-ok{color:var(--green);font-weight:800;font-size:18px}
 .st-tr-list{overflow:auto;max-height:58vh;display:flex;flex-direction:column}
 .st-tr-p{display:grid;grid-template-columns:26px 74px 1fr 30px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eef2f4}
 .st-tr-p .cell{width:100%}
@@ -1827,7 +1831,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-197';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-198';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5906,12 +5910,12 @@ function campoAppOut(talId, tagoi, opItens, r){
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
   const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
     return `<tr><td>${esc(x.produto)}</td>
-      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td>
-      <td class="num">${haPorTanque?num(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
+      <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
+      <td class="num">${haPorTanque?fmtDose(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
     return `<tr><td>${esc(x.produto)}</td>
-      <td class="num">${num(x.dose)}<small> ${esc(x.un)}/ha</small></td>
-      <td class="num">${num(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
+      <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
+      <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
   let html=`<div class="app-stats">
       ${stat('Área do talhão',num(area)+' ha')}
       ${liq.length?stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—'):''}
@@ -6297,7 +6301,7 @@ function standTrenaAbrir(i){ const f=standFormAtual(), l=f&&f.linhas[i]; if(!l) 
 function standTrenaRender(){ const tr=standTrena; if(!tr) return; let ov=document.getElementById('st-tr-ov');
   if(!ov){ ov=document.createElement('div'); ov.id='st-tr-ov'; ov.className='modal-ov'; document.body.appendChild(ov); }
   ov.innerHTML=`<div class="modal-box st-tr">
-    <div class="modal-head"><button class="icon-btn" data-act="stTrFechar" title="Cancelar">✕</button><h3>Posição das Plantas (em cm) · linha ${tr.i+1}</h3><button class="icon-btn st-ok" data-act="stTrOk" title="Confirmar">✓</button></div>
+    <div class="modal-head"><button class="icon-btn" data-act="stTrFechar" title="Cancelar">✕</button><h3>Posição das Plantas (em cm) · linha ${tr.i+1}</h3><button class="icon-btn st-tr-ok" data-act="stTrOk" title="Confirmar">✓</button></div>
     <p class="mut" style="font-size:13px;margin:0 0 8px">Informe a medida na trena em que cada uma das plantas foi encontrada. A primeira planta está preenchida no início da trena.</p>
     <label class="af-n" style="margin-bottom:8px">Número de plantas<input class="cell" inputmode="numeric" id="st-tr-n" value="${tr.pos.length}"></label>
     <div class="st-tr-list">${tr.pos.map((v,k)=>`<div class="st-tr-p"><span class="st-tr-ico">🌱</span><span>Planta ${k+1}</span><input class="cell" inputmode="decimal" data-trp="${k}" value="${esc(v)}" placeholder="Medida na trena">${k?`<button class="icon-btn" data-act="stTrDel" data-k="${k}" title="Remover">✕</button>`:'<span style="width:30px"></span>'}</div>`).join('')}</div>
@@ -8244,8 +8248,8 @@ V.campo = function(arg){
       const diff=rv!=='' && +rv!==+it.dose;
       return `<tr>
         <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b></td>
-        <td class="num ci-plan">${num(it.dose)}<small> ${esc(it.un||'')}</small></td>
-        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${num(it.dose)}"></td>
+        <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
+        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}"></td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
