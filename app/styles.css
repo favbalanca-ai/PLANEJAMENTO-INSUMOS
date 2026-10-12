@@ -1316,7 +1316,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .cr-st.ok{color:#2e7d32}
 .cr-st.pend{color:#8a6d00;background:#fff3cd;border-radius:6px;padding:1px 6px}
 .cr-obs{font-size:12px;padding:6px 0 0}
-.cr-foot{display:flex;justify-content:flex-end;padding-top:6px}
+.cr-foot{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding-top:6px}
 .cr-foot .del{color:#b3261e}
 @media (max-width:640px){
   .cr-head{display:none}
@@ -1717,3 +1717,4 @@ body[data-embed] .content{padding:10px 10px 24px}
 @keyframes opFlash{0%,40%{box-shadow:0 0 0 3px #d32f2f;background:#fff5f5}100%{box-shadow:none}}
 .est-saldo-f{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--muted)}
 .est-saldo-f .sel{min-width:150px}
+.cr-reclass{width:28px;height:28px;min-width:28px;min-height:28px;padding:0;font-size:14px;margin-left:4px}

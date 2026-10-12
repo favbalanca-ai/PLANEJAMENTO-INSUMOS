@@ -214,17 +214,21 @@ function writeRealizadoApp(map){
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO']];
   for (var kk in cur){ rows.push([kk, JSON.stringify(cur[kk]), (cur[kk] && cur[kk]._u)||'']); }
-  regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
+  _keyTexto_(s, rows.length); regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
 }
 // mapa genérico chave->JSON (merge por chave pelo _u) numa aba KEY|JSON|ATUALIZADO — usado por Resultados
+// KEY lida como TEXTO: uma chave de NF-e (44 dígitos) gravada sem formato de texto vira número (3.1e+43) e
+// perde os dígitos — nesse caso vale o id de dentro do JSON. A coluna passa a ser formatada como texto ao gravar.
 function readMapApp(name){
   var b = ss(), s = b.getSheetByName(name), out = {};
   if (!s) return out; var last = s.getLastRow(); if (last < 2) return out;
   var v = s.getRange(2,1,last-1,2).getValues();
-  for (var i=0;i<v.length;i++){ var k=S(v[i][0]); if(!k) continue; try { out[k]=JSON.parse(v[i][1]); } catch(e){} }
+  for (var i=0;i<v.length;i++){ var k=S(v[i][0]); if(!k) continue;
+    try { var o=JSON.parse(v[i][1]); if (o && typeof o.id === 'string' && o.id && (typeof v[i][0] !== 'string' || k !== o.id)) k = o.id; out[k]=o; } catch(e){} }
   return out;
 }
+function _keyTexto_(s, n){ try { s.getRange(1, 1, Math.max(n, 2), 1).setNumberFormat('@'); } catch (e) {} }
 function writeMapApp(name, map){
   map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
   var cur = readMapApp(name);
@@ -232,7 +236,7 @@ function writeMapApp(name, map){
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO']];
   for (var kk in cur){ rows.push([kk, JSON.stringify(cur[kk]), (cur[kk] && cur[kk]._u)||'']); }
-  regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
+  _keyTexto_(s, rows.length); regrava_(s, rows, 3); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
 }
 // ---- AFERIÇÕES do Campo (pulverizador, perda na colheita, semeadura adubo/sementes) ----
@@ -247,7 +251,7 @@ function writeMapAppLeg_(name, map, cab, linhaFn){
     var iu = +inc._u||0, lu = (cur[k] && +cur[k]._u)||0; if(!cur[k] || iu>=lu) cur[k]=inc; }
   var rows = [['KEY','JSON','ATUALIZADO'].concat(cab)];
   for (var kk in cur){ var r = cur[kk] || {}; rows.push([kk, JSON.stringify(r), r._u||''].concat(linhaFn(r))); }
-  regrava_(s, rows, 3 + cab.length); try { s.setFrozenRows(1); } catch(e){}
+  _keyTexto_(s, rows.length); regrava_(s, rows, 3 + cab.length); try { s.setFrozenRows(1); } catch(e){}
   return { rows: rows.length-1 };
 }
 function writeAfericoesApp(map){
