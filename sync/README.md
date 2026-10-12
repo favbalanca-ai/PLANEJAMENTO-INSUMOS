@@ -78,6 +78,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   PLANTAS · SC/HA · QUEM · REGISTRO**. As plantas amostradas (nós, vagens, grãos / fileiras × grãos) ficam no
   JSON. Volta como **`produtividade_app`**.
 
+## Chave da NF-e como texto nas abas KEY|JSON (conserto)
+- Uma chave de 44 dígitos gravada numa célula sem formato de texto vira **número** (3,1E+43) e perde os
+  dígitos: na **COMPRAS APP** isso criava um registro "fantasma" em cada aparelho e fazia o app reenviar a
+  compra a cada puxar. Agora `readMapApp` usa o **id de dentro do JSON** quando a KEY está estragada, e toda
+  gravação (`writeMapApp`, `writeMapAppLeg_`, REALIZADO APP) formata a coluna A como **texto** (`@`) antes de
+  escrever — a primeira gravação depois de atualizar o Code.gs conserta a aba.
+- `__nfeClassifica` numa nota já RECEBIDA **substitui** os itens (NFE ITENS) e a data; a entrada no razão vai
+  pelo `__entrada` normal (id = chave → `movDeleteBySource` antes de regravar).
+
 ## Configurar (uma vez)
 1. Abra a sua planilha (a fonte da verdade) no Google Sheets.
 2. **Extensões → Apps Script**.

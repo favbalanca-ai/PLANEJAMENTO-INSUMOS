@@ -57,6 +57,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Estoque → filtro de Saldo** — seletor ao lado da busca: *Todos os saldos · Não zerado · Positivo · Negativo ·
   Zerado* (com a contagem de cada um); combina com a classe, a busca e "só com movimento", e vale também para
   o **Relatório PDF**.
+- **NF-e → ♻️ Reclassificar nota já recebida** — em *Compras registradas* (botão na nota vinda do XML, nas duas
+  visões) ou na seção *♻️ Reclassificar uma nota já recebida* (lista as notas RECEBIDAS da planilha). Abre a
+  conferência de novo (data da entrada anterior, itens do de-para); ao confirmar com **Regravar entrada**, a
+  entrada é **substituída** — mesma chave no razão (`[#chave]`), em NFE ITENS, no de-para e em COMPRAS APP —
+  sem duplicar. Até a regravação subir, o estoque já desconta a entrada antiga (`subst`). Importar o mesmo XML
+  por fora continua bloqueado (a mensagem aponta o Reclassificar).
 - **NF-e de SEMENTE** — quando a unidade do produto no app é de sementes (**5MM**, 60MIL…), o fator de conversão
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
