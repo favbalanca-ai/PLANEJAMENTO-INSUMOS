@@ -7,6 +7,8 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
+/* iPhone: sem o "elástico" ao rolar até o fim — ele levava o menu de baixo junto */
+html,body{overscroll-behavior-y:none}
 /* iPhone: não aumenta a letra sozinho ao girar a tela (deitado) */
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
@@ -737,6 +739,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .main{padding-bottom:calc(66px + env(safe-area-inset-bottom,0px))}
   .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
+  /* menu de baixo preso no rodapé: camada própria (o Safari do iPhone não o arrasta na rolagem rápida) */
+  .sidebar{transform:translate3d(0,0,0);-webkit-transform:translate3d(0,0,0);will-change:transform;backface-visibility:hidden}
   /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
   .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px;flex-wrap:wrap}.safra-chip{display:none}
   .topbar-right{margin-left:auto}   /* sincronização + edições não empurram a tela para o lado */
@@ -1587,7 +1591,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 .st-trena{min-width:44px;white-space:nowrap}
 .st-tr{width:min(520px,100%)}
 .st-tr .modal-head h3{text-align:center;font-size:16px}
-.st-ok{color:var(--green);font-weight:800;font-size:18px}
+.st-tr-ok{color:var(--green);font-weight:800;font-size:18px}
 .st-tr-list{overflow:auto;max-height:58vh;display:flex;flex-direction:column}
 .st-tr-p{display:grid;grid-template-columns:26px 74px 1fr 30px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid #eef2f4}
 .st-tr-p .cell{width:100%}
