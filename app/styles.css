@@ -1718,3 +1718,11 @@ body[data-embed] .content{padding:10px 10px 24px}
 .est-saldo-f{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--muted)}
 .est-saldo-f .sel{min-width:150px}
 .cr-reclass{width:28px;height:28px;min-width:28px;min-height:28px;padding:0;font-size:14px;margin-left:4px}
+/* Campo: produto planejado tirado desta aplicação */
+tr.ci-off td{opacity:.55}
+tr.ci-off .ci-prod b{text-decoration:line-through}
+.ci-off-tag{font-size:10.5px;font-weight:700;color:#b45309;background:#fff3c4;border-radius:8px;padding:1px 6px;margin-left:4px;white-space:nowrap}
+.ci-x{margin-left:4px;width:30px;height:30px;min-width:30px;min-height:30px;padding:0;font-size:13px;color:var(--muted)}
+.ci-x.on{color:var(--teal);font-size:15px}
+.ci-real{white-space:nowrap}
+@media (max-width:640px){ .ci-real input{width:62px} .ci-x{margin-left:2px;width:26px;min-width:26px;height:28px;min-height:28px} .ci-off-tag{display:block;margin:2px 0 0;width:max-content} }
