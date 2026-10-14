@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-202';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-203';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5056,10 +5056,17 @@ window.addEventListener('hashchange', novaAcaoFechar);
 // da tela. Enquanto o teclado está aberto o menu some; ao fechar, um empurrãozinho na rolagem faz o Safari recolocá-lo.
 // Vale dos dois jeitos: (1) caixa de texto em foco = teclado aberto (não depende de aviso do Safari); (2) viewport visual menor.
 const _ehCampo=el=>!!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !/^(checkbox|radio|button|submit|file|range)$/.test(el.type||''));
+// Só esconde com uma caixa EM FOCO. Se este aparelho avisa o teclado pela viewport visual (_vvSabe), o teclado fechado
+// mostra o menu de volta mesmo que a caixa continue em foco; se nunca avisou, vale só o foco. Zoom sem foco não esconde.
+let _vvSabe=false;
 function navTeclado(h, top){ const vv=window.visualViewport, H=window.innerHeight;
-  const alt=(h!=null?h:(vv?vv.height:H)), foco=_ehCampo(document.activeElement), aberto=foco || (H-alt)>140;
+  const alt=(h!=null?h:(vv?vv.height:H)), dif=H-alt, foco=_ehCampo(document.activeElement);
+  if(foco && dif>140) _vvSabe=true;
+  const aberto=foco && (_vvSabe ? dif>140 : true);
   const era=document.body.classList.contains('kb-aberto'); document.body.classList.toggle('kb-aberto', aberto);
   if(era && !aberto){ const x=window.scrollX, y=window.scrollY; window.scrollTo(x, y+1); window.scrollTo(x, y); } return aberto; }
+// segurança: se por algum motivo o menu ficou escondido sem caixa em foco, mostra de novo
+setInterval(()=>{ if(document.body.classList.contains('kb-aberto') && !_ehCampo(document.activeElement)) navTeclado(); }, 1500);
 if(window.visualViewport){ window.visualViewport.addEventListener('resize', ()=>navTeclado()); window.visualViewport.addEventListener('scroll', ()=>{ if(document.body.classList.contains('kb-aberto')) navTeclado(); }); }
 document.addEventListener('focusin', e=>{ if(_ehCampo(e.target)) navTeclado(); });
 document.addEventListener('focusout', ()=>{ setTimeout(()=>navTeclado(), 60); setTimeout(()=>navTeclado(), 350); });
