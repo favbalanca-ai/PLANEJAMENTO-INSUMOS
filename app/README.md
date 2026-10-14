@@ -245,10 +245,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
 
 ## iPhone: zoom e girar a tela
 
-- **iPhone: menu de baixo × teclado** — com o teclado aberto o Safari prende o menu fixo no topo do teclado e, ao
-  fechar, ele ficava parado no meio da tela. Agora `navTeclado()` (visualViewport `resize` + `focusout`) esconde
-  o menu enquanto o teclado está aberto (`body.kb-aberto`) e, ao fechar, dá um empurrão de 1px na rolagem para
-  o Safari recolocá-lo no rodapé.
+- **Celular: a janela não rola — só o conteúdo** (`body{overflow:hidden}`, `#app{height:100%}`, `.main{overflow-y:auto}`)
+  e o **menu de baixo é um pedaço normal do rodapé** (`position:static`, último item do flex), sem
+  `position:fixed`. Motivo: no Safari do iPhone o menu fixo subia com a rolagem e ficava parado no meio da tela
+  (com ou sem teclado). A barra do topo continua `sticky` dentro do `.main`; `route({toTop})` e `rolarTopo()`
+  zeram o `.main`; `scrollIntoView` funciona igual. No computador nada muda.
 - No celular, todo campo (input/select/textarea) tem letra de **16px**: com menos, o Safari do iPhone dá
   **zoom sozinho** ao tocar e a página fica ampliada (a barra de baixo ia parar no meio da tela).
 - `text-size-adjust:100%`: o iPhone não aumenta a letra ao girar a tela.

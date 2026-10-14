@@ -3,7 +3,7 @@
    (cache:'no-store' também fura o cache HTTP do navegador/GitHub Pages).
    Ao ativar, apaga qualquer cache de versões antigas. O worker só existe para o
    app continuar "instalável" (PWA) e para dar uma mensagem clara quando não há internet. */
-const VERSAO = 'nocache-v69';   // mudar este texto força os aparelhos a trocarem o worker
+const VERSAO = 'nocache-v70';   // mudar este texto força os aparelhos a trocarem o worker
 
 self.addEventListener('install', () => { self.skipWaiting(); });   // assume na hora, sem esperar fechar as abas
 
