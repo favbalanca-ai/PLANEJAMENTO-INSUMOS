@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-199';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-200';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3892,7 +3892,7 @@ function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status
 function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
   && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)
-  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!=='')) && r.ord==null) delete OV.realizado[key]; }
+  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!=='')) && r.ord==null && !(r.excl&&Object.keys(r.excl).length)) delete OV.realizado[key]; }
 // localiza operação a partir da chave "TL|tagOp"
 function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), tagoi=key.slice(i+1);
   const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
@@ -3903,8 +3903,11 @@ function durHoras(a,b){ if(!a||!b) return null; const pa=a.split(':'),pb=b.split
 // classifica o insumo pela unidade: 'L' = líquido (vai na calda); demais = sólido (distribuição)
 function isLiquido(un){ const u=(un||'').trim().toLowerCase(); return u==='l'||u==='lt'||u==='ml'||u==='litro'||u==='cc'; }
 // itens efetivos da operação (dose realizada, se houver, senão a planejada) + extras
+// produto planejado TIRADO desta aplicação (só no Campo: r.excl[iid]=true) — o planejamento do talhão não muda
+const iidDe=it=>it.kind==='base'?String(it.ii):'a'+it.ai;
+function itemFora(r,it){ return !!(r && r.excl && r.excl[iidDe(it)]); }
 function campoItems(talId, tagoi, opItens, r){
-  return effItems(talId,tagoi,opItens).map(it=>{
+  return effItems(talId,tagoi,opItens).filter(it=>!itemFora(r,it)).map(it=>{
     const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
     return {produto:it.produto,un:it.un,dose};
@@ -3927,7 +3930,7 @@ function tsBagLbl(un){ const u=String(un||'').trim().toUpperCase(); if(semPorUn(
 function tsCalc(key, rl){
   const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t||!fk.op) return null;
   rl=rl||realOf(key)||{}; const cfg=rl.ts||{};
-  const its=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto);
+  const its=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto && !itemFora(rl,it));
   const sem=its.find(_isSemente), prods=its.filter(_isTS);
   if(!sem||!prods.length) return null;
   const area=areaDe(t)||0, semDose=+sem.dose||0, semUn=sem.un||'', bl=tsBagLbl(semUn);
@@ -4018,7 +4021,7 @@ function plantioCalc(key, rl){
   const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t||!fk.op) return null;
   rl=rl||realOf(key)||{}; const cfg=rl.ts||{};
   const its=campoItems(fk.talId,fk.tagoi,fk.op.itens,rl);
-  const all=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto);
+  const all=effItems(fk.talId,fk.tagoi,fk.op.itens).filter(it=>it.produto && !itemFora(rl,it));
   const sem=all.find(_isSemente); if(!sem) return null;
   const tsSt=(cfg.st)||'', temTS=all.some(_isTS);
   const area=areaDe(t)||0, semUn=sem.un||'', bl=tsBagLbl(semUn);
@@ -5105,8 +5108,9 @@ function recomCalda(r){
 function recomItensFromOp(t, opKey){
   const o=opsDoTalhao(t).find(x=>x.key===opKey); if(!o) return [];
   const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
-  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)))
-    .map(it=>({produto:it.produto, un:it.un||'', dose:+it.dose||0, real:null}));
+  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
+    .map(it=>({produto:it.produto, un:it.un||'', dose:+it.dose||0, real:null}))
+    .concat(((rl&&rl.extras)||[]).filter(e=>e.produto).map(e=>({produto:e.produto, un:(PROD[e.produto]&&PROD[e.produto].un)||'', dose:+e.dose||0, real:null, extra:true})));   // extras do Campo entram
 }
 function recomCreate(talId, opKey){
   const t=findTalhao(talId); if(!t) return null;
@@ -5143,6 +5147,7 @@ function recomFromCampoOp(opKey){
     const mq=opMaqCampo(t, {key:opKey, tag:opKey[i+1], oi:+opKey.slice(i+2), op:opFromKey(opKey).op}, rl||{}); if(mq) r.maquina=mq; }
   // tanque e vazão: SEMPRE os atuais do Campo enquanto o operador não respondeu
   // (antes copiava só na 1ª vez — corrigir o tanque no Campo não mudava o PDF/WhatsApp)
+  if(!ehPlantio && !r.retorno) r.itens=recomItensFromOp(t, opKey);   // aplicação: segue o Campo (produto tirado sai, extra entra, dose do plano)
   if(!ehPlantio && !r.retorno && rl && rl.app){
     if(rl.app.vazao!=null && rl.app.vazao!=='') r.calda=String(rl.app.vazao);
     if(rl.app.tanque!=null && rl.app.tanque!=='') r.tanque=String(rl.app.tanque); }
@@ -6150,7 +6155,7 @@ function fillDosesFromBaixa(key){
   const area=areaDe(t)||0; if(!area) return;
   const o=opsDoTalhao(t).find(x=>x.key===key); if(!o) return;
   rl.doses=rl.doses||{};
-  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto || itemFora(rl,it)) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const vol=(rl.baixa[it.produto]!=null)?+rl.baixa[it.produto]:null;
     if(vol!=null) rl.doses[iid]=+(vol/area).toFixed(4); });
 }
@@ -6174,7 +6179,7 @@ function finalizarOpModal(key){
   const i=key.indexOf('|'); if(i<0) return; const talId=key.slice(0,i), t=findTalhao(talId); if(!t){ toast('Talhão não encontrado'); return; }
   const o=opsDoTalhao(t).find(x=>x.key===key); if(!o){ toast('Operação não encontrada'); return; }
   const area=areaDe(t), r=realEnsure(key), agg={};
-  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto || itemFora(r,it)) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const doseHa=(r.doses&&(iid in r.doses)&&r.doses[iid]!=='')?+r.doses[iid]:(+it.dose||0);
     if(!agg[it.produto]) agg[it.produto]={un:it.un||'',vol:0}; agg[it.produto].vol+=doseHa*area; });
   (r.extras||[]).forEach(ex=>{ if(!ex.produto) return; if(!agg[ex.produto]) agg[ex.produto]={un:(PROD[ex.produto]&&PROD[ex.produto].un)||'',vol:0}; agg[ex.produto].vol+=(+ex.dose||0)*area; });
@@ -6268,7 +6273,7 @@ function oqCard(t,o,n,f,hoje){
 const _oqN=(v,d)=>(+v||0).toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:d});
 function oqProdutos(t,o,r){
   const area=areaDe(t), out=[];
-  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
+  effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto || itemFora(r,it)) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const dose=(r.doses&&(iid in r.doses)&&r.doses[iid]!=='')?+r.doses[iid]:(+it.dose||0);
     out.push({p:it.produto, dh:doseHaUn(dose,it.un||'')}); });
   (r.extras||[]).forEach(ex=>{ if(ex.produto) out.push({p:ex.produto, extra:1, dh:doseHaUn(+ex.dose||0,(PROD[ex.produto]&&PROD[ex.produto].un)||'')}); });
@@ -6461,11 +6466,12 @@ V.campo = function(arg){
     const insRows=items.map(it=>{
       const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
       const rv=(r.doses&&(iid in r.doses))?r.doses[iid]:'';
-      const diff=rv!=='' && +rv!==+it.dose;
-      return `<tr>
-        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b></td>
+      const diff=rv!=='' && +rv!==+it.dose, fora=itemFora(r,it), trava=r.status==='concluido';
+      return `<tr${fora?' class="ci-off"':''}>
+        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}</td>
         <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
-        <td class="num ci-real"><input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}"></td>
+        <td class="num ci-real">${fora?'<span class="mut">—</span>':`<input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}">`}
+          ${trava?'':`<button class="icon-btn ci-x${fora?' on':''}" data-act="realExcl" data-key="${esc(o.key)}" data-iid="${iid}" title="${fora?'Voltar a usar este produto nesta aplicação':'Tirar este produto desta aplicação (o planejamento não muda)'}">${fora?'↩':'✕'}</button>`}</td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
@@ -6486,7 +6492,8 @@ V.campo = function(arg){
     if(r.status==='concluido') prazo=`<span class="cp-tag ok">✔ ${r.data?fmtDataBR(r.data):'concluída'}</span>`;
     else if(r.status==='cancelado') prazo=`<span class="cp-tag">🚫 não será realizada</span>`;
     else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
-    const resumo=(o.items||[]).map(it=>`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join(' · ');
+    const resumo=(o.items||[]).map(it=>itemFora(r,it)?`<s class="mut" title="fora desta aplicação">${esc(it.produto)}</s>`:`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`)
+      .concat((r.extras||[]).filter(e=>e.produto).map(e=>`<span class="pill pill-buy">extra</span> ${esc(e.produto)} <span>${fmtDose(e.dose)} ${esc((PROD[e.produto]||{}).un||'')}/ha</span>`)).join(' · ');
     // ação principal do cartão, conforme o status
     const tsBtn=(tc && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
     const acao= r.status==='cancelado' ? `<span class="cp-baixa">🚫 Não será realizada</span><button class="btn btn-ghost btn-sm" data-act="realStatus" data-key="${esc(o.key)}" data-val="pendente">↩ Voltar a pendente</button>`
@@ -7158,6 +7165,9 @@ document.addEventListener('click',e=>{
       route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
+    else if(a.act==='realExcl'){ const r=realEnsure(a.key); r.excl=r.excl||{};
+      if(r.excl[a.iid]) delete r.excl[a.iid]; else { r.excl[a.iid]=true; if(r.doses) delete r.doses[a.iid]; }
+      if(!Object.keys(r.excl).length) delete r.excl; stampReal(a.key); realClean(a.key); route({keepScroll:true}); }
     else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
     else if(a.act==='lgEntrar'){ lgEntrar(); }
     else if(a.act==='sessSair'){ sessSair(); }

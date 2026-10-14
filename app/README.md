@@ -169,6 +169,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Status "Não será realizada"** — 4º botão no registro da operação (além de Pendente / Em andamento /
   Concluída). Não conta como atrasada nem como próxima, sai da % de conclusão e tem o chip *Não realizadas*;
   "↩ Voltar a pendente" desfaz.
+- **Campo → tirar/voltar produto planejado da aplicação** — na tabela Insumo · Planejado · Realizado da
+  operação, o **✕** tira o produto *desta aplicação* (linha riscada, "fora desta aplicação", **↩** volta). Só a
+  execução muda (`r.excl[iid]`, vai com a execução para a planilha): o **planejamento do talhão fica igual**.
+  Calda por tanque, WhatsApp, recomendação/PDF, baixa no estoque, TS/plantio e o quadro ignoram o produto
+  tirado. **+ insumo extra** inclui um produto; os extras passam a entrar também na recomendação/PDF, e a
+  recomendação de uma aplicação (não plantio) é refeita a partir do Campo a cada envio, enquanto o operador
+  não respondeu. Operação concluída não mostra o ✕.
 - **Campo → Recomendação de TS** — toda operação com **semente + produtos de TS** ganha a seção
   🧪 *Recomendação de TS* e o botão **Enviar TS**. A batelada é medida em **bag** (a unidade da semente
   no planejamento, ex.: 5MM); as doses vêm do **planejamento** (por ha) e viram "por batelada"
