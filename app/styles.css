@@ -1726,3 +1726,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ci-x.on{color:var(--teal);font-size:15px}
 .ci-real{white-space:nowrap}
 @media (max-width:640px){ .ci-real input{width:62px} .ci-x{margin-left:2px;width:26px;min-width:26px;height:28px;min-height:28px} .ci-off-tag{display:block;margin:2px 0 0;width:max-content} }
+/* iPhone: teclado aberto → menu de baixo some (volta ao fechar) */
+@media (max-width:640px){ body.kb-aberto .sidebar{display:none} }

@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-200';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-201';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5052,6 +5052,14 @@ function novaAcaoOpen(tid, sub){
   document.body.appendChild(ov);
 }
 window.addEventListener('hashchange', novaAcaoFechar);
+// iPhone: com o teclado aberto o Safari "cola" o menu de baixo no topo do teclado e, ao fechar, ele fica parado no meio
+// da tela. Enquanto o teclado está aberto o menu some; ao fechar, um empurrãozinho na rolagem faz o Safari recolocá-lo.
+function navTeclado(h, top){ const vv=window.visualViewport, H=window.innerHeight;
+  const alt=(h!=null?h:(vv?vv.height:H)), aberto=(H-alt)>140;
+  const era=document.body.classList.contains('kb-aberto'); document.body.classList.toggle('kb-aberto', aberto);
+  if(era && !aberto){ const x=window.scrollX, y=window.scrollY; window.scrollTo(x, y+1); window.scrollTo(x, y); } return aberto; }
+if(window.visualViewport){ window.visualViewport.addEventListener('resize', ()=>navTeclado()); }
+document.addEventListener('focusout', ()=>{ setTimeout(()=>navTeclado(), 80); setTimeout(()=>navTeclado(), 400); });
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
   if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
   else if(el.matches('[data-oc]') && el.type!=='checkbox' && el.tagName!=='SELECT'){ const f=ocFormAtual(); if(f){ f[el.dataset.oc]=el.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } }
