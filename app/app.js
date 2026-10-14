@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-203';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-204';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1724,7 +1724,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
       if(nota.ref && nfeContratosDoFornecedor(nota.cnpj).some(c=>c.chave===nota.ref)) imp.ref=nota.ref;
       else { const cs=nfeContratosDoFornecedor(nota.cnpj); const prods=new Set(imp.itens.map(i=>i.produto)); const m=cs.filter(c=>c.itens.some(x=>prods.has(x.produto)&&x.saldo>0)); if(m.length===1) imp.ref=m[0].chave; }
       route({keepScroll:true}); }); }
-    route(); window.scrollTo(0,0);
+    route(); rolarTopo();
     const nAuto=nfeImport.itens.filter(i=>i.fonte==='auto').length;
     toast(`NF-e ${nota.nNF} lida: ${nota.itens.length} item(ns)${nAuto?` · ${nAuto} automático(s)`:''} — confira e confirme`);
     return true;
@@ -2208,7 +2208,7 @@ async function recAbrirChave(d){
       if(st==='EM TRÂNSITO'){ REC.etapa='conferir'; REC.itens=r.itens.filter(i=>!i.ignorar&&i.produto).map(i=>Object.assign({},i,{div:null})); }
       else REC.etapa='aviso'; }
   }catch(e){ REC.msg='Não consegui consultar a planilha: '+e.message; }
-  route(); window.scrollTo(0,0);
+  route(); rolarTopo();
 }
 function recTransitoCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
@@ -2249,7 +2249,7 @@ async function recConfirmar(){
   const nPend=pend.length;
   REC.etapa='feito'; REC.feito={nNF:p.nNF, fornecedor:nota.fornecedor||REC.fornecedor||'', itens:uso.length, pend:nPend, pendencias:pend, semXml};
   if(REC.transito) REC.transito.notas=REC.transito.notas.filter(x=>x.chave!==ch);
-  route(); window.scrollTo(0,0); updateEditBadge();
+  route(); rolarTopo(); updateEditBadge();
   toast(`Recebimento registrado: ${uso.length} produto(s) no estoque${nPend?` · ${nPend} pendência(s)`:''}`);
 }
 // recebimento que não subiu fica na mesma fila das classificações
@@ -5052,24 +5052,8 @@ function novaAcaoOpen(tid, sub){
   document.body.appendChild(ov);
 }
 window.addEventListener('hashchange', novaAcaoFechar);
-// iPhone: com o teclado aberto o Safari "cola" o menu de baixo no topo do teclado e, ao fechar, ele fica parado no meio
-// da tela. Enquanto o teclado está aberto o menu some; ao fechar, um empurrãozinho na rolagem faz o Safari recolocá-lo.
-// Vale dos dois jeitos: (1) caixa de texto em foco = teclado aberto (não depende de aviso do Safari); (2) viewport visual menor.
-const _ehCampo=el=>!!(el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !/^(checkbox|radio|button|submit|file|range)$/.test(el.type||''));
-// Só esconde com uma caixa EM FOCO. Se este aparelho avisa o teclado pela viewport visual (_vvSabe), o teclado fechado
-// mostra o menu de volta mesmo que a caixa continue em foco; se nunca avisou, vale só o foco. Zoom sem foco não esconde.
-let _vvSabe=false;
-function navTeclado(h, top){ const vv=window.visualViewport, H=window.innerHeight;
-  const alt=(h!=null?h:(vv?vv.height:H)), dif=H-alt, foco=_ehCampo(document.activeElement);
-  if(foco && dif>140) _vvSabe=true;
-  const aberto=foco && (_vvSabe ? dif>140 : true);
-  const era=document.body.classList.contains('kb-aberto'); document.body.classList.toggle('kb-aberto', aberto);
-  if(era && !aberto){ const x=window.scrollX, y=window.scrollY; window.scrollTo(x, y+1); window.scrollTo(x, y); } return aberto; }
-// segurança: se por algum motivo o menu ficou escondido sem caixa em foco, mostra de novo
-setInterval(()=>{ if(document.body.classList.contains('kb-aberto') && !_ehCampo(document.activeElement)) navTeclado(); }, 1500);
-if(window.visualViewport){ window.visualViewport.addEventListener('resize', ()=>navTeclado()); window.visualViewport.addEventListener('scroll', ()=>{ if(document.body.classList.contains('kb-aberto')) navTeclado(); }); }
-document.addEventListener('focusin', e=>{ if(_ehCampo(e.target)) navTeclado(); });
-document.addEventListener('focusout', ()=>{ setTimeout(()=>navTeclado(), 60); setTimeout(()=>navTeclado(), 350); });
+// celular: a janela não rola (só .main) — ver styles.css; rolar ao topo = os dois
+function rolarTopo(){ try{ const m=$('.main'); if(m) m.scrollTop=0; }catch(e){} window.scrollTo(0,0); }
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
   if(el.matches('input[data-af]') && el.dataset.af!=='nAm'){ const f=afFormAtual(); if(f){ f[el.dataset.af]=el.value; afAtualizaRes(f); } }
   else if(el.matches('[data-oc]') && el.type!=='checkbox' && el.tagName!=='SELECT'){ const f=ocFormAtual(); if(f){ f[el.dataset.oc]=el.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } }
