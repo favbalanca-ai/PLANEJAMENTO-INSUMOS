@@ -186,6 +186,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   **depois** do plantio concluído, a baixa do plantio é reenviada sem a semente; reabrir/reprovar/excluir o
   TS faz o contrário (`tsMarca`). O custo realizado do talhão soma a baixa do TS. Unidades em branco no
   PORTIFÓLIO aparecem como aviso (preencher na planilha).
+- **Campo → operação SÓ de TS** — operação **sem semente** mas com produto de classe TS (ex.: "Tratamento
+  de sementes" planejado como operação própria) usa o **modelo de batelada**, não o de pulverizador: a
+  semente é **emprestada da operação de plantio** da mesma safra (`tsSemDe`), **todos** os produtos da
+  operação (TS, fungicida, biológico…) viram dose por batelada e o botão principal é **📲 Enviar TS ao
+  operador** (a seção 🚿 de aplicação some). Enviar deixa a operação *em andamento*; a baixa do operador
+  (só os produtos — a semente **não** entra, ela baixa no plantio) **conclui a operação** com a data de
+  hoje, sem segunda baixa (`tsCalc().soTS`, `tsRecomFromOp` → `tsCfg.semInfo`, `tsMarca`, `opBaixaEff`).
+  O link do operador leva a semente em `ts.sn/sd/so` para calcular a batelada.
 - **Campo → Recomendação de plantio** — na operação com semente, a seção 🚿 de aplicação vira
   🌱 *Recomendação de plantio*: **população (sementes/ha)** — já vem a do planejamento (bags/ha × sementes
   por bag) e pode ser informada —, plantadeira, início e fim. **Linhas sempre a 50 cm** (fixo):
