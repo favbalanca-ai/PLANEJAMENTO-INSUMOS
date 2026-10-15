@@ -199,7 +199,8 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   var PL=REC.pl||null;
   // ---- tratamento de sementes (TS): dose por BATELADA (bag) em vez de por tanque ----
   var TS=REC.ts||null;
-  var SEM=ITENS.filter(function(i){return i.sem;})[0]||null, TSP=ITENS.filter(function(i){return !i.sem;});
+  // operação só de TS: a semente não está nos itens (não dá baixa aqui) — vem da operação de plantio, no TS.sn/TS.sd
+  var SEM=ITENS.filter(function(i){return i.sem;})[0]||(TS&&TS.sn?{produto:TS.sn, un:'', dose:+TS.sd||0, sem:true, doPlantio:TS.so||'plantio'}:null), TSP=ITENS.filter(function(i){return !i.sem;});
   var SD=SEM?SEM.dose:0, BAT=TS?(+TS.b||1):1, BL=TS?(TS.bl||'bag'):'bag';
   function B(n){ return nf.format(n)+' '+esc(BL)+(BL==='bag'&&n>=2?'s':''); }
   function BLs(){ return BL==='bag'?'bags':(BL==='saco'?'sacos':BL); }
@@ -278,6 +279,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
             '<div class="r-tank"><div class="big">'+nf.format(pb*BAT)+'</div><div class="un">'+esc(it.un)+' / batelada</div></div>'+
             '<div class="r-tot">'+nf.format(it.dose*AREA)+' '+esc(it.un)+'</div></div>'; }).join('')+
         '<div class="recipe-note">'+tsUlt+'</div>'+
+        (SEM&&SEM.doPlantio?'<div class="recipe-note">🌱 Semente da operação de plantio <b>'+esc(SEM.doPlantio)+'</b> — a baixa da semente é feita no plantio, não aqui.</div>':'')+
       '</div>'+
     '</div></section>'
   ) : VAZAO>0 && LIQ.length ? (
@@ -324,7 +326,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
       '<div class="field"><label>Seu nome <span class="req">*</span></label><input id="operador" type="text" placeholder="ex.: José da Silva"></div>'+
       '<div class="field"><label>Observações (opcional)</label><textarea id="obs" placeholder="'+(TS?'ex.: sobrou meio bag tratado':(PL?'ex.: sobrou 1 bag; parei 1h por chuva':'ex.: sobrou meio tanque; parei 1h por chuva'))+'"></textarea></div>'+
     '</div>'+
-    '<p class="foot">'+(TS?'Ao enviar, a baixa da semente e dos produtos de TS vai para o planejamento,<br>onde o administrador confere e aprova.':'Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.')+'</p>'+
+    '<p class="foot">'+(TS?'Ao enviar, a baixa '+(SEM&&SEM.doPlantio?'dos produtos':'da semente e dos produtos de TS')+' vai para o planejamento,<br>onde o administrador confere e aprova.':'Ao enviar, o volume utilizado vai direto para o planejamento da fazenda,<br>onde o administrador confere e aprova a aplicação no histórico.')+'</p>'+
     '</section>';
 
   wrap.innerHTML =
