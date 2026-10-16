@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-205';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-206';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6086,6 +6086,95 @@ function filterTimeline(){
   list.querySelectorAll('.tlg-card').forEach(c=>{ const any=[...c.querySelectorAll('.tl-wrap')].some(w=>w.style.display!=='none'); c.style.display=(any||(!q&&!timelineTipo))?'':'none'; });
   const c=document.querySelector('#tl-count'); if(c) c.textContent=n;
 }
+// ===== USO DE PRODUTOS POR TALHÃO (só o que JÁ SAIU do estoque: baixas aprovadas) =====
+// Fontes: operação concluída com baixa (opBaixaEff — sem contar em dobro o que o TS já baixou), TS feito
+// (r.ts.baixa: semente + produtos) e recomendação avulsa aprovada (sem operação ligada).
+let relUsoTal='';   // '' = todos os talhões
+function usoProdutosDe(t){
+  const out=[], add=(o)=>{ if(o.produto && +o.qtd>0){ const p=PROD[o.produto]||{}; out.push(Object.assign({classe:p.classe||'', un:p.un||'', valor:(+o.qtd||0)*precoDe(o.produto)}, o)); } };
+  eachOp(t,(seq,tag,oi,op,tagoi)=>{ const key=`${t.id}|${tagoi}`, r=OV.realizado&&OV.realizado[key]; if(!r) return;
+    const nome=op.nome||('Operação '+(oi+1));
+    if(r.status==='concluido' && r.baixa){ const b=opBaixaEff(r); for(const pr in b) add({data:_isISO(r.data)?r.data:'', seq, op:nome, origem:'Operação', produto:pr, qtd:+b[pr]||0, quem:(r.app&&r.app.operador)||''}); }
+    if(tsFeito(r) && r.ts.baixa){ for(const pr in r.ts.baixa) add({data:r.ts.em?_dISO(r.ts.em):(_isISO(r.data)?r.data:''), seq, op:nome, origem:'TS', produto:pr, qtd:+r.ts.baixa[pr]||0, quem:r.ts.quem||''}); } });
+  ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.talhao!==t.id || r0.opKey || r0.tipo==='ts') return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
+    const data=_isISO(r.data)?String(r.data).slice(0,10):(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):'');
+    (r.itens||[]).forEach(it=>add({data, seq:'', op:r.opNome||'Recomendação', origem:'Recomendação', produto:it.produto, qtd:+it.real||0, quem:(r.retorno&&r.retorno.quem)||''})); });
+  return out.sort((a,b)=>(a.data||'9').localeCompare(b.data||'9')||a.op.localeCompare(b.op)||a.produto.localeCompare(b.produto));
+}
+// totais por produto de uma lista de lançamentos
+function usoTotais(lin){ const m={}; lin.forEach(l=>{ const x=m[l.produto]||(m[l.produto]={produto:l.produto, classe:l.classe, un:l.un, qtd:0, valor:0, n:0}); x.qtd+=l.qtd; x.valor+=l.valor; x.n++; });
+  return Object.values(m).sort((a,b)=>b.valor-a.valor||a.produto.localeCompare(b.produto)); }
+function usoProdutosHtml(){
+  const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
+  const t=relUsoTal?tals.find(x=>x.id===relUsoTal):null; if(relUsoTal && !t) relUsoTal='';
+  const sel=`<select class="sel" id="rel-uso-tal"><option value="">Todos os talhões</option>${tals.map(x=>`<option value="${esc(x.id)}"${x.id===relUsoTal?' selected':''}>${esc(tNome(x))} · ${num(areaDe(x))} ha</option>`).join('')}</select>`;
+  const vazio=msg=>`<p class="mut" style="padding:14px">${msg}</p>`;
+  let corpo='';
+  if(t){
+    const lin=usoProdutosDe(t), tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0);
+    corpo=`<div class="rel-uso-kpis"><span><small>Área</small>${num(area)} ha</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${lin.length}</span><span><small>Valor utilizado</small>${brl0(vTot)}</span>${area?`<span><small>Por ha</small>${brl0(vTot/area)}</span>`:''}</div>
+      <h3 class="rel-uso-h">Totais por produto</h3>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
+        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td></tr>`).join('')||`<tr><td colspan="4">${vazio('Nenhuma baixa aprovada neste talhão ainda. As baixas aparecem quando uma operação é concluída (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
+        ${tot.length?`<tfoot><tr><td colspan="3">Total</td><td class="num">${brl0(vTot)}</td></tr></tfoot>`:''}</table></div>
+      ${lin.length?`<h3 class="rel-uso-h">Lançamentos (o que saiu, quando e em qual operação)</h3>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th>Quem</th></tr></thead>
+        <tbody>${lin.map(l=>`<tr><td class="num" data-th="Data">${l.data?_dtBRc(l.data):'—'}</td><td class="c-full"><b>${esc(l.op)}</b>${l.origem!=='Operação'?` <span class="pill">${esc(l.origem)}</span>`:''}${l.seq==='safrinha'?' <span class="mut">· 2ª</span>':''}</td><td data-th="Produto">${esc(l.produto)}</td><td class="num" data-th="Qtd"><b>${fmtDose(l.qtd)}</b> ${esc(l.un)}</td><td data-th="Quem">${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+  } else {
+    const porTal=tals.map(x=>{ const lin=usoProdutosDe(x); return {t:x, lin, area:areaDe(x)||0, valor:lin.reduce((s,l)=>s+l.valor,0), nProd:usoTotais(lin).length}; }).filter(x=>x.lin.length);
+    const todas=porTal.reduce((a,x)=>a.concat(x.lin),[]), tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0), aTot=porTal.reduce((s,x)=>s+x.area,0);
+    corpo=`<div class="rel-uso-kpis"><span><small>Talhões com baixa</small>${porTal.length}</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${todas.length}</span><span><small>Valor utilizado</small>${brl0(vTot)}</span>${aTot?`<span><small>Por ha</small>${brl0(vTot/aTot)}</span>`:''}</div>
+      <h3 class="rel-uso-h">Por talhão</h3>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Produtos</th><th class="num">Lançamentos</th><th class="num">Valor</th><th class="num">R$/ha</th></tr></thead>
+        <tbody>${porTal.map(x=>`<tr><td class="c-full"><a class="link" data-act="relUsoTal" data-id="${esc(x.t.id)}"><b>${esc(tNome(x.t))}</b></a></td><td class="num" data-th="Área">${num(x.area)}</td><td class="num" data-th="Produtos">${x.nProd}</td><td class="num" data-th="Lançamentos">${x.lin.length}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td><td class="num" data-th="R$/ha">${x.area?brl0(x.valor/x.area):'—'}</td></tr>`).join('')||`<tr><td colspan="6">${vazio('Nenhuma baixa aprovada ainda. As baixas aparecem quando uma operação é concluída no Campo (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
+        ${porTal.length?`<tfoot><tr><td colspan="4">Total · ${num(aTot)} ha · ${todas.length} lançamentos</td><td class="num">${brl0(vTot)}</td><td class="num">${aTot?brl0(vTot/aTot)+'/ha':'—'}</td></tr></tfoot>`:''}</table></div>
+      ${tot.length?`<h3 class="rel-uso-h">Totais por produto (fazenda)</h3>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
+        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+  }
+  return `<div class="panel" id="rel-uso"><div class="panel-head"><h2>Uso de produtos por talhão</h2><span class="sub">só o que já saiu do estoque (baixas aprovadas) · preços da planilha</span></div>
+    <div class="rel-uso-top">${sel}<button class="btn btn-outline btn-sm" data-act="relUsoCsv">⬇ CSV</button><button class="btn btn-outline btn-sm" data-act="relUsoPdf">🖨 PDF</button></div>
+    ${corpo}</div>`;
+}
+function _usoCsvEsc(s){ return `"${String(s==null?'':s).replace(/"/g,'""')}"`; }
+function exportUsoProdutosCsv(){
+  const tals=relUsoTal?[findTalhao(relUsoTal)].filter(Boolean):talhoesAll();
+  const linhas=[['Talhão','Data','Operação','Origem','Produto','Classe','Qtd','Un','Valor (R$)','Quem'].map(_usoCsvEsc).join(';')]; let n=0;
+  tals.forEach(t=>usoProdutosDe(t).forEach(l=>{ n++; linhas.push([tNome(t), l.data?_dtBRc(l.data):'', l.op+(l.seq==='safrinha'?' (2ª)':''), l.origem, l.produto, l.classe, nf2.format(l.qtd), l.un, nf2.format(l.valor), l.quem].map(_usoCsvEsc).join(';')); }));
+  if(!n){ toast('Nenhuma baixa aprovada para exportar'); return; }
+  download(`uso_produtos${relUsoTal?'_'+relUsoTal:''}.csv`, '﻿'+linhas.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado');
+}
+function usoProdutosPdfBloco(t){
+  const lin=usoProdutosDe(t); if(!lin.length) return '';
+  const tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0);
+  return `<h2>${esc(tNome(t))} <span class="mut2">— ${num(area)} ha · ${esc(empDe(t)||'—')}${temSafrinha(t)?` → ${esc(empSafDe(t))}`:''}</span></h2>
+    <div class="meta">${tot.length} produtos · ${lin.length} lançamentos · utilizado <b>${brl0(vTot)}</b>${area?` (${brl0(vTot/area)}/ha)`:''}</div>
+    <h3>Totais por produto</h3>
+    <table class="pdf-ops"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:20%"><col style="width:18%"></colgroup>
+      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
+      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>
+    <h3>Lançamentos</h3>
+    <table class="pdf-ops"><colgroup><col style="width:11%"><col style="width:31%"><col style="width:30%"><col style="width:14%"><col style="width:14%"></colgroup>
+      <thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th>Quem</th></tr></thead>
+      <tbody>${lin.map(l=>`<tr><td class="num">${l.data?_dtBRc(l.data):'—'}</td><td>${esc(l.op)}${l.origem!=='Operação'?` (${esc(l.origem)})`:''}${l.seq==='safrinha'?' · 2ª':''}</td><td>${esc(l.produto)}</td><td class="num">${fmtDose(l.qtd)} ${esc(l.un)}</td><td>${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table>`;
+}
+function exportUsoProdutosPDF(){
+  const hoje=fmtDataBR(_hojeISO()), t=relUsoTal?findTalhao(relUsoTal):null;
+  let html=`<div class="pdf-head"><h1>Uso de produtos por talhão${t?'':' — todos os talhões'}</h1><div class="meta">Safra 2026/2027 · só o que já saiu do estoque (baixas aprovadas) · gerado em ${hoje}</div></div>`;
+  let n=0;
+  if(t){ const b=usoProdutosPdfBloco(t); if(b){ html+=b; n++; } }
+  else { const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
+    const todas=[]; tals.forEach(x=>todas.push(...usoProdutosDe(x))); const tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0);
+    if(tot.length){ html+=`<h2>Totais da fazenda</h2><table class="pdf-ops"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:20%"><col style="width:18%"></colgroup>
+      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
+      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>`; }
+    tals.forEach(x=>{ const b=usoProdutosPdfBloco(x); if(!b) return; html+=`<section class="${n>0||tot.length?'pb':''}">${b}</section>`; n++; }); }
+  if(!n){ toast('Nenhuma baixa aprovada para imprimir'); return; }
+  html+=`<div class="pdf-foot">Quantidades = baixas aprovadas (operação concluída, TS feito ou retorno do operador aprovado). Valor = quantidade × preço da planilha.</div>`;
+  printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
+}
 V.relatorios = function(){
   const tals=talhoesAll(), ev=camposEventos();
   const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,apl:0,oper:0,ult:0});
@@ -6102,6 +6191,7 @@ V.relatorios = function(){
   return `
   <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
+  ${usoProdutosHtml()}
   <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
     <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Aplic.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
     <tbody>${rows||'<tr><td colspan="7" class="mut" style="padding:14px">Sem talhões.</td></tr>'}</tbody></table></div></div>`;
@@ -6978,6 +7068,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('[data-af="nAm"]')){ const f=afFormAtual(); if(f){ const n=Math.max(0,Math.min(60,Math.round(numBR(e.target.value)))); if(n===f.am.length) return; while(f.am.length<n) f.am.push(''); f.am.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
+  if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
@@ -7270,6 +7361,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
+    else if(a.act==='relUsoCsv'){ exportUsoProdutosCsv(); }
+    else if(a.act==='relUsoPdf'){ exportUsoProdutosPDF(); }
+    else if(a.act==='relUsoTal'){ relUsoTal=a.id||''; route(); const el=document.getElementById('rel-uso'); if(el) el.scrollIntoView({block:'start'}); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
     else if(a.act==='estToggleMov'){ estoqueSoMov=!estoqueSoMov; act.classList.toggle('on',estoqueSoMov); filterEstoque(); }

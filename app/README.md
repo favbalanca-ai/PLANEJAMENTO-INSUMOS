@@ -223,6 +223,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **DRE Orçada** — resultado por cultura: Receita = Produção × Preço; Custo =
   insumos + **máquinas** (somadas por operação) + **arrendamento/outros**
   (R$/ha editável). Preço de venda, custo de máquinas e arrendamento editáveis.
+- **Relatórios → Uso de produtos por talhão** (módulo Campo) — só o que **já saiu do estoque**
+  (baixas aprovadas): operação concluída com baixa (`opBaixaEff`, sem contar em dobro o que o TS
+  já tirou), TS feito (`r.ts.baixa`: semente + produtos) e recomendação avulsa aprovada. Seletor
+  de talhão: um talhão mostra **totais por produto** (quantidade, valor = qtd × preço da planilha)
+  e os **lançamentos** (data, operação, produto, quantidade, quem); "Todos os talhões" mostra a
+  tabela por talhão (R$ e R$/ha, clique abre o talhão) e os totais da fazenda por produto.
+  Botões ⬇ CSV e 🖨 PDF (um bloco por talhão). Funções: `usoProdutosDe`, `usoTotais`,
+  `usoProdutosHtml`, `exportUsoProdutosCsv`, `exportUsoProdutosPDF`.
 
 ## Baixa do operador e aprovação (v180)
 
