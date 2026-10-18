@@ -1747,3 +1747,30 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .bula-arq>span:first-child{font-weight:700}
 .bula-pend{color:var(--amber);font-weight:700}
 .bula-warn{color:var(--amber);font-size:11px;font-weight:700;white-space:normal}
+/* ===== Misturas (banco de misturas e eficácia) ===== */
+.mi-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.mi-ok{background:var(--green-soft);color:var(--green)}
+.mi-par{background:#fff3df;color:#b7791f}
+.mi-nao{background:var(--red-soft,#fdecec);color:var(--red)}
+.mi-pend{background:var(--line);color:var(--muted)}
+.mi-box{width:min(600px,100%)}
+.mi-info{font-size:13px;margin:4px 0 8px}
+.mi-notas{display:flex;gap:8px;flex-wrap:wrap}
+.mi-nota{flex:1 1 120px;padding:12px 8px;border:2px solid var(--line);border-radius:12px;background:#fff;font-weight:800;font-size:14px;cursor:pointer;opacity:.75}
+.mi-nota.on{opacity:1;border-color:currentColor;box-shadow:var(--shadow)}
+.mi-lbl{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);margin:4px 0 8px}
+.mi-lbl textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:15px;color:var(--ink)}
+.mi-card{padding:0;overflow:hidden}
+.mi-head{padding:12px 14px 8px;display:grid;gap:8px}
+.mi-prods{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px}
+.mi-prods small{color:var(--muted);font-weight:600}
+.mi-stats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;font-weight:700;color:var(--muted)}
+.mi-stats span.mi-ok,.mi-stats span.mi-par,.mi-stats span.mi-nao,.mi-stats span.mi-pend{background:none;padding:0}
+.mi-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line)}
+.mi-bar i{display:block;height:100%}
+.mi-bar .mi-ok{background:var(--green)} .mi-bar .mi-par{background:#e0a030} .mi-bar .mi-nao{background:var(--red)} .mi-bar .mi-pend{background:#c7d0d4}
+.mi-rows{display:grid}
+.mi-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.mi-row-main{flex:1 1 240px;min-width:0}
+.mi-row-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mi-pendpanel .mi-rows .mi-row:first-child{border-top:none}

@@ -1764,6 +1764,33 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .bula-arq>span:first-child{font-weight:700}
 .bula-pend{color:var(--amber);font-weight:700}
 .bula-warn{color:var(--amber);font-size:11px;font-weight:700;white-space:normal}
+/* ===== Misturas (banco de misturas e eficácia) ===== */
+.mi-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.mi-ok{background:var(--green-soft);color:var(--green)}
+.mi-par{background:#fff3df;color:#b7791f}
+.mi-nao{background:var(--red-soft,#fdecec);color:var(--red)}
+.mi-pend{background:var(--line);color:var(--muted)}
+.mi-box{width:min(600px,100%)}
+.mi-info{font-size:13px;margin:4px 0 8px}
+.mi-notas{display:flex;gap:8px;flex-wrap:wrap}
+.mi-nota{flex:1 1 120px;padding:12px 8px;border:2px solid var(--line);border-radius:12px;background:#fff;font-weight:800;font-size:14px;cursor:pointer;opacity:.75}
+.mi-nota.on{opacity:1;border-color:currentColor;box-shadow:var(--shadow)}
+.mi-lbl{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted);margin:4px 0 8px}
+.mi-lbl textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:15px;color:var(--ink)}
+.mi-card{padding:0;overflow:hidden}
+.mi-head{padding:12px 14px 8px;display:grid;gap:8px}
+.mi-prods{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px}
+.mi-prods small{color:var(--muted);font-weight:600}
+.mi-stats{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;font-weight:700;color:var(--muted)}
+.mi-stats span.mi-ok,.mi-stats span.mi-par,.mi-stats span.mi-nao,.mi-stats span.mi-pend{background:none;padding:0}
+.mi-bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line)}
+.mi-bar i{display:block;height:100%}
+.mi-bar .mi-ok{background:var(--green)} .mi-bar .mi-par{background:#e0a030} .mi-bar .mi-nao{background:var(--red)} .mi-bar .mi-pend{background:#c7d0d4}
+.mi-rows{display:grid}
+.mi-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line);font-size:13px;flex-wrap:wrap}
+.mi-row-main{flex:1 1 240px;min-width:0}
+.mi-row-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mi-pendpanel .mi-rows .mi-row:first-child{border-top:none}
 
 </style>
 </head>
@@ -1807,6 +1834,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
       <a href="#/stand" data-view="stand" data-mod="campo"><span class="ico">🌱</span><span class="lbl">Contagem de Stand</span><span class="lbl-s">Stand</span></a>
       <a href="#/afericao" data-view="afericao" data-mod="campo"><span class="ico">🧮</span><span class="lbl">Aferição</span><span class="lbl-s">Aferir</span></a>
       <a href="#/recomendacao" data-view="recomendacao" data-mod="campo"><span class="ico">💊</span><span class="lbl">Recomendação</span><span class="lbl-s">Recom.</span></a>
+      <a href="#/misturas" data-view="misturas" data-mod="campo"><span class="ico">⚗️</span><span class="lbl">Misturas</span><span class="lbl-s">Mistur.</span></a>
       <a href="#/relatorios" data-view="relatorios" data-mod="campo"><span class="ico">📄</span><span class="lbl">Relatórios</span><span class="lbl-s">Relat.</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
       <a href="#/usuarios" data-view="usuarios" data-mod="planejamento campo precos admin tarefas"><span class="ico">👥</span><span class="lbl">Usuários</span><span class="lbl-s">Usuários</span></a>
@@ -1861,7 +1889,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-208';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-209';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2270,7 +2298,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -6742,6 +6770,132 @@ async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
   bulaArqPend=bulaArqPend.filter(x=>!(bulaKey(x.prod)===k&&x.tipo===tipo)); bulaArqPend.push({prod:bulaEditProd, tipo, nome:file.name, b64}); saveBulaArq();
   if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:Date.now()}; try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} }   // a ficha precisa existir para o link chegar
   bulaRender(); scheduleBulaPush(); toast(syncUrl()?'PDF na fila — sobe para o Drive ao sincronizar':'PDF guardado; configure a Sincronização para enviar ao Drive'); }
+// ===== MISTURAS (banco de misturas de produtos e eficácia) — aba "MISTURAS APP" =====
+// Toda recomendação de APLICAÇÃO aprovada vira um registro de mistura (produtos e doses, alvo, talhão, cultura,
+// estádio, data, calda, condições, máquina, operador). Depois a dona avalia: Eficaz / Parcial / Não eficaz, com
+// dias após a aplicação, observação e foto. A tela Misturas agrupa combinações iguais e mostra o % de eficácia.
+const MIST_KEY='planejamento_misturas', MIST_FOTO_KEY='planejamento_misturas_fotos';
+let MIST=null, mistFotoPend=[], mistFotoEnviando=false, mistPushTimer=null, lastMistSig='', mistAvalId=null, mistAvalForm=null, mistFiltro='';
+const MIST_NOTAS={ eficaz:{lbl:'Eficaz',ico:'✅',cls:'mi-ok'}, parcial:{lbl:'Parcial',ico:'➖',cls:'mi-par'}, ineficaz:{lbl:'Não eficaz',ico:'❌',cls:'mi-nao'} };
+function loadMist(){ try{ const d=JSON.parse(localStorage.getItem(MIST_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
+function saveMist(){ try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} scheduleMistPush(); }
+function loadMistFoto(){ try{ const a=JSON.parse(localStorage.getItem(MIST_FOTO_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveMistFoto(){ try{ localStorage.setItem(MIST_FOTO_KEY, JSON.stringify(mistFotoPend)); }catch(e){ toast('Memória do aparelho cheia: a foto não ficou guardada'); } }
+function mistLista(){ return Object.values((MIST&&MIST.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
+function mistDeOp(opKey){ return opKey?(mistLista().find(m=>m.opKey===opKey)||null):null; }
+function mistDeRecom(id){ return id?(mistLista().find(m=>m.recomId===id)||null):null; }
+function mistAssin(itens){ return (itens||[]).filter(it=>it.produto).map(it=>bulaKey(it.produto)).sort().join(' + '); }
+function mistEhPlantio(r){ try{ return !!(r.opKey && plantioCalc(r.opKey)); }catch(e){ return false; } }
+// recomendação de aplicação aprovada → registro de mistura (uma por recomendação; reaprovar atualiza)
+function misturaDeRecom(r){
+  if(!MIST||!r||r.status!=='aprovada'||r.tipo==='ts'||mistEhPlantio(r)) return null;   // TS e plantio não são mistura de pulverização
+  const its=(r.itens||[]).filter(it=>it.produto).map(it=>({produto:it.produto, dose:+it.dose||0, un:it.un||'', classe:(PROD[it.produto]||{}).classe||'', real:it.real!=null&&it.real!==''?+it.real:null}));
+  if(!its.length) return null;
+  const t=findTalhao(r.talhao), now=Date.now(), old=mistDeRecom(r.id);
+  const m=Object.assign(old||{id:'mi'+now.toString(36)+Math.random().toString(36).slice(2,6), ts:now, aval:null}, {
+    recomId:r.id, opKey:r.opKey||'', talhao:r.talhao, talhaoNome:t?tNome(t):r.talhao, data:String(r.data||'').slice(0,10)||_hojeISO(), cultura:r.cultura||'', estadio:r.estadio||'',
+    alvo:r.alvo||'', nivel:r.nivel||'', opNome:r.opNome||'', calda:_mmC(r.calda)||0, cond:recomCondTxt(r), adjuvante:r.adjuvante||'', maquina:r.maquina||'',
+    operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:now });
+  delete m.del; MIST.reg[m.id]=m; saveMist(); return m;
+}
+function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.aval.nota)){ m.del=true; m._u=Date.now(); saveMist(); } }   // reprovar/reabrir: some se ainda não foi avaliada
+// ---- sincronização (aba MISTURAS APP; só envia se o Code.gs já tiver o ramo __mistura) ----
+function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.misturas_app==='object'); }
+function mistSig(){ return JSON.stringify((MIST&&MIST.reg)||{}); }
+function scheduleMistPush(){ if(!syncUrl()||!autoOn()||!mistServerOk()) return; clearTimeout(mistPushTimer);
+  mistPushTimer=setTimeout(async()=>{ await mistFotosEnviar(); if(mistSig()===lastMistSig) return; mistPush({auto:true}); }, 1500); }
+async function mistPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!mistServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleMistPush(); return; }
+  const sig=mistSig(); if(opts.auto && sig===lastMistSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__mistura:(MIST.reg||{})}));
+    if(postOk(r)) lastMistSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Misturas: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+// fotos da avaliação → Drive (pasta "Fotos do Campo"), uma por vez; cada uma que chega vira link no registro
+async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length) return;
+  mistFotoEnviando=true;
+  try{ for(const p of mistFotoPend.slice()){ const rec=MIST.reg[p.id]; if(!rec||rec.del||!rec.aval){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
+      let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
+      if(!(r&&r.foto&&r.foto.url)) break;
+      rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
+      mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} } }
+  finally{ mistFotoEnviando=false; }
+  if(document.body.dataset.view==='misturas') route({keepScroll:true});
+}
+function mistApplyPulled(map){
+  if(!map || typeof map!=='object' || !MIST) return false;
+  let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=MIST.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>lu){ MIST.reg[k]=inc; changed=true; } }
+  const pend=mistSig()!==lastMistSig && !!lastMistSig;
+  if(changed){ try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} if(!pend) lastMistSig=mistSig(); }
+  if(pend||mistFotoPend.length) scheduleMistPush();
+  return changed;
+}
+// ---- avaliação da eficácia ----
+function mistDias(m, data){ if(!m||!_isISO(m.data)||!_isISO(data)) return null; return Math.round((new Date(data+'T12:00:00')-new Date(m.data+'T12:00:00'))/86400000); }
+function mistProdsTxt(m){ return (m.itens||[]).map(it=>`${it.produto} ${fmtDose(it.dose)} ${it.un||''}/ha`).join(' + '); }
+function mistAvalAbrir(id){ const m=MIST&&MIST.reg[id]; if(!m) return; mistAvalId=id; const a=m.aval||{}; mistAvalForm={nota:a.nota||'', data:a.data||_hojeISO(), obs:a.obs||'', fotos:[]}; mistAvalRender(); }
+function mistAvalFechar(){ mistAvalId=null; mistAvalForm=null; mistAvalRender(); }
+function mistAvalRender(){
+  let ov=document.getElementById('mist-ov'); if(!mistAvalId||!mistAvalForm){ if(ov) ov.remove(); return; }
+  const m=MIST.reg[mistAvalId], f=mistAvalForm; if(!m){ mistAvalFechar(); return; }
+  if(ov){ const o=ov.querySelector('[data-mist="obs"]'); if(o) f.obs=o.value; const d=ov.querySelector('[data-mist="data"]'); if(d&&d.value) f.data=d.value; }
+  if(!ov){ ov=document.createElement('div'); ov.id='mist-ov'; ov.className='modal-ov'; ov.addEventListener('click',e=>{ if(e.target===ov) mistAvalFechar(); }); document.body.appendChild(ov); }
+  const dias=mistDias(m,f.data), fotosOk=(m.aval&&m.aval.fotos)||[];
+  ov.innerHTML=`<div class="modal-box mi-box"><div class="modal-head"><h3>⭐ Eficácia da mistura</h3><button class="icon-btn" data-act="mistAvalFechar" title="Fechar">✕</button></div>
+    <div class="mi-info"><b>${esc(m.talhaoNome||m.talhao)}</b> · ${fmtDataBR(m.data)}${m.alvo?` · alvo: ${esc(m.alvo)}`:''}${m.estadio?` · ${esc(m.estadio)}`:''}<br><span class="mut">${esc(mistProdsTxt(m))}</span></div>
+    <div class="bula-body">
+      <div class="mi-notas">${Object.keys(MIST_NOTAS).map(k=>`<button class="mi-nota ${MIST_NOTAS[k].cls}${f.nota===k?' on':''}" data-act="mistNota" data-val="${k}">${MIST_NOTAS[k].ico} ${MIST_NOTAS[k].lbl}</button>`).join('')}</div>
+      <div class="app-grid" style="margin:8px 0 4px"><label>Data da avaliação<input type="date" class="cell" data-mist="data" value="${esc(f.data||'')}"></label>
+        <label>Dias após a aplicação<input class="cell" value="${dias!=null?dias:''}" disabled placeholder="—"></label></div>
+      <label class="mi-lbl">Observação (o que viu no talhão)<textarea class="txt" data-mist="obs" rows="3" placeholder="ex.: controle bom do capim, falhou na buva…">${esc(f.obs||'')}</textarea></label>
+      ${fotosOk.length?`<div class="oc-ths">${fotosOk.map(x=>`<a class="oc-th" href="${esc(x.url)}" target="_blank" rel="noopener"><img src="${esc(x.url)}" alt="foto"></a>`).join('')}</div>`:''}
+      ${f.fotos.length?`<div class="oc-ths oc-prev">${f.fotos.map((u,i)=>`<span class="oc-th"><img src="${u}" alt="foto"><button class="icon-btn" data-act="mistFotoDel" data-i="${i}" title="Tirar esta foto">✕</button></span>`).join('')}</div>`:''}
+      <div class="oc-fotos"><label class="oc-fbtn">📷<span>Tirar foto</span><input type="file" accept="image/*" capture="environment" data-mistfoto hidden></label>
+        <label class="oc-fbtn">🖼️<span>Selecionar imagem</span><input type="file" accept="image/*" multiple data-mistfoto hidden></label></div>
+    </div>
+    <div class="cp-btns" style="margin-top:10px"><button class="btn btn-primary" data-act="mistAvalSalvar">Salvar avaliação</button>${m.aval&&m.aval.nota?`<button class="btn btn-ghost" data-act="mistAvalLimpar">↩ Limpar avaliação</button>`:''}<button class="btn btn-outline" data-act="mistAvalFechar">Fechar</button></div></div>`;
+}
+function mistAvalSalvar(){ const m=MIST&&MIST.reg[mistAvalId], f=mistAvalForm, ov=document.getElementById('mist-ov'); if(!m||!f||!ov) return;
+  const obs=(ov.querySelector('[data-mist="obs"]')||{}).value||'', data=(ov.querySelector('[data-mist="data"]')||{}).value||_hojeISO();
+  if(!f.nota){ toast('Escolha: Eficaz, Parcial ou Não eficaz'); return; }
+  const u=sessUsuario(), now=Date.now();
+  m.aval={nota:f.nota, data, dias:mistDias(m,data), obs:obs.trim(), fotos:(m.aval&&m.aval.fotos)||[], quem:(u&&u.nome)||'', ts:now}; m._u=now;
+  f.fotos.forEach((d,i)=>mistFotoPend.push({id:m.id, nome:`mistura-${m.id}-${now.toString(36)}-${i+1}.jpg`, dataUrl:d})); if(f.fotos.length) saveMistFoto();
+  saveMist(); mistAvalFechar(); route({keepScroll:true}); toast(`Eficácia registrada: ${MIST_NOTAS[m.aval.nota].lbl}${f.fotos.length?` · ${f.fotos.length} foto(s) enviando`:''}`); }
+function mistAvalLimpar(){ const m=MIST&&MIST.reg[mistAvalId]; if(!m||!ask('Limpar a avaliação desta mistura?')) return; m.aval=null; m._u=Date.now(); mistFotoPend=mistFotoPend.filter(x=>x.id!==m.id); saveMistFoto(); saveMist(); mistAvalFechar(); route({keepScroll:true}); }
+async function mistFotosAdd(files){ const f=mistAvalForm; if(!f) return;
+  for(const fl of [...files].slice(0,6)){ try{ f.fotos.push(await recFotoReduzir(fl)); }catch(e){ toast('Não consegui ler a foto'); } }
+  mistAvalRender(); }
+// ---- o que aparece nos cartões ----
+function mistChip(m){ const a=m&&m.aval; if(!a||!a.nota) return `<span class="mi-chip mi-pend">⏳ eficácia a avaliar</span>`; const N=MIST_NOTAS[a.nota]||{}; return `<span class="mi-chip ${N.cls||''}">${N.ico||''} ${N.lbl||a.nota}${a.dias!=null?` · ${a.dias} d`:''}</span>`; }
+function mistBtn(m, cls){ return `<button class="btn ${cls||'btn-outline'} btn-sm" data-act="mistAvaliar" data-id="${esc(m.id)}">⭐ ${m.aval&&m.aval.nota?'Rever eficácia':'Avaliar eficácia'}</button>`; }
+// ---- tela Misturas ----
+V.misturas=function(){
+  const all=mistLista(), aval=all.filter(m=>m.aval&&m.aval.nota), pend=all.filter(m=>!(m.aval&&m.aval.nota));
+  const nEf=aval.filter(m=>m.aval.nota==='eficaz').length, pctEf=aval.length?Math.round(nEf/aval.length*100):null;
+  const passa=m=>!mistFiltro||(mistFiltro==='pend'?!(m.aval&&m.aval.nota):(m.aval&&m.aval.nota===mistFiltro));
+  // agrupa por combinação de produtos (sem a dose): mesma mistura em talhões/datas diferentes
+  const grupos={}; all.forEach(m=>{ const g=grupos[m.assin]||(grupos[m.assin]={assin:m.assin, itens:{}, apps:[]}); g.apps.push(m);
+    (m.itens||[]).forEach(it=>{ const x=g.itens[bulaKey(it.produto)]||(g.itens[bulaKey(it.produto)]={produto:it.produto, un:it.un, classe:it.classe, min:it.dose, max:it.dose}); x.min=Math.min(x.min,it.dose); x.max=Math.max(x.max,it.dose); }); });
+  const gl=Object.values(grupos).map(g=>{ const c={eficaz:0,parcial:0,ineficaz:0,pend:0}; g.apps.forEach(m=>{ c[(m.aval&&m.aval.nota)||'pend']++; }); return Object.assign(g,{c, n:g.apps.length, visiveis:g.apps.filter(passa)}); })
+    .filter(g=>g.visiveis.length).sort((a,b)=>b.n-a.n||b.apps[0].data.localeCompare(a.apps[0].data));
+  const barra=c=>{ const n=c.eficaz+c.parcial+c.ineficaz+c.pend; if(!n) return ''; const seg=(k,cls)=>c[k]?`<i class="${cls}" style="flex:${c[k]}" title="${MIST_NOTAS[k]?MIST_NOTAS[k].lbl:'a avaliar'}: ${c[k]}"></i>`:''; return `<div class="mi-bar">${seg('eficaz','mi-ok')}${seg('parcial','mi-par')}${seg('ineficaz','mi-nao')}${seg('pend','mi-pend')}</div>`; };
+  const linha=m=>`<div class="mi-row"><div class="mi-row-main"><b>${esc(m.talhaoNome||m.talhao)}</b> · ${fmtDataBR(m.data)}${m.alvo?` · <span>alvo: ${esc(m.alvo)}</span>`:''}${m.estadio?` · ${esc(m.estadio)}`:''}
+      <div class="mut">${[m.cultura, m.calda?`calda ${num(m.calda)} L/ha`:'', m.cond, m.maquina, m.operador?`op.: ${m.operador}`:''].filter(Boolean).map(esc).join(' · ')}${m.aval&&m.aval.obs?`<br><i>“${esc(m.aval.obs)}”</i>`:''}${m.aval&&(m.aval.fotos||[]).length?` <span class="mut">📷 ${m.aval.fotos.length}</span>`:''}</div></div>
+      <div class="mi-row-act">${mistChip(m)}${mistBtn(m, m.aval&&m.aval.nota?'btn-ghost':'btn-primary')}</div></div>`;
+  const cards=gl.map(g=>`<div class="panel mi-card"><div class="mi-head"><div class="mi-prods">${Object.values(g.itens).map(it=>`<span><b>${esc(it.produto)}</b> <small>${it.min===it.max?fmtDose(it.min):fmtDose(it.min)+'–'+fmtDose(it.max)} ${esc(it.un||'')}/ha${it.classe?' · '+esc(it.classe):''}</small></span>`).join('')}</div>
+      <div class="mi-stats"><span><b>${g.n}</b> aplicação(ões)</span>${g.c.eficaz?`<span class="mi-ok">✅ ${g.c.eficaz}</span>`:''}${g.c.parcial?`<span class="mi-par">➖ ${g.c.parcial}</span>`:''}${g.c.ineficaz?`<span class="mi-nao">❌ ${g.c.ineficaz}</span>`:''}${g.c.pend?`<span class="mi-pend">⏳ ${g.c.pend}</span>`:''}</div>${barra(g.c)}</div>
+      <details class="panel-collapse"${g.visiveis.length<=3?' open':''}><summary class="camp-app-sum"><span>Aplicações</span><span class="panel-chevron">▸</span></summary><div class="mi-rows">${g.visiveis.map(linha).join('')}</div></details></div>`).join('');
+  return `<div class="toolbar"><span class="badge badge-muted">${gl.length} de ${Object.keys(grupos).length} misturas · ${all.length} aplicações · ${aval.length} avaliadas${pctEf!=null?` · <b>${pctEf}% eficazes</b>`:''}</span>
+      <div class="spacer"></div><label class="mut" style="font-size:12px;font-weight:700">Mostrar <select class="sel" id="mi-filtro"><option value="">todas</option><option value="pend"${mistFiltro==='pend'?' selected':''}>a avaliar (${pend.length})</option>${Object.keys(MIST_NOTAS).map(k=>`<option value="${k}"${mistFiltro===k?' selected':''}>${MIST_NOTAS[k].lbl} (${aval.filter(m=>m.aval.nota===k).length})</option>`).join('')}</select></label></div>
+    ${(!mistFiltro&&pend.length)?`<div class="panel mi-pendpanel"><div class="panel-head"><h2>⏳ A avaliar</h2><span class="sub">aplicações aprovadas que ainda não têm nota de eficácia</span></div><div class="mi-rows">${pend.slice(0,8).map(linha).join('')}${pend.length>8?`<p class="mut" style="padding:8px 14px">… e mais ${pend.length-8}. Use o filtro "a avaliar".</p>`:''}</div></div>`:''}
+    ${cards||`<div class="panel"><p class="mut" style="padding:16px">${all.length?'Nenhuma mistura com esse filtro.':'Nenhuma mistura ainda. Toda <b>recomendação de aplicação aprovada</b> (retorno do operador aprovado) entra aqui automaticamente; depois é só avaliar a eficácia no cartão da operação (Campo) ou nesta tela.'}</p></div>`}
+    <p class="mut" style="font-size:11px;margin:6px 4px">Misturas iguais (mesmos produtos) ficam juntas, mesmo com doses diferentes. TS e plantio não entram. Vai para a aba <b>MISTURAS APP</b> da planilha.</p>`;
+};
 // ---- formulário ----
 function ocFormNovo(tipo,tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal', hj=_hojeISO();
   const est=t?estadioEm(estadiosDe(t,seq),hj):null;
@@ -7842,7 +7996,7 @@ function camposEventos(){
     const prods=(r.itens||[]).filter(it=>it.produto).map(it=>it.produto).join(', ');
     if(r.status==='aprovada'){
       ev.push({ts:(r.aprov&&r.aprov.ts)||_tsC(r),data:r.data,tipo:'aplicacao',talhao:r.talhao,
-        titulo:r.tipo==='ts'?'🧪 Sementes tratadas (TS)':'Aplicação'+(r.opNome?' · '+r.opNome:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
+        titulo:r.tipo==='ts'?'🧪 Sementes tratadas (TS)':'Aplicação'+(r.opNome?' · '+r.opNome:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')+(()=>{ const m=mistDeRecom(r.id); return (m&&m.aval&&m.aval.nota)?` · eficácia: ${MIST_NOTAS[m.aval.nota].lbl}`:''; })()});
     } else {
       ev.push({ts:_tsC(r),data:r.data,tipo:'recomendacao',talhao:r.talhao,
         titulo:'Recomendação'+(r.janela?' · '+r.janela:''), resumo:[r.alvo, prods].filter(Boolean).join(' — ')});
@@ -8565,7 +8719,7 @@ V.campo = function(arg){
     const acao= r.status==='cancelado' ? `<span class="cp-baixa">🚫 Não será realizada</span><button class="btn btn-ghost btn-sm" data-act="realStatus" data-key="${esc(o.key)}" data-val="pendente">↩ Voltar a pendente</button>`
       : r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="${soTS?'waTs':'waApp'}" data-key="${esc(o.key)}">📲 ${soTS?'Enviar TS ao operador':pc?'Enviar plantio':'Enviar ao operador'}</button>`
       : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="${soTS?'waTs':'waApp'}" data-key="${esc(o.key)}">📲 Reenviar${soTS?' TS':''}</button>`
-      : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>`;
+      : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>${(()=>{ const m=mistDeOp(o.key); return m?mistChip(m)+mistBtn(m, m.aval&&m.aval.nota?'btn-ghost':'btn-outline'):''; })()}`;
     const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · ${soTS?'baixa dos produtos ✓':'baixa da semente e do TS ✓'}</div>`
       :(tsSt==='enviada'?`<div class="cp-maq">🧪 TS enviado ao operador — aguardando a baixa</div>`:`<div class="cp-maq mut">🧪 ${tc.nBat} batelada(s) de TS · ${esc(tc.sem.produto)}</div>`));
     const retHtml=[RECOM.registros.find(x=>x.opKey===o.key && x.status==='retorno'), RECOM.registros.find(x=>x.tipo==='ts' && x.tsOp===o.key && x.status==='retorno')]
@@ -8717,11 +8871,11 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
-const MORPH_VIEWS=new Set(['estoque','talhao','talhoes','campo','compras','cotacao','dashboard','dre','resultados','maquinas','empreendimentos','recomendacao','precos','sync','entradas','afericao','stand','ocorrencia','produtividade']);
+const MORPH_VIEWS=new Set(['misturas','estoque','talhao','talhoes','campo','compras','cotacao','dashboard','dre','resultados','maquinas','empreendimentos','recomendacao','precos','sync','entradas','afericao','stand','ocorrencia','produtividade']);
 let _lastArg=null;
 function morphSyncField(o, nw){
   if(o===document.activeElement) return;                       // não mexe no campo em que a pessoa está
@@ -9022,6 +9176,8 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-pr]')){ const f=prFormAtual(); if(f){ const k=e.target.dataset.pr; f[k]=e.target.value; if(k==='amostragem'){ f.plantas=[]; route({keepScroll:true}); } else prAtualiza(f); } return; }
   if(e.target.id==='oc-tal'){ location.hash='#/ocorrencia/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('input[data-ocfoto]')){ const fs=e.target.files; if(fs&&fs.length) ocFotosAdd(fs); e.target.value=''; return; }
+  if(e.target.matches&&e.target.matches('input[data-mistfoto]')){ const fs=e.target.files; if(fs&&fs.length) mistFotosAdd(fs); e.target.value=''; return; }
+  if(e.target.id==='mi-filtro'){ mistFiltro=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.matches&&e.target.matches('input[data-bulaarq]')){ const fs=e.target.files; if(fs&&fs.length) bulaArqAdd(fs[0], e.target.dataset.bulaarq); e.target.value=''; return; }
   if(e.target.matches&&e.target.matches('input[type="checkbox"][data-oc]')){ const f=ocFormAtual(); if(f) f[e.target.dataset.oc]=e.target.checked; return; }
   if(e.target.matches&&e.target.matches('select[data-oc]')){ const f=ocFormAtual(); if(f){ f[e.target.dataset.oc]=e.target.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } return; }
@@ -9301,7 +9457,7 @@ document.addEventListener('click',e=>{
       r.retorno={quem:(r.retorno&&r.retorno.quem)||'', obs:(r.retorno&&r.retorno.obs)||'', ts:Date.now()};
       (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
       saveRecom(); route(); toast('Registre o volume utilizado e aprove'); } }
-    else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; r.saidaPushed=false; saveRecom(); route();
+    else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; r.saidaPushed=false; saveRecom(); try{ misturaDeRecom(r); }catch(e){} route();   // aplicação aprovada → banco de misturas
       if(r.opKey){   // recomendação de uma operação de campo: a baixa é da operação (id op:), sem contar em dobro
         const rl=realEnsure(r.opKey), baixa={};
         (recomNorm(r).itens||[]).forEach(it=>{ if(it.produto&&it.real!=null&&+it.real>0) baixa[it.produto]=(baixa[it.produto]||0)+(+it.real||0); });
@@ -9317,11 +9473,17 @@ document.addEventListener('click',e=>{
         toast(syncUrl()?'Aplicação aprovada — dando baixa no estoque…':'Aplicação aprovada — no histórico do talhão');
         pushSaida(r).then(ok=>{ if(ok && location.hash.indexOf('recomendacao')>=0) route({keepScroll:true}); });
       } } }
-    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
-    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
-    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
+    else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; try{ mistRemoverDeRecom(a.id); }catch(e){} clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
+    else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; try{ mistRemoverDeRecom(a.id); }catch(e){} clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
+    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); try{ mistRemoverDeRecom(a.id); }catch(e){} if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
+    else if(a.act==='mistAvaliar'){ mistAvalAbrir(a.id); }
+    else if(a.act==='mistNota'){ if(mistAvalForm){ mistAvalForm.nota=a.val; mistAvalRender(); } }
+    else if(a.act==='mistAvalSalvar'){ mistAvalSalvar(); }
+    else if(a.act==='mistAvalFechar'){ mistAvalFechar(); }
+    else if(a.act==='mistAvalLimpar'){ mistAvalLimpar(); }
+    else if(a.act==='mistFotoDel'){ if(mistAvalForm){ mistAvalForm.fotos.splice(+a.i,1); mistAvalRender(); } }
     else if(a.act==='bulaAbrir'){ bulaAbrir(a.prod||''); }
     else if(a.act==='bulaSalvar'){ bulaSalvar(); }
     else if(a.act==='bulaFechar'){ bulaFechar(); }
@@ -10105,6 +10267,7 @@ function applyPulledData(d, raw){
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
   try{ bulaApplyPulled(d.bulas_app); }catch(e){}           // bulas dos produtos
+  try{ mistApplyPulled(d.misturas_app); }catch(e){}         // misturas e eficácia
   try{ prApplyPulled(d.produtividade_app); }catch(e){}      // estimativas de produtividade
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
@@ -10737,7 +10900,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); BULAS=loadBulas(); bulaArqPend=loadBulaArq(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); BULAS=loadBulas(); bulaArqPend=loadBulaArq(); MIST=loadMist(); mistFotoPend=loadMistFoto(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
