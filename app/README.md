@@ -233,6 +233,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   tabela por talhão (R$ e R$/ha, clique abre o talhão) e os totais da fazenda por produto.
   Botões ⬇ CSV e 🖨 PDF (um bloco por talhão). Funções: `usoProdutosDe`, `usoTotais`,
   `usoProdutosHtml`, `exportUsoProdutosCsv`, `exportUsoProdutosPDF`.
+- **Preços → 📘 Bula do produto** — botão em cada produto do portfólio abre a ficha: ingrediente ativo,
+  concentração, pH ideal da calda, dose mín/máx da bula, carência (dias), reentrada (horas), classe
+  toxicológica, grupo/modo de ação, links da bula e da FISPQ, observações, e **anexar PDF** (bula e FISPQ
+  vão para a pasta "Bulas" do Drive; o link volta para a ficha). Grava na aba **BULAS APP** (`__bula`,
+  `__bulaArquivo`; `bulaDe`, `bulaSalvar`, `bulaArqEnviar`, `bulaApplyPulled`). A **recomendação** usa a
+  ficha: ingrediente ativo e carência dos itens (`recomNorm`), reentrada sugerida = a maior entre os
+  produtos (`recomCreate`), aviso **⚠ fora da bula** quando a dose sai da faixa (`bulaDoseAviso`) e o pH
+  ideal da calda no cartão e no PDF (`bulaPhTxt`). Sem bula, vale a coluna ATIVOS da planilha, como antes.
 
 ## Baixa do operador e aprovação (v180)
 

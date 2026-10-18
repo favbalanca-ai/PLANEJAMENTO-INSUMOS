@@ -1737,3 +1737,13 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rel-uso-t tfoot td{font-weight:800;background:var(--bg);padding:9px 14px}
 @media(max-width:640px){ .rel-uso-t tbody tr::after{display:none} .rel-uso-t tbody tr{cursor:default} }
 .rel-uso-t .pill{background:var(--line);color:var(--muted);margin-left:4px}
+/* ===== Bulas dos produtos (módulo Preços) ===== */
+.bula-btn.on{background:var(--teal-soft);border-color:var(--teal)}
+.bula-box{width:min(680px,100%)}
+.bula-body{overflow:auto;flex:1;min-height:0}
+.bula-grid{margin:10px 0 4px}
+.bula-grid label.w2{grid-column:1/-1}
+.bula-arq{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:13px}
+.bula-arq>span:first-child{font-weight:700}
+.bula-pend{color:var(--amber);font-weight:700}
+.bula-warn{color:var(--amber);font-size:11px;font-weight:700;white-space:normal}
