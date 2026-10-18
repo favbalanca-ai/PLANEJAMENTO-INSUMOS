@@ -112,7 +112,7 @@ function readAppPart_(){
     if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
     return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
       result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
-      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), ocorrencias_app:readMapApp(OCOR_SHEET), produtividade_app:readMapApp(PROD_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), ocorrencias_app:readMapApp(OCOR_SHEET), produtividade_app:readMapApp(PROD_SHEET), bulas_app:readMapApp(BULAS_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
   } finally { _CTR_MEMO_ = null; _LER_MEMO_ = null; }
 }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
@@ -242,7 +242,7 @@ function writeMapApp(name, map){
 // ---- AFERIÇÕES do Campo (pulverizador, perda na colheita, semeadura adubo/sementes) ----
 // Mesmo formato KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis para consulta.
 // O app manda o resumo pronto (campo "resumo"); excluídas ficam marcadas (del) para não voltarem de outro aparelho.
-var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP', OCOR_SHEET = 'OCORRENCIAS APP', PROD_SHEET = 'PRODUTIVIDADE APP';
+var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP', OCOR_SHEET = 'OCORRENCIAS APP', PROD_SHEET = 'PRODUTIVIDADE APP', BULAS_SHEET = 'BULAS APP';
 // mapa KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis calculadas por linhaFn(registro)
 function writeMapAppLeg_(name, map, cab, linhaFn){
   map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
@@ -268,16 +268,26 @@ function writeOcorrenciasApp(map){
     return [T_(r.data), T_(r.talhaoNome||r.talhao), TIPO[r.tipo]||T_(r.tipo), T_(r.ativ), T_(r.evento), T_(r.situacao), T_(r.acao||r.texto),
       T_(r.estadio), T_(per), T_(fotos), T_(r.quem), r.del ? 'EXCLUÍDA' : '']; });
 }
-// foto do Campo → pasta "Fotos do Campo" ao lado da planilha (link de visualização para quem tiver o link)
-function campoFoto_(f){
+// arquivo enviado pelo app → pasta ao lado da planilha (link de visualização para quem tiver o link)
+function driveArquivo_(f, pastaNome, mimePadrao, nomePadrao){
   if (!f || !f.b64) return { url:'' };
   var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
-  var pasta = _pasta(base, 'Fotos do Campo');
-  var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || 'image/jpeg', S(f.nome) || ('campo-' + Date.now() + '.jpg'));
+  var pasta = _pasta(base, pastaNome);
+  var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || mimePadrao, S(f.nome) || nomePadrao);
   var file = pasta.createFile(blob);
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}   // os outros celulares abrem a foto pelo link
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}   // os outros celulares abrem pelo link
   return { url:file.getUrl(), id:file.getId() };
 }
+// foto do Campo → pasta "Fotos do Campo"
+function campoFoto_(f){ return driveArquivo_(f, 'Fotos do Campo', 'image/jpeg', 'campo-' + Date.now() + '.jpg'); }
+// ---- BULAS dos produtos (módulo Preços): ingrediente ativo, concentração, pH, dose da bula, carência, reentrada, links ----
+// KEY = nome do produto (como no PORTIFÓLIO). Bula/FISPQ em PDF vão para a pasta "Bulas" ao lado da planilha.
+function writeBulasApp(map){
+  return writeMapAppLeg_(BULAS_SHEET, map, ['PRODUTO','INGREDIENTE ATIVO','CONCENTRAÇÃO','pH CALDA','DOSE MÍN','DOSE MÁX','UN DOSE','CARÊNCIA (dias)','REENTRADA (h)','CLASSE TOX.','GRUPO / MODO DE AÇÃO','BULA','FISPQ','OBS','REGISTRO'], function(r){
+    return [T_(r.produto), T_(r.ia), T_(r.conc), T_(r.ph), r.doseMin!==''&&r.doseMin!=null?+r.doseMin:'', r.doseMax!==''&&r.doseMax!=null?+r.doseMax:'', T_(r.doseUn),
+      r.carencia!==''&&r.carencia!=null?+r.carencia:'', r.reentrada!==''&&r.reentrada!=null?+r.reentrada:'', T_(r.tox), T_(r.grupo), T_(r.bulaUrl), T_(r.fispqUrl), T_(r.obs), r.del ? 'EXCLUÍDA' : '']; });
+}
+function bulaArquivo_(f){ return driveArquivo_(f, 'Bulas', 'application/pdf', 'bula-' + Date.now() + '.pdf'); }
 // ---- ESTIMATIVA DE PRODUTIVIDADE (plantas amostradas: nós/vagens/grãos ou espiga) ----
 function writeProdutividadeApp(map){
   return writeMapAppLeg_(PROD_SHEET, map, ['DATA','TALHÃO','ATIVIDADE','ESTÁDIO','AMOSTRAGEM','PMS (g)','FATOR CORREÇÃO (%)','PL/HA ESTABELECIDAS','PL/HA PRODUTIVAS','GRÃOS/PLANTA','PLANTAS','SC/HA','QUEM','REGISTRO'], function(r){
@@ -1564,15 +1574,15 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','compras_app','nfe_estados'],
-  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app'],
-  precos:['precos_app'],
+  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','compras_app','nfe_estados'],
+  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app'],
+  precos:['precos_app','bulas_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -1853,6 +1863,10 @@ function doPost(e){
       var oc = writeOcorrenciasApp(payload.__ocorrencia); out.ok = oc.rows;
     } else if (payload && payload.__campoFoto){       // foto de ocorrência/anotação → Drive (pasta "Fotos do Campo")
       out.foto = campoFoto_(payload.__campoFoto); out.ok = out.foto && out.foto.url ? 1 : 0; semCache = true;
+    } else if (payload && payload.__bula){            // bulas dos produtos (módulo Preços) — merge por chave
+      var bl = writeBulasApp(payload.__bula); out.ok = bl.rows;
+    } else if (payload && payload.__bulaArquivo){     // bula / FISPQ em PDF → Drive (pasta "Bulas")
+      out.arquivo = bulaArquivo_(payload.__bulaArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0; semCache = true;
     } else if (payload && payload.__produtividade){   // estimativas de produtividade do Campo — merge por chave
       var pd = writeProdutividadeApp(payload.__produtividade); out.ok = pd.rows;
     } else if (payload && payload.__stand){           // contagens de stand do Campo — merge por chave

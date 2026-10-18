@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-207';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-208';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3245,8 +3245,10 @@ V.precos = function(){
       <input class="pr-price cell${it.precoPrazo!=null&&it.precoPrazo!==''?' edited':''}" inputmode="decimal" data-pr="itPrecoPrazo" data-i="${i}" value="${it.precoPrazo!=null?it.precoPrazo:''}" placeholder="${compP>0?fmtn(compP):'a prazo'}" title="Preço a prazo">
       <input class="pr-price cell pr-pct" inputmode="decimal" data-pr="itPct" data-i="${i}" value="${pctToField(it.pct)}" placeholder="% vista" title="% sobre a referência da classe (só usado se o preço à vista estiver vazio)">
       <input class="pr-price cell pr-pct" inputmode="decimal" data-pr="itPctPrazo" data-i="${i}" value="${pctToField(it.pctPrazo)}" placeholder="% prazo" title="% a prazo">
+      <button class="icon-btn bula-btn${bulaTem(bulaDe(it.produto))?' on':''}" title="${bulaTem(bulaDe(it.produto))?'Bula cadastrada — abrir':'Cadastrar bula (ingrediente ativo, pH, dose, carência, FISPQ)'}" data-act="bulaAbrir" data-prod="${esc(it.produto||'')}">📘</button>
       <button class="icon-btn del" title="Remover" data-act="prDelItem" data-i="${i}">🗑</button></div>`;
   });
+  const nBula=s.itens.filter(it=>bulaTem(bulaDe(it.produto))).length;
   if(!s.itens.length) itemsList='<div class="mut" style="padding:14px">Nenhum produto. Adicione abaixo.</div>';
   const temUrl=!!syncUrl();
   return `<datalist id="pr-classes">${s.refs.map(r=>`<option value="${esc(r.classe)}">`).join('')}</datalist>
@@ -3274,7 +3276,7 @@ V.precos = function(){
       <tbody>${refRows||'<tr><td colspan="5" class="mut" style="padding:12px 14px">Nenhuma classe. Adicione abaixo.</td></tr>'}</tbody></table></div>
     <div class="op-add"><button class="btn btn-primary btn-sm" data-act="prAddRef">+ adicionar classe de referência</button></div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">por classe · A→Z · preço final = referência × (1 + %)${prevName?` · variação vs ${esc(prevName)}`:''}</span></div>
+  <div class="panel"><div class="panel-head"><h2>Portfólio do ano</h2><span class="sub">por classe · A→Z · preço final = referência × (1 + %)${prevName?` · variação vs ${esc(prevName)}`:''} · 📘 ${nBula} com bula</span></div>
     <div class="toolbar" style="margin:12px 12px 4px">
       <div class="search"><input id="q-preco" value="${esc(precoQ)}" placeholder="Buscar produto, empresa ou classe…" autocomplete="off"></div>
       <button class="chip-f${precoSemPreco?' on':''}" data-act="prToggleSemPreco" title="Mostrar só produtos sem preço à vista">só sem preço</button>
@@ -4788,6 +4790,99 @@ function ocorApplyPulled(map){
   if(pend||fotoPend.length) scheduleOcorPush();
   return changed;
 }
+// ===== BULAS dos produtos (módulo Preços → aba "BULAS APP") =====
+// Uma ficha por produto: ingrediente ativo, concentração, pH ideal da calda, dose mín/máx da bula, carência,
+// reentrada, classe toxicológica, grupo/modo de ação, links (bula e FISPQ) e PDFs no Drive (pasta "Bulas").
+// A recomendação puxa daqui o ingrediente ativo, a carência e a reentrada, e avisa dose fora da faixa da bula.
+const BULAS_KEY='planejamento_bulas', BULA_ARQ_KEY='planejamento_bulas_arq';
+let BULAS=null, bulaArqPend=[], bulaArqEnviando=false, bulaPushTimer=null, lastBulaSig='', bulaEditProd=null;
+const BULA_CAMPOS=[
+  ['ia','Ingrediente ativo','text','ex.: Glifosato'],['conc','Concentração','text','ex.: 480 g/L'],['ph','pH ideal da calda','text','ex.: 5 a 6'],
+  ['doseMin','Dose mínima (bula)','num','0'],['doseMax','Dose máxima (bula)','num','0'],['doseUn','Unidade da dose','text','ex.: L/ha'],
+  ['carencia','Carência (dias)','num','dias'],['reentrada','Reentrada (horas)','num','horas'],['tox','Classe toxicológica','text','ex.: 3 — moderadamente tóxico'],
+  ['grupo','Grupo / modo de ação','text','ex.: HRAC 9 · inibidor da EPSPs'],['bulaUrl','Link da bula','url','https://…'],['fispqUrl','Link da FISPQ','url','https://…'],
+  ['obs','Observações (mistura, compatibilidade…)','text','']];
+function bulaKey(p){ return String(p||'').toUpperCase().replace(/\s+/g,' ').trim(); }
+function bulaDe(p){ const k=bulaKey(p), r=BULAS&&BULAS.reg&&BULAS.reg[k]; return (r&&!r.del)?r:null; }
+function bulaTem(r){ return !!r && BULA_CAMPOS.some(([k])=>String(r[k]==null?'':r[k]).trim()!==''); }
+function bulaNum(v){ return (v===''||v==null||isNaN(+v))?null:+v; }
+function loadBulas(){ try{ const d=JSON.parse(localStorage.getItem(BULAS_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
+function saveBulas(){ try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} scheduleBulaPush(); }
+function loadBulaArq(){ try{ const a=JSON.parse(localStorage.getItem(BULA_ARQ_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+function saveBulaArq(){ try{ localStorage.setItem(BULA_ARQ_KEY, JSON.stringify(bulaArqPend)); }catch(e){ toast('Memória do aparelho cheia: o PDF não ficou guardado para envio'); } }
+// ---- sincronização (só envia se o Code.gs já tiver o ramo __bula) ----
+function bulasServerOk(){ return !!(DATA && DATA.bulas_app && typeof DATA.bulas_app==='object'); }
+function bulaSig(){ return JSON.stringify((BULAS&&BULAS.reg)||{}); }
+function scheduleBulaPush(){ if(!syncUrl()||!autoOn()||!bulasServerOk()) return; clearTimeout(bulaPushTimer);
+  bulaPushTimer=setTimeout(async()=>{ await bulaArqEnviar(); if(bulaSig()===lastBulaSig) return; bulaPush({auto:true}); }, 1500); }
+async function bulaPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!bulasServerOk()) return;
+  if(syncBusy){ if(opts.auto) scheduleBulaPush(); return; }
+  const sig=bulaSig(); if(opts.auto && sig===lastBulaSig) return;
+  syncBusy=true; setSyncStatus('busy');
+  try{ const r=await syncPost(url, JSON.stringify({__bula:(BULAS.reg||{})}));
+    if(postOk(r)) lastBulaSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Bulas: '+((r&&r.ok)||0)); }
+  catch(e){ syncBusy=false; setSyncStatus('err'); }
+}
+// sobe os PDFs da fila (bula / FISPQ), um por vez; cada um que chega vira link na ficha
+async function bulaArqEnviar(){ const url=syncUrl(); if(!url||!bulasServerOk()||bulaArqEnviando||!bulaArqPend.length) return;
+  bulaArqEnviando=true;
+  try{ for(const p of bulaArqPend.slice()){ const k=bulaKey(p.prod), rec=BULAS.reg[k]; if(!rec||rec.del){ bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); continue; }
+      let r=null; try{ r=await syncPost(url, JSON.stringify({__bulaArquivo:{nome:p.nome, mime:'application/pdf', b64:p.b64}})); }catch(e){ r=null; }
+      if(!(r&&r.arquivo&&r.arquivo.url)) break;                            // sem sinal: tenta de novo na próxima sincronização
+      rec[p.tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[p.tipo+'Arq']=p.nome; rec._u=Date.now();
+      bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} } }
+  finally{ bulaArqEnviando=false; }
+  if(bulaEditProd) bulaRender();
+}
+function bulaApplyPulled(map){
+  if(!map || typeof map!=='object' || !BULAS) return false;
+  let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const loc=BULAS.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
+    if(!loc || iu>lu){ BULAS.reg[k]=inc; changed=true; } }
+  const pend=bulaSig()!==lastBulaSig && !!lastBulaSig;
+  if(changed){ try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} if(!pend) lastBulaSig=bulaSig(); if(bulaEditProd) bulaRender(); }
+  if(pend||bulaArqPend.length) scheduleBulaPush();
+  return changed;
+}
+// ---- o que a recomendação usa da bula ----
+function bulaReentradaMax(itens){ let m=0; (itens||[]).forEach(it=>{ const b=bulaDe(it&&it.produto), v=b?bulaNum(b.reentrada):null; if(v!=null&&v>m) m=v; }); return m; }
+function bulaDoseAviso(it){ const b=bulaDe(it&&it.produto); if(!b) return ''; const d=+it.dose||0, mn=bulaNum(b.doseMin), mx=bulaNum(b.doseMax); if(!d||(mn==null&&mx==null)) return '';
+  if((mn!=null&&d<mn-1e-9)||(mx!=null&&d>mx+1e-9)) return `fora da bula (${mn!=null?fmtDose(mn):'?'} a ${mx!=null?fmtDose(mx):'?'}${b.doseUn?' '+b.doseUn:''})`; return ''; }
+function bulaPhTxt(itens){ const a=[]; (itens||[]).forEach(it=>{ const b=bulaDe(it&&it.produto); if(b&&String(b.ph||'').trim()) a.push(`${it.produto}: pH ${b.ph}`); }); return a.join(' · '); }
+// ---- ficha (janela) ----
+function bulaAbrir(prod){ if(!prod) return; bulaEditProd=prod; bulaRender(); }
+function bulaFechar(){ bulaEditProd=null; bulaRender(); }
+function bulaRender(){
+  let ov=document.getElementById('bula-ov'); if(!bulaEditProd){ if(ov) ov.remove(); return; }
+  const cur={}; if(ov) ov.querySelectorAll('input[data-bula]').forEach(i=>{ cur[i.dataset.bula]=i.value; });   // o que já foi digitado não se perde ao redesenhar (anexo, sincronização)
+  if(!ov){ ov=document.createElement('div'); ov.id='bula-ov'; ov.className='modal-ov'; ov.addEventListener('click',e=>{ if(e.target===ov) bulaFechar(); }); document.body.appendChild(ov); }
+  const p=bulaEditProd, r=bulaDe(p)||{}, P=PROD[p]||{}, k=bulaKey(p), val=f=>(f in cur)?cur[f]:(r[f]==null?'':r[f]);
+  const pend=t=>bulaArqPend.find(x=>bulaKey(x.prod)===k&&x.tipo===t);
+  const arq=(t,lbl)=>{ const url=r[t==='fispq'?'fispqUrl':'bulaUrl'], nome=r[t+'Arq'], pd=pend(t);
+    return `<div class="bula-arq"><span>📎 ${lbl} em PDF</span>${pd?`<span class="bula-pend">⏳ ${esc(pd.nome)} — sobe ao sincronizar</span>`:(url?`<a class="link" href="${esc(url)}" target="_blank" rel="noopener">${esc(nome||'abrir')}</a>`:'<span class="mut">nenhum</span>')}
+      <label class="btn btn-outline btn-sm">Anexar PDF<input type="file" accept="application/pdf,.pdf" data-bulaarq="${t}" hidden></label></div>`; };
+  ov.innerHTML=`<div class="modal-box bula-box"><div class="modal-head"><h3>📘 Bula — ${esc(p)}</h3><button class="icon-btn" data-act="bulaFechar" title="Fechar">✕</button></div>
+    <div class="mut" style="font-size:12px">${[P.classe, P.empresa, P.un?'un. '+P.un:'', P.ativos?'planilha: '+P.ativos:''].filter(Boolean).map(esc).join(' · ')||'produto fora do portfólio da planilha'}</div>
+    <div class="bula-body"><div class="app-grid bula-grid">${BULA_CAMPOS.map(([f,l,t,ph])=>`<label${f==='obs'?' class="w2"':''}>${l}<input ${t==='num'?'class="cell" inputmode="decimal"':'class="txt"'} data-bula="${f}" value="${esc(val(f))}" placeholder="${esc(ph)}"></label>`).join('')}</div>
+      ${arq('bula','Bula')}${arq('fispq','FISPQ')}
+      <p class="mut" style="font-size:11px;margin:6px 0 0">Vai para a aba <b>BULAS APP</b> da planilha e os PDFs para a pasta <b>Bulas</b> no Drive. A recomendação usa o ingrediente ativo, a carência, a reentrada e a faixa de dose.</p></div>
+    <div class="cp-btns" style="margin-top:10px"><button class="btn btn-primary" data-act="bulaSalvar">Salvar</button>${bulaTem(r)?`<button class="btn btn-ghost" data-act="bulaExcluir">🗑 Apagar ficha</button>`:''}<button class="btn btn-outline" data-act="bulaFechar">Fechar</button></div></div>`;
+}
+function bulaSalvar(){ const p=bulaEditProd, ov=document.getElementById('bula-ov'); if(!p||!ov) return; const k=bulaKey(p);
+  const r=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete r.del;
+  ov.querySelectorAll('input[data-bula]').forEach(i=>{ const f=i.dataset.bula, t=(BULA_CAMPOS.find(c=>c[0]===f)||[])[2], v=i.value.trim(); r[f]=(t==='num')?(v===''?'':numBR(v)):v; });
+  r._u=Date.now(); BULAS.reg[k]=r; saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Bula salva'+(syncUrl()?' — sincronizando com a planilha':'')); }
+function bulaExcluir(){ const p=bulaEditProd; if(!p||!ask('Apagar a ficha de bula deste produto?')) return; const k=bulaKey(p);
+  BULAS.reg[k]={produto:p, del:true, _u:Date.now()}; bulaArqPend=bulaArqPend.filter(x=>bulaKey(x.prod)!==k); saveBulaArq(); saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Ficha apagada'); }
+async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
+  if(!/pdf/i.test(file.type||'') && !/\.pdf$/i.test(file.name||'')){ toast('Envie um arquivo PDF'); return; }
+  if(file.size>8*1024*1024){ toast('PDF muito grande (máximo 8 MB)'); return; }
+  const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file); });
+  const k=bulaKey(bulaEditProd);
+  bulaArqPend=bulaArqPend.filter(x=>!(bulaKey(x.prod)===k&&x.tipo===tipo)); bulaArqPend.push({prod:bulaEditProd, tipo, nome:file.name, b64}); saveBulaArq();
+  if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:Date.now()}; try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} }   // a ficha precisa existir para o link chegar
+  bulaRender(); scheduleBulaPush(); toast(syncUrl()?'PDF na fila — sobe para o Drive ao sincronizar':'PDF guardado; configure a Sincronização para enviar ao Drive'); }
 // ---- formulário ----
 function ocFormNovo(tipo,tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal', hj=_hojeISO();
   const est=t?estadioEm(estadiosDe(t,seq),hj):null;
@@ -5105,7 +5200,9 @@ function recomNorm(r){
   if(r.tmax==null) r.tmax=30; if(r.urmin==null) r.urmin=55; if(r.vmax==null) r.vmax=10;   // limites climáticos usuais
   if(r.epi==null) r.epi=RECOM_EPI_PADRAO;
   if(!r.resp){ try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); if(d.resp) r.resp=d.resp; if(d.crea&&!r.crea) r.crea=d.crea; }catch(e){} }
-  (r.itens||[]).forEach(it=>{ if(it.ativo==null) it.ativo=(PROD[it.produto]&&PROD[it.produto].ativos)||''; if(it.car==null) it.car=''; });
+  (r.itens||[]).forEach(it=>{ const b=bulaDe(it.produto);   // bula do produto (módulo Preços) manda; senão, a coluna ATIVOS da planilha
+    if(it.ativo==null||it.ativo==='') it.ativo=(b&&b.ia)||(PROD[it.produto]&&PROD[it.produto].ativos)||'';
+    if(it.car==null||it.car==='') it.car=(b&&bulaNum(b.carencia)!=null)?String(bulaNum(b.carencia)):''; });
   return r;
 }
 const RECOM_TEC_KEY='planejamento_recom_tec';   // último responsável técnico/CREA usado (vira padrão)
@@ -5142,6 +5239,7 @@ function recomCreate(talId, opKey){
     tmax:30, urmin:55, vmax:10, reentrada:'', epi:RECOM_EPI_PADRAO, crea:'',
     produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
   recomNorm(r);
+  { const m=bulaReentradaMax(r.itens); if(m&&!r.reentrada) r.reentrada=String(m); }   // reentrada sugerida pela bula (a maior entre os produtos)
   RECOM.registros.push(r); saveRecom(); return r;
 }
 // Operação de Campo → reaproveita/cria a recomendação da operação e marca como enviada,
@@ -5310,9 +5408,10 @@ function recomCard(r,t){
     const prodCell=editable
       ? `<input list="prodlist" class="txt prod-in" ${F('itProd')} data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo"><br><input class="txt" ${F('itAtivo')} data-reci="${i}" value="${esc(it.ativo||'')}" placeholder="ingrediente ativo" style="font-size:11px;margin-top:3px;max-width:240px">`
       : `<b>${esc(it.produto||'—')}</b>${it.ativo?`<br><small class="mut">${esc(it.ativo)}</small>`:''}`;
-    const doseCell=editable
+    const dAv=bulaDoseAviso(it), dAvHtml=dAv?`<div class="bula-warn" title="Faixa de dose cadastrada na bula do produto (módulo Preços)">⚠ ${esc(dAv)}</div>`:'';
+    const doseCell=(editable
       ? `<input class="cell" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
-      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`;
+      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`)+dAvHtml;
     const carCell=editable
       ? `<input class="cell" inputmode="numeric" ${F('itCar')} data-reci="${i}" value="${esc(it.car||'')}" placeholder="dias" style="width:56px">`
       : (it.car?`${esc(it.car)}<small> d</small>`:'<span class="mut">—</span>');
@@ -5357,7 +5456,7 @@ function recomCard(r,t){
       <label>Volume de calda (L/ha)<input class="cell" inputmode="decimal" ${F('calda')} value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
       <label>Tanque (L)<input class="cell" inputmode="decimal" ${F('tanque')} value="${esc(r.tanque||'')}" placeholder="ex.: 3000"></label>
       <label>Adjuvante / pH<input class="txt" ${F('adjuvante')} value="${esc(r.adjuvante||'')}" placeholder="ex.: óleo mineral 0,5% · pH 5,5"></label></div>
-      ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}`)}
+      ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}${bulaPhTxt(its)?`<div class="rc-obs">📘 pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}`)}
     ${sec('Aplicação',`<div class="app-grid" style="padding:6px 12px 10px">
       <label>Máquina / conjunto<input class="txt" ${F('maquina')} value="${esc(r.maquina||'')}"></label>
       <label>Ponta / bico<input class="txt" ${F('ponta')} value="${esc(r.ponta||'')}" placeholder="ex.: leque 110-02 · cone vazio"></label>
@@ -5375,7 +5474,7 @@ function recomCard(r,t){
       <label>Nome<input class="txt" ${F('resp')} value="${esc(r.resp||'')}" placeholder="engenheiro(a) agrônomo(a)"></label>
       <label>CREA / registro<input class="txt" ${F('crea')} value="${esc(r.crea||'')}"></label></div>`)}` : `
     <div class="rc-meta">
-      ${caldaTxt?`<span>💧 ${caldaTxt}</span>`:''}${r.adjuvante?`<span>🧪 ${esc(r.adjuvante)}</span>`:''}
+      ${caldaTxt?`<span>💧 ${caldaTxt}</span>`:''}${r.adjuvante?`<span>🧪 ${esc(r.adjuvante)}</span>`:''}${bulaPhTxt(its)?`<span title="pH ideal da calda, pela bula de cada produto">📘 ${esc(bulaPhTxt(its))}</span>`:''}
       ${(r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.maquina,r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
       ${recomCondTxt(r)?`<span>🌤 ${esc(recomCondTxt(r))}</span>`:''}
       ${(r.epi||r.reentrada)?`<span>⚠️ ${esc(r.epi||'')}${r.reentrada?` · reentrada ${esc(r.reentrada)} h`:''}</span>`:''}
@@ -5578,7 +5677,7 @@ function exportRecomPDF_(r){
     <thead><tr><th>#</th><th>Produto</th><th>Ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (${num(area)} ha)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th></tr></thead><tbody>`;
   its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num">${fmtDose(it.dose)} ${esc(it.un||'')}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
   if(!its.length) h+=`<tr><td colspan="8">— sem produtos —</td></tr>`;
-  h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}</div>
+  h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}${bulaPhTxt(its)?`<div class="rx-note">pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}</div>
   <div class="rx-sec"><h2>4. Calda</h2><div class="rx-kv">
     ${kv('Volume de calda',cd.calda?`${num(cd.calda)} L/ha`:'')}${kv('Tanque',cd.tk?`${num(cd.tk)} L`:'')}${kv('Área por tanque',cd.haTk?`${num(cd.haTk)} ha`:'')}${kv('Nº de tanques',cd.nTk?`${cd.nTk}${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último: ${num(cd.ultimo)} ha)`:''}`:'')}
     ${kv('Volume total de calda',cd.total?`${num(cd.total)} L`:'')}</div></div>
@@ -7064,6 +7163,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-pr]')){ const f=prFormAtual(); if(f){ const k=e.target.dataset.pr; f[k]=e.target.value; if(k==='amostragem'){ f.plantas=[]; route({keepScroll:true}); } else prAtualiza(f); } return; }
   if(e.target.id==='oc-tal'){ location.hash='#/ocorrencia/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('input[data-ocfoto]')){ const fs=e.target.files; if(fs&&fs.length) ocFotosAdd(fs); e.target.value=''; return; }
+  if(e.target.matches&&e.target.matches('input[data-bulaarq]')){ const fs=e.target.files; if(fs&&fs.length) bulaArqAdd(fs[0], e.target.dataset.bulaarq); e.target.value=''; return; }
   if(e.target.matches&&e.target.matches('input[type="checkbox"][data-oc]')){ const f=ocFormAtual(); if(f) f[e.target.dataset.oc]=e.target.checked; return; }
   if(e.target.matches&&e.target.matches('select[data-oc]')){ const f=ocFormAtual(); if(f){ f[e.target.dataset.oc]=e.target.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } return; }
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
@@ -7363,6 +7463,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
+    else if(a.act==='bulaAbrir'){ bulaAbrir(a.prod||''); }
+    else if(a.act==='bulaSalvar'){ bulaSalvar(); }
+    else if(a.act==='bulaFechar'){ bulaFechar(); }
+    else if(a.act==='bulaExcluir'){ bulaExcluir(); }
     else if(a.act==='relUsoCsv'){ exportUsoProdutosCsv(); }
     else if(a.act==='relUsoPdf'){ exportUsoProdutosPDF(); }
     else if(a.act==='relUsoTal'){ relUsoTal=a.id||''; route(); const el=document.getElementById('rel-uso'); if(el) el.scrollIntoView({block:'start'}); }
@@ -8141,6 +8245,7 @@ function applyPulledData(d, raw){
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
+  try{ bulaApplyPulled(d.bulas_app); }catch(e){}           // bulas dos produtos
   try{ prApplyPulled(d.produtividade_app); }catch(e){}      // estimativas de produtividade
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
@@ -8383,6 +8488,7 @@ async function precosPull(opts){
   try{
     const d=await syncGet(url,{auto:opts.auto});
     const changed=precosApplyPulled(d&&d.precos_app);
+    try{ if(d&&d.bulas_app){ if(!DATA) DATA={}; DATA.bulas_app=d.bulas_app; bulaApplyPulled(d.bulas_app); } }catch(e){}   // bulas também vêm no puxar do módulo Preços
     syncBusy=false; setSyncStatus('ok'); markSynced();
     if(changed){ if(!opts.auto) toast('Preços atualizados da planilha'); route({keepScroll:true}); }
     else if(!opts.auto){ toast('Sem mudanças na planilha'); }
@@ -8772,7 +8878,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); BULAS=loadBulas(); bulaArqPend=loadBulaArq(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
