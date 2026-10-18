@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-206';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-207';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5527,13 +5527,15 @@ async function pdfArquivo(html){
     const links=[...box.querySelectorAll('a[href]')].map(a=>Object.assign(rel(a),{url:a.href}));
     const qr=box.querySelector('.rx-qr'); if(qr && links[0]) links.push(Object.assign(rel(qr),{url:links[0].url}));   // o QR Code também é clicável
     const ESC=2, canvas=await window.html2canvas(box,{scale:ESC, backgroundColor:'#ffffff', logging:false});
-    const {jsPDF}=window.jspdf, doc=new jsPDF({unit:'mm', format:'a4'});
-    const M=14, pw=210-2*M, mm=pw/W, pagPx=Math.floor((297-2*M)/mm), totH=canvas.height/ESC, nPag=Math.max(1, Math.ceil(totH/pagPx-0.02));
-    for(let i=0;i<nPag;i++){ if(i) doc.addPage();
-      const y0=i*pagPx, hPx=Math.min(pagPx, totH-y0), c=document.createElement('canvas');
-      c.width=canvas.width; c.height=Math.ceil(hPx*ESC); c.getContext('2d').drawImage(canvas, 0, y0*ESC, canvas.width, c.height, 0, 0, canvas.width, c.height);
-      doc.addImage(c.toDataURL('image/png'), 'PNG', M, M, pw, hPx*mm, undefined, 'FAST');   // PNG comprimido: texto e QR nítidos, arquivo leve
-      links.filter(l=>l.y>=y0 && l.y<y0+pagPx).forEach(l=>doc.link(M+l.x*mm, M+(l.y-y0)*mm, l.w*mm, l.h*mm, {url:l.url})); }
+    // SEMPRE UMA PÁGINA SÓ (a quebra em 2 páginas cortava a tabela e o QR Code): se o conteúdo passa do A4,
+    // encolhe para caber (até 62%); se for muito comprido, a página cresce na altura (fica legível e inteira).
+    const {jsPDF}=window.jspdf, M=12, totH=canvas.height/ESC, mmA4=(210-2*M)/W, hA4=297-2*M;
+    let mm=mmA4, pageH=297, f=1;
+    if(totH*mmA4>hA4){ f=hA4/(totH*mmA4); if(f>=0.62) mm=mmA4*f; else { f=1; pageH=Math.ceil(totH*mmA4+2*M); } }
+    const doc=new jsPDF({unit:'mm', format:pageH===297?'a4':[210,pageH]});
+    const pw=W*mm, x0=(210-pw)/2;   // encolhido: centralizado na largura
+    doc.addImage(canvas.toDataURL('image/png'), 'PNG', x0, M, pw, totH*mm, undefined, 'FAST');   // PNG comprimido: texto e QR nítidos, arquivo leve
+    links.forEach(l=>doc.link(x0+l.x*mm, M+l.y*mm, l.w*mm, l.h*mm, {url:l.url}));
     return doc.output('blob');
   } finally { box.remove(); }
 }

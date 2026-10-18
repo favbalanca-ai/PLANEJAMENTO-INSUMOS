@@ -214,7 +214,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   com o link longo, sem QR. QR via `qrcode-generator@1.4.4` (jsDelivr, carregado só ao gerar o PDF).
   O **arquivo PDF é montado no próprio app** (`pdfArquivo`: `html2canvas@1.4.1` + `jspdf@2.5.1`, jsDelivr):
   "Imprimir → Salvar como PDF" do celular perdia os links. A página vira imagem (mesmo visual da
-  impressão, ~200–300 KB) e o link entra como link de verdade sobre o botão e o QR Code. Abre a janela
+  impressão, ~200–300 KB) e o link entra como link de verdade sobre o botão e o QR Code. O PDF sai
+  **sempre numa página só**: se passa do A4, encolhe para caber (até 62%); se for muito comprido, a
+  página cresce na altura (nada de tabela/QR cortados entre páginas). Abre a janela
   **PDF pronto**: 📲 Enviar o PDF (WhatsApp… — compartilhar do celular), ⬇️ Baixar, 👁 Abrir e 🖨 Imprimir.
   Sem internet para o gerador, cai na impressão como antes.
 - **Máquinas** — catálogo de conjuntos (custo de operação) com **R$/HM** e
