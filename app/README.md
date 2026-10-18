@@ -241,6 +241,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ficha: ingrediente ativo e carência dos itens (`recomNorm`), reentrada sugerida = a maior entre os
   produtos (`recomCreate`), aviso **⚠ fora da bula** quando a dose sai da faixa (`bulaDoseAviso`) e o pH
   ideal da calda no cartão e no PDF (`bulaPhTxt`). Sem bula, vale a coluna ATIVOS da planilha, como antes.
+- **Campo → Misturas** (`#/misturas`) — banco de misturas de produtos com eficácia. Toda **recomendação de
+  aplicação aprovada** (retorno do operador aprovado) vira um registro automático (`misturaDeRecom`): produtos
+  e doses, alvo, talhão, cultura, estádio, data, calda, condições, máquina e operador; TS e plantio não entram;
+  reprovar/reabrir a recomendação tira a mistura se ainda não foi avaliada. A **avaliação** (⭐ botão no cartão da
+  operação concluída no Campo e na tela Misturas) tem nota Eficaz / Parcial / Não eficaz, data (dias após a
+  aplicação calculados), observação e fotos (Drive). A tela agrupa combinações iguais (mesmos produtos, mesmo
+  com doses diferentes) com nº de aplicações, barra ✅➖❌⏳ e a lista de aplicações; painel "A avaliar" e filtro
+  por nota. A Timeline mostra "eficácia: …" no evento da aplicação. Aba **MISTURAS APP** (`__mistura`;
+  `mistApplyPulled`, `mistAvalSalvar`, `mistFotosEnviar`).
 
 ## Baixa do operador e aprovação (v180)
 

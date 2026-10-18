@@ -87,6 +87,13 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **`__bulaArquivo`**: recebe a bula ou a FISPQ em PDF (até 8 MB) e grava na pasta **“Bulas”** ao lado da
   planilha (`driveArquivo_`, a mesma rotina das fotos do Campo); o link vai para a ficha (colunas BULA / FISPQ).
 
+## Misturas e eficácia (aba `MISTURAS APP`)
+- **`__mistura`** (Campo e Planejamento): toda recomendação de **aplicação aprovada** vira um registro (TS e plantio
+  não entram), formato KEY|JSON|ATUALIZADO + colunas **DATA · TALHÃO · CULTURA · ESTÁDIO · ALVO · PRODUTOS (DOSE/HA) ·
+  CALDA (L/ha) · CONDIÇÕES · MÁQUINA · OPERADOR · EFICÁCIA · AVALIADA EM · DIAS APÓS · OBS. AVALIAÇÃO · FOTOS ·
+  QUEM AVALIOU · REGISTRO**. A avaliação (Eficaz / Parcial / Não eficaz) vai no JSON (`aval`) e nas colunas; as
+  fotos da avaliação usam o `__campoFoto` (pasta "Fotos do Campo"). Volta como **`misturas_app`**.
+
 ## Chave da NF-e como texto nas abas KEY|JSON (conserto)
 - Uma chave de 44 dígitos gravada numa célula sem formato de texto vira **número** (3,1E+43) e perde os
   dígitos: na **COMPRAS APP** isso criava um registro "fantasma" em cada aparelho e fazia o app reenviar a
