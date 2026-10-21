@@ -299,6 +299,24 @@ function writeBulasApp(map){
       r.carencia!==''&&r.carencia!=null?+r.carencia:'', r.reentrada!==''&&r.reentrada!=null?+r.reentrada:'', T_(r.tox), T_(r.grupo), T_(emb), T_(r.bulaUrl), T_(r.fispqUrl), T_(r.obs), r.del ? 'EXCLUÍDA' : '']; });
 }
 function bulaArquivo_(f){ return driveArquivo_(f, 'Bulas', 'application/pdf', 'bula-' + Date.now() + '.pdf'); }
+// baixa um PDF (bula / FISPQ) de um LINK da web e guarda na pasta "Bulas" — o navegador do app não consegue
+// baixar de outros sites (CORS); a planilha consegue. Só aceita PDF de verdade (começa com "%PDF") até 15 MB.
+function bulaBaixar_(b){
+  var url = S(b && b.url).trim(); if (!/^https?:\/\//i.test(url)) return { erro:'cole um link que comece com http:// ou https://' };
+  var resp; try { resp = UrlFetchApp.fetch(url, { muteHttpExceptions:true, followRedirects:true }); } catch (e) { return { erro:'não consegui abrir o link: ' + String(e && e.message || e).slice(0, 120) }; }
+  if (resp.getResponseCode() !== 200) return { erro:'o site respondeu ' + resp.getResponseCode() + ' — abra o link no navegador e confira' };
+  var blob = resp.getBlob(), bytes = blob.getBytes();
+  var ehPdf = bytes.length > 4 && bytes[0] === 37 && bytes[1] === 80 && bytes[2] === 68 && bytes[3] === 70;   // "%PDF"
+  if (!ehPdf) return { erro:'o link não é um arquivo PDF — abra o resultado da busca e copie o endereço do próprio .pdf' };
+  if (bytes.length > 15 * 1024 * 1024) return { erro:'PDF grande demais (máximo 15 MB)' };
+  var nome = S(b.nome).trim() || decodeURIComponent(url.split('?')[0].split('#')[0].split('/').pop() || '') || 'bula.pdf';
+  nome = nome.replace(/[\\/:*?"<>|]+/g, '_'); if (!/\.pdf$/i.test(nome)) nome += '.pdf';
+  blob.setName(nome); blob.setContentType('application/pdf');
+  var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
+  var file = _pasta(base, 'Bulas').createFile(blob);
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
+  return { url:file.getUrl(), id:file.getId(), nome:nome, kb:Math.round(bytes.length / 1024) };
+}
 // ---- MISTURAS: toda recomendação de aplicação aprovada + avaliação de eficácia (Eficaz / Parcial / Não eficaz) ----
 function writeMisturasApp(map){
   var NOTA = { eficaz:'Eficaz', parcial:'Parcial', ineficaz:'Não eficaz' };
@@ -1602,7 +1620,7 @@ var MOD_DADOS = {
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -1758,7 +1776,7 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe'];
-var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __nfeFoto:[],
+var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_,
@@ -1942,6 +1960,9 @@ function gravaUm_(payload, acc, cfg, out){
       var mi = writeMisturasApp(payload.__mistura); out.ok = mi.rows;
     } else if (payload && payload.__bula){            // bulas dos produtos (módulo Preços) — merge por chave
       var bl = writeBulasApp(payload.__bula); out.ok = bl.rows;
+    } else if (payload && payload.__bulaBaixar){      // bula / FISPQ: baixa o PDF de um link da web → Drive (pasta "Bulas")
+      out.arquivo = bulaBaixar_(payload.__bulaBaixar); semCache = true;
+      if (out.arquivo && out.arquivo.url) out.ok = 1; else { out.fail = 1; out.msgs.push((out.arquivo && out.arquivo.erro) || 'não baixou'); }
     } else if (payload && payload.__bulaArquivo){     // bula / FISPQ em PDF → Drive (pasta "Bulas")
       out.arquivo = bulaArquivo_(payload.__bulaArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0; semCache = true;
     } else if (payload && payload.__produtividade){   // estimativas de produtividade do Campo — merge por chave

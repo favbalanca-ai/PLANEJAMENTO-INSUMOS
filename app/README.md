@@ -264,6 +264,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
   coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);
   no celular continua uma coluna simples.
+- **Bula → 🔎 Buscar na web e ⬇ Baixar e anexar pelo link** — embaixo de "Link da bula" e "Link da FISPQ".
+  Buscar abre o Google com a pesquisa pronta (`"PRODUTO" bula pdf` / `FISPQ pdf`); a dona copia o endereço do PDF
+  para o campo e toca em Baixar: o app manda `__bulaBaixar:{url,tipo}` e a **planilha** baixa o arquivo (o navegador
+  do app não consegue, por CORS), guarda na pasta "Bulas" do Drive e devolve o link, que entra na ficha com o
+  nome do arquivo e o link de origem (`bulaBuscar`, `bulaBaixar`). Link que não é PDF, 404 ou > 15 MB: aviso e o
+  campo fica como estava.
 - **Campo → Misturas** (`#/misturas`) — banco de misturas de produtos com eficácia. Toda **recomendação de
   aplicação aprovada** (retorno do operador aprovado) vira um registro automático (`misturaDeRecom`): produtos
   e doses, alvo, talhão, cultura, estádio, data, calda, condições, máquina e operador; TS e plantio não entram;

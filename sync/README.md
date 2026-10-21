@@ -87,6 +87,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   mais recente vence.
 - **`__bulaArquivo`**: recebe a bula ou a FISPQ em PDF (até 8 MB) e grava na pasta **“Bulas”** ao lado da
   planilha (`driveArquivo_`, a mesma rotina das fotos do Campo); o link vai para a ficha (colunas BULA / FISPQ).
+- **`__bulaBaixar`** `{url, tipo}`: a planilha baixa o PDF do link com `UrlFetchApp` (só aceita arquivo que começa
+  com `%PDF`, até 15 MB, resposta 200), grava na pasta "Bulas" e responde `arquivo:{url,id,nome,kb}`; erro vem em
+  `msgs`. Não invalida o cache.
 
 ## Sincronização mais rápida: cache por aba, `__lote` e checagem leve (v211)
 - **Cache por aba.** A parte APP do pacote (`retornos`, `movimentacao`, `realizado_app`, `ocorrencias_app`, `bulas_app`,
