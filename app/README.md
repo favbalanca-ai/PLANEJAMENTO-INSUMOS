@@ -241,6 +241,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ficha: ingrediente ativo e carência dos itens (`recomNorm`), reentrada sugerida = a maior entre os
   produtos (`recomCreate`), aviso **⚠ fora da bula** quando a dose sai da faixa (`bulaDoseAviso`) e o pH
   ideal da calda no cartão e no PDF (`bulaPhTxt`). Sem bula, vale a coluna ATIVOS da planilha, como antes.
+- **Campo → quadro no PC** — com o quadro aberto o conteúdo deixa de ter largura máxima
+  (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
+  coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);
+  no celular continua uma coluna simples.
 - **Campo → Misturas** (`#/misturas`) — banco de misturas de produtos com eficácia. Toda **recomendação de
   aplicação aprovada** (retorno do operador aprovado) vira um registro automático (`misturaDeRecom`): produtos
   e doses, alvo, talhão, cultura, estádio, data, calda, condições, máquina e operador; TS e plantio não entram;
