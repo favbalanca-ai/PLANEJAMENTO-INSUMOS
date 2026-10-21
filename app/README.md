@@ -266,6 +266,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - Números digitados: `numBR` — "2,5" e "2.5" = 2,5; "1.500" = 1500.
 - Operação concluída / TS feito: PDF e WhatsApp não criam outro link de baixa (o PDF diz "Baixa já registrada").
 
+## Sincronização mais rápida (v211)
+- **Envio em lote.** Os registros do Campo (execução, ocorrências + fotos, misturas, bulas, stand, aferições,
+  produtividade, limites, resultados, tarefas) não têm mais um temporizador e um pedido cada: `scheduleXxxPush`
+  só marca o tipo (`loteAgendar`) e, 1,5 s depois da última mudança, `loteEnviar` manda tudo o que mudou numa
+  requisição `__lote` (fotos/PDFs sobem antes, para virarem link). Tabela `LOTE_TIPOS` (payload, assinatura,
+  rótulo). Com Code.gs antigo (sem `cap.lote` no puxar) manda um pedido por tipo, como antes. Ao entrar/sair do
+  app, `loteEnviarTudo()`.
+- **Planilha relê só o que mudou.** O Code.gs guarda uma chave de cache por aba: depois de gravar uma mistura, o
+  próximo puxar relê só MISTURAS APP (antes: as 17 abas). O Log detalhado mostra quais abas foram relidas.
+- **Checagem leve de verdade.** O "mudou alguma coisa?" (a cada 45 s) responde do cache; se o cache está frio,
+  responde "frio" na hora e o app puxa direto (uma leitura em vez de duas).
+
 ## Desempenho (v181)
 
 - **Redesenho parcial** (`morphInto`): na MESMA tela (edição, sincronização) o app compara a tela nova

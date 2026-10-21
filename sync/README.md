@@ -87,6 +87,19 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **`__bulaArquivo`**: recebe a bula ou a FISPQ em PDF (até 8 MB) e grava na pasta **“Bulas”** ao lado da
   planilha (`driveArquivo_`, a mesma rotina das fotos do Campo); o link vai para a ficha (colunas BULA / FISPQ).
 
+## Sincronização mais rápida: cache por aba, `__lote` e checagem leve (v211)
+- **Cache por aba.** A parte APP do pacote (`retornos`, `movimentacao`, `realizado_app`, `ocorrencias_app`, `bulas_app`,
+  `misturas_app`… — lista `APP_TODAS_`) fica no CacheService **uma chave por aba**, cada uma com a sua geração.
+  Uma gravação só invalida as chaves que ela muda (`APP_INVALIDA_`: `__mistura` → `misturas_app`; NF-e → resumo,
+  estados, movimentação, compras e de-para; login/fotos/link curto → nada). O próximo puxar relê **só essas abas**
+  (`readAppKeys_`), não as 17. Edição na BASE (dose, estoque…) continua apagando tudo. O `_srv.app` do puxar
+  lista as abas relidas (aparece no Log detalhado do app).
+- **`__lote`**: `{__lote:[{__ocorrencia:…},{__mistura:…},{__realizado:…}]}` grava cada item na ordem, com as
+  mesmas regras de permissão, e responde `itens:[{ok,fail,msgs}…]` (um por item) + `ok/fail` do conjunto. Até 40 itens.
+- **Checagem leve**: `?h=1` responde `{hash:'', frio:1}` na hora quando alguma parte do cache está vencida ou
+  invalidada, em vez de ler a planilha para calcular o hash; o app então faz o puxar completo direto.
+- O puxar informa `cap:{lote:1, cacheAba:1}`; o app só manda `__lote` quando vê isso (Code.gs antigo: um pedido por tipo).
+
 ## Misturas e eficácia (aba `MISTURAS APP`)
 - **`__mistura`** (Campo e Planejamento): toda recomendação de **aplicação aprovada** vira um registro (TS e plantio
   não entram), formato KEY|JSON|ATUALIZADO + colunas **DATA · TALHÃO · CULTURA · ESTÁDIO · ALVO · PRODUTOS (DOSE/HA) ·
