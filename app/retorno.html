@@ -89,6 +89,7 @@ img{max-width:100%}
 .rrow .r-tank{width:88px;text-align:right}
 .rrow .r-tank .big{font-size:19px;font-weight:700;color:var(--teal);font-variant-numeric:tabular-nums;line-height:1.1}
 .rrow .r-tank .un{font-size:11px;color:var(--ink-soft);font-weight:600}
+.rrow .r-tank .r-emb{color:var(--teal);white-space:nowrap}
 .rrow .r-tot{width:64px;text-align:right;font-size:13.5px;font-weight:600;color:var(--ink-soft);font-variant-numeric:tabular-nums}
 .sub-h{padding:10px 14px 2px;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-soft);font-weight:700;border-top:1px solid var(--line)}
 .recipe-note{display:flex;gap:8px;padding:11px 14px;border-top:1px solid var(--line);background:var(--surface-2);border-radius:0 0 15px 15px;font-size:12.5px;color:var(--ink-soft)}
@@ -194,7 +195,9 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     wrap.innerHTML='<div class="err-page"><h2>Link incompleto</h2><p>Peça para reenviarem a recomendação pelo app. O link precisa vir completo do WhatsApp.</p></div>';
     return;
   }
-  var ITENS=REC.it.map(function(x){ return {produto:x.p, un:x.u||'', dose:+x.d||0, liquido:!!x.l, sem:!!x.s, ts:!!x.t}; });
+  var ITENS=REC.it.map(function(x){ return {produto:x.p, un:x.u||'', dose:+x.d||0, liquido:!!x.l, sem:!!x.s, ts:!!x.t, emb:+x.e||0, embUn:x.eu||x.u||''}; });
+  // embalagem do produto (ficha da bula): "4 emb. de 5 L" para o preparo da calda
+  function embTxt(q,it){ if(!it.emb) return ''; var k=q/it.emb; return (Math.abs(k-Math.round(k))<1e-6?nf0.format(k):nf.format(k))+' emb. de '+nf.format(it.emb)+' '+esc(it.embUn); }
   // ---- plantio: regulagem da plantadeira (sementes por metro) + sulco/adubo ----
   var PL=REC.pl||null;
   // ---- tratamento de sementes (TS): dose por BATELADA (bag) em vez de por tanque ----
@@ -351,7 +354,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
     document.getElementById('recipeRows').innerHTML=LIQ.map(function(it){
       var porTanque=it.dose*haTanque, total=it.dose*AREA;
       return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div><div class="r-cls">'+nf.format(it.dose)+' '+esc(it.un)+'/ha</div></div>'+
-        '<div class="r-tank"><div class="big">'+(haTanque?nf.format(porTanque):'—')+'</div><div class="un">'+esc(it.un)+' / tanque</div></div>'+
+        '<div class="r-tank"><div class="big">'+(haTanque?nf.format(porTanque):'—')+'</div><div class="un">'+esc(it.un)+' / tanque</div>'+(haTanque&&it.emb?'<div class="un r-emb">📦 '+embTxt(porTanque,it)+'</div>':'')+'</div>'+
         '<div class="r-tot">'+nf.format(total)+' '+esc(it.un)+'</div></div>';
     }).join('');
     var note=document.getElementById('recipeNote');

@@ -248,6 +248,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   diferença % vs o planejado. Botão **⚖ Arredondar por tanque** arredonda todos (0,5 L acima de 10 L · 0,1 L
   entre 1 e 10 · 0,01 L abaixo de 1). Digitar o volume exato do planejado limpa o ajuste. O planejamento do
   talhão não muda (`tankSetDose`, `tankArredondar`, `tankRefresh`).
+- **Arredondar pela embalagem** — a ficha 📘 Bula ganhou **Embalagem (tamanho + unidade)** (ex.: 5 L, 15 kg;
+  coluna EMBALAGEM na aba BULAS APP). Com embalagem cadastrada, ⚖ Arredondar leva o volume por tanque para a
+  **meia embalagem mais próxima** (19,5 L c/ 5 L → 20 L; 31 kg c/ 15 kg → 30 kg; 17 L → 17,5 L); sem embalagem,
+  vale o passo 0,5/0,1/0,01 (`embDe`, `embTxt`, `tankRedondo`). Ao lado do volume aparece "📦 4 emb. de 5 L" — no
+  quadro, no WhatsApp, no PDF e na página do operador (`it.e`/`it.eu` no link). **Sólidos de calda** (WG/WP em
+  kg/g: herbicida, inseticida, fungicida…) agora entram na seção "Na calda (tanque)" com coluna por tanque;
+  fertilizante, corretivo e semente continuam em "Sólidos — distribuição" (`vaiNoTanque`).
 - **Campo → quadro no PC** — com o quadro aberto o conteúdo deixa de ter largura máxima
   (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
   coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);

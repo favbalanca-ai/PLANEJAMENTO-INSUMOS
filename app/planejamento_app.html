@@ -1803,6 +1803,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .tk-dose{font-size:11px}
 .tk-up{color:#b45309} .tk-down{color:var(--teal)}
 .app-note .btn{margin-left:6px;vertical-align:middle}
+.tk-emb{color:var(--ink2);font-weight:700;font-size:11px;white-space:nowrap}
 
 </style>
 </head>
@@ -1901,7 +1902,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-212';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-213';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5816,6 +5817,15 @@ function campoItems(talId, tagoi, opItens, r){
 // acompanha (volume ÷ ha por tanque). Só mexe no REALIZADO desta aplicação; o planejamento do talhão fica igual.
 function tankHaDe(r){ const app=(r&&r.app)||{}, vazao=+app.vazao||0, tanque=+app.tanque||0; return (vazao>0&&tanque>0)?tanque/vazao:0; }
 function tankPasso(v){ return v>=10?0.5:(v>=1?0.1:0.01); }   // arredondamento "de balde": 0,5 L acima de 10 L · 0,1 L entre 1 e 10 · 0,01 abaixo de 1
+// o que vai NA CALDA (tanque): líquidos e sólidos de calda (WG/WP em kg/g: herbicida, inseticida, fungicida…).
+// Fertilizante, corretivo e semente em kg continuam como distribuição (fora do tanque).
+function vaiNoTanque(it){ if(!it) return false; if(isLiquido(it.un)) return true; const u=String(it.un||'').trim().toLowerCase(); if(!/^(kg|g|gr|grama|gramas)$/.test(u)) return false;
+  const c=String(it.classe||((PROD[it.produto]||{}).classe)||'').toUpperCase(); return !/FERTILIZ|CORRETIV|SEMENTE|ADUBO|CALC/.test(c); }
+// embalagem do produto (ficha da bula, módulo Preços): {tam, un} ou null
+function embDe(produto){ const b=bulaDe(produto), tam=b?bulaNum(b.emb):null; if(!(tam>0)) return null; return {tam, un:String(b.embUn||'').trim()||((PROD[produto]||{}).un||'')}; }
+function embTxt(qtd, e){ if(!e||!e.tam) return ''; const k=qtd/e.tam; return `${(Math.abs(k-Math.round(k))<1e-6?nf0.format(k):nf1.format(k))} emb. de ${fmtDose(e.tam)} ${e.un}`.trim(); }
+// volume por tanque arredondado: com embalagem cadastrada, para a MEIA embalagem mais próxima (19,5 L c/ 5 L → 20 L; 31 kg c/ 15 kg → 30 kg); senão, o passo "de balde"
+function tankRedondo(produto, porT){ const e=embDe(produto); const p=e?e.tam/2:tankPasso(porT); const r=Math.round(porT/p)*p; return Math.max(p, Math.round(r*1e6)/1e6); }
 function tankSetDose(key, it, dose){ const r=realEnsure(key); dose=Math.round(dose*1e6)/1e6;
   if(it.ei!=null){ const ex=r.extras[it.ei]||(r.extras[it.ei]={}); ex.dose=dose; }
   else { if(it.plan!=null && Math.abs(dose-it.plan)<1e-9) delete r.doses[it.iid]; else r.doses[it.iid]=dose; }
@@ -5826,8 +5836,8 @@ function tankRefresh(key){ const fk=opFromKey(key), r=realOf(key)||{}, box=docum
   campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).forEach(it=>{ const inp=it.ei!=null?document.querySelector(`input[data-edit="realExtraDose"][data-key="${CSS.escape(key)}"][data-ei="${it.ei}"]`):document.querySelector(`input[data-edit="realDose"][data-key="${CSS.escape(key)}"][data-iid="${it.iid}"]`);
     if(inp){ const dif=it.plan==null||Math.abs(it.dose-it.plan)>1e-9; inp.value=dif?String(it.dose).replace('.',','):''; inp.classList.toggle('edited',dif); if(!dif&&it.plan!=null) inp.placeholder=String(it.plan).replace('.',','); } }); }
 function tankArredondar(key){ const fk=opFromKey(key), r=realEnsure(key), ha=tankHaDe(r); if(!ha){ toast('Informe a vazão (L/ha) e o tanque (L) primeiro'); return; }
-  let n=0; campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).filter(x=>isLiquido(x.un)).forEach(it=>{ const porT=it.dose*ha; if(!porT) return; const p=tankPasso(porT), red=Math.round(porT/p)*p; if(Math.abs(red-porT)<1e-9) return; tankSetDose(key,it,red/ha); n++; });
-  tankRefresh(key); toast(n?`${n} produto(s) arredondado(s) por tanque — dose realizada ajustada`:'Os volumes por tanque já estão redondos'); }
+  let n=0, ne=0; campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).filter(vaiNoTanque).forEach(it=>{ const porT=it.dose*ha; if(!porT) return; const red=tankRedondo(it.produto, porT); if(embDe(it.produto)) ne++; if(Math.abs(red-porT)<1e-9) return; tankSetDose(key,it,red/ha); n++; });
+  tankRefresh(key); toast(n?`${n} produto(s) arredondado(s) por tanque${ne?` (${ne} pela embalagem)`:''} — dose realizada ajustada`:'Os volumes por tanque já estão redondos'); }
 // ---- Tratamento de sementes (TS) ----
 // A batelada é medida em BAG = a unidade da semente no planejamento (ex.: bag 5MM). As doses dos produtos
 // de TS vêm do PLANEJAMENTO (por ha) e viram "por bag": dose/ha ÷ bags/ha. Não precisa de PMS.
@@ -6050,14 +6060,14 @@ function campoAppOut(talId, tagoi, opItens, r){
   const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
   const dur=durHoras(app.hIni,app.hFim);
   const all=campoItems(talId,tagoi,opItens,r);
-  const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
+  const liq=all.filter(vaiNoTanque), sol=all.filter(x=>!vaiNoTanque(x));
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
   const key=`${talId}|${tagoi}`;
   const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque, dif=(x.plan!=null&&x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null;   // só mostra a diferença a partir de 0,05%
     const ref=x.ei!=null?`data-ei="${x.ei}"`:`data-iid="${esc(x.iid)}"`;
     return `<tr><td>${esc(x.produto)}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
       <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
-      <td class="num">${haPorTanque?`<input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tankDose" data-key="${esc(key)}" ${ref} value="${fmtDose(porT)}" title="Volume deste produto em 1 tanque — digite o valor redondo que vai usar; a dose/ha realizada acompanha">`:'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
+      <td class="num">${haPorTanque?`<input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tankDose" data-key="${esc(key)}" ${ref} value="${fmtDose(porT)}" title="Volume deste produto em 1 tanque — digite o valor redondo que vai usar; a dose/ha realizada acompanha">`:'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}${(()=>{ const e=haPorTanque?embDe(x.produto):null; return e?`<br><small class="tk-emb" title="Embalagem cadastrada na bula do produto">📦 ${esc(embTxt(porT,e))}</small>`:''; })()}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
     return `<tr><td>${esc(x.produto)}</td>
       <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
@@ -6069,10 +6079,10 @@ function campoAppOut(talId, tagoi, opItens, r){
       ${stat('Duração',dur!=null?nf1.format(dur)+' h':'—')}
     </div>`;
   if(liq.length){
-    html+=`<div class="app-secttl">💧 Líquidos — ${app.tipo==='aereo'?'aéreo (air tractor)':'pulverizador'}</div>
+    html+=`<div class="app-secttl">💧 Na calda (tanque) — ${app.tipo==='aereo'?'aéreo (air tractor)':'pulverizador'}</div>
       <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Total na área</th><th class="num">Por tanque</th></tr></thead>
         <tbody>${liqRows}</tbody></table>
-      ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão). Pode <b>digitar o volume por tanque</b> que vai usar (ex.: 27,5 em vez de 27,503): a dose realizada por ha acompanha. <button class="btn btn-outline btn-sm" data-act="tankRound" data-key="${esc(key)}" title="Arredonda todos os volumes por tanque: 0,5 L acima de 10 L · 0,1 L entre 1 e 10 L · 0,01 L abaixo de 1 L">⚖ Arredondar por tanque</button></p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volume por tanque.</p>'}`;
+      ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão). Pode <b>digitar o volume por tanque</b> que vai usar (ex.: 27,5 em vez de 27,503): a dose realizada por ha acompanha. <button class="btn btn-outline btn-sm" data-act="tankRound" data-key="${esc(key)}" title="Produto com embalagem na bula: meia embalagem mais próxima (19,5 L c/ 5 L → 20 L; 31 kg c/ 15 kg → 30 kg). Sem embalagem: 0,5 L acima de 10 L · 0,1 L entre 1 e 10 L · 0,01 L abaixo de 1 L">⚖ Arredondar por tanque / embalagem</button></p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volume por tanque.</p>'}`;
   }
   if(sol.length){
     html+=`<div class="app-secttl">📦 Sólidos — distribuição</div>
@@ -6094,7 +6104,7 @@ function campoAppMsg(key){
   const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
   const dur=durHoras(app.hIni,app.hFim);
   const all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
-  const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
+  const liq=all.filter(vaiNoTanque), sol=all.filter(x=>!vaiNoTanque(x));
   const L=[];
   L.push(`🚿 *Aplicação* — ${tNome(t)} (${num(area)} ha)`);
   const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
@@ -6105,11 +6115,11 @@ function campoAppMsg(key){
     const l2=[]; if(vazao) l2.push(`Vazão ${num(vazao)} L/ha`); if(tanque) l2.push(`Tanque ${num(tanque)} L`);
     if(l2.length) L.push('💧 '+l2.join(' · '));
     if(caldaTotal) L.push(`🧪 Calda ${num(caldaTotal)} L · ${nT} tanque(s)`);
-    L.push(''); L.push(haPorTanque?'*Líquidos (por tanque):*':'*Líquidos (total):*');
-    liq.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
-      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}`); });
+    L.push(''); L.push(haPorTanque?'*Na calda (por tanque):*':'*Na calda (total):*');
+    liq.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque, e=haPorTanque?embDe(x.produto):null;
+      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}${e?` (${embTxt(porT,e)})`:''}`); });
   }
-  if(sol.length){ L.push(''); L.push('*Sólidos (total na área):*');
+  if(sol.length){ L.push(''); L.push('*Distribuição (total na área):*');
     sol.forEach(x=>{ const total=x.dose*area; L.push(`• ${x.produto}: ${num(total)} ${x.un}`); }); }
   if(r.obs) L.push(`\n📝 ${r.obs}`);
   // link de resposta: abre um questionário no WhatsApp para o operador informar o volume utilizado
@@ -6711,7 +6721,8 @@ const BULA_CAMPOS=[
   ['ia','Ingrediente ativo','text','ex.: Glifosato'],['conc','Concentração','text','ex.: 480 g/L'],['ph','pH ideal da calda','text','ex.: 5 a 6'],
   ['doseMin','Dose mínima (bula)','num','0'],['doseMax','Dose máxima (bula)','num','0'],['doseUn','Unidade da dose','text','ex.: L/ha'],
   ['carencia','Carência (dias)','num','dias'],['reentrada','Reentrada (horas)','num','horas'],['tox','Classe toxicológica','text','ex.: 3 — moderadamente tóxico'],
-  ['grupo','Grupo / modo de ação','text','ex.: HRAC 9 · inibidor da EPSPs'],['bulaUrl','Link da bula','url','https://…'],['fispqUrl','Link da FISPQ','url','https://…'],
+  ['grupo','Grupo / modo de ação','text','ex.: HRAC 9 · inibidor da EPSPs'],['emb','Embalagem (tamanho)','num','ex.: 5'],['embUn','Unidade da embalagem','text','ex.: L, kg'],
+  ['bulaUrl','Link da bula','url','https://…'],['fispqUrl','Link da FISPQ','url','https://…'],
   ['obs','Observações (mistura, compatibilidade…)','text','']];
 function bulaKey(p){ return String(p||'').toUpperCase().replace(/\s+/g,' ').trim(); }
 function bulaDe(p){ const k=bulaKey(p), r=BULAS&&BULAS.reg&&BULAS.reg[k]; return (r&&!r.del)?r:null; }
@@ -7330,7 +7341,7 @@ function recomPayload(r){
   if(!tanque && r.opKey){ const rl=realOf(r.opKey); if(rl&&rl.app&&rl.app.tanque!=null&&rl.app.tanque!=='') tanque=+rl.app.tanque||0; }
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:t?tNome(t):'', c:(t?empDe(t):'')||'',
     a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.tipo==='ts'?'':recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
-    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:isLiquido(it.un)?1:0,
+    it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:vaiNoTanque(it)?1:0, ...(embDe(it.produto)?{e:embDe(it.produto).tam, eu:embDe(it.produto).un}:{}),
       ...((it.sem||(r.tipo!=='ts'&&_isSemente(it)))?{s:1}:{}), ...((r.tipo!=='ts'&&_isTS(it))?{t:1}:{})})) };
   const pc=(r.tipo!=='ts'&&r.opKey)?plantioCalc(r.opKey):null;
   if(pc){ payload.cd=''; payload.v=0; payload.tk=0;
@@ -7710,7 +7721,7 @@ function exportRecomPDF_(r){
   <div class="rx-sec"><h2>3. Produtos — na ordem de mistura no tanque</h2>
     <table class="rx pdf-ops"><colgroup><col style="width:4%"><col style="width:24%"><col style="width:22%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:8%"></colgroup>
     <thead><tr><th>#</th><th>Produto</th><th>Ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (${num(area)} ha)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th></tr></thead><tbody>`;
-  its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num">${fmtDose(it.dose)} ${esc(it.un||'')}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
+  its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num">${fmtDose(it.dose)} ${esc(it.un||'')}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}${(()=>{ const e=embDe(it.produto); return e?`<br><span class="mut2">${esc(embTxt(it.dose*cd.haTk,e))}</span>`:''; })()}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
   if(!its.length) h+=`<tr><td colspan="8">— sem produtos —</td></tr>`;
   h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}${bulaPhTxt(its)?`<div class="rx-note">pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}</div>
   <div class="rx-sec"><h2>4. Calda</h2><div class="rx-kv">
