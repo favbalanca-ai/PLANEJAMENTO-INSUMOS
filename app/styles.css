@@ -1786,3 +1786,4 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .tk-dose{font-size:11px}
 .tk-up{color:#b45309} .tk-down{color:var(--teal)}
 .app-note .btn{margin-left:6px;vertical-align:middle}
+.tk-emb{color:var(--ink2);font-weight:700;font-size:11px;white-space:nowrap}
