@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-211';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-212';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3909,10 +3909,26 @@ function campoItems(talId, tagoi, opItens, r){
   return effItems(talId,tagoi,opItens).filter(it=>!itemFora(r,it)).map(it=>{
     const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
-    return {produto:it.produto,un:it.un,dose};
-  }).concat((r.extras||[]).filter(e=>e.produto).map(e=>({produto:e.produto,un:(PROD[e.produto]&&PROD[e.produto].un)||'',dose:+e.dose||0})))
+    return {produto:it.produto,un:it.un,dose,iid,plan:+it.dose||0};
+  }).concat((r.extras||[]).map((e,ei)=>({e,ei})).filter(x=>x.e.produto).map(x=>({produto:x.e.produto,un:(PROD[x.e.produto]&&PROD[x.e.produto].un)||'',dose:+x.e.dose||0,ei:x.ei,plan:null})))
   .filter(x=>x.produto);
 }
+// ---- dose por TANQUE: a dona ajusta o volume que vai no tanque (ex.: 27,503 L → 27,5 L) e a dose/ha realizada
+// acompanha (volume ÷ ha por tanque). Só mexe no REALIZADO desta aplicação; o planejamento do talhão fica igual.
+function tankHaDe(r){ const app=(r&&r.app)||{}, vazao=+app.vazao||0, tanque=+app.tanque||0; return (vazao>0&&tanque>0)?tanque/vazao:0; }
+function tankPasso(v){ return v>=10?0.5:(v>=1?0.1:0.01); }   // arredondamento "de balde": 0,5 L acima de 10 L · 0,1 L entre 1 e 10 · 0,01 abaixo de 1
+function tankSetDose(key, it, dose){ const r=realEnsure(key); dose=Math.round(dose*1e6)/1e6;
+  if(it.ei!=null){ const ex=r.extras[it.ei]||(r.extras[it.ei]={}); ex.dose=dose; }
+  else { if(it.plan!=null && Math.abs(dose-it.plan)<1e-9) delete r.doses[it.iid]; else r.doses[it.iid]=dose; }
+  realClean(key); stampReal(key); }
+// redesenha o quadro de calda e as caixas "Realizado" da operação (sem rolar a tela)
+function tankRefresh(key){ const fk=opFromKey(key), r=realOf(key)||{}, box=document.querySelector('[data-appout="'+key+'"]');
+  if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
+  campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).forEach(it=>{ const inp=it.ei!=null?document.querySelector(`input[data-edit="realExtraDose"][data-key="${CSS.escape(key)}"][data-ei="${it.ei}"]`):document.querySelector(`input[data-edit="realDose"][data-key="${CSS.escape(key)}"][data-iid="${it.iid}"]`);
+    if(inp){ const dif=it.plan==null||Math.abs(it.dose-it.plan)>1e-9; inp.value=dif?String(it.dose).replace('.',','):''; inp.classList.toggle('edited',dif); if(!dif&&it.plan!=null) inp.placeholder=String(it.plan).replace('.',','); } }); }
+function tankArredondar(key){ const fk=opFromKey(key), r=realEnsure(key), ha=tankHaDe(r); if(!ha){ toast('Informe a vazão (L/ha) e o tanque (L) primeiro'); return; }
+  let n=0; campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).filter(x=>isLiquido(x.un)).forEach(it=>{ const porT=it.dose*ha; if(!porT) return; const p=tankPasso(porT), red=Math.round(porT/p)*p; if(Math.abs(red-porT)<1e-9) return; tankSetDose(key,it,red/ha); n++; });
+  tankRefresh(key); toast(n?`${n} produto(s) arredondado(s) por tanque — dose realizada ajustada`:'Os volumes por tanque já estão redondos'); }
 // ---- Tratamento de sementes (TS) ----
 // A batelada é medida em BAG = a unidade da semente no planejamento (ex.: bag 5MM). As doses dos produtos
 // de TS vêm do PLANEJAMENTO (por ha) e viram "por bag": dose/ha ÷ bags/ha. Não precisa de PMS.
@@ -4137,10 +4153,12 @@ function campoAppOut(talId, tagoi, opItens, r){
   const all=campoItems(talId,tagoi,opItens,r);
   const liq=all.filter(x=>isLiquido(x.un)), sol=all.filter(x=>!isLiquido(x.un));
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
-  const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque;
-    return `<tr><td>${esc(x.produto)}</td>
+  const key=`${talId}|${tagoi}`;
+  const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque, dif=(x.plan!=null&&x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null;   // só mostra a diferença a partir de 0,05%
+    const ref=x.ei!=null?`data-ei="${x.ei}"`:`data-iid="${esc(x.iid)}"`;
+    return `<tr><td>${esc(x.produto)}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
       <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
-      <td class="num">${haPorTanque?fmtDose(porT):'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
+      <td class="num">${haPorTanque?`<input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tankDose" data-key="${esc(key)}" ${ref} value="${fmtDose(porT)}" title="Volume deste produto em 1 tanque — digite o valor redondo que vai usar; a dose/ha realizada acompanha">`:'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
     return `<tr><td>${esc(x.produto)}</td>
       <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
@@ -4155,7 +4173,7 @@ function campoAppOut(talId, tagoi, opItens, r){
     html+=`<div class="app-secttl">💧 Líquidos — ${app.tipo==='aereo'?'aéreo (air tractor)':'pulverizador'}</div>
       <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Total na área</th><th class="num">Por tanque</th></tr></thead>
         <tbody>${liqRows}</tbody></table>
-      ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão).</p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volume por tanque.</p>'}`;
+      ${vazao&&tanque?`<p class="app-note">1 tanque cobre <b>${nf1.format(haPorTanque)} ha</b> (tanque ÷ vazão). Pode <b>digitar o volume por tanque</b> que vai usar (ex.: 27,5 em vez de 27,503): a dose realizada por ha acompanha. <button class="btn btn-outline btn-sm" data-act="tankRound" data-key="${esc(key)}" title="Arredonda todos os volumes por tanque: 0,5 L acima de 10 L · 0,1 L entre 1 e 10 L · 0,01 L abaixo de 1 L">⚖ Arredondar por tanque</button></p>`:'<p class="app-note mut">Informe vazão (L/ha) e volume do tanque (L) para calcular tanques e volume por tanque.</p>'}`;
   }
   if(sol.length){
     html+=`<div class="app-secttl">📦 Sólidos — distribuição</div>
@@ -5336,7 +5354,8 @@ function recomItensFromOp(t, opKey){
   const o=opsDoTalhao(t).find(x=>x.key===opKey); if(!o) return [];
   const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
   return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
-    .map(it=>({produto:it.produto, un:it.un||'', dose:+it.dose||0, real:null}))
+    .map(it=>{ const iid=it.kind==='base'?String(it.ii):'a'+it.ai, aj=(rl&&rl.doses&&(iid in rl.doses))?+rl.doses[iid]:null;   // dose ajustada no Campo (por tanque / realizado) manda
+      return {produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null}; })
     .concat(((rl&&rl.extras)||[]).filter(e=>e.produto).map(e=>({produto:e.produto, un:(PROD[e.produto]&&PROD[e.produto].un)||'', dose:+e.dose||0, real:null, extra:true})));   // extras do Campo entram
 }
 function recomCreate(talId, opKey){
@@ -7176,6 +7195,14 @@ function applyEdit(el){
     const pbox=document.querySelector('[data-plout="'+el.dataset.key+'"]'); if(pbox) pbox.innerHTML=plantioOut(plantioCalc(el.dataset.key));
     return;
   }
+  if(kind==='tankDose'){   // volume por tanque digitado → dose/ha realizada = volume ÷ ha por tanque
+    const key=el.dataset.key, r=realEnsure(key), ha=tankHaDe(r), q=numBR(el.value);
+    if(!ha){ toast('Informe a vazão e o tanque primeiro'); return; }
+    const fk=opFromKey(key), it=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).find(x=>el.dataset.ei!=null?String(x.ei)===el.dataset.ei:x.iid===el.dataset.iid);
+    if(!it) return; if(!(q>0)){ tankRefresh(key); return; }
+    tankSetDose(key,it,q/ha); setTimeout(()=>tankRefresh(key),0);   // redesenha depois do evento (a caixa está dentro do quadro)
+    return;
+  }
   if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
     const val=el.value.trim().replace(',','.'), q=val===''?null:parseFloat(val);
     const r=realEnsure(el.dataset.key);
@@ -7183,6 +7210,7 @@ function applyEdit(el){
     else { const ex=r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={}); ex.dose=(q==null?null:q); }
     realClean(el.dataset.key); stampReal(el.dataset.key);
     el.classList.toggle('edited', q!=null);   // sem re-render: não rola a tela ao preencher várias doses
+    { const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]'); if(box&&fk.op) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op.itens,realOf(el.dataset.key)||{}); }   // quadro de calda acompanha
     return;
   }
   const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
@@ -7689,6 +7717,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='prImpDo'){ prDoImport(); }
     else if(a.act==='prListaClose'){ const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove(); }
     else if(a.act==='prListaDo'){ prListaApply(); }
+    else if(a.act==='tankRound'){ tankArredondar(a.key); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
       const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));

@@ -241,6 +241,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ficha: ingrediente ativo e carência dos itens (`recomNorm`), reentrada sugerida = a maior entre os
   produtos (`recomCreate`), aviso **⚠ fora da bula** quando a dose sai da faixa (`bulaDoseAviso`) e o pH
   ideal da calda no cartão e no PDF (`bulaPhTxt`). Sem bula, vale a coluna ATIVOS da planilha, como antes.
+- **Campo → dose por tanque ajustável** — na 🚿 Recomendação de aplicação, a coluna **Por tanque** dos líquidos
+  é editável: digitar o volume redondo que vai no tanque (ex.: 27,5 em vez de 27,503) recalcula a **dose/ha
+  realizada** (volume ÷ ha por tanque), a caixa "Realizado" da tabela de insumos, o total na área, o WhatsApp,
+  o PDF e a página do operador (`recomItensFromOp` usa a dose ajustada). Abaixo do produto aparece a dose e a
+  diferença % vs o planejado. Botão **⚖ Arredondar por tanque** arredonda todos (0,5 L acima de 10 L · 0,1 L
+  entre 1 e 10 · 0,01 L abaixo de 1). Digitar o volume exato do planejado limpa o ajuste. O planejamento do
+  talhão não muda (`tankSetDose`, `tankArredondar`, `tankRefresh`).
 - **Campo → quadro no PC** — com o quadro aberto o conteúdo deixa de ter largura máxima
   (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
   coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);

@@ -1781,3 +1781,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .oq-cell-3{flex-basis:412px;width:412px;grid-template-columns:1fr 1fr 1fr}
 .oq-colbtn.oq-cell-2{display:flex}
 @media (max-width:640px){ .oq-cell-2,.oq-cell-3{flex-basis:118px;width:118px;display:flex} }
+/* ===== dose por tanque editável (Campo → Recomendação de aplicação) ===== */
+.tk-in{width:92px;text-align:right}
+.tk-dose{font-size:11px}
+.tk-up{color:#b45309} .tk-down{color:var(--teal)}
+.app-note .btn{margin-left:6px;vertical-align:middle}
