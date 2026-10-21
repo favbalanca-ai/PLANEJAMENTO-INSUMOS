@@ -279,7 +279,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
         '<div class="recipe-h"><span>Produto de TS</span><span class="r2">Por batelada</span><span class="r3">Total</span></div>'+
         TSP.map(function(it){ var pb=SD?it.dose/SD:0;
           return '<div class="rrow"><div><div class="r-prod">'+esc(it.produto)+'</div><div class="r-cls">'+nf.format(it.dose)+' '+esc(it.un)+'/ha</div></div>'+
-            '<div class="r-tank"><div class="big">'+nf.format(pb*BAT)+'</div><div class="un">'+esc(it.un)+' / batelada</div></div>'+
+            '<div class="r-tank"><div class="big">'+nf.format(pb*BAT)+'</div><div class="un">'+esc(it.un)+' / batelada</div>'+(it.emb?'<div class="un r-emb">📦 '+embTxt(pb*BAT,it)+'</div>':'')+'</div>'+
             '<div class="r-tot">'+nf.format(it.dose*AREA)+' '+esc(it.un)+'</div></div>'; }).join('')+
         '<div class="recipe-note">'+tsUlt+'</div>'+
         (SEM&&SEM.doPlantio?'<div class="recipe-note">🌱 Semente da operação de plantio <b>'+esc(SEM.doPlantio)+'</b> — a baixa da semente é feita no plantio, não aqui.</div>':'')+

@@ -255,6 +255,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   quadro, no WhatsApp, no PDF e na página do operador (`it.e`/`it.eu` no link). **Sólidos de calda** (WG/WP em
   kg/g: herbicida, inseticida, fungicida…) agora entram na seção "Na calda (tanque)" com coluna por tanque;
   fertilizante, corretivo e semente continuam em "Sólidos — distribuição" (`vaiNoTanque`).
+- **TS: bateladas e quantidade por batelada ajustáveis** — na 🧪 Recomendação de TS, a caixa **Nº de
+  bateladas** recalcula a batelada (semente total ÷ nº) para ficarem todas iguais, sem última parcial; a coluna
+  **Por batelada** é editável por produto (a dose/ha realizada = qtd ÷ bags por batelada × bags/ha da semente;
+  `tsCalc` usa a dose ajustada) e **⚖ Arredondar por batelada / embalagem** usa a mesma regra do tanque
+  (`tsArredondar`, `tankRedondo`). "📦 N emb." aparece no quadro, no WhatsApp, no PDF e na página do operador.
 - **Campo → quadro no PC** — com o quadro aberto o conteúdo deixa de ter largura máxima
   (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
   coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);

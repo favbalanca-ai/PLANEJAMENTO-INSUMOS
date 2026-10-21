@@ -1902,7 +1902,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-213';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-214';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5833,8 +5833,13 @@ function tankSetDose(key, it, dose){ const r=realEnsure(key); dose=Math.round(do
 // redesenha o quadro de calda e as caixas "Realizado" da operação (sem rolar a tela)
 function tankRefresh(key){ const fk=opFromKey(key), r=realOf(key)||{}, box=document.querySelector('[data-appout="'+key+'"]');
   if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
+  const tb=document.querySelector('[data-tsout="'+key+'"]'); if(tb) tb.innerHTML=tsOut(tsCalc(key));
   campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).forEach(it=>{ const inp=it.ei!=null?document.querySelector(`input[data-edit="realExtraDose"][data-key="${CSS.escape(key)}"][data-ei="${it.ei}"]`):document.querySelector(`input[data-edit="realDose"][data-key="${CSS.escape(key)}"][data-iid="${it.iid}"]`);
     if(inp){ const dif=it.plan==null||Math.abs(it.dose-it.plan)>1e-9; inp.value=dif?String(it.dose).replace('.',','):''; inp.classList.toggle('edited',dif); if(!dif&&it.plan!=null) inp.placeholder=String(it.plan).replace('.',','); } }); }
+// TS: arredonda a quantidade por batelada de cada produto (meia embalagem, se cadastrada; senão o passo "de balde")
+function tsArredondar(key){ const c=tsCalc(key); if(!c||!(c.bat>0)||!(c.sem.dose>0)){ toast('Operação de TS sem semente ou batelada'); return; }
+  let n=0, ne=0; c.itens.forEach(it=>{ if(!it.porBat) return; const red=tankRedondo(it.produto, it.porBat); if(embDe(it.produto)) ne++; if(Math.abs(red-it.porBat)<1e-9) return; tankSetDose(key, it, red/c.bat*c.sem.dose); n++; });
+  tankRefresh(key); toast(n?`${n} produto(s) arredondado(s) por batelada${ne?` (${ne} pela embalagem)`:''} — dose realizada ajustada`:'As quantidades por batelada já estão redondas'); }
 function tankArredondar(key){ const fk=opFromKey(key), r=realEnsure(key), ha=tankHaDe(r); if(!ha){ toast('Informe a vazão (L/ha) e o tanque (L) primeiro'); return; }
   let n=0, ne=0; campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).filter(vaiNoTanque).forEach(it=>{ const porT=it.dose*ha; if(!porT) return; const red=tankRedondo(it.produto, porT); if(embDe(it.produto)) ne++; if(Math.abs(red-porT)<1e-9) return; tankSetDose(key,it,red/ha); n++; });
   tankRefresh(key); toast(n?`${n} produto(s) arredondado(s) por tanque${ne?` (${ne} pela embalagem)`:''} — dose realizada ajustada`:'Os volumes por tanque já estão redondos'); }
@@ -5868,8 +5873,8 @@ function tsCalc(key, rl){
   const pms=+cfg.pms||0;                                                                 // peso de mil sementes (g) — opcional
   const bags=semDose*area, nBat=bags>0?Math.ceil(bags/bat-1e-9):0, ult=nBat?+(bags-(nBat-1)*bat).toFixed(4):0;
   const semHa=porBag?semDose*porBag:0, kgHa=(semHa&&pms)?semHa*pms/1e6:(bl==='kg'?semDose:0);
-  const itens=prods.map(it=>{ const d=+it.dose||0, pb=semDose?d/semDose:0;
-    return {produto:it.produto, un:it.un||'', dose:d, porBag:pb, porBat:pb*bat, ult:pb*ult, total:d*area}; });
+  const itens=prods.map(it=>{ const iid=it.kind==='base'?String(it.ii):'a'+it.ai, plan=+it.dose||0, d=(rl.doses&&(iid in rl.doses))?+rl.doses[iid]:plan, pb=semDose?d/semDose:0;   // dose ajustada no Campo (por batelada) manda
+    return {produto:it.produto, un:it.un||'', dose:d, plan, iid, porBag:pb, porBat:pb*bat, ult:pb*ult, total:d*area}; });
   return {key, t, area, sem:{produto:sem.produto, un:semUn, dose:semDose, deOp:sem.deOp||''}, soTS, bl, porBag, bat, pms, bags, nBat, ult, semHa, kgHa,
     itens, st:cfg.st||'', quem:cfg.quem||'', em:cfg.em||0};
 }
@@ -5885,10 +5890,11 @@ function tsOut(c){
   if(!c.sem.un) avisos.push(`A semente <b>${esc(c.sem.produto)}</b> está <b>sem unidade</b> no PORTIFÓLIO da planilha — preencha (ex.: 5MM, SC ou KG).`);
   const semUnP=c.itens.filter(x=>!x.un).map(x=>x.produto);
   if(semUnP.length) avisos.push(`Sem unidade no PORTIFÓLIO: <b>${esc(semUnP.join(', '))}</b> — preencha (ex.: L) na planilha.`);
-  const rows=c.itens.map(x=>`<tr><td>${esc(x.produto)}</td>
+  const rows=c.itens.map(x=>{ const dif=(x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null, e=embDe(x.produto);
+    return `<tr><td>${esc(x.produto)}${dif!=null?`<br><small class="mut tk-dose"><b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)} ${esc(x.un)}/ha)</small>`:''}</td>
       <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
-      <td class="num"><b>${fmtDose(x.porBat)}</b><small> ${esc(x.un)}</small></td>
-      <td class="num">${fmtDose(x.total)}<small> ${esc(x.un)}</small></td></tr>`).join('');
+      <td class="num"><input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tsDose" data-key="${esc(c.key)}" data-iid="${esc(x.iid)}" value="${fmtDose(x.porBat)}" title="Quantidade deste produto em 1 batelada — digite o valor redondo que vai usar; a dose/ha realizada acompanha"><small> ${esc(x.un)}</small>${e?`<br><small class="tk-emb" title="Embalagem cadastrada na bula do produto">📦 ${esc(embTxt(x.porBat,e))}</small>`:''}</td>
+      <td class="num">${fmtDose(x.total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
   return `<div class="app-stats">
       ${stat('Área do talhão',num(c.area)+' ha')}
       ${stat('Semente total',B(c.bags))}
@@ -5900,6 +5906,7 @@ function tsOut(c){
     <table class="app-ins"><thead><tr><th>Produto</th><th class="num">Dose/ha</th><th class="num">Por batelada</th><th class="num">Total</th></tr></thead>
       <tbody>${rows}</tbody></table>
     ${c.nBat&&cheias<c.nBat?`<p class="app-note">${cheias?`${cheias} batelada(s) cheia(s) + `:''}1 de <b>${B(c.ult)}</b>: ${c.itens.map(x=>`${esc(x.produto)} ${fmtDose(x.ult)} ${esc(x.un)}`).join(' · ')}</p>`:''}
+    <p class="app-note">Pode <b>digitar a quantidade por batelada</b> que vai usar (a dose/ha realizada acompanha) ou <button class="btn btn-outline btn-sm" data-act="tsRound" data-key="${esc(c.key)}" title="Produto com embalagem na bula: meia embalagem mais próxima. Sem embalagem: 0,5 acima de 10 · 0,1 entre 1 e 10 · 0,01 abaixo de 1">⚖ Arredondar por batelada / embalagem</button> Para bateladas todas iguais, informe o <b>Nº de bateladas</b> acima.</p>
     ${avisos.map(a=>`<p class="app-note" style="color:var(--amber)">⚠️ ${a}</p>`).join('')}`;
 }
 // cria/atualiza a recomendação de TS da operação (tipo 'ts'; NÃO usa opKey: o TS não conclui a operação de plantio)
@@ -5929,7 +5936,7 @@ function tsWhats(r){
   if(sem) x+=`Semente: *${sem.produto}* — ${B(sd*area)} no talhão (${fmtDose(sd)} ${bl}/ha${c.semHa?` · ${nf0.format(c.semHa)} sementes/ha`:''}${c.kgHa?` · ${fmtDose(c.kgHa)} kg/ha`:''})${sem.deOp?` — da operação de plantio ${sem.deOp}`:''}\n`;
   if(c.nBat){ const cheias=c.ult<c.bat-1e-6?c.nBat-1:c.nBat;
     x+=`Batelada: ${B(c.bat)} → *${c.nBat} batelada(s)*${cheias<c.nBat?` (${cheias} cheia(s) + 1 de ${B(c.ult)})`:''}\n`; }
-  x+=`\n*Por batelada (${B(c.bat||1)}):*\n`+prods.map((it,i)=>`${i+1}. ${it.produto} — *${fmtDose(pb(it)*(c.bat||1))}${it.un?' '+it.un:''}*`).join('\n')+'\n';
+  x+=`\n*Por batelada (${B(c.bat||1)}):*\n`+prods.map((it,i)=>{ const q=pb(it)*(c.bat||1), e=embDe(it.produto); return `${i+1}. ${it.produto} — *${fmtDose(q)}${it.un?' '+it.un:''}*${e?` (${embTxt(q,e)})`:''}`; }).join('\n')+'\n';
   if(c.nBat && c.ult<c.bat-1e-6) x+=`\n*Última batelada (${B(c.ult)}):* `+prods.map(it=>`${it.produto} ${fmtDose(pb(it)*c.ult)}${it.un?' '+it.un:''}`).join(' · ')+'\n';
   x+=`\n*Total no talhão:* `+prods.map(it=>`${it.produto} ${fmtDose((+it.dose||0)*area)}${it.un?' '+it.un:''}`).join(' · ')+'\n';
   if(r.obs) x+=`Obs.: ${r.obs}\n`;
@@ -7596,7 +7603,7 @@ function exportTsPDF(r){
   <div class="rx-sec"><h2>3. Produtos — dose por batelada (${B(c.bat)})</h2>
     <table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:${parcial?31:38}%"><col style="width:12%"><col style="width:15%">${parcial?'<col style="width:12%">':''}<col style="width:12%"><col style="width:13%"></colgroup>
     <thead><tr><th>#</th><th>Produto</th><th class="num">Dose/ha</th><th class="num">Por batelada</th>${parcial?`<th class="num">Última (${B(c.ult)})</th>`:''}<th class="num">Total</th><th class="num">Utilizado</th></tr></thead><tbody>
-    ${c.itens.map((x,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(x.produto)}</b></td><td class="num">${fmtDose(x.dose)}${U(x.un)}</td><td class="num"><b style="font-size:13px">${fmtDose(x.porBat)}${U(x.un)}</b></td>${parcial?`<td class="num">${fmtDose(x.ult)}${U(x.un)}</td>`:''}<td class="num">${fmtDose(x.total)}${U(x.un)}</td><td></td></tr>`).join('')}
+    ${c.itens.map((x,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(x.produto)}</b></td><td class="num">${fmtDose(x.dose)}${U(x.un)}</td><td class="num"><b style="font-size:13px">${fmtDose(x.porBat)}${U(x.un)}</b>${(()=>{ const e=embDe(x.produto); return e?`<br><span class="mut2">${esc(embTxt(x.porBat,e))}</span>`:''; })()}</td>${parcial?`<td class="num">${fmtDose(x.ult)}${U(x.un)}</td>`:''}<td class="num">${fmtDose(x.total)}${U(x.un)}</td><td></td></tr>`).join('')}
     <tr><td class="num">—</td><td><b>${c.soTS?`Semente (operação de plantio ${esc(c.sem.deOp||'')} — baixa no plantio) — `:'Semente tratada — '}${esc(c.sem.produto)}</b></td><td class="num">${fmtDose(c.sem.dose)} ${c.bl}</td><td class="num">${B(c.bat)}</td>${parcial?`<td class="num">${B(c.ult)}</td>`:''}<td class="num">${B(c.bags)}</td><td></td></tr>
     </tbody></table></div>
   ${recomPdfLink(r)}
@@ -8794,6 +8801,7 @@ V.campo = function(arg){
         <div class="camp-app-in">
           <div class="app-grid">
             <label>Batelada (${tc.bl==='bag'?'bags':tc.bl==='saco'?'sacos':tc.bl})<input class="cell" inputmode="decimal" data-edit="realTs" data-field="bat" data-key="${esc(o.key)}" value="${r.ts&&r.ts.bat!=null?r.ts.bat:''}" placeholder="${tc.bl==='kg'?'1000':'1'}"></label>
+            <label>Nº de bateladas<input class="cell" inputmode="numeric" data-edit="realTs" data-field="nBat" data-key="${esc(o.key)}" value="${tc.nBat||''}" placeholder="—" title="Digite quantas bateladas quer fazer: o tamanho da batelada é recalculado para ficarem todas iguais (semente total ÷ nº)"></label>
             ${tc.bl==='kg'?'':`<label>Sementes por ${tc.bl}<input class="cell" inputmode="numeric" data-edit="realTs" data-field="semBag" data-key="${esc(o.key)}" value="${r.ts&&r.ts.semBag!=null?r.ts.semBag:''}" placeholder="${semPorUn(tc.sem.un)?nf0.format(semPorUn(tc.sem.un)):'ex.: 60.000'}"></label>`}
             ${tc.bl==='kg'?'':`<label>PMS (g) — opcional<input class="cell" inputmode="decimal" data-edit="realTs" data-field="pms" data-key="${esc(o.key)}" value="${r.ts&&r.ts.pms!=null?r.ts.pms:''}" placeholder="peso de mil sementes"></label>`}
           </div>
@@ -9084,14 +9092,19 @@ function applyEdit(el){
       if(r0 && r0.app && r0.app.maq!=null){ delete r0.app.maq; stampReal(key); }
       saveOverrides(); toast('Máquina da operação atualizada no planejamento'); route({keepScroll:true}); return; }
   }
-  if(kind==='realTs'){   // modo Campo: recomendação de TS (bags por batelada, sementes por bag, PMS)
+  if(kind==='realTs'){   // modo Campo: recomendação de TS (bags por batelada, sementes por bag, PMS, nº de bateladas)
     const r=realEnsure(el.dataset.key); r.ts=r.ts||{}; const raw=el.value.trim();
     const val=/,/.test(raw)?raw.replace(/\./g,'').replace(',','.'):(/^\d{1,3}(\.\d{3})+$/.test(raw)?raw.replace(/\./g,''):raw);
-    r.ts[el.dataset.field]=val===''?null:(parseFloat(val)||0);
+    if(el.dataset.field==='nBat'){   // nº de bateladas → batelada = semente total ÷ nº (todas iguais); não fica guardado, deriva da batelada
+      const nb=Math.round(parseFloat(val)||0), c=tsCalc(el.dataset.key); if(!(nb>0)||!c||!(c.bags>0)){ if(c) el.value=c.nBat||''; return; }
+      r.ts.bat=Math.round(c.bags/nb*1e4)/1e4;
+      document.querySelectorAll('[data-edit="realTs"][data-field="bat"]').forEach(x=>{ if(x.dataset.key===el.dataset.key) x.value=String(r.ts.bat).replace('.',','); });
+    } else r.ts[el.dataset.field]=val===''?null:(parseFloat(val)||0);
     realClean(el.dataset.key); stampReal(el.dataset.key);
     const box=document.querySelector('[data-tsout="'+el.dataset.key+'"]'); if(box) box.innerHTML=tsOut(tsCalc(el.dataset.key));
     const pbox=document.querySelector('[data-plout="'+el.dataset.key+'"]'); if(pbox) pbox.innerHTML=plantioOut(plantioCalc(el.dataset.key));
     document.querySelectorAll('[data-edit="realTs"][data-field="'+el.dataset.field+'"]').forEach(x=>{ if(x!==el && x.dataset.key===el.dataset.key) x.value=el.value; });
+    { const c2=tsCalc(el.dataset.key); document.querySelectorAll('[data-edit="realTs"][data-field="nBat"]').forEach(x=>{ if(x.dataset.key===el.dataset.key) x.value=(c2&&c2.nBat)||''; }); }   // nº de bateladas acompanha a batelada
     return;
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
@@ -9103,6 +9116,12 @@ function applyEdit(el){
     const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]');
     if(box) box.innerHTML=campoAppOut(fk.talId, fk.tagoi, fk.op?fk.op.itens:[], (OV.realizado[el.dataset.key]||r));
     const pbox=document.querySelector('[data-plout="'+el.dataset.key+'"]'); if(pbox) pbox.innerHTML=plantioOut(plantioCalc(el.dataset.key));
+    return;
+  }
+  if(kind==='tsDose'){   // quantidade por batelada digitada → dose/ha realizada = qtd ÷ bags por batelada × bags/ha da semente
+    const key=el.dataset.key, c=tsCalc(key), q=numBR(el.value); if(!c||!(c.bat>0)||!(c.sem.dose>0)) return;
+    const it=c.itens.find(x=>x.iid===el.dataset.iid); if(!it) return; if(!(q>0)){ tankRefresh(key); return; }
+    tankSetDose(key, it, q/c.bat*c.sem.dose); setTimeout(()=>tankRefresh(key),0);
     return;
   }
   if(kind==='tankDose'){   // volume por tanque digitado → dose/ha realizada = volume ÷ ha por tanque
@@ -9628,6 +9647,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='prListaClose'){ const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove(); }
     else if(a.act==='prListaDo'){ prListaApply(); }
     else if(a.act==='tankRound'){ tankArredondar(a.key); }
+    else if(a.act==='tsRound'){ tsArredondar(a.key); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
       const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));
