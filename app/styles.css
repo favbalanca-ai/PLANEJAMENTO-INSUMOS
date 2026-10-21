@@ -1774,3 +1774,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .mi-row-main{flex:1 1 240px;min-width:0}
 .mi-row-act{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mi-pendpanel .mi-rows .mi-row:first-child{border-top:none}
+/* ===== Quadro de operações no PC: usa a tela toda e semanas cheias viram coluna dupla ===== */
+.content:has(.oq-wrap){max-width:none}
+.oq-cell-2{flex-basis:272px;width:272px;display:grid;grid-template-columns:1fr 1fr;align-content:start}
+.oq-cell-2 .oq-card{min-width:0}
+.oq-cell-3{flex-basis:412px;width:412px;grid-template-columns:1fr 1fr 1fr}
+.oq-colbtn.oq-cell-2{display:flex}
+@media (max-width:640px){ .oq-cell-2,.oq-cell-3{flex-basis:118px;width:118px;display:flex} }
