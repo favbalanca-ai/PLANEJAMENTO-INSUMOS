@@ -1804,6 +1804,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .tk-up{color:#b45309} .tk-down{color:var(--teal)}
 .app-note .btn{margin-left:6px;vertical-align:middle}
 .tk-emb{color:var(--ink2);font-weight:700;font-size:11px;white-space:nowrap}
+.bula-web{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 
 </style>
 </head>
@@ -1902,7 +1903,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-214';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-215';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6792,7 +6793,7 @@ function bulaRender(){
       <label class="btn btn-outline btn-sm">Anexar PDF<input type="file" accept="application/pdf,.pdf" data-bulaarq="${t}" hidden></label></div>`; };
   ov.innerHTML=`<div class="modal-box bula-box"><div class="modal-head"><h3>📘 Bula — ${esc(p)}</h3><button class="icon-btn" data-act="bulaFechar" title="Fechar">✕</button></div>
     <div class="mut" style="font-size:12px">${[P.classe, P.empresa, P.un?'un. '+P.un:'', P.ativos?'planilha: '+P.ativos:''].filter(Boolean).map(esc).join(' · ')||'produto fora do portfólio da planilha'}</div>
-    <div class="bula-body"><div class="app-grid bula-grid">${BULA_CAMPOS.map(([f,l,t,ph])=>`<label${f==='obs'?' class="w2"':''}>${l}<input ${t==='num'?'class="cell" inputmode="decimal"':'class="txt"'} data-bula="${f}" value="${esc(val(f))}" placeholder="${esc(ph)}"></label>`).join('')}</div>
+    <div class="bula-body"><div class="app-grid bula-grid">${BULA_CAMPOS.map(([f,l,t,ph])=>`<label${f==='obs'||t==='url'?' class="w2"':''}>${l}<input ${t==='num'?'class="cell" inputmode="decimal"':'class="txt"'} data-bula="${f}" value="${esc(val(f))}" placeholder="${esc(ph)}">${t==='url'?`<span class="bula-web"><button type="button" class="btn btn-outline btn-sm" data-act="bulaBuscar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="Abre a busca na web já montada com o nome do produto">🔎 Buscar na web</button><button type="button" class="btn btn-outline btn-sm" data-act="bulaBaixar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="A planilha baixa o PDF deste link e guarda na pasta Bulas do Drive">⬇ Baixar e anexar pelo link</button></span>`:''}</label>`).join('')}</div>
       ${arq('bula','Bula')}${arq('fispq','FISPQ')}
       <p class="mut" style="font-size:11px;margin:6px 0 0">Vai para a aba <b>BULAS APP</b> da planilha e os PDFs para a pasta <b>Bulas</b> no Drive. A recomendação usa o ingrediente ativo, a carência, a reentrada e a faixa de dose.</p></div>
     <div class="cp-btns" style="margin-top:10px"><button class="btn btn-primary" data-act="bulaSalvar">Salvar</button>${bulaTem(r)?`<button class="btn btn-ghost" data-act="bulaExcluir">🗑 Apagar ficha</button>`:''}<button class="btn btn-outline" data-act="bulaFechar">Fechar</button></div></div>`;
@@ -6803,6 +6804,25 @@ function bulaSalvar(){ const p=bulaEditProd, ov=document.getElementById('bula-ov
   r._u=Date.now(); BULAS.reg[k]=r; saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Bula salva'+(syncUrl()?' — sincronizando com a planilha':'')); }
 function bulaExcluir(){ const p=bulaEditProd; if(!p||!ask('Apagar a ficha de bula deste produto?')) return; const k=bulaKey(p);
   BULAS.reg[k]={produto:p, del:true, _u:Date.now()}; bulaArqPend=bulaArqPend.filter(x=>bulaKey(x.prod)!==k); saveBulaArq(); saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Ficha apagada'); }
+// busca na web: abre o Google com a pesquisa pronta ("PRODUTO" bula pdf / FISPQ pdf) — a dona escolhe o resultado e copia o link do PDF
+function bulaBuscar(tipo){ const p=bulaEditProd; if(!p) return;
+  const q=`"${p}" ${tipo==='fispq'?'FISPQ':'bula'} pdf`; window.open('https://www.google.com/search?q='+encodeURIComponent(q), '_blank', 'noopener'); }
+// baixar pelo link: a planilha (Code.gs) baixa o PDF e devolve o link do Drive — o navegador do app não consegue baixar de outros sites
+let bulaBaixando=false;
+async function bulaBaixar(tipo){ const p=bulaEditProd, ov=document.getElementById('bula-ov'); if(!p||!ov||bulaBaixando) return;
+  const inp=ov.querySelector(`input[data-bula="${tipo==='fispq'?'fispqUrl':'bulaUrl'}"]`), url=((inp&&inp.value)||'').trim();
+  if(!/^https?:\/\//i.test(url)){ toast('Cole no campo o link do PDF (começa com http)'); return; }
+  if(/drive\.google\.com/i.test(url)){ toast('Esse link já é do Drive — não precisa baixar de novo'); return; }
+  if(!syncUrl()){ toast('Configure a Sincronização: é a planilha que baixa o PDF'); return; }
+  if(!bulasServerOk()){ toast('A planilha ainda não tem a versão nova do Code.gs (aba BULAS APP)'); return; }
+  bulaBaixando=true; toast('Baixando o PDF pela planilha…');
+  let r=null; try{ r=await syncPost(syncUrl(), JSON.stringify({__bulaBaixar:{url, tipo}})); }catch(e){ r=null; }
+  bulaBaixando=false;
+  if(!(r&&r.arquivo&&r.arquivo.url)){ toast('Não baixou: '+((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha')); return; }
+  const k=bulaKey(p), rec=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete rec.del;
+  rec[tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[tipo+'Arq']=r.arquivo.nome||'arquivo.pdf'; rec[tipo+'Origem']=url; rec._u=Date.now();
+  BULAS.reg[k]=rec; try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){}
+  if(inp) inp.value=r.arquivo.url; bulaRender(); scheduleBulaPush(); toast(`PDF anexado no Drive (${r.arquivo.nome||''}${r.arquivo.kb?` · ${r.arquivo.kb} KB`:''})`); }
 async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
   if(!/pdf/i.test(file.type||'') && !/\.pdf$/i.test(file.name||'')){ toast('Envie um arquivo PDF'); return; }
   if(file.size>8*1024*1024){ toast('PDF muito grande (máximo 8 MB)'); return; }
@@ -9549,6 +9569,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='mistAvalLimpar'){ mistAvalLimpar(); }
     else if(a.act==='mistFotoDel'){ if(mistAvalForm){ mistAvalForm.fotos.splice(+a.i,1); mistAvalRender(); } }
     else if(a.act==='bulaAbrir'){ bulaAbrir(a.prod||''); }
+    else if(a.act==='bulaBuscar'){ bulaBuscar(a.tipo); }
+    else if(a.act==='bulaBaixar'){ bulaBaixar(a.tipo); }
     else if(a.act==='bulaSalvar'){ bulaSalvar(); }
     else if(a.act==='bulaFechar'){ bulaFechar(); }
     else if(a.act==='bulaExcluir'){ bulaExcluir(); }
