@@ -106,15 +106,25 @@ function readBase_(){
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos, abas_faltando:semAba,
     precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), equipe_sst:readEquipeSST() };
 }
-function readAppPart_(){
-  _LER_MEMO_ = {};
+// Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
+// invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
+var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
+  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados'];
+var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
+  realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
+  limites_app:function(){ return readMapApp('LIMITES APP'); }, afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
+  ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },
+  misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
+  nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); } };
+function readAppKeys_(keys){
+  _LER_MEMO_ = {}; var out = {};
   try {
-    if (sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
-    return { retornos:readRetornos(), movimentacao:readMovimentacao(), tarefas_app:readTarefasApp(), realizado_app:readRealizadoApp(),
-      result_app:readMapApp('RESULTADO APP'), opplan_app:readMapApp('PLANO OPS APP'),
-      limites_app:readMapApp('LIMITES APP'), afericoes_app:readMapApp(AFER_SHEET), stand_app:readMapApp(STAND_SHEET), ocorrencias_app:readMapApp(OCOR_SHEET), produtividade_app:readMapApp(PROD_SHEET), bulas_app:readMapApp(BULAS_SHEET), misturas_app:readMapApp(MIST_SHEET), compras_app:readMapApp('COMPRAS APP'), depara_nfe:readDeParaNfe(), nfe_resumo:nfeResumo_(), nfe_estados:nfeEstados_() };
+    if ((keys.indexOf('nfe_resumo') >= 0 || keys.indexOf('nfe_estados') >= 0) && sh(NFE_IDX_SHEET)) _CTR_MEMO_ = nfeContratos_();   // contratos: calcula 1x só (resumo e estados usam)
+    keys.forEach(function(k){ out[k] = APP_LER_[k] ? APP_LER_[k]() : null; });
+    return out;
   } finally { _CTR_MEMO_ = null; _LER_MEMO_ = null; }
 }
+function readAppPart_(){ return readAppKeys_(APP_TODAS_); }
 // ---- Equipe puxada do sistema de RH / SST (planilha SEPARADA) ----
 // Cole o ID **ou** a URL da planilha de RH (a "SST_GoogleSheets_BancoDeDados").
 // O ID é a parte entre /d/ e /edit — ex.: https://docs.google.com/spreadsheets/d/AQUI_O_ID/edit
@@ -779,7 +789,7 @@ function capturarNfe(maxMs){
     _NFE_MEMO_ = null;
     _nfeCapturaSalva_(res, erros, parcial);
     try { pr.deleteProperty('NFE_CAPTURANDO'); } catch (e) {}
-    if (res.length || mexeu) cacheClearApp_(); }   // NF-e: só a parte APP do cache, e só se algo mudou
+    if (res.length || mexeu) cacheClearAppKeys_(NFE_KEYS_); }   // NF-e: só as chaves de NF-e/estoque do cache, e só se algo mudou
   // gatilho: aproveita e deixa a leitura da planilha pronta no cache → quem abrir o app não espera
   if (gatilho && Date.now() - t0 < 180000) try { currentJson(); } catch (e) {}
   return res;
@@ -1745,8 +1755,18 @@ function cachePutK_(pfx, str, ttl){
 // no meio) não grava no cache — senão a foto antiga ficava até 30 min e a edição parecia desfeita.
 function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; } catch (e) { return ''; } }
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
-function cacheClear(){ cacheNovaGen_(['gb_','ga_']); try { CacheService.getScriptCache().removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu']); } catch (e) {} }
-function cacheClearApp_(){ cacheNovaGen_(['ga_']); try { CacheService.getScriptCache().remove('pa_meta'); } catch (e) {} }
+// que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
+var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe'];
+var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __nfeFoto:[],
+  __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
+  __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
+  __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_,
+  __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
+  __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'] };
+function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
+function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }))); } catch (e) {} }
+function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; })); } catch (e) {} }
+function cacheClearApp_(){ cacheClearAppKeys_(APP_TODAS_); }
 // edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
 function onEdit(e){ cacheClear(); }
 // JSON atual dos dados (cada parte do cache; senão lê a planilha e cacheia)
@@ -1754,18 +1774,38 @@ function onEdit(e){ cacheClear(); }
 // (ou a checagem + o puxar) pedem juntos com o cache vazio, o 2º espera e usa o que o 1º leu —
 // antes os dois liam as 20 abas ao mesmo tempo, um atrasava o outro e o Google cortava (~30 s).
 var _SRV_ = null;   // quanto a planilha levou (vai no fim do puxar, p/ o log do app)
-function currentJson(){
+// lê do cache as chaves do pacote APP que estão lá (uma ida só ao CacheService para os "meta"); devolve {chave: json}
+function cacheGetApp_(keys){
+  var out = {}; try {
+    var c = CacheService.getScriptCache(), metas = c.getAll(keys.map(function(k){ return 'pa_' + k + '_meta'; })), pedir = [], ns = {};
+    keys.forEach(function(k){ var m = metas['pa_' + k + '_meta']; if (!m) return; var n = parseInt(m, 10); ns[k] = n; for (var i = 0; i < n; i++) pedir.push('pa_' + k + '_' + i); });
+    if (!pedir.length) return out;
+    var got = c.getAll(pedir);
+    keys.forEach(function(k){ if (!ns[k]) return; var parts = []; for (var j = 0; j < ns[k]; j++){ var v = got['pa_' + k + '_' + j]; if (v == null) return; parts.push(v); } out[k] = parts.join(''); });
+  } catch (e) {}
+  return out;
+}
+// soCache=true: devolve null se faltar qualquer parte (a checagem leve "?h=1" não lê a planilha)
+function currentJson(soCache){
   var t0 = Date.now(), info = { base:false, app:false };
-  var b = cacheGetK_('pb_'), a = cacheGetK_('pa_');
-  if (b == null || a == null){
+  var b = cacheGetK_('pb_'), partes = cacheGetApp_(APP_TODAS_), faltam = APP_TODAS_.filter(function(k){ return partes[k] == null; });
+  if (soCache && (b == null || faltam.length)) return null;
+  if (b == null || faltam.length){
     var lk = null; try { lk = LockService.getDocumentLock(); } catch (e) {}
     var tem = false; try { tem = lk ? lk.tryLock(55000) : false; } catch (e) {}
     try {
       if (b == null){ b = cacheGetK_('pb_'); if (b == null){ var gb = cacheGen_('gb_'); b = JSON.stringify(readBase_()); if (cacheGen_('gb_') === gb) cachePutK_('pb_', b, CACHE_TTL_BASE); info.base = true; } }
-      if (a == null){ a = cacheGetK_('pa_'); if (a == null){ var ga = cacheGen_('ga_'); a = JSON.stringify(readAppPart_()); if (cacheGen_('ga_') === ga) cachePutK_('pa_', a, CACHE_TTL); info.app = true; } }
+      if (faltam.length){   // re-checa: outro pedido pode ter preenchido enquanto esperava a trava
+        var de = cacheGetApp_(faltam), ainda = []; faltam.forEach(function(k){ if (de[k] != null) partes[k] = de[k]; else ainda.push(k); });
+        if (ainda.length){
+          var gens = {}; ainda.forEach(function(k){ gens[k] = cacheGen_('ga_' + k); });
+          var lidas = readAppKeys_(ainda);
+          ainda.forEach(function(k){ var str = JSON.stringify(lidas[k] === undefined ? null : lidas[k]); partes[k] = str; if (cacheGen_('ga_' + k) === gens[k]) cachePutK_('pa_' + k + '_', str, CACHE_TTL); });
+          info.app = ainda; } }
     } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
   }
   info.ms = Date.now() - t0; if (_CACHE_ERRO_){ info.cacheErro = _CACHE_ERRO_; _CACHE_ERRO_ = ''; } _SRV_ = info;
+  var a = '{' + APP_TODAS_.map(function(k){ return JSON.stringify(k) + ':' + partes[k]; }).join(',') + '}';
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }
 
@@ -1800,10 +1840,15 @@ function doGet_(e){
   var cfg = loginCfg_();
   if (acc && acc.erro) return json({ ok:false, login:true, erro:acc.erro, exigido:cfg.exigido });   // sessão velha/derrubada
   if (cfg.exigido && !(acc && acc.u)) return json({ ok:false, login:true, erro:'entre com seu login e PIN', exigido:true });
-  var str = acessoFiltra_(currentJson(), acc);
-  str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + '}';
-  // ?h=1 -> devolve só o "hash" (resposta minúscula) para o app checar se mudou antes de baixar tudo
-  if (e && e.parameter && e.parameter.h){
+  // ?h=1 -> devolve só o "hash" (resposta minúscula) para o app checar se mudou antes de baixar tudo.
+  // Se o cache está frio (parte vencida ou invalidada), responde na hora hash vazio: o app faz o puxar completo
+  // direto, em vez de ler a planilha duas vezes (uma p/ o hash e outra p/ os dados).
+  var leve = !!(e && e.parameter && e.parameter.h);
+  var cj = currentJson(leve);
+  if (leve && cj == null) return jsonStr(JSON.stringify({ hash:'', frio:1 }));
+  var str = acessoFiltra_(cj, acc);
+  str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + ',"cap":{"lote":1,"cacheAba":1}}';
+  if (leve){
     var dig = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8);
     var hash = Utilities.base64Encode(dig);
     return jsonStr(JSON.stringify({ hash: hash }));
@@ -1814,7 +1859,7 @@ function doGet_(e){
 
 var _ACC_ = null;   // sessão do pedido atual (doPost)
 function doPost(e){
-  var out = { ok:0, fail:0, msgs:[] }, base = false, semCache = false;
+  var out = { ok:0, fail:0, msgs:[] }, base = false, inval = {};
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
   // apagar a linha errada do razão ou perder uma compra na COMPRAS APP. Quem chega depois espera.
   var lock = LockService.getScriptLock();
@@ -1822,6 +1867,26 @@ function doPost(e){
   try {
     var payload = JSON.parse(e.postData.contents), acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
     _ACC_ = acc;
+    // __lote: vários payloads (um tipo cada) numa requisição só — grava um a um, na ordem, e responde um resultado por item
+    if (payload && Array.isArray(payload.__lote)){
+      var lista = payload.__lote; out.itens = [];
+      if (lista.length > 40){ out.fail = 1; out.msgs.push('lote grande demais'); }
+      else lista.forEach(function(p){ var o = { ok:0, fail:0, msgs:[] }, r = gravaUm_(p, acc, cfg, o);
+        if (r.base) base = true; (r.inval || []).forEach(function(k){ inval[k] = 1; });
+        out.itens.push(o); out.ok += +o.ok || 0; if (o.fail) out.fail = 1; out.msgs = out.msgs.concat(o.msgs); });
+    } else { var r1 = gravaUm_(payload, acc, cfg, out); if (r1.base) base = true; (r1.inval || []).forEach(function(k){ inval[k] = 1; }); }
+  } catch(err){ out.msgs.push('payload inválido: ' + err); }
+  finally {
+    // invalida o cache: o próximo puxar traz o dado fresco. Mexeu na BASE = tudo; senão só as chaves da parte APP que a gravação muda.
+    if (base) cacheClear(); else cacheClearAppKeys_(Object.keys(inval));
+    lock.releaseLock();
+  }
+  return json(out);
+}
+// grava UM payload (um tipo __x). Devolve { base, inval }: base = mexeu na planilha-base; inval = chaves do pacote APP a invalidar
+function gravaUm_(payload, acc, cfg, out){
+  var base = false, semCache = false;
+  try {
     var chaves = (payload && !Array.isArray(payload) && typeof payload === 'object') ? Object.keys(payload).filter(function(k){ return k.indexOf('__') === 0; }) : [];
     var livre = chaves.length === 1 && (chaves[0] === '__login' || chaves[0] === '__retorno');   // login e retorno do operador (retorno.html) não pedem sessão
     if (chaves.length > 1){ out.fail = 1; out.msgs.push('pedido inválido: um tipo de gravação por vez'); semCache = true; }
@@ -1890,12 +1955,8 @@ function doPost(e){
       applyEditsBatch(payload, out); base = true;   // edições de campo (dose, estoque, área…): mexem na BASE
     }
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
-  finally {
-    // invalida o cache: o próximo puxar traz o dado fresco. Só a parte APP, a não ser que mexeu na BASE.
-    if (base) cacheClear(); else if (!semCache) cacheClearApp_();   // link curto não muda o que o app puxa
-    lock.releaseLock();
-  }
-  return json(out);
+  var ch = chaves && chaves.length === 1 ? chaves[0] : '';
+  return { base:base, inval: base ? [] : (semCache ? [] : (ch && APP_INVALIDA_[ch]) ? APP_INVALIDA_[ch] : APP_TODAS_) };
 }
 
 /* ------------------------- MANUTENÇÃO (rodar à mão) -------------------------

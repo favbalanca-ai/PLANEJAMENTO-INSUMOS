@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-210';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-211';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2652,8 +2652,7 @@ function saveTarefas(){ _persistTarefas(); scheduleTarefasPush(); }
 // ---- sincronização (planilha = fonte compartilhada; puxar substitui, enviar grava tudo) ----
 let tarefasPushTimer=null, lastTarefasPushSig='';
 function tarefasSig(){ return JSON.stringify({f:(EQUIPE&&EQUIPE.funcionarios)||[], t:(TAREFAS&&TAREFAS.tarefas)||[]}); }
-function scheduleTarefasPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(tarefasPushTimer);
-  tarefasPushTimer=setTimeout(()=>{ if(tarefasSig()===lastTarefasPushSig) return; tarefasPush({auto:true}); }, 1500); }
+function scheduleTarefasPush(){ loteAgendar('__tarefas'); }   // sai no envio em lote (ver LOTE_TIPOS)
 async function tarefasPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL de sincronização primeiro'); return; }
   if(syncBusy){ if(opts.auto) scheduleTarefasPush(); else toast('Sincronização ocupada — tente de novo'); return; }
   const sig=tarefasSig(); if(opts.auto && sig===lastTarefasPushSig) return;
@@ -2678,8 +2677,7 @@ function tarefasApplyPulled(pa){
 let realizadoPushTimer=null, lastRealizadoSig='';
 function realizadoSig(){ return JSON.stringify((OV&&OV.realizado)||{}); }
 function stampReal(key){ const r=OV&&OV.realizado&&OV.realizado[key]; if(r) r._u=Date.now(); saveOverrides(); scheduleRealizadoPush(); }
-function scheduleRealizadoPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(realizadoPushTimer);
-  realizadoPushTimer=setTimeout(()=>{ if(realizadoSig()===lastRealizadoSig) return; realizadoPush({auto:true}); }, 1800); }
+function scheduleRealizadoPush(){ loteAgendar('__realizado'); }
 async function realizadoPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
   if(syncBusy){ if(opts.auto) scheduleRealizadoPush(); return; }
   const sig=realizadoSig(); if(opts.auto && sig===lastRealizadoSig) return;
@@ -2703,8 +2701,7 @@ function realizadoApplyPulled(map){
 // ---- Resultados (OV.result: colhido/preço por talhão) — sincroniza por chave (mais recente vence) ----
 let resultPushTimer=null, lastResultSig='';
 function resultSig(){ return JSON.stringify((OV&&OV.result)||{}); }
-function scheduleResultPush(){ if(!syncUrl()||!autoOn()) return; clearTimeout(resultPushTimer);
-  resultPushTimer=setTimeout(()=>{ if(resultSig()===lastResultSig) return; resultPush({auto:true}); }, 1800); }
+function scheduleResultPush(){ loteAgendar('__result'); }
 async function resultPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
   if(syncBusy){ if(opts.auto) scheduleResultPush(); return; }
   const sig=resultSig(); if(opts.auto && sig===lastResultSig) return;
@@ -4390,8 +4387,7 @@ let standPushTimer=null, lastStandSig='';
 function standMapa(){ const m={}; ((STAND&&STAND.registros)||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); return m; }
 function standSig(){ return JSON.stringify(standMapa()); }
 function standServerOk(){ return !!(DATA && DATA.stand_app && typeof DATA.stand_app==='object'); }
-function scheduleStandPush(){ if(!syncUrl()||!autoOn()||!standServerOk()) return; clearTimeout(standPushTimer);
-  standPushTimer=setTimeout(()=>{ if(standSig()===lastStandSig) return; standPush({auto:true}); }, 1500); }
+function scheduleStandPush(){ loteAgendar('__stand'); }
 async function standPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!standServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleStandPush(); return; }
   const sig=standSig(); if(opts.auto && sig===lastStandSig) return;
@@ -4562,8 +4558,7 @@ function aferLista(){ return Object.values((AFER&&AFER.reg)||{}).filter(r=>r&&!r
 let aferPushTimer=null, lastAferSig='';
 function aferSig(){ return JSON.stringify((AFER&&AFER.reg)||{}); }
 function aferServerOk(){ return !!(DATA && DATA.afericoes_app && typeof DATA.afericoes_app==='object'); }
-function scheduleAferPush(){ if(!syncUrl()||!autoOn()||!aferServerOk()) return; clearTimeout(aferPushTimer);
-  aferPushTimer=setTimeout(()=>{ if(aferSig()===lastAferSig) return; aferPush({auto:true}); }, 1500); }
+function scheduleAferPush(){ loteAgendar('__afericao'); }
 async function aferPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!aferServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleAferPush(); return; }
   const sig=aferSig(); if(opts.auto && sig===lastAferSig) return;
@@ -4758,8 +4753,7 @@ function ocorLista(){ return Object.values((OCOR&&OCOR.reg)||{}).filter(r=>r&&!r
 let ocorPushTimer=null, lastOcorSig='', fotoEnviando=false;
 function ocorSig(){ return JSON.stringify((OCOR&&OCOR.reg)||{}); }
 function ocorServerOk(){ return !!(DATA && DATA.ocorrencias_app && typeof DATA.ocorrencias_app==='object'); }
-function scheduleOcorPush(){ if(!syncUrl()||!autoOn()||!ocorServerOk()) return; clearTimeout(ocorPushTimer);
-  ocorPushTimer=setTimeout(async()=>{ await ocorFotosEnviar(); if(ocorSig()===lastOcorSig) return; ocorPush({auto:true}); }, 1500); }
+function scheduleOcorPush(){ loteAgendar('__ocorrencia'); }
 async function ocorPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!ocorServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleOcorPush(); return; }
   const sig=ocorSig(); if(opts.auto && sig===lastOcorSig) return;
@@ -4813,8 +4807,7 @@ function saveBulaArq(){ try{ localStorage.setItem(BULA_ARQ_KEY, JSON.stringify(b
 // ---- sincronização (só envia se o Code.gs já tiver o ramo __bula) ----
 function bulasServerOk(){ return !!(DATA && DATA.bulas_app && typeof DATA.bulas_app==='object'); }
 function bulaSig(){ return JSON.stringify((BULAS&&BULAS.reg)||{}); }
-function scheduleBulaPush(){ if(!syncUrl()||!autoOn()||!bulasServerOk()) return; clearTimeout(bulaPushTimer);
-  bulaPushTimer=setTimeout(async()=>{ await bulaArqEnviar(); if(bulaSig()===lastBulaSig) return; bulaPush({auto:true}); }, 1500); }
+function scheduleBulaPush(){ loteAgendar('__bula'); }
 async function bulaPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!bulasServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleBulaPush(); return; }
   const sig=bulaSig(); if(opts.auto && sig===lastBulaSig) return;
@@ -4915,8 +4908,7 @@ function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.av
 // ---- sincronização (aba MISTURAS APP; só envia se o Code.gs já tiver o ramo __mistura) ----
 function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.misturas_app==='object'); }
 function mistSig(){ return JSON.stringify((MIST&&MIST.reg)||{}); }
-function scheduleMistPush(){ if(!syncUrl()||!autoOn()||!mistServerOk()) return; clearTimeout(mistPushTimer);
-  mistPushTimer=setTimeout(async()=>{ await mistFotosEnviar(); if(mistSig()===lastMistSig) return; mistPush({auto:true}); }, 1500); }
+function scheduleMistPush(){ loteAgendar('__mistura'); }
 async function mistPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!mistServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleMistPush(); return; }
   const sig=mistSig(); if(opts.auto && sig===lastMistSig) return;
@@ -5123,8 +5115,7 @@ function prLista(){ return Object.values((PRODE&&PRODE.reg)||{}).filter(r=>r&&!r
 let prPushTimer=null, lastPrSig='';
 function prSig(){ return JSON.stringify((PRODE&&PRODE.reg)||{}); }
 function prServerOk(){ return !!(DATA && DATA.produtividade_app && typeof DATA.produtividade_app==='object'); }
-function schedulePrPush(){ if(!syncUrl()||!autoOn()||!prServerOk()) return; clearTimeout(prPushTimer);
-  prPushTimer=setTimeout(()=>{ if(prSig()===lastPrSig) return; prPush({auto:true}); }, 1500); }
+function schedulePrPush(){ loteAgendar('__produtividade'); }
 async function prPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!prServerOk()) return;
   if(syncBusy){ if(opts.auto) schedulePrPush(); return; }
   const sig=prSig(); if(opts.auto && sig===lastPrSig) return;
@@ -6007,8 +5998,7 @@ function limRemovidos(){ const o=(OV&&OV.limites)||{}; return Object.keys(o).fil
 let limitesPushTimer=null, lastLimitesSig='';
 function limitesSig(){ return JSON.stringify((OV&&OV.limites)||{}); }
 function limitesServerOk(){ return !!(DATA && DATA.limites_app && typeof DATA.limites_app==='object'); }
-function scheduleLimitesPush(){ if(!syncUrl()||!autoOn()||!limitesServerOk()) return; clearTimeout(limitesPushTimer);
-  limitesPushTimer=setTimeout(()=>{ if(limitesSig()===lastLimitesSig) return; limitesPush({auto:true}); }, 1500); }
+function scheduleLimitesPush(){ loteAgendar('__limites'); }
 async function limitesPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!limitesServerOk()) return;
   if(syncBusy){ if(opts.auto) scheduleLimitesPush(); return; }
   const sig=limitesSig(); if(opts.auto && sig===lastLimitesSig) return;
@@ -8178,6 +8168,45 @@ const SYNC_KEY='planejamento_sync_url';
 const AUTO_KEY='planejamento_sync_auto';   // '0' desliga a sincronização automática
 const POLL_MS=45000;                        // intervalo do puxar automático (quando a aba está visível)
 const PUSH_DEBOUNCE=1500;                   // espera após a última edição antes de enviar
+/* ---- ENVIO EM LOTE (app -> planilha): os registros do Campo (execução, ocorrências, misturas, bulas, stand, aferições,
+   produtividade, limites, resultados, tarefas) saem numa requisição só ({__lote:[{__ocorrencia:…},{__mistura:…}]}) em vez
+   de um pedido por tipo — antes, uma ação no Campo disparava 3–4 envios em sequência, cada um apagando o cache da
+   planilha. Com Code.gs antigo (sem "cap.lote" no puxar) manda um por vez, como antes. ---- */
+const LOTE={ pend:new Set(), timer:null };
+const LOTE_TIPOS={
+  __tarefas:     { lbl:'Tarefas',       ok:()=>true,              dados:()=>({funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas}), sig:()=>tarefasSig(),   last:()=>lastTarefasPushSig, set:v=>{ lastTarefasPushSig=v; } },
+  __realizado:   { lbl:'Operações',     ok:()=>true,              dados:()=>(OV.realizado||{}),  sig:()=>realizadoSig(), last:()=>lastRealizadoSig, set:v=>{ lastRealizadoSig=v; } },
+  __result:      { lbl:'Resultados',    ok:()=>true,              dados:()=>(OV.result||{}),     sig:()=>resultSig(),    last:()=>lastResultSig,    set:v=>{ lastResultSig=v; } },
+  __limites:     { lbl:'Limites',       ok:()=>limitesServerOk(), dados:()=>(OV.limites||{}),    sig:()=>limitesSig(),   last:()=>lastLimitesSig,   set:v=>{ lastLimitesSig=v; } },
+  __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
+  __stand:       { lbl:'Stand',         ok:()=>standServerOk(),   dados:()=>standMapa(),         sig:()=>standSig(),     last:()=>lastStandSig,     set:v=>{ lastStandSig=v; } },
+  __ocorrencia:  { lbl:'Ocorrências',   ok:()=>ocorServerOk(),    dados:()=>(OCOR.reg||{}),      sig:()=>ocorSig(),      last:()=>lastOcorSig,      set:v=>{ lastOcorSig=v; },  antes:()=>ocorFotosEnviar() },
+  __mistura:     { lbl:'Misturas',      ok:()=>mistServerOk(),    dados:()=>(MIST.reg||{}),      sig:()=>mistSig(),      last:()=>lastMistSig,      set:v=>{ lastMistSig=v; },  antes:()=>mistFotosEnviar() },
+  __bula:        { lbl:'Bulas',         ok:()=>bulasServerOk(),   dados:()=>(BULAS.reg||{}),     sig:()=>bulaSig(),      last:()=>lastBulaSig,      set:v=>{ lastBulaSig=v; },  antes:()=>bulaArqEnviar() },
+  __produtividade:{ lbl:'Produtividade',ok:()=>prServerOk(),      dados:()=>(PRODE.reg||{}),     sig:()=>prSig(),        last:()=>lastPrSig,        set:v=>{ lastPrSig=v; } } };
+function loteSuporta(){ return !!(DATA && DATA.cap && DATA.cap.lote); }
+function loteAgendar(tipo){ if(!syncUrl()||!autoOn()) return; LOTE.pend.add(tipo); clearTimeout(LOTE.timer); LOTE.timer=setTimeout(()=>loteEnviar(), PUSH_DEBOUNCE); }
+async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) return false;
+  if(syncBusy){ if(!opts.agora){ clearTimeout(LOTE.timer); LOTE.timer=setTimeout(()=>loteEnviar(), 1000); } return false; }
+  const ks=[...LOTE.pend]; LOTE.pend.clear(); if(!ks.length) return true;
+  syncBusy=true; setSyncStatus('busy');
+  try{
+    for(const k of ks){ const T=LOTE_TIPOS[k]; if(T&&T.antes&&T.ok()){ try{ await T.antes(); }catch(e){} } }   // fotos/PDFs primeiro (viram link no registro)
+    const itens=[], usados=[], sigs={};
+    ks.forEach(k=>{ const T=LOTE_TIPOS[k]; if(!T||!T.ok()) return; const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:T.dados()}); usados.push(k); });
+    if(!itens.length){ syncBusy=false; setSyncStatus('ok'); return true; }
+    let res;
+    if(itens.length===1){ res=[await syncPost(url, JSON.stringify(itens[0]))]; }
+    else if(loteSuporta()){ const r=await syncPost(url, JSON.stringify({__lote:itens})); res=(r&&Array.isArray(r.itens)&&r.itens.length===itens.length)?r.itens:itens.map(()=>r); }
+    else { res=[]; for(const it of itens){ let r=null; try{ r=await syncPost(url, JSON.stringify(it)); }catch(e){ r=null; } res.push(r); } }   // Code.gs antigo: um por vez
+    let okAll=true; usados.forEach((k,i)=>{ if(postOk(res[i])) LOTE_TIPOS[k].set(sigs[k]); else okAll=false; });
+    syncBusy=false; setSyncStatus(okAll?'ok':'err'); markSynced();
+    addHist('push', okAll, (usados.length>1?'Lote · ':'')+usados.map((k,i)=>`${LOTE_TIPOS[k].lbl}: ${(res[i]&&res[i].ok)||0}`).join(' · '));
+    return okAll;
+  }catch(e){ syncBusy=false; setSyncStatus('err'); addHist('push',false,'Envio: '+(e&&e.message||'')); return false; }
+}
+// tudo o que estiver diferente do último envio, de uma vez (ao entrar/sair do app e no "Enviar agora")
+async function loteEnviarTudo(){ Object.keys(LOTE_TIPOS).forEach(k=>LOTE.pend.add(k)); return loteEnviar({agora:true}); }
 let syncBusy=false, pushTimer=null, pollTimer=null;
 let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
 let lastPullTs=0;   // último puxar que trouxe dados
@@ -8447,7 +8476,7 @@ async function syncGet(url, opts){
       const txt=await r.text(), d=JSON.parse(txt);
       if(d && d.login){ syncLogAdd('down', 'Puxar planilha', t0, false, 'precisa entrar: '+(d.erro||'')); return d; }
       if(d && d.ok===false && d.erro) throw new Error(d.erro);   // a planilha explicou o erro (ex.: "timed out")
-      const sv=d&&d._srv, lida=sv?(sv.base||sv.app?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',sv.app?'compras/NF-e/execução':''].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
+      const sv=d&&d._srv, abas=(sv&&Array.isArray(sv.app))?sv.app:[], lida=sv?((sv.base||abas.length||sv.app===true)?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',abas.length?abas.length+' aba(s): '+abas.map(k=>k.replace(/_app$/,'')).join(', '):(sv.app===true?'compras/NF-e/execução':'')].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
       const cacheAviso=(sv&&sv.cacheErro)?` · ⚠️ a planilha não conseguiu guardar o cache (${sv.cacheErro})`:'';
       syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${lida}${cacheAviso}${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
       return d;
@@ -8531,14 +8560,7 @@ async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
   try{ await pushComprasLote(); await pushSaidasPendentes(); }catch(e){}
-  try{ if(tarefasSig()!==lastTarefasPushSig) await tarefasPush({auto:true}); }catch(e){}   // equipe + tarefas
-  try{ if(realizadoSig()!==lastRealizadoSig) await realizadoPush({auto:true}); }catch(e){}   // status das operações
-  try{ if(resultSig()!==lastResultSig) await resultPush({auto:true}); }catch(e){}            // resultados (colhido/preço)
-  try{ if(limitesServerOk() && limitesSig()!==lastLimitesSig) await limitesPush({auto:true}); }catch(e){}   // limites dos talhões (mapa)
-  try{ if(aferServerOk() && aferSig()!==lastAferSig) await aferPush({auto:true}); }catch(e){}   // aferições do Campo
-  try{ if(standServerOk() && standSig()!==lastStandSig) await standPush({auto:true}); }catch(e){}   // contagens de stand
-  try{ if(ocorServerOk()){ await ocorFotosEnviar(); if(ocorSig()!==lastOcorSig) await ocorPush({auto:true}); } }catch(e){}   // ocorrências + fotos
-  try{ if(prServerOk() && prSig()!==lastPrSig) await prPush({auto:true}); }catch(e){}   // estimativas de produtividade
+  try{ await loteEnviarTudo(); }catch(e){}   // registros do Campo (execução, ocorrências+fotos, misturas, bulas, stand, aferições, produtividade, limites, resultados, tarefas) num envio só
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
