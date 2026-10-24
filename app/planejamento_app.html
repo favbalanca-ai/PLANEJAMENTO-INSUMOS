@@ -1903,7 +1903,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-216';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-217';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1918,7 +1918,7 @@ function loadPrecos(){
   const s=d.safras[d.atual]; s.refs=s.refs||[]; s.itens=s.itens||[];
   return d;
 }
-function savePrecos(){ lsSet(PRECOS_KEY, JSON.stringify(PRECOS));
+function savePrecos(){ PRECOS_VER++; lsSet(PRECOS_KEY, JSON.stringify(PRECOS));
   try{ if(typeof schedulePrecosPush==='function') schedulePrecosPush(); }catch(e){} }
 function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
 // fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
@@ -2145,12 +2145,6 @@ function _numLoose(v){
   if(v.indexOf(',')>=0 && v.indexOf('.')>=0) v=v.replace(/\./g,'').replace(',','.');
   else if(v.indexOf(',')>=0) v=v.replace(',','.');
   const n=parseFloat(v); return isFinite(n)?n:null;
-}
-function _pctParse(raw){
-  const hadP=/%/.test(String(raw||''));
-  let n=_numLoose(raw); if(n==null) return null;
-  if(hadP || Math.abs(n)>1) n=n/100;
-  return n;
 }
 function prDoImport(){
   const ta=document.getElementById('pr-imp-txt'); if(!ta) return;
@@ -2472,10 +2466,12 @@ function buildFornecedorMap(){
   try{ const s=safraAtual(); (s&&s.itens||[]).forEach(it=>put(it.produto,it.empresa)); }catch(e){}
   return map;
 }
+let PRECOS_VER=0, _mpKey='';   // versão da lista de preços: mergePrecosProdutos só refaz os mapas quando ela muda
 function mergePrecosProdutos(){
   try{
     if(!DATA||!DATA.produtos||typeof safraAtual!=='function') return;
     const s=safraAtual(); if(!s||!s.itens) return;
+    const key=PRECOS_VER+'|'+(PRECOS&&PRECOS.atual)+'|'+s.itens.length+'|'+DATA.produtos.length; if(key===_mpKey) return; _mpKey=key;
     const uMap=buildUnitMap(), fMap=buildFornecedorMap();
     s.itens.forEach(it=>{
       const nm=String(it.produto||'').trim(); if(!nm||PROD[nm]) return;
@@ -2493,9 +2489,13 @@ function mergePrecosProdutos(){
 function areaDe(t){ const o=OV.talhao[t.id]; return o && o.area!=null ? +o.area : t.area; }
 function prodvDe(t){ const o=OV.talhao[t.id]; return o && o.produtividade!=null ? +o.produtividade : t.produtividade; }
 const doseKey = (tid,oi,ii)=>`${tid}|${oi}|${ii}`;
-function doseDe(tid,oi,ii,base){ const k=doseKey(tid,oi,ii); return (k in OV.dose)?+OV.dose[k]:base; }
 // itens EFETIVOS de uma operação (base sem removidos, com trocas/doses, + adicionados)
-function effItems(tid, tagoi, baseItens){
+// ---- MEMÓRIA POR RENDER: dentro de route() as funções pesadas (itens da operação, operações do talhão, data de plantio…)
+// calculam UMA vez por chave; fora do render (eventos) calculam sempre. Zerada no começo e no fim de cada route().
+let _M=null;
+function memo(k, fn){ if(!_M) return fn(); if(_M.has(k)) return _M.get(k); const v=fn(); _M.set(k,v); return v; }
+function effItems(tid, tagoi, baseItens){ return memo('ef|'+tid+'|'+tagoi+'|'+((baseItens&&baseItens.length)||0), ()=>_effItems(tid, tagoi, baseItens)); }
+function _effItems(tid, tagoi, baseItens){
   const out=[];
   (baseItens||[]).forEach((it,ii)=>{
     const rk=`${tid}|${tagoi}|${ii}`;
@@ -2516,7 +2516,8 @@ function effItems(tid, tagoi, baseItens){
 // ---- talhões: base (não removidos, não vazios) + criados ----
 // talhão "vazio" = placeholder da planilha sem cultura, sem safrinha e sem área
 function talhaoVazio(t){ return !(t.empreendimento||'').trim() && !(t.emp_safrinha||'').trim() && (+t.area||0)===0; }
-function talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id] && !talhaoVazio(t)).concat(OV.talhaoAdd); }
+function talhoesAll(){ return memo('tals', _talhoesAll); }
+function _talhoesAll(){ return DATA.talhoes.filter(t=>!OV.talhaoRemoved[t.id] && !talhaoVazio(t)).concat(OV.talhaoAdd); }
 function findTalhao(id){ return DATA.talhoes.find(t=>t.id===id) || OV.talhaoAdd.find(t=>t.id===id); }
 // nome do talhão para MOSTRAR: só o nome ("ESTEVÃO"), sem os códigos na frente ("NV2-", "TL02-").
 // O código (t.id) continua sendo a chave da aba na planilha — só não aparece mais na tela.
@@ -2625,7 +2626,8 @@ function recomSeq(r){ if(r.opKey){ const tg=r.opKey.split('|')[1]||''; return tg
 const _dISO=ts=>{ const d=new Date(ts); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 // realizada AUTOMÁTICA: o plantio vira REALIZADO quando a RECOMENDAÇÃO DE SEMENTE é concluída (aprovada),
 // ou quando uma operação com semente é concluída no Campo — vale a data mais antiga (replantio não move o dia 0)
-function plantioRealAutoDe(tid,seq){
+function plantioRealAutoDe(tid,seq){ return memo('pra|'+tid+'|'+seq, ()=>_plantioRealAutoDe(tid,seq)); }
+function _plantioRealAutoDe(tid,seq){
   const tag=seq==='safrinha'?'S':'P', datas=[];
   (opsOf(tid,seq)||[]).forEach((op,oi)=>{ const r=OV.realizado&&OV.realizado[`${tid}|${tag}${oi}`];
     if(r && r.status==='concluido' && _isISO(r.data) && opTemSemente(tid,`${tag}${oi}`)) datas.push(String(r.data).slice(0,10)); });
@@ -2650,7 +2652,8 @@ function cicloDe(tid,seq){ const o=OV.talhao[tid]||{}, pl=planoDe(tid)||{}, k=se
 function colheitaPrevDe(tid,seq){ const p=plantioEffDe(tid,seq), c=cicloDe(tid,seq); if(!p||!c) return '';
   const d=new Date(p+'T12:00:00'); d.setDate(d.getDate()+c); return d.toISOString().slice(0,10); }
 // data planejada da operação = plantio (realizado > previsto) + DAE
-function opDataPlan(tid,tagoi,opDap){
+function opDataPlan(tid,tagoi,opDap){ return memo('odp|'+tid+'|'+tagoi+'|'+(opDap||''), ()=>_opDataPlan(tid,tagoi,opDap)); }
+function _opDataPlan(tid,tagoi,opDap){
   const seq=tagoi[0]==='S'?'safrinha':'principal';
   const plantio=plantioEffDe(tid,seq), dae=opDaeDe(tid,tagoi,opDap);
   if(!plantio) return '';
@@ -2753,7 +2756,8 @@ function empSafDe(t){ const o=OV.talhao[t.id]; return (o&&o.emp_safrinha!=null)?
 const temSafrinha = t => !!String(empSafDe(t)||'').trim();
 function prodSafDe(t){ const o=OV.talhao[t.id]; return o&&o.prod_safrinha!=null?+o.prod_safrinha:(t.prod_safrinha||0); }
 // operações de uma safra = base (planilha) + operações criadas no app
-function opsOf(tid, seq){
+function opsOf(tid, seq){ return memo('ops|'+tid+'|'+seq, ()=>_opsOf(tid, seq)); }
+function _opsOf(tid, seq){
   // operações vêm SEMPRE da planilha (12 slots por safra, por posição); o app revela/preenche os vazios.
   // A ORDEM aqui é sempre física (índice = slot); o NOME exibido é limpo (sem o marcador "OPERAÇÃO n").
   const tag=seq==='safrinha'?'S':'P';
@@ -2811,7 +2815,7 @@ function hasExecInSafra(tid,tag){ const cnt=opsShownCount(tid,tag);
   return false; }
 function opPlanEnsure(tid,seq){ OV.opPlan=OV.opPlan||{}; const k=opPlanKey(tid,seq);
   const pl=OV.opPlan[k]||{order:null,names:{}}; pl.names=pl.names||{}; OV.opPlan[k]=pl; return pl; }
-function opPlanStamp(tid,seq){ const pl=opPlanEnsure(tid,seq); pl._u=Date.now(); saveOverrides(); }  // saveOverrides agenda o envio (reescreve a aba do talhão)
+function opPlanStamp(tid,seq){ const pl=opPlanEnsure(tid,seq); pl._u=tsAgora(); saveOverrides(); }  // saveOverrides agenda o envio (reescreve a aba do talhão)
 function opRename(tid,tagoi,nome){ const seq=_seqOfTag(tagoi[0]), pl=opPlanEnsure(tid,seq);
   const base=(planoDe(tid)[seq]||[])[+tagoi.slice(1)]; const orig=opStripMarker((base&&base.nome)||'');
   nome=String(nome||'').trim();
@@ -3276,13 +3280,6 @@ let precoQ = '';                   // busca do Portfólio (Preços) — sessão
 let precoSemPreco = false;         // filtro "só sem preço" do Portfólio (Preços) — sessão
 let precoClasse = '';              // filtro por classe do Portfólio (Preços) — sessão
 // custo de insumos por classe (R$/ha) de um talhão -> { CLASSE: rs_ha }
-function custoClasseHa(t){
-  const m={};
-  eachOp(t,(seq,tag,oi,op,tagoi)=>{ effItems(t.id,tagoi,op.itens).forEach(it=>{ if(!it.produto) return;
-    const cl=(((PROD[it.produto]&&PROD[it.produto].classe)||it.classe||'—')+'').toUpperCase();
-    m[cl]=(m[cl]||0)+it.dose*precoDe(it.produto); }); });
-  return m;
-}
 // custo por ha × classe restrito às safras selecionadas (principal e/ou safrinha)
 function custoClasseHaSeqs(t, seqs){
   const m={};
@@ -3334,7 +3331,7 @@ function excluirCompra(id){
   COMPRAS.registros=COMPRAS.registros.filter(x=>x.id!==id);
   const ex=comprasExcluidas().filter(e=>e.id!==id);
   // srv = já estava na planilha: guarda os itens p/ tirar do saldo até o próximo puxar trazer o razão novo
-  ex.push({id, _u:Date.now(), srv:!!c.pushed, itens:c.pushed?(c.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null});
+  ex.push({id, _u:tsAgora(), srv:!!c.pushed, itens:c.pushed?(c.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null});
   COMPRAS.excluidas=ex.slice(-300); saveCompras();
   pushComprasLote().then(n=>{ if(n) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
 }
@@ -3855,7 +3852,7 @@ function nfeConfirmar(modo){
       obs:`NF-e emitida em ${fmtDataBR(n.emissao)}${n.tipo!=='VENDA'?' · '+NFE_TIPO[n.tipo]:''}`, itens, pushed:false, ts:Date.now(),
       nfe:{chave:n.chave, cnpj:n.cnpj, emissao:n.emissao, tipo:n.tipo, vNF:n.vNF} };
     const i0=(COMPRAS.registros||[]).findIndex(x=>x.id===n.chave);   // reclassificar: substitui (mesma chave) em vez de empilhar
-    if(i0>=0){ const old=COMPRAS.registros[i0]; rec.ts=old.ts||rec.ts; rec._u=Date.now();
+    if(i0>=0){ const old=COMPRAS.registros[i0]; rec.ts=old.ts||rec.ts; rec._u=tsAgora();
       if(old.pushed) rec.subst=(old.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0}));   // razão ainda tem a entrada antiga: desconta até regravar
       COMPRAS.registros[i0]=rec; }
     else COMPRAS.registros.push(rec);
@@ -4598,7 +4595,7 @@ function tarefasApplyPulled(pa){
 // ---- sincronização do STATUS das operações (OV.realizado) — merge por chave (mais recente vence) ----
 let lastRealizadoSig='';
 function realizadoSig(){ return sigHash(JSON.stringify((OV&&OV.realizado)||{})); }
-function stampReal(key){ const r=OV&&OV.realizado&&OV.realizado[key]; if(r) r._u=Date.now(); saveOverrides(); scheduleRealizadoPush(); }
+function stampReal(key){ const r=OV&&OV.realizado&&OV.realizado[key]; if(r) r._u=tsAgora(); saveOverrides(); scheduleRealizadoPush(); }
 function scheduleRealizadoPush(){ loteAgendar('__realizado'); }
 function realizadoApplyPulled(map){
   if(!map || typeof map!=='object' || !OV) return false;
@@ -6049,7 +6046,7 @@ function tsMarca(r, feito, quem){
     if(soTS && rl.status!=='concluido'){ rl.status='concluido'; if(!_isISO(rl.data)) rl.data=_hojeISO(); rl.baixa={}; rl.saidaPushed=true; } }   // já baixou pela recomendação de TS
   else { rl.ts.st=(r.status==='enviada'||r.status==='retorno')?'enviada':''; delete rl.ts.baixa; delete rl.ts.quem; delete rl.ts.em;
     if(soTS && rl.status==='concluido' && rl.saidaPushed && !Object.keys(rl.baixa||{}).length){ rl.status='andamento'; delete rl.baixa; } }
-  rl._u=Date.now();
+  rl._u=tsAgora();
   const reenvia=!!(rl.status==='concluido' && rl.baixa && Object.keys(rl.baixa).length); if(reenvia) rl.saidaPushed=false;   // só de TS: baixa vazia, nada a reenviar
   return reenvia;
 }
@@ -6319,7 +6316,6 @@ const nfpop=n=>Math.round(+n||0).toLocaleString('pt-BR');
 function loadStand(){ try{ const d=JSON.parse(localStorage.getItem(STAND_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
 function saveStand(){ lsSet(STAND_KEY, JSON.stringify(STAND)); scheduleStandPush(); }
 function standLista(){ return ((STAND&&STAND.registros)||[]).filter(r=>r&&!r.del); }
-function parsePontos(s){ return String(s||'').split(/[,;\s]+/).filter(Boolean); }
 // ---- sincronização (aba "STAND APP"; só envia se o Code.gs já tiver o ramo __stand) ----
 let lastStandSig='';
 function standMapa(){ const m={}; ((STAND&&STAND.registros)||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); return m; }
@@ -6650,7 +6646,7 @@ function afFormAtual(){ const m=String((location.hash.split('/')[2])||''), [tp,t
 function afSalvar(){ const f=afFormAtual(); if(!f) return; const c=afCalc(f);
   if(!c.ok){ toast('Falta: '+c.falta.join(', ')); return; }
   const id='af'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario();
-  const rec=Object.assign({}, f, {id, am:(f.am||[]).filter(v=>String(v).trim()!==''), talhaoNome:t?tNome(t):f.talhao, resumo:c.resumo, quem:(u&&u.nome)||'', ts:Date.now(), _u:Date.now()});
+  const rec=Object.assign({}, f, {id, am:(f.am||[]).filter(v=>String(v).trim()!==''), talhaoNome:t?tNome(t):f.talhao, resumo:c.resumo, quem:(u&&u.nome)||'', ts:Date.now(), _u:tsAgora()});
   AFER.reg[id]=rec; saveAfer();
   const nv=afFormNovo(f.tipo,f.talhao); ['maq','impl','comp','larg','esp','medida','pms','alvo','ativ'].forEach(k=>nv[k]=f[k]); nv.am=Array(f.am.length).fill('');   // próxima amostra: mesma máquina e medidas
   afForm[f.tipo+'|'+f.talhao]=nv; afAba='hist'; route({keepScroll:true}); toast('Aferição salva: '+c.resumo);
@@ -6681,7 +6677,7 @@ async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()|
   try{ for(const p of fotoPend.slice()){ const rec=OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
       let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
       if(!(r&&r.foto&&r.foto.url)) break;                                  // sem sinal: tenta de novo na próxima sincronização
-      rec.fotos=(rec.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
+      rec.fotos=(rec.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=tsAgora();
       fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); lsSet(OCOR_KEY, JSON.stringify(OCOR)) } }
   finally{ fotoEnviando=false; }
   if(document.body.dataset.view==='ocorrencia') route({keepScroll:true});
@@ -6727,7 +6723,7 @@ async function bulaArqEnviar(){ const url=syncUrl(); if(!url||!bulasServerOk()||
   try{ for(const p of bulaArqPend.slice()){ const k=bulaKey(p.prod), rec=BULAS.reg[k]; if(!rec||rec.del){ bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); continue; }
       let r=null; try{ r=await syncPost(url, JSON.stringify({__bulaArquivo:{nome:p.nome, mime:'application/pdf', b64:p.b64}})); }catch(e){ r=null; }
       if(!(r&&r.arquivo&&r.arquivo.url)) break;                            // sem sinal: tenta de novo na próxima sincronização
-      rec[p.tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[p.tipo+'Arq']=p.nome; rec._u=Date.now();
+      rec[p.tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[p.tipo+'Arq']=p.nome; rec._u=tsAgora();
       bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); lsSet(BULAS_KEY, JSON.stringify(BULAS)) } }
   finally{ bulaArqEnviando=false; }
   if(bulaEditProd) bulaRender();
@@ -6770,9 +6766,9 @@ function bulaRender(){
 function bulaSalvar(){ const p=bulaEditProd, ov=document.getElementById('bula-ov'); if(!p||!ov) return; const k=bulaKey(p);
   const r=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete r.del;
   ov.querySelectorAll('input[data-bula]').forEach(i=>{ const f=i.dataset.bula, t=(BULA_CAMPOS.find(c=>c[0]===f)||[])[2], v=i.value.trim(); r[f]=(t==='num')?(v===''?'':numBR(v)):v; });
-  r._u=Date.now(); BULAS.reg[k]=r; saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Bula salva'+(syncUrl()?' — sincronizando com a planilha':'')); }
+  r._u=tsAgora(); BULAS.reg[k]=r; saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Bula salva'+(syncUrl()?' — sincronizando com a planilha':'')); }
 function bulaExcluir(){ const p=bulaEditProd; if(!p||!ask('Apagar a ficha de bula deste produto?')) return; const k=bulaKey(p);
-  BULAS.reg[k]={produto:p, del:true, _u:Date.now()}; bulaArqPend=bulaArqPend.filter(x=>bulaKey(x.prod)!==k); saveBulaArq(); saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Ficha apagada'); }
+  BULAS.reg[k]={produto:p, del:true, _u:tsAgora()}; bulaArqPend=bulaArqPend.filter(x=>bulaKey(x.prod)!==k); saveBulaArq(); saveBulas(); bulaFechar(); route({keepScroll:true}); toast('Ficha apagada'); }
 // busca na web: abre o Google com a pesquisa pronta ("PRODUTO" bula pdf / FISPQ pdf) — a dona escolhe o resultado e copia o link do PDF
 function bulaBuscar(tipo){ const p=bulaEditProd; if(!p) return;
   const q=`"${p}" ${tipo==='fispq'?'FISPQ':'bula'} pdf`; window.open('https://www.google.com/search?q='+encodeURIComponent(q), '_blank', 'noopener'); }
@@ -6789,7 +6785,7 @@ async function bulaBaixar(tipo){ const p=bulaEditProd, ov=document.getElementByI
   bulaBaixando=false;
   if(!(r&&r.arquivo&&r.arquivo.url)){ toast('Não baixou: '+((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha')); return; }
   const k=bulaKey(p), rec=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete rec.del;
-  rec[tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[tipo+'Arq']=r.arquivo.nome||'arquivo.pdf'; rec[tipo+'Origem']=url; rec._u=Date.now();
+  rec[tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[tipo+'Arq']=r.arquivo.nome||'arquivo.pdf'; rec[tipo+'Origem']=url; rec._u=tsAgora();
   BULAS.reg[k]=rec; lsSet(BULAS_KEY, JSON.stringify(BULAS));
   if(inp) inp.value=r.arquivo.url; bulaRender(); scheduleBulaPush(); toast(`PDF anexado no Drive (${r.arquivo.nome||''}${r.arquivo.kb?` · ${r.arquivo.kb} KB`:''})`); }
 async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
@@ -6798,7 +6794,7 @@ async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
   const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file); });
   const k=bulaKey(bulaEditProd);
   bulaArqPend=bulaArqPend.filter(x=>!(bulaKey(x.prod)===k&&x.tipo===tipo)); bulaArqPend.push({prod:bulaEditProd, tipo, nome:file.name, b64}); saveBulaArq();
-  if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:Date.now()}; lsSet(BULAS_KEY, JSON.stringify(BULAS)) }   // a ficha precisa existir para o link chegar
+  if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:tsAgora()}; lsSet(BULAS_KEY, JSON.stringify(BULAS)) }   // a ficha precisa existir para o link chegar
   bulaRender(); scheduleBulaPush(); toast(syncUrl()?'PDF na fila — sobe para o Drive ao sincronizar':'PDF guardado; configure a Sincronização para enviar ao Drive'); }
 // ===== MISTURAS (banco de misturas de produtos e eficácia) — aba "MISTURAS APP" =====
 // Toda recomendação de APLICAÇÃO aprovada vira um registro de mistura (produtos e doses, alvo, talhão, cultura,
@@ -6827,7 +6823,7 @@ function misturaDeRecom(r){
     operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:tsAgora() });
   delete m.del; MIST.reg[m.id]=m; saveMist(); return m;
 }
-function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.aval.nota)){ m.del=true; m._u=Date.now(); saveMist(); } }   // reprovar/reabrir: some se ainda não foi avaliada
+function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.aval.nota)){ m.del=true; m._u=tsAgora(); saveMist(); } }   // reprovar/reabrir: some se ainda não foi avaliada
 // ---- sincronização (aba MISTURAS APP; só envia se o Code.gs já tiver o ramo __mistura) ----
 function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.misturas_app==='object'); }
 function mistSig(){ return sigHash(JSON.stringify((MIST&&MIST.reg)||{})); }
@@ -6838,7 +6834,7 @@ async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()|
   try{ for(const p of mistFotoPend.slice()){ const rec=MIST.reg[p.id]; if(!rec||rec.del||!rec.aval){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
       let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
       if(!(r&&r.foto&&r.foto.url)) break;
-      rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
+      rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=tsAgora();
       mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); lsSet(MIST_KEY, JSON.stringify(MIST)) } }
   finally{ mistFotoEnviando=false; }
   if(document.body.dataset.view==='misturas') route({keepScroll:true});
@@ -6886,7 +6882,7 @@ function mistAvalSalvar(){ const m=MIST&&MIST.reg[mistAvalId], f=mistAvalForm, o
   m.aval={nota:f.nota, data, dias:mistDias(m,data), obs:obs.trim(), fotos:(m.aval&&m.aval.fotos)||[], quem:(u&&u.nome)||'', ts:now}; m._u=tsAgora();
   f.fotos.forEach((d,i)=>mistFotoPend.push({id:m.id, nome:`mistura-${m.id}-${now.toString(36)}-${i+1}.jpg`, dataUrl:d})); if(f.fotos.length) saveMistFoto();
   saveMist(); mistAvalFechar(); route({keepScroll:true}); toast(`Eficácia registrada: ${MIST_NOTAS[m.aval.nota].lbl}${f.fotos.length?` · ${f.fotos.length} foto(s) enviando`:''}`); }
-function mistAvalLimpar(){ const m=MIST&&MIST.reg[mistAvalId]; if(!m||!ask('Limpar a avaliação desta mistura?')) return; m.aval=null; m._u=Date.now(); mistFotoPend=mistFotoPend.filter(x=>x.id!==m.id); saveMistFoto(); saveMist(); mistAvalFechar(); route({keepScroll:true}); }
+function mistAvalLimpar(){ const m=MIST&&MIST.reg[mistAvalId]; if(!m||!ask('Limpar a avaliação desta mistura?')) return; m.aval=null; m._u=tsAgora(); mistFotoPend=mistFotoPend.filter(x=>x.id!==m.id); saveMistFoto(); saveMist(); mistAvalFechar(); route({keepScroll:true}); }
 async function mistFotosAdd(files){ const f=mistAvalForm; if(!f) return;
   for(const fl of [...files].slice(0,6)){ try{ f.fotos.push(await recFotoReduzir(fl)); }catch(e){ toast('Não consegui ler a foto'); } }
   mistAvalRender(); }
@@ -7890,15 +7886,15 @@ async function limImportFiles(fileList){
 function limCompact(rings){ let r=rings; while(JSON.stringify(r).length>40000 && r.some(x=>x.length>20)) r=r.map(x=>x.length>20?x.filter((p,i)=>i%2===0||i===x.length-1):x); return r; }
 function limSalvarImport(){
   if(!_limImport) return; OV.limites=OV.limites||{}; let n=0;
-  _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:it.arquivo||_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:Date.now()}; n++; });
+  _limImport.itens.forEach(it=>{ if(!it.tid) return; OV.limites[it.tid]={nome:it.nome, arquivo:it.arquivo||_limImport.arquivo, ha:+it.ha.toFixed(2), coords:limCompact(it.rings), _u:tsAgora()}; n++; });
   _limImport=null; saveOverrides(); scheduleLimitesPush(); route(); toast(n?`${n} limite(s) salvo(s) no mapa`:'Nenhum talhão escolhido');
 }
 // remover guarda o contorno anterior (se era importado) para poder restaurar; o do app volta sozinho
 function limRemover(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid], prev=(cur&&cur.coords)?Object.assign({},cur):null;
-  OV.limites[tid]=Object.assign({del:true,_u:Date.now()},prev?{prev}:{}); if(_map) _map.closePopup();
+  OV.limites[tid]=Object.assign({del:true,_u:tsAgora()},prev?{prev}:{}); if(_map) _map.closePopup();
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} removido do mapa`); }
 function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]||{};
-  OV.limites[tid]=cur.prev?Object.assign({},cur.prev,{_u:Date.now()}):{restore:true,_u:Date.now()};
+  OV.limites[tid]=cur.prev?Object.assign({},cur.prev,{_u:tsAgora()}):{restore:true,_u:tsAgora()};
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} restaurado`); }
 // removidos que dá para restaurar (o publicado com o app ou o importado guardado)
 function limRemovidos(){ const o=(OV&&OV.limites)||{}; return Object.keys(o).filter(k=>o[k]&&o[k].del&&(o[k].prev||(LIM_BASE&&LIM_BASE[k]))); }
@@ -7977,6 +7973,7 @@ function _dtBRc(s){ if(!s) return ''; const p=String(s).slice(0,10).split('-'); 
 function _tsC(r){ return r.ts || (r.data?(Date.parse(String(r.data).slice(0,10)+'T12:00:00')||0):0); }
 function _diasC(ts){ if(!ts) return null; return Math.floor((Date.now()-ts)/86400000); }
 // número digitado no padrão BR ou com ponto: "2,5" → 2,5 · "2.5" → 2,5 · "1.500" → 1500 · "1.234,5" → 1234,5
+const numBRn=v=>{ const t=String(v==null?'':v).trim(); return t===''?null:numBR(t); };   // vazio = null (campo apagado)
 function numBR(v){ if(typeof v==='number') return isFinite(v)?v:0; let x=String(v==null?'':v).trim().replace(/\s/g,''); if(!x) return 0;
   if(x.indexOf(',')>=0) x=x.replace(/\./g,'').replace(',','.'); else if(/^-?[1-9]\d{0,2}(\.\d{3})+$/.test(x)) x=x.replace(/\./g,'');
   return parseFloat(x)||0; }
@@ -8440,7 +8437,8 @@ let campoFiltro='todas';                  // todas | pendente | andamento | conc
 const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
 document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.matches&&d.matches('details.cp-det')){ const k=d.dataset.key; if(d.open) campoOpen.add(k); else campoOpen.delete(k); } },true);
 // operações REAIS do talhão para o campo: com insumo, com execução registrada ou com máquina escolhida — na ordem do planejamento
-function campoOpsDoTalhao(t){
+function campoOpsDoTalhao(t){ return memo('cot|'+t.id, ()=>_campoOpsDoTalhao(t)); }
+function _campoOpsDoTalhao(t){
   const out=[];
   ['principal','safrinha'].forEach(seq=>{ const tag=seq==='safrinha'?'S':'P', all=opsOf(t.id,seq)||[];
     opDisplayOrder(t.id,tag,opsShownCount(t.id,tag)).forEach(oi=>{ const op=all[oi]; if(!op) return;
@@ -8473,7 +8471,8 @@ let oqSeq='principal', oqAtiv='', oqTal='';
 const OQ_ST={ok:'Aplicado', and:'Em andamento', breve:'3 dias para a aplicação', late:'Atrasado', prazo:'Dentro do prazo', canc:'Não será realizada a aplicação', sem:'Sem data (defina o plantio)'};
 function _dias(a,b){ return Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/86400000); }
 // atividade da operação, pelos produtos: Plantio (semente) · Herbicida · Fungicida · …
-function oqAtividades(t,o){ const s=new Set(); effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto).forEach(it=>{
+function oqAtividades(t,o){ return memo('oqa|'+o.key, ()=>_oqAtividades(t,o)); }
+function _oqAtividades(t,o){ const s=new Set(); effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto).forEach(it=>{
     if(_isSemente(it)) s.add('Plantio'); else if(_isTS(it)) s.add('Tratamento de sementes');
     else { const c=String(it.classe||((PROD[it.produto]||{}).classe)||'').trim().toUpperCase().replace(/S$/,''); if(c && !/ADJUVANTE|MÁQUINA/.test(c)) s.add(c.charAt(0)+c.slice(1).toLowerCase()); } });
   return [...s]; }
@@ -8920,7 +8919,8 @@ function morphChildren(op, np){
   for(let i=b.length;i<a.length;i++) a[i].remove();
 }
 function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
-function route(opts){
+function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; } }   // memória por render (ver memo)
+function _route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
   // só rola pro topo em navegação de verdade (toTop:true — troca de página)
@@ -9004,16 +9004,16 @@ function applyEdit(el){
     OV.result[k]=OV.result[k]||{};
     if(v===''||v===plantioRealAutoDe(id,seq)) delete OV.result[k].plantioReal; else OV.result[k].plantioReal=v;
     const keys=Object.keys(OV.result[k]).filter(x=>x!=='_u');
-    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=Date.now();
+    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=tsAgora();
     saveOverrides(); scheduleResultPush();
     const n=reagendarTarefasSafra(id,seq); route(); if(n) toast(`Plantio realizado salvo — ${n} tarefa(s) recalculada(s)`); return;
   }
   if(kind==='resProd'||kind==='resPreco'){   // Resultados: colhido/ha e preço de venda (por talhão/safra)
     const k=el.dataset.key, v=el.value.trim(), f=(kind==='resProd')?'prodHa':'preco';
     OV.result[k]=OV.result[k]||{};
-    if(v==='') delete OV.result[k][f]; else OV.result[k][f]=parseFloat(v.replace(',','.'))||0;
+    if(v==='') delete OV.result[k][f]; else OV.result[k][f]=numBR(v)||0;
     const keys=Object.keys(OV.result[k]).filter(x=>x!=='_u');
-    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=Date.now();
+    if(!keys.length) delete OV.result[k]; else OV.result[k]._u=tsAgora();
     saveOverrides(); scheduleResultPush(); route({keepScroll:true}); return;
   }
   if(kind==='itemProd'||kind==='itemProdAdd'){   // troca de produto (string)
@@ -9082,7 +9082,7 @@ function applyEdit(el){
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
-    if(f==='vazao'||f==='tanque'){ const val=el.value.trim().replace(',','.'); r.app[f]=val===''?null:parseFloat(val); }
+    if(f==='vazao'||f==='tanque'){ r.app[f]=numBRn(el.value); }
     else { r.app[f]=el.value; }
     realClean(el.dataset.key); stampReal(el.dataset.key);
     // atualiza só o quadro de cálculo (sem re-render, para não rolar a tela)
@@ -9106,7 +9106,7 @@ function applyEdit(el){
     return;
   }
   if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
-    const val=el.value.trim().replace(',','.'), q=val===''?null:parseFloat(val);
+    const q=numBRn(el.value);
     const r=realEnsure(el.dataset.key);
     if(kind==='realDose'){ if(q==null) delete r.doses[el.dataset.iid]; else r.doses[el.dataset.iid]=q; }
     else { const ex=r.extras[+el.dataset.ei]||(r.extras[+el.dataset.ei]={}); ex.dose=(q==null?null:q); }
@@ -9115,7 +9115,7 @@ function applyEdit(el){
     { const fk=opFromKey(el.dataset.key), box=document.querySelector('[data-appout="'+el.dataset.key+'"]'); if(box&&fk.op) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op.itens,realOf(el.dataset.key)||{}); }   // quadro de calda acompanha
     return;
   }
-  const val=el.value.trim().replace(',','.'), n=val===''?null:parseFloat(val);
+  const val=el.value.trim().replace(',','.'), n=numBRn(el.value);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='pedido'){ if(n==null||n===0) delete OV.pedido[el.dataset.prod]; else OV.pedido[el.dataset.prod]=n; }
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
@@ -9318,15 +9318,15 @@ document.addEventListener('click',e=>{
     else if(a.act==='bulkdel'){ if(ask(`Excluir "${a.prod}" de todos os talhões de ${a.emp}?`)){ bulkDelProd(a.emp,a.prod); saveOverrides(); route(); toast('Excluído da cultura'); } }
     else if(a.act==='bulkadd'){
       const prod=($('#ba-prod').value||'').trim();
-      const dose=parseFloat((($('#ba-dose').value)||'').replace(',','.'))||0;
+      const dose=numBR($('#ba-dose').value)||0;
       const opn=parseInt($('#ba-op').value)||1;
       if(!prod||!PROD[prod]){ toast('Escolha um produto válido da lista'); return; }
       const n=bulkAdd(a.emp,prod,dose,opn); saveOverrides(); route(); toast(`Adicionado em ${n} talhões`);
     }
     else if(a.act==='createtalhao'){
       const nome=($('#nt-nome').value||'').trim(), emp=($('#nt-emp').value||'').trim();
-      const area=parseFloat(($('#nt-area').value||'').replace(',','.'))||0;
-      const prod=parseFloat(($('#nt-prod').value||'').replace(',','.'))||0;
+      const area=numBR($('#nt-area').value)||0;
+      const prod=numBR($('#nt-prod').value)||0;
       const copy=$('#nt-copy').value, id=nextTalhaoId();
       const plano=copy?snapshotPlano(copy):{principal:[{nome:'OPERAÇÃO 1',itens:[]}],safrinha:[]};
       OV.talhaoAdd.push({id,nome:nome||id,empreendimento:emp,produtividade:prod,area,plano});
@@ -9354,7 +9354,7 @@ document.addEventListener('click',e=>{
     }
     else if(a.act==='addmaq'){
       const maq=($('#mq-maq').value||'').trim(), imp=($('#mq-imp').value||'').trim();
-      const nn=id=>parseFloat(($('#'+id).value||'').replace(',','.'))||0;
+      const nn=id=>numBR($('#'+id).value)||0;
       if(!maq&&!imp){ toast('Informe máquina e/ou implemento'); return; }
       let conj=(maq+(imp?' + '+imp:'')).trim(), base=conj, i=2; while(maqByConj[conj]){ conj=base+' ('+i+')'; i++; }
       OV.maqAdd.push({conjunto:conj,maquina:maq,implemento:imp,largura:nn('mq-larg'),velocidade:nn('mq-vel'),
@@ -9384,13 +9384,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='prSalvar'){ prSalvar(); return; }
     else if(a.act==='prLimpar'){ const f=prFormAtual(); if(f && confirm('Limpar esta estimativa?')){ prForm[f.talhao]=prFormNovo(f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='prPlDel'){ const f=prFormAtual(); if(f){ f.plantas.splice(+a.i,1); route({keepScroll:true}); } return; }
-    else if(a.act==='prDel'){ const r=PRODE.reg[a.id]; if(r && confirm('Excluir esta estimativa?')){ r.del=true; r._u=Date.now(); saveProdE(); route({keepScroll:true}); toast('Estimativa excluída'); } return; }
+    else if(a.act==='prDel'){ const r=PRODE.reg[a.id]; if(r && confirm('Excluir esta estimativa?')){ r.del=true; r._u=tsAgora(); saveProdE(); route({keepScroll:true}); toast('Estimativa excluída'); } return; }
     else if(a.act==='prTecAbrir'){ prTecAbrir(); return; }
     else if(a.act==='prTecFechar'){ prTecFechar(); return; }
     else if(/^prTec/.test(a.act)){ prTecAcao(a); return; }
     else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
-    else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=Date.now(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
+    else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
     else if(a.act==='naVoltar'){ novaAcaoOpen(a.id); return; }
     else if(a.act==='naFechar'){ novaAcaoFechar(); return; }
     else if(a.act==='afAba'){ afAba=a.val==='hist'?'hist':'dados'; route({keepScroll:true}); return; }
@@ -9398,7 +9398,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='afAmDel'){ const f=afFormAtual(); if(f){ f.am.splice(+a.i,1); route({keepScroll:true}); } return; }
     else if(a.act==='afSalvar'){ afSalvar(); return; }
     else if(a.act==='afLimpar'){ const f=afFormAtual(); if(f && confirm('Limpar os dados desta aferição?')){ afForm[f.tipo+'|'+f.talhao]=afFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
-    else if(a.act==='afDel'){ const r=AFER.reg[a.id]; if(r && confirm('Excluir esta aferição?')){ r.del=true; r._u=Date.now(); saveAfer(); route({keepScroll:true}); toast('Aferição excluída'); } return; }
+    else if(a.act==='afDel'){ const r=AFER.reg[a.id]; if(r && confirm('Excluir esta aferição?')){ r.del=true; r._u=tsAgora(); saveAfer(); route({keepScroll:true}); toast('Aferição excluída'); } return; }
     else if(a.act==='oqPopClose'){ oqPopClose(); return; }
     else if(a.act==='oqPlan'){ oqFecharTudo(); const i=a.key.indexOf('|'); collapsedOps.delete(a.key); location.hash='#/talhao/'+encodeURIComponent(a.key.slice(0,i));
       const ir=fim=>{ const b=document.querySelector(`[data-optoggle="${a.key}"]`), blk=b&&b.closest('.op-block'); if(!blk) return;
@@ -9471,7 +9471,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
     else if(a.act==='standSave'){ standSave(a.t); }
-    else if(a.act==='standDel'){ const r=STAND.registros.find(x=>x.id===a.id); if(r && ask('Remover esta contagem?')){ r.del=true; r._u=Date.now(); saveStand(); route({keepScroll:true}); toast('Removido'); } }
+    else if(a.act==='standDel'){ const r=STAND.registros.find(x=>x.id===a.id); if(r && ask('Remover esta contagem?')){ r.del=true; r._u=tsAgora(); saveStand(); route({keepScroll:true}); toast('Removido'); } }
     else if(a.act==='stLinAdd'){ const f=standFormAtual(); if(f){ f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); route({keepScroll:true}); } }
     else if(a.act==='stLinDel'){ const f=standFormAtual(); if(f){ f.linhas.splice(+a.i,1); route({keepScroll:true}); } }
     else if(a.act==='stLimpar'){ const f=standFormAtual(); if(f && ask('Limpar os dados desta contagem?')){ standForm[f.talhao]=standFormNovo(f.talhao); route({keepScroll:true}); } }
@@ -9626,7 +9626,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='tsRound'){ tsArredondar(a.key); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
-      const n=parseFloat((((nEl&&nEl.value)||'').replace(',','.')));
+      const n=numBR((nEl&&nEl.value)||'');
       const fk=opFromKey(a.key), t=findTalhao(fk.talId), area=t?areaDe(t):0;
       const r=realEnsure(a.key); r.app=r.app||{}; const tanque=+r.app.tanque||0;
       if(!n||n<=0){ toast('Informe o número de tanques'); return; }
@@ -10120,6 +10120,13 @@ const LOTE_TIPOS={
   __bula:        { lbl:'Bulas',         ok:()=>bulasServerOk(),   dados:()=>(BULAS.reg||{}),     sig:()=>bulaSig(),      last:()=>lastBulaSig,      set:v=>{ lastBulaSig=v; },  antes:()=>bulaArqEnviar() },
   __produtividade:{ lbl:'Produtividade',ok:()=>prServerOk(),      dados:()=>(PRODE.reg||{}),     sig:()=>prSig(),        last:()=>lastPrSig,        set:v=>{ lastPrSig=v; } } };
 function loteSuporta(){ return !!(DATA && DATA.cap && DATA.cap.lote); }
+// DELTA: a planilha mescla por chave/_u, então basta mandar o que mudou desde o último envio OK daquele tipo
+// (com 1 min de folga). Sem marca de último envio, ou a cada 20 envios, vai o conjunto inteiro (rede de segurança).
+LOTE.ult={}; LOTE.nEnv=0;
+function loteDelta(k, dados){ const ult=+(LOTE.ult||{})[k]||0; if(!ult || (LOTE.nEnv%20===0)) return dados; const corte=ult-60000, rec=x=>!x||typeof x!=='object'||!(+x._u)||+x._u>=corte;
+  if(dados && Array.isArray(dados.tarefas)) return Object.assign({}, dados, {funcionarios:(dados.funcionarios||[]).filter(rec), tarefas:(dados.tarefas||[]).filter(rec)});
+  if(dados && typeof dados==='object' && !Array.isArray(dados)){ const o={}; let n=0, tot=0; for(const id in dados){ tot++; if(rec(dados[id])){ o[id]=dados[id]; n++; } } return n<tot?o:dados; }
+  return dados; }
 function loteAgendar(tipo){ if(!syncUrl()||!autoOn()) return; LOTE.pend.add(tipo); clearTimeout(LOTE.timer); LOTE.timer=setTimeout(()=>loteEnviar(), PUSH_DEBOUNCE); }
 async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) return false;
   if(syncBusy){ if(!opts.agora){ clearTimeout(LOTE.timer); LOTE.timer=setTimeout(()=>loteEnviar(), 1000); } return false; }
@@ -10129,13 +10136,14 @@ async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) re
     for(const k of ks){ const T=LOTE_TIPOS[k]; if(T&&T.antes&&T.ok()){ try{ await T.antes(); }catch(e){} } }   // fotos/PDFs primeiro (viram link no registro)
     const itens=[], usados=[], sigs={};
     ks.forEach(k=>{ const T=LOTE_TIPOS[k]; if(!T) return; if(!T.ok()){ LOTE.pend.add(k); return; }   // aba ainda não confirmada pela planilha: fica para depois da puxada
-      const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:T.dados()}); usados.push(k); });
+      const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:loteDelta(k, T.dados())}); usados.push(k); });
     if(!itens.length){ syncBusy=false; setSyncStatus('ok'); return true; }
+    const agora=tsAgora(); LOTE.nEnv++;
     let res;
     if(itens.length===1){ res=[await syncPost(url, JSON.stringify(itens[0]))]; }
     else if(loteSuporta()){ const r=await syncPost(url, JSON.stringify({__lote:itens})); res=(r&&Array.isArray(r.itens)&&r.itens.length===itens.length)?r.itens:itens.map(()=>r); }
     else { res=[]; for(const it of itens){ let r=null; try{ r=await syncPost(url, JSON.stringify(it)); }catch(e){ r=null; } res.push(r); } }   // Code.gs antigo: um por vez
-    let okAll=true; usados.forEach((k,i)=>{ if(postOk(res[i])) LOTE_TIPOS[k].set(sigs[k]); else okAll=false; });
+    let okAll=true; usados.forEach((k,i)=>{ if(postOk(res[i])){ LOTE_TIPOS[k].set(sigs[k]); LOTE.ult[k]=agora; } else okAll=false; });
     sigsSalvar(); syncBusy=false; setSyncStatus(okAll?'ok':'err'); if(okAll) markSynced();
     addHist('push', okAll, (usados.length>1?'Lote · ':'')+usados.map((k,i)=>`${LOTE_TIPOS[k].lbl}: ${(res[i]&&res[i].ok)||0}`).join(' · '));
     return okAll;
@@ -10146,8 +10154,9 @@ async function loteEnviarTudo(){ Object.keys(LOTE_TIPOS).forEach(k=>LOTE.pend.ad
 // as marcas "último envio" ficam guardadas no aparelho: ao reabrir o app, o que foi feito sem internet continua pendente
 // (antes, a primeira puxada carimbava tudo como enviado e a operação concluída offline ficava presa no celular)
 const SIGS_KEY='planejamento_sync_sigs';
-function sigsSalvar(){ const o={}; for(const k in LOTE_TIPOS){ try{ o[k]=LOTE_TIPOS[k].last()||''; }catch(e){} } lsSet(SIGS_KEY, JSON.stringify(o)); }
+function sigsSalvar(){ const o={__ult:LOTE.ult||{}}; for(const k in LOTE_TIPOS){ try{ o[k]=LOTE_TIPOS[k].last()||''; }catch(e){} } lsSet(SIGS_KEY, JSON.stringify(o)); }
 function sigsCarregar(){ let o=null; try{ o=JSON.parse(localStorage.getItem(SIGS_KEY)||'null'); }catch(e){} if(!o||typeof o!=='object') return;
+  if(o.__ult && typeof o.__ult==='object') LOTE.ult=o.__ult;
   for(const k in LOTE_TIPOS){ if(typeof o[k]==='string' && o[k] && !LOTE_TIPOS[k].last()) LOTE_TIPOS[k].set(o[k]); } }
 let syncBusy=false, pushTimer=null, pollTimer=null;
 let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
@@ -10249,7 +10258,6 @@ function setSyncStatus(state, msg){
   if(typeof updateSyncBar==='function' && s!=='busy') updateSyncBar();
 }
 // assinatura das edições pendentes (para não reenviar/reler à toa)
-function fieldSig(){ return JSON.stringify(buildFieldEdits()); }
 // monta as edições de CAMPO a partir dos overrides (só talhões/produtos da planilha)
 function buildFieldEdits(){
   if(!DATA) return [];
@@ -10336,7 +10344,7 @@ function buildFieldEdits(){
   return eds;
 }
 function applyPulledData(d, raw){
-  DATA=d; dadosDaPlanilha=true; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
+  DATA=d; dadosDaPlanilha=true; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';   // produtos novos: mergePrecosProdutos refaz
   saveDataCache(d, raw);   // guarda p/ abrir com o dado mais recente na próxima vez
   for(const k in maqByConj) delete maqByConj[k]; buildMaqIndex();
   // NÃO apaga as edições cegamente: só descarta o override que JÁ está igual na planilha
@@ -10580,6 +10588,7 @@ function precosApplyPulled(pa){
   const keys=Object.keys(pa.safras);
   const hasContent=keys.some(k=>{ const s=pa.safras[k]||{}; return (s.refs&&s.refs.length)||(s.itens&&s.itens.length); });
   if(!hasContent) return false;            // planilha ainda sem preços: não apaga o que é local
+  PRECOS_VER++;
   Object.keys(pa.safras).forEach(k=>{ const s=pa.safras[k]; s.refs=s.refs||[]; s.itens=s.itens||[]; });
   const sig=JSON.stringify({atual:PRECOS.atual,safras:pa.safras});
   if(sig===JSON.stringify({atual:PRECOS.atual,safras:PRECOS.safras})) { lastPrecosPushSig=JSON.stringify(PRECOS); return false; }
@@ -10835,7 +10844,9 @@ function logAindaPendentes(enviadas){
 }
 // há algo local ainda não enviado? (edições de campo, compras/baixas offline, tarefas/execução/resultados alterados)
 // o que REALMENTE falta ir para a planilha (não confundir com countEdits, que inclui ajustes que só existem no app)
-function pendingInfo(fe0){
+let _piCache=null;
+function pendingInfo(fe0){ if(!fe0 && _piCache && Date.now()-_piCache.t<400) return _piCache.v; const v=_pendingInfo(fe0); if(!fe0) _piCache={t:Date.now(), v}; return v; }
+function _pendingInfo(fe0){
   const parts=[]; let total=0;
   const add=(n,lbl)=>{ if(n>0){ parts.push(`${n} ${lbl}`); total+=n; } };
   try{
@@ -10985,7 +10996,7 @@ async function checkNewVersion(){
 /* ================= INIT ================= */
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
-  DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
+  DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';
   loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não

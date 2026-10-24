@@ -312,6 +312,26 @@ arquivo único `planejamento_app.html` para abrir localmente.
   igual aos demais mapas; `realEnsure` nasce com `_u`; funções de envio antigas (`ocorPush`, `realizadoPush`…)
   removidas; `SYNC_TIPO` completo.
 
+## Revisão fase 3 — app no celular (v217)
+- **Memória por render (`memo`).** Dentro de `route()` as funções pesadas — `effItems`, `opsOf`,
+  `campoOpsDoTalhao`, `talhoesAll`, `plantioRealAutoDe`, `opDataPlan`, `oqAtividades` — calculam uma vez por
+  chave e reaproveitam o resultado no mesmo desenho da tela (`_M`). A memória nasce no começo de cada `route()`
+  e é zerada no fim, então nunca fica velha: a próxima tela já vê a mudança. Fora do render (eventos) calculam
+  normalmente.
+- **`mergePrecosProdutos` só refaz quando a lista de preços muda** (`PRECOS_VER`/`_mpKey`): `savePrecos`,
+  a chegada de preços da planilha e a troca da lista de produtos invalidam o atalho.
+- **`pendingInfo` com folga de 400 ms** (`_piCache`): o contador de pendências, chamado várias vezes por
+  gravação, não refaz a conta em sequência.
+- **Envio delta (`loteDelta`).** Como a planilha mescla por chave/`_u`, cada tipo manda só os registros que
+  mudaram desde o último envio OK (`LOTE.ult`, com 1 min de folga, guardado em `planejamento_sync_sigs.__ult`).
+  Sem marca anterior, ou a cada 20 envios, vai o conjunto inteiro (rede de segurança). Vale para os mapas
+  (operações, ocorrências, misturas, bulas…) e para as listas de tarefas/equipe.
+- **`numBR` em todos os campos numéricos** (`numBRn` devolve `null` quando o campo foi apagado): "1.500" vira
+  1500 e "2,5" vira 2,5 também na dose realizada, vazão/tanque, resultados, novo talhão, adicionar em massa e
+  ajuste de vazão.
+- Todo carimbo `_u` usa `tsAgora()`; código morto removido (`doseDe`, `fieldSig`, `parsePontos`, `_pctParse`,
+  `custoClasseHa`).
+
 ## Sincronização mais rápida (v211)
 - **Envio em lote.** Os registros do Campo (execução, ocorrências + fotos, misturas, bulas, stand, aferições,
   produtividade, limites, resultados, tarefas) não têm mais um temporizador e um pedido cada: `scheduleXxxPush`
