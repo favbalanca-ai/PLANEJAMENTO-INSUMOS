@@ -91,6 +91,14 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   com `%PDF`, até 15 MB, resposta 200), grava na pasta "Bulas" e responde `arquivo:{url,id,nome,kb}`; erro vem em
   `msgs`. Não invalida o cache.
 
+## Tarefas/Equipe com merge por registro e hora do servidor (v216)
+- **`__tarefas`** com `merge:1`: `{funcionarios, tarefas, excl:{f:{id:_u}, t:{id:_u}}}`. As abas **EQUIPE APP**
+  (ID · NOME · FUNCAO · ATUALIZADO · DEL) e **TAREFAS APP** (… · OPKEY · ATUALIZADO · DEL) guardam `_u` e a lápide
+  (`DEL = X`). `writeTarefasApp` mescla por id: o registro com `_u` maior vence; exclusão com `_u` maior vira
+  lápide. Sem `merge` (app antigo) continua substituindo as listas, como antes. `readTarefasApp` devolve `_u` e
+  `del` (o app ignora/aplica as lápides).
+- O puxar traz **`_srv.now`** (hora do servidor): o app alinha o relógio do celular nos carimbos `_u`.
+
 ## Sincronização mais rápida: cache por aba, `__lote` e checagem leve (v211)
 - **Cache por aba.** A parte APP do pacote (`retornos`, `movimentacao`, `realizado_app`, `ocorrencias_app`, `bulas_app`,
   `misturas_app`… — lista `APP_TODAS_`) fica no CacheService **uma chave por aba**, cada uma com a sua geração.

@@ -341,28 +341,40 @@ function writeStandApp(map){
 // ---- Módulo Tarefas: equipe + tarefas (sincroniza entre aparelhos) ----
 var EQUIPE_SHEET = 'EQUIPE APP', TAREFAS_SHEET_APP = 'TAREFAS APP';
 function _fmtISO(v){ if (v instanceof Date){ return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd'); } return S(v).slice(0,10); }
+// EQUIPE APP: ID · NOME · FUNCAO · ATUALIZADO · DEL   |   TAREFAS APP: … · OPKEY · ATUALIZADO · DEL
+// ATUALIZADO (_u) e DEL (lápide 'X') permitem o MERGE por registro entre aparelhos (o app manda merge:1 + excl).
 function readTarefasApp(){
   var b = ss(), out = { funcionarios:[], tarefas:[] };
   var se = b.getSheetByName(EQUIPE_SHEET);
-  if (se){ var l1 = se.getLastRow(); if (l1 >= 2){ var v1 = se.getRange(2,1,l1-1,3).getValues();
-    for (var i=0;i<v1.length;i++){ var r=v1[i]; if(!S(r[0])) continue; out.funcionarios.push({ id:S(r[0]), nome:S(r[1]), funcao:S(r[2]) }); } } }
+  if (se){ var l1 = se.getLastRow(); if (l1 >= 2){ var v1 = se.getRange(2,1,l1-1,5).getValues();
+    for (var i=0;i<v1.length;i++){ var r=v1[i]; if(!S(r[0])) continue; var f = { id:S(r[0]), nome:S(r[1]), funcao:S(r[2]) }; if (N(r[3])) f._u = N(r[3]); if (S(r[4])) f.del = true; out.funcionarios.push(f); } } }
   var st = b.getSheetByName(TAREFAS_SHEET_APP);
-  if (st){ var l2 = st.getLastRow(); if (l2 >= 2){ var v2 = st.getRange(2,1,l2-1,9).getValues();
+  if (st){ var l2 = st.getLastRow(); if (l2 >= 2){ var v2 = st.getRange(2,1,l2-1,11).getValues();
     for (var j=0;j<v2.length;j++){ var t=v2[j]; if(!S(t[0])) continue;
-      out.tarefas.push({ id:S(t[0]), titulo:S(t[1]), talhaoId:S(t[2]), funcionarioId:S(t[3]), inicio:_fmtISO(t[4]), dias:N(t[5])||1, status:S(t[6])||'afazer', obs:S(t[7]), opKey:S(t[8]) }); } } }
+      var o = { id:S(t[0]), titulo:S(t[1]), talhaoId:S(t[2]), funcionarioId:S(t[3]), inicio:_fmtISO(t[4]), dias:N(t[5])||1, status:S(t[6])||'afazer', obs:S(t[7]), opKey:S(t[8]) };
+      if (N(t[9])) o._u = N(t[9]); if (S(t[10])) o.del = true; out.tarefas.push(o); } } }
   return out;
 }
 function writeTarefasApp(obj){
   obj = obj || {}; var eq = obj.funcionarios || [], tf = obj.tarefas || [], b = ss();
+  if (obj.merge){   // app novo: mescla por id/_u com o que já está na planilha; exclusões viram lápides (DEL) com a hora
+    var cur = readTarefasApp(), mapa = function(l){ var m = {}; l.forEach(function(x){ if (x && x.id) m[x.id] = x; }); return m; };
+    var mf = mapa(cur.funcionarios), mt = mapa(cur.tarefas);
+    var junta = function(m, inc, excl){
+      (inc || []).forEach(function(x){ if (!x || !x.id) return; var iu = +x._u || 0, ex = m[x.id], lu = ex ? (+ex._u || 0) : 0; if (!ex || iu >= lu) m[x.id] = x; });
+      var e = excl || {}; Object.keys(e).forEach(function(id){ var du = +e[id] || 1, ex = m[id], lu = ex ? (+ex._u || 0) : 0; if (!ex || du >= lu) m[id] = { id:id, del:true, _u:du }; }); };
+    junta(mf, eq, obj.excl && obj.excl.f); junta(mt, tf, obj.excl && obj.excl.t);
+    eq = Object.keys(mf).map(function(k){ return mf[k]; }); tf = Object.keys(mt).map(function(k){ return mt[k]; });
+  }
   var se = b.getSheetByName(EQUIPE_SHEET) || b.insertSheet(EQUIPE_SHEET);
-  var er = [['ID','NOME','FUNCAO']];
-  eq.forEach(function(f){ er.push([T_(f.id), T_(f.nome), T_(f.funcao)]); });
-  regrava_(se, er, 3); try { se.setFrozenRows(1); } catch(e){}
+  var er = [['ID','NOME','FUNCAO','ATUALIZADO','DEL']];
+  eq.forEach(function(f){ er.push([T_(f.id), T_(f.nome), T_(f.funcao), +f._u || '', f.del ? 'X' : '']); });
+  regrava_(se, er, 5); try { se.setFrozenRows(1); } catch(e){}
   var st = b.getSheetByName(TAREFAS_SHEET_APP) || b.insertSheet(TAREFAS_SHEET_APP);
-  var tr = [['ID','TITULO','TALHAO','RESPONSAVEL_ID','INICIO','DIAS','STATUS','OBS','OPKEY']];
-  tf.forEach(function(t){ tr.push([T_(t.id), T_(t.titulo), T_(t.talhaoId), T_(t.funcionarioId), S(t.inicio), N(t.dias)||1, T_(t.status), T_(t.obs), T_(t.opKey)]); });
+  var tr = [['ID','TITULO','TALHAO','RESPONSAVEL_ID','INICIO','DIAS','STATUS','OBS','OPKEY','ATUALIZADO','DEL']];
+  tf.forEach(function(t){ tr.push([T_(t.id), T_(t.titulo), T_(t.talhaoId), T_(t.funcionarioId), S(t.inicio), N(t.dias)||1, T_(t.status), T_(t.obs), T_(t.opKey), +t._u || '', t.del ? 'X' : '']); });
   if (tf.length) st.getRange(2,5,tf.length,1).setNumberFormat('@');   // coluna INICIO como texto (não vira data)
-  regrava_(st, tr, 9); try { st.setFrozenRows(1); } catch(e){}
+  regrava_(st, tr, 11); try { st.setFrozenRows(1); } catch(e){}
   return { rows: eq.length + tf.length };
 }
 
@@ -1823,7 +1835,7 @@ function currentJson(soCache){
           info.app = ainda; } }
     } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
   }
-  info.ms = Date.now() - t0; if (_CACHE_ERRO_){ info.cacheErro = _CACHE_ERRO_; _CACHE_ERRO_ = ''; } _SRV_ = info;
+  info.ms = Date.now() - t0; info.now = Date.now(); if (_CACHE_ERRO_){ info.cacheErro = _CACHE_ERRO_; _CACHE_ERRO_ = ''; } _SRV_ = info;   // now: hora do servidor (o app alinha o relógio do celular)
   var a = '{' + APP_TODAS_.map(function(k){ return JSON.stringify(k) + ':' + partes[k]; }).join(',') + '}';
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }

@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-215';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-216';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -17,7 +17,7 @@ function loadPrecos(){
   const s=d.safras[d.atual]; s.refs=s.refs||[]; s.itens=s.itens||[];
   return d;
 }
-function savePrecos(){ try{ localStorage.setItem(PRECOS_KEY, JSON.stringify(PRECOS)); }catch(e){}
+function savePrecos(){ lsSet(PRECOS_KEY, JSON.stringify(PRECOS));
   try{ if(typeof schedulePrecosPush==='function') schedulePrecosPush(); }catch(e){} }
 function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
 // fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
@@ -403,7 +403,26 @@ function prListaApply(){
   if(syncUrl()&&autoOn()) schedulePrecosPush();
 }
 const DATA_KEY = 'planejamento_data_cache';   // últimos dados sincronizados — o app abre com eles (não com o data.json antigo)
-function saveDataCache(d, raw){ try{ localStorage.setItem(DATA_KEY, raw||JSON.stringify(d)); }catch(e){} }
+/* ===== memória do aparelho: localStorage com aviso de cota; IndexedDB para arquivos (fotos/PDFs em base64, sem o limite de 5 MB) ===== */
+let _lsAvisoTs=0;
+function lsSet(k, v){ try{ localStorage.setItem(k, v); return true; }
+  catch(e){ const t=Date.now(); if(t-_lsAvisoTs>60000){ _lsAvisoTs=t; try{ toast('⚠️ Memória do aparelho cheia: a última alteração pode não ficar guardada. Sincronize e limpe dados antigos.'); }catch(x){} } return false; } }
+function idbAbrir(){ return new Promise((res,rej)=>{ try{ const rq=indexedDB.open('planejamento',1); rq.onupgradeneeded=()=>{ rq.result.createObjectStore('kv'); }; rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }catch(e){ rej(e); } }); }
+function idbSet(k, v){ return idbAbrir().then(db=>new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k); tx.oncomplete=()=>res(true); tx.onerror=()=>rej(tx.error); })).catch(()=>false); }
+function idbGet(k){ return idbAbrir().then(db=>new Promise((res,rej)=>{ const rq=db.transaction('kv','readonly').objectStore('kv').get(k); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); })).catch(()=>undefined); }
+// fila de arquivos: carrega do IndexedDB (migra o que ainda estava no localStorage) / guarda no IndexedDB
+async function filaCarregar(k){ let a=await idbGet(k);
+  if(!Array.isArray(a)){ try{ a=JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ a=null; } if(Array.isArray(a)&&a.length) await idbSet(k,a); try{ localStorage.removeItem(k); }catch(e){} }
+  return Array.isArray(a)?a:[]; }
+function filaSalvar(k, a){ idbSet(k, a).then(ok=>{ if(!ok) toast('Não consegui guardar o arquivo no aparelho — tente de novo com o app aberto'); }); }
+// relógio: a hora da PLANILHA manda nos carimbos _u (celular com hora errada não vence nem perde o conflito à toa)
+let SRV_OFFSET=0;
+function tsAgora(){ return Date.now()+SRV_OFFSET; }
+function srvRelogio(now){ if(!(now>0)) return; const off=now-Date.now(); if(Math.abs(off)>30*86400000) return; const antes=SRV_OFFSET; SRV_OFFSET=off;
+  if(Math.abs(off)>120000 && Math.abs(off-antes)>60000) addHist('pull', true, `Relógio do aparelho ${off>0?'atrasado':'adiantado'} ${Math.round(Math.abs(off)/60000)} min — os registros usam a hora da planilha`); }
+// assinatura curta (hash) do conjunto enviado por último — guardada no aparelho para o que não subiu continuar pendente ao reabrir
+function sigHash(str){ let h=0x811c9dc5; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return str.length+'.'+h.toString(16); }
+function saveDataCache(d, raw){ lsSet(DATA_KEY, raw||JSON.stringify(d)); }
 function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' | 'admin' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
@@ -428,7 +447,7 @@ function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
 function sessUsuario(){ const x=sessao(); return (x&&x.usuario)||null; }
 function loginExigido(){ try{ return localStorage.getItem(LOGIN_EXIG_KEY)==='1'; }catch(e){ return false; } }
-function setLoginExigido(b){ try{ localStorage.setItem(LOGIN_EXIG_KEY, b?'1':'0'); }catch(e){} }
+function setLoginExigido(b){ lsSet(LOGIN_EXIG_KEY, b?'1':'0') }
 function ehAdmin(){ const u=sessUsuario(); return !!(u&&u.perfil==='ADMIN'); }
 function podeModulo(m){ const u=sessUsuario(); return !u || u.perfil==='ADMIN' || (u.modulos||[]).includes(m); }
 // telas de um módulo = itens do menu daquele módulo (sem Sincronizar/Usuários)
@@ -938,14 +957,14 @@ function reconcileReorder(e){
   // execução do Campo (status, doses, máquina, horários…): acompanha a operação. Posição vaga ganha um registro
   // "limpo" carimbado agora, para o dado antigo que está na planilha não voltar no próximo puxar.
   if(OV.realizado){ const R=OV.realizado, moved={}, old=[];
-    Object.keys(R).forEach(k=>{ if(oiOf(k)==null) return; old.push(k); const nk=novo(k); if(nk) moved[nk]=Object.assign({},R[k],{_u:now}); delete R[k]; });
-    old.forEach(k=>{ if(!moved[k]) R[k]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{},_u:now}; });
+    Object.keys(R).forEach(k=>{ if(oiOf(k)==null) return; old.push(k); const nk=novo(k); if(nk) moved[nk]=Object.assign({},R[k],{_u:tsAgora()}); delete R[k]; });
+    old.forEach(k=>{ if(!moved[k]) R[k]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{},_u:tsAgora()}; });
     Object.assign(R,moved); try{ scheduleRealizadoPush(); }catch(err){} }
   // recomendações e tarefas ligadas à operação
   (typeof RECOM!=='undefined'&&RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey||oiOf(r.opKey)==null) return; const nk=novo(r.opKey);
     if(nk) r.opKey=nk; else { r.opKey=''; r.opOrfa=true; if(r.status==='aprovada') r.saidaPushed=true; } });
   try{ saveRecom(); }catch(err){}
-  let tch=false; (typeof TAREFAS!=='undefined'&&TAREFAS&&TAREFAS.tarefas||[]).forEach(tf=>{ if(!tf.opKey||oiOf(tf.opKey)==null) return; const nk=novo(tf.opKey); tf.opKey=nk||''; tch=true; });
+  let tch=false; (typeof TAREFAS!=='undefined'&&TAREFAS&&TAREFAS.tarefas||[]).forEach(tf=>{ if(!tf.opKey||oiOf(tf.opKey)==null) return; const nk=novo(tf.opKey); tf.opKey=nk||''; tf._u=tsAgora(); tch=true; });
   if(tch) try{ saveTarefas(); }catch(err){}
   [OV.dose,OV.itemAdd,OV.itemRemoved,OV.itemProd,OV.opDae,OV.opDel].forEach(map=>{ if(!map) return;
     for(const k in map){ if(k.indexOf(pref)===0) delete map[k]; } });
@@ -956,7 +975,7 @@ function reconcileReorder(e){
 // registros antigos: máquina gravada na execução de operação AINDA NÃO concluída (pode ter vindo de outra operação
 // que ocupava a posição antes de uma reordenação) — sai; vale a do planejamento. Carimba p/ a planilha não devolver.
 function limparMaqPendentes(){ const R=(OV&&OV.realizado)||{}, now=Date.now(); let n=0;
-  for(const k in R){ const r=R[k]; if(r && r.status!=='concluido' && r.app && r.app.maq!=null){ delete r.app.maq; r._u=now; n++; } }
+  for(const k in R){ const r=R[k]; if(r && r.status!=='concluido' && r.app && r.app.maq!=null){ delete r.app.maq; r._u=tsAgora(); n++; } }
   if(n){ saveOverrides(); try{ scheduleRealizadoPush(); }catch(e){} }
   return n; }
 // máquina mostrada no Campo: a do PLANEJAMENTO (fonte única). Depois de concluída, vale a registrada na execução.
@@ -1378,7 +1397,7 @@ function custoClasseHaSeqs(t, seqs){
 const COMPRAS_KEY='planejamento_compras';
 let COMPRAS=null, compraDraft=null;
 function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveCompras(){ try{ localStorage.setItem(COMPRAS_KEY, JSON.stringify(COMPRAS)); }catch(e){} }
+function saveCompras(){ lsSet(COMPRAS_KEY, JSON.stringify(COMPRAS)) }
 // envia a compra para a planilha: ENTRADA na aba MOVIMENTAÇÃO ESTOQUE + o registro inteiro na aba COMPRAS APP
 // (é de lá que os OUTROS aparelhos puxam a lista "Compras registradas")
 function pushEntrada(c){
@@ -1484,7 +1503,9 @@ function pushSaidasPendentes(){
   // recoms avulsas aprovadas (sem operação de campo)
   (RECOM.registros||[]).filter(r=>!r.opKey && recomNorm(r).status==='aprovada' && !r.saidaPushed).forEach(r=>tasks.push(()=>pushSaida(r)));
   // baixas de operações de campo concluídas ainda não enviadas
-  const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(r&&r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(()=>pushOpSaida(k)); }
+  const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(!r) continue;
+    if(r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(()=>pushOpSaida(k));
+    else if(r.saidaClearPend) tasks.push(()=>clearOpSaida(k)); }   // limpeza de saída (operação reaberta) que não tinha conseguido subir
   // uma de cada vez: a planilha grava uma por vez (em paralelo davam "planilha ocupada")
   return tasks.reduce((p,f)=>p.then(()=>f().catch(()=>false)), Promise.resolve());
 }
@@ -1599,7 +1620,7 @@ V.entradas=function(){
 const NFE_DEPARA_KEY='planejamento_nfe_depara';   // de-para salvo neste aparelho (até a planilha confirmar)
 let NFE_DEPARA_LOCAL=null, nfeImport=null;
 function deparaLocal(){ if(!NFE_DEPARA_LOCAL){ try{ NFE_DEPARA_LOCAL=JSON.parse(localStorage.getItem(NFE_DEPARA_KEY))||{}; }catch(e){ NFE_DEPARA_LOCAL={}; } } return NFE_DEPARA_LOCAL; }
-function saveDeParaLocal(){ try{ localStorage.setItem(NFE_DEPARA_KEY, JSON.stringify(deparaLocal())); }catch(e){} }
+function saveDeParaLocal(){ lsSet(NFE_DEPARA_KEY, JSON.stringify(deparaLocal())) }
 // de-para de um item: o salvo aqui (mais novo) > o da planilha
 function deparaDe(cnpj,cprod){ const k=cnpj+'|'+cprod; return deparaLocal()[k] || (DATA&&DATA.depara_nfe&&DATA.depara_nfe[k]) || null; }
 // a planilha só aceita o de-para depois de colar o Code.gs novo (ele devolve "depara_nfe" no puxar)
@@ -1843,7 +1864,7 @@ function nfeRecebidasHtml(){
 }
 // classificação que não conseguiu subir (sem internet) fica na fila e vai no próximo ENVIAR
 function nfePend(){ try{ return JSON.parse(localStorage.getItem(NFE_PEND_KEY))||[]; }catch(e){ return []; } }
-function nfePendSave(a){ try{ localStorage.setItem(NFE_PEND_KEY, JSON.stringify(a)); }catch(e){} }
+function nfePendSave(a){ lsSet(NFE_PEND_KEY, JSON.stringify(a)) }
 async function nfeEnviarClassif(cl){
   const envio=Object.assign({}, cl); delete envio.xml;
   try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave)); updateEditBadge(); return true; } }catch(e){}
@@ -1904,7 +1925,7 @@ function nfeItensPayload(imp){ return imp.itens.map(i=>({n:i.n, cprod:i.cprod, x
   qtd:i.ignorar?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:(PROD[i.produto]||{}).un||'', custo:i.ignorar?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar})); }
 function nfeSalvarDePara(imp){ if(!imp.lembrar) return; const n=imp.nota, L=deparaLocal(), now=Date.now();
   imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
-    custo:(i.ignorar||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:now}; });   // remessa não mexe no último custo
+    custo:(i.ignorar||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:tsAgora()}; });   // remessa não mexe no último custo
   saveDeParaLocal(); }
 // modo: 'entrada' (já chegou: entrada direta, RECEBIDA) · 'transito' (venda/remessa: EM TRÂNSITO, entra ao receber na fazenda)
 //       'contrato' (faturamento de entrega futura: A ENTREGAR)
@@ -2226,7 +2247,7 @@ function recQtdUso(i){ const q=+i.qtd||0, d=i.div; if(!d||!d.tipo) return q; con
   return d.tipo==='SOBRA'?q+x:Math.max(0,q-x); }
 async function recConfirmar(){
   const r=REC.info||{}, nota=r.nota||{}, semXml=REC.etapa==='semxml', por=(document.getElementById('rec-por')||{}).value||recPor();
-  try{ localStorage.setItem(REC_POR_KEY, por); }catch(e){}
+  lsSet(REC_POR_KEY, por);
   let itens;
   if(semXml){ itens=REC.itens.filter(i=>i.produto&&PROD[i.produto]&&(+i.qtd>0)).map((i,k)=>({n:k+1, produto:i.produto, un:(PROD[i.produto]||{}).un||'', qtd:+i.qtd, custo:precoDe(i.produto)}));
     if(!itens.length){ toast('Informe ao menos um produto com quantidade'); return; } }
@@ -2578,7 +2599,7 @@ const FLUXO_KEY='planejamento_fluxo';
 let FLUXO=null, fluxoDraft=null, fluxoMes='';
 const FLUXO_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Venda de grãos','Adiantamento','Outros'];
 function loadFluxo(){ try{ const d=JSON.parse(localStorage.getItem(FLUXO_KEY)); if(d&&Array.isArray(d.lancamentos)) return d; }catch(e){} return {lancamentos:[]}; }
-function saveFluxo(){ try{ localStorage.setItem(FLUXO_KEY, JSON.stringify(FLUXO)); }catch(e){} }
+function saveFluxo(){ lsSet(FLUXO_KEY, JSON.stringify(FLUXO)) }
 function fluxoNovoDraft(){ return {data:new Date().toISOString().slice(0,10), tipo:'saida', categoria:'', descricao:'', valor:0}; }
 function fluxoMesLabel(ym){ if(!ym) return ''; const [a,m]=ym.split('-'); return `${_MESN[(+m||1)-1]||m}/${a}`; }
 V.fluxocaixa=function(){
@@ -2643,50 +2664,41 @@ let EQUIPE=null, TAREFAS=null, tarefaDraft=null, ganttGrupo='func';
 const TAR_ST={ afazer:{lbl:'A fazer',cls:'kb-afazer'}, andamento:{lbl:'Em andamento',cls:'kb-and'}, concluida:{lbl:'Concluída',cls:'kb-ok'} };
 const TAR_ORDER=['afazer','andamento','concluida'];
 const EQ_CORES=['#2f7d6e','#c0645a','#5a7fb0','#e0a458','#8a6fb0','#6fa06f','#b0894f','#3f9aa8','#a05a86','#7a8b3f','#c07d3f','#4f6f9a'];
-function loadEquipe(){ try{ const d=JSON.parse(localStorage.getItem(EQUIPE_KEY)); if(d&&Array.isArray(d.funcionarios)) return d; }catch(e){} return {funcionarios:[]}; }
-function _persistEquipe(){ try{ localStorage.setItem(EQUIPE_KEY, JSON.stringify(EQUIPE)); }catch(e){} }
+function loadEquipe(){ try{ const d=JSON.parse(localStorage.getItem(EQUIPE_KEY)); if(d&&Array.isArray(d.funcionarios)){ d.excl=d.excl||{}; return d; } }catch(e){} return {funcionarios:[], excl:{}}; }   // excl = lápides {id:_u} das exclusões (merge entre aparelhos)
+function _persistEquipe(){ lsSet(EQUIPE_KEY, JSON.stringify(EQUIPE)) }
 function saveEquipe(){ _persistEquipe(); scheduleTarefasPush(); }
-function loadTarefas(){ try{ const d=JSON.parse(localStorage.getItem(TAREFAS_KEY)); if(d&&Array.isArray(d.tarefas)) return d; }catch(e){} return {tarefas:[]}; }
-function _persistTarefas(){ try{ localStorage.setItem(TAREFAS_KEY, JSON.stringify(TAREFAS)); }catch(e){} }
+function loadTarefas(){ try{ const d=JSON.parse(localStorage.getItem(TAREFAS_KEY)); if(d&&Array.isArray(d.tarefas)){ d.excl=d.excl||{}; return d; } }catch(e){} return {tarefas:[], excl:{}}; }
+function _persistTarefas(){ lsSet(TAREFAS_KEY, JSON.stringify(TAREFAS)) }
 function saveTarefas(){ _persistTarefas(); scheduleTarefasPush(); }
 // ---- sincronização (planilha = fonte compartilhada; puxar substitui, enviar grava tudo) ----
-let tarefasPushTimer=null, lastTarefasPushSig='';
-function tarefasSig(){ return JSON.stringify({f:(EQUIPE&&EQUIPE.funcionarios)||[], t:(TAREFAS&&TAREFAS.tarefas)||[]}); }
+let lastTarefasPushSig='';
+function tarefasSig(){ return sigHash(JSON.stringify({f:(EQUIPE&&EQUIPE.funcionarios)||[], fx:(EQUIPE&&EQUIPE.excl)||{}, t:(TAREFAS&&TAREFAS.tarefas)||[], tx:(TAREFAS&&TAREFAS.excl)||{}})); }
 function scheduleTarefasPush(){ loteAgendar('__tarefas'); }   // sai no envio em lote (ver LOTE_TIPOS)
-async function tarefasPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL de sincronização primeiro'); return; }
-  if(syncBusy){ if(opts.auto) scheduleTarefasPush(); else toast('Sincronização ocupada — tente de novo'); return; }
-  const sig=tarefasSig(); if(opts.auto && sig===lastTarefasPushSig) return;
-  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando tarefas e equipe…');
-  try{ const r=await syncPost(url, JSON.stringify({__tarefas:{funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas}}));
-    if(postOk(r)) lastTarefasPushSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced();
-    addHist('push', !(r&&r.fail), 'Tarefas: '+((r&&r.ok)||0)+' registros');
-    if(!opts.auto) toast('Tarefas e equipe enviadas à planilha'); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto){ toast('Falha ao enviar tarefas'); addHist('push',false,'Tarefas: '+(e&&e.message||'')); } }
-}
+// merge POR REGISTRO (id + _u + lápides), como os outros mapas: o celular B não apaga mais a tarefa que A acabou de criar,
+// e uma tarefa criada sem internet não some ao reabrir. Registros antigos da planilha (sem _u) só entram se não existirem aqui.
+function tarefasMerge(lista, inc, excl){ let ch=false; const byId={}; (lista||[]).forEach(x=>{ if(x&&x.id) byId[x.id]=x; });
+  (inc||[]).forEach(x=>{ if(!x||!x.id) return; const iu=+x._u||0, loc=byId[x.id], lu=loc?(+loc._u||0):0;
+    if(x.del){ if(loc && iu>=lu){ delete byId[x.id]; ch=true; } if(!loc || iu>=lu) excl[x.id]=Math.max(+excl[x.id]||0, iu||1); return; }
+    const ex=+excl[x.id]||0; if(ex && ex>=iu) return;                        // excluída aqui depois: não volta
+    if(!loc || iu>lu){ byId[x.id]=x; ch=true; } });
+  return {ch, lista:Object.values(byId)}; }
 function tarefasApplyPulled(pa){
   if(!pa || !EQUIPE || !TAREFAS) return false;
   const f=pa.funcionarios||[], t=pa.tarefas||[];
   if(!f.length && !t.length) return false;                 // planilha ainda vazia: não apaga o local
-  const sig=JSON.stringify({f,t});
-  if(sig===tarefasSig()){ lastTarefasPushSig=tarefasSig(); return false; }
-  if(lastTarefasPushSig && tarefasSig()!==lastTarefasPushSig){ scheduleTarefasPush(); return false; }   // edição local ainda não enviada: não atropela
-  EQUIPE.funcionarios=f; TAREFAS.tarefas=t; _persistEquipe(); _persistTarefas();
-  lastTarefasPushSig=tarefasSig(); return true;
+  EQUIPE.excl=EQUIPE.excl||{}; TAREFAS.excl=TAREFAS.excl||{};
+  const pend=lastTarefasPushSig && tarefasSig()!==lastTarefasPushSig;   // havia edição local ainda não enviada?
+  const mf=tarefasMerge(EQUIPE.funcionarios, f, EQUIPE.excl), mt=tarefasMerge(TAREFAS.tarefas, t, TAREFAS.excl);
+  const changed=mf.ch||mt.ch;
+  if(changed){ EQUIPE.funcionarios=mf.lista; TAREFAS.tarefas=mt.lista; _persistEquipe(); _persistTarefas(); }
+  if(!pend) lastTarefasPushSig=tarefasSig(); else scheduleTarefasPush();
+  return changed;
 }
 // ---- sincronização do STATUS das operações (OV.realizado) — merge por chave (mais recente vence) ----
-let realizadoPushTimer=null, lastRealizadoSig='';
-function realizadoSig(){ return JSON.stringify((OV&&OV.realizado)||{}); }
+let lastRealizadoSig='';
+function realizadoSig(){ return sigHash(JSON.stringify((OV&&OV.realizado)||{})); }
 function stampReal(key){ const r=OV&&OV.realizado&&OV.realizado[key]; if(r) r._u=Date.now(); saveOverrides(); scheduleRealizadoPush(); }
 function scheduleRealizadoPush(){ loteAgendar('__realizado'); }
-async function realizadoPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
-  if(syncBusy){ if(opts.auto) scheduleRealizadoPush(); return; }
-  const sig=realizadoSig(); if(opts.auto && sig===lastRealizadoSig) return;
-  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando status das operações…');
-  try{ const r=await syncPost(url, JSON.stringify({__realizado:(OV.realizado||{})}));
-    if(postOk(r)) lastRealizadoSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Operações: '+((r&&r.ok)||0));
-    if(!opts.auto) toast('Status das operações enviado'); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar status'); }
-}
 function realizadoApplyPulled(map){
   if(!map || typeof map!=='object' || !OV) return false;
   OV.realizado=OV.realizado||{}; let changed=false;
@@ -2699,18 +2711,9 @@ function realizadoApplyPulled(map){
   return changed;
 }
 // ---- Resultados (OV.result: colhido/preço por talhão) — sincroniza por chave (mais recente vence) ----
-let resultPushTimer=null, lastResultSig='';
-function resultSig(){ return JSON.stringify((OV&&OV.result)||{}); }
+let lastResultSig='';
+function resultSig(){ return sigHash(JSON.stringify((OV&&OV.result)||{})); }
 function scheduleResultPush(){ loteAgendar('__result'); }
-async function resultPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a sincronização primeiro'); return; }
-  if(syncBusy){ if(opts.auto) scheduleResultPush(); return; }
-  const sig=resultSig(); if(opts.auto && sig===lastResultSig) return;
-  syncBusy=true; setSyncStatus('busy'); if(!opts.auto) toast('Enviando resultados…');
-  try{ const r=await syncPost(url, JSON.stringify({__result:(OV.result||{})}));
-    if(postOk(r)) lastResultSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Resultados: '+((r&&r.ok)||0));
-    if(!opts.auto) toast('Resultados enviados'); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); if(!opts.auto) toast('Falha ao enviar resultados'); }
-}
 function resultApplyPulled(map){
   if(!map || typeof map!=='object' || !OV) return false;
   OV.result=OV.result||{}; let changed=false;
@@ -2753,7 +2756,7 @@ function importarOperacoes(){
         TAREFAS.tarefas.push({ id:'t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
           titulo:op.nome||('Operação '+(oi+1)), talhaoId:t.id, funcionarioId:'', inicio, dias:1, status:'afazer',
           obs:[cult&&cult!=='—'?cult:'', seq==='safrinha'?'2ª safra':'', dap?dap+' DAP':''].filter(Boolean).join(' · '),
-          opKey, ts:Date.now() });
+          opKey, ts:Date.now(), _u:tsAgora() });
         existing.add(opKey); add++;
       });
     });
@@ -3786,7 +3789,7 @@ async function lgEntrar(){
   const antes=sessUsuario();
   if(antes && antes.login!==r.usuario.login){ try{ localStorage.removeItem(DATA_KEY); }catch(e){} }   // outra pessoa neste aparelho
   sessSalva({token:r.token, usuario:r.usuario, em:Date.now()}); setLoginExigido(!!r.exigido);
-  try{ localStorage.setItem('planejamento_ultimo_login', r.usuario.login); }catch(e){}
+  lsSet('planejamento_ultimo_login', r.usuario.login);
   toast('Olá, '+(r.usuario.nome||r.usuario.login)+'!'); applyModule();
   const m=MODULOS.find(podeModulo); location.hash=EMBED?'#/receber':(m&&MODULOS.filter(podeModulo).length===1?homeDoModulo(m):'#/inicio');
   lastRawSig=''; lastInputTs=0; setTimeout(()=>syncPull({force:true, silentToast:true}), 100);   // não-automático: redesenha a tela assim que os dados chegam
@@ -3887,7 +3890,7 @@ function opsDoTalhao(t){
   return out;
 }
 function realOf(key){ return OV.realizado[key]||null; }
-function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{}}); }
+function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status:'pendente',data:'',obs:'',doses:{},extras:[],app:{},_u:tsAgora()}); }
 function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
   && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)
@@ -4252,7 +4255,7 @@ function campoProgress(){
 const MONIT_KEY='planejamento_monitoramento';
 let MONIT=null, _monitGPS=null;
 function loadMonit(){ try{ const d=JSON.parse(localStorage.getItem(MONIT_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveMonit(){ try{ localStorage.setItem(MONIT_KEY, JSON.stringify(MONIT)); }catch(e){} }
+function saveMonit(){ lsSet(MONIT_KEY, JSON.stringify(MONIT)) }
 const fmtData=s=>{ if(!s) return ''; const p=String(s).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; };
 const MONIT_ALVOS=['Lagarta-do-cartucho','Lagarta-da-soja','Helicoverpa','Percevejo-marrom','Percevejo-verde','Mosca-branca','Tripes','Ácaro-rajado','Ferrugem-asiática','Mancha-alvo','Mancha-parda','Antracnose','Oídio','Cercospora','Mofo-branco','Buva','Capim-amargoso','Caruru','Corda-de-viola','Trapoeraba','Picão-preto','Falha de stand'];
 const MONIT_CAT={praga:{lbl:'Praga',cls:'mc-praga'},doenca:{lbl:'Doença',cls:'mc-doenca'},daninha:{lbl:'Daninha',cls:'mc-daninha'},outro:{lbl:'Outro',cls:'mc-outro'}};
@@ -4359,7 +4362,7 @@ let CHUVA=null;
 const _MESN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const nfmm=n=>String(Math.round((+n||0)*10)/10).replace('.',',');
 function loadChuva(){ try{ const d=JSON.parse(localStorage.getItem(CHUVA_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveChuva(){ try{ localStorage.setItem(CHUVA_KEY, JSON.stringify(CHUVA)); }catch(e){} }
+function saveChuva(){ lsSet(CHUVA_KEY, JSON.stringify(CHUVA)) }
 function chuvaSave(){
   const g=id=>{ const el=document.getElementById(id); return el?el.value.trim():''; };
   if(_numc(g('chuva-mm'))==null){ toast('Informe a chuva em mm'); return; }
@@ -4413,23 +4416,15 @@ const STAND_KEY='planejamento_stand';
 let STAND=null;
 const nfpop=n=>Math.round(+n||0).toLocaleString('pt-BR');
 function loadStand(){ try{ const d=JSON.parse(localStorage.getItem(STAND_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveStand(){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} scheduleStandPush(); }
+function saveStand(){ lsSet(STAND_KEY, JSON.stringify(STAND)); scheduleStandPush(); }
 function standLista(){ return ((STAND&&STAND.registros)||[]).filter(r=>r&&!r.del); }
 function parsePontos(s){ return String(s||'').split(/[,;\s]+/).filter(Boolean); }
 // ---- sincronização (aba "STAND APP"; só envia se o Code.gs já tiver o ramo __stand) ----
-let standPushTimer=null, lastStandSig='';
+let lastStandSig='';
 function standMapa(){ const m={}; ((STAND&&STAND.registros)||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); return m; }
-function standSig(){ return JSON.stringify(standMapa()); }
+function standSig(){ return sigHash(JSON.stringify(standMapa())); }
 function standServerOk(){ return !!(DATA && DATA.stand_app && typeof DATA.stand_app==='object'); }
 function scheduleStandPush(){ loteAgendar('__stand'); }
-async function standPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!standServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleStandPush(); return; }
-  const sig=standSig(); if(opts.auto && sig===lastStandSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__stand:standMapa()}));
-    if(postOk(r)) lastStandSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Stand: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 function standApplyPulled(map){
   if(!map || typeof map!=='object' || !STAND) return false;
   let changed=false; const idx={}; STAND.registros.forEach((r,i)=>{ if(r&&r.id) idx[r.id]=i; });
@@ -4437,7 +4432,7 @@ function standApplyPulled(map){
     const i=idx[k], loc=i!=null?STAND.registros[i]:null, iu=+inc._u||0, lu=+(loc&&(loc._u||loc.ts))||0;
     if(!loc){ STAND.registros.push(inc); changed=true; } else if(iu>lu){ STAND.registros[i]=inc; changed=true; } }
   const pend=standSig()!==lastStandSig && !!lastStandSig;
-  if(changed){ try{ localStorage.setItem(STAND_KEY, JSON.stringify(STAND)); }catch(e){} if(!pend) lastStandSig=standSig(); }
+  if(changed){ lsSet(STAND_KEY, JSON.stringify(STAND)); if(!pend) lastStandSig=standSig(); }
   if(pend) scheduleStandPush();
   return changed;
 }
@@ -4551,7 +4546,7 @@ function standSave(talhao){
     pontos:linhas.map(l=>l.n).join(', '), pop:Math.round(c.dens), plm:r1(c.plm), cv:r1(c.cv),
     pctMeta:c.pctMeta!=null?Math.round(c.pctMeta):null, falha:c.pctMeta!=null?Math.max(0,Math.round(100-c.pctMeta)):null,
     cvDist:f.dist?r1(c.cvDist):null, inconf:f.dist?r1(c.inconf):null, pdom:f.dist?r1(c.pdom):null, pdup:f.dist?r1(c.pdup):null, paus:f.dist?r1(c.paus):null,
-    resumo:c.resumo, obs:f.obs, quem:(u&&u.nome)||'', ts:now, _u:now });
+    resumo:c.resumo, obs:f.obs, quem:(u&&u.nome)||'', ts:now, _u:tsAgora() });
   saveStand();
   const nv=standFormNovo(talhao); ['ativ','comp','esp','meta','dist'].forEach(k=>nv[k]=f[k]); nv.linhas=f.linhas.map(()=>({n:'',dom:'',dup:'',aus:'',pos:[]}));
   standForm[talhao]=nv; route({keepScroll:true}); toast('Contagem salva: '+c.resumo);
@@ -4586,21 +4581,13 @@ const AF_TIPOS={
   adubo:{lbl:'Semeadura: adubo',sub:'Adubo por linha da plantadeira',ico:'🧂',cls:'na-amarelo',am:'Linha',un:'g'},
   sementes:{lbl:'Semeadura: sementes',sub:'Sementes por linha da plantadeira',ico:'🌱',cls:'na-amarelo',am:'Linha',un:'sementes'} };
 function loadAfer(){ try{ const d=JSON.parse(localStorage.getItem(AFER_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
-function saveAfer(){ try{ localStorage.setItem(AFER_KEY, JSON.stringify(AFER)); }catch(e){} scheduleAferPush(); }
+function saveAfer(){ lsSet(AFER_KEY, JSON.stringify(AFER)); scheduleAferPush(); }
 function aferLista(){ return Object.values((AFER&&AFER.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
 // ---- sincronização (aba "AFERICOES APP"; só envia se o Code.gs já tiver o ramo __afericao) ----
-let aferPushTimer=null, lastAferSig='';
-function aferSig(){ return JSON.stringify((AFER&&AFER.reg)||{}); }
+let lastAferSig='';
+function aferSig(){ return sigHash(JSON.stringify((AFER&&AFER.reg)||{})); }
 function aferServerOk(){ return !!(DATA && DATA.afericoes_app && typeof DATA.afericoes_app==='object'); }
 function scheduleAferPush(){ loteAgendar('__afericao'); }
-async function aferPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!aferServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleAferPush(); return; }
-  const sig=aferSig(); if(opts.auto && sig===lastAferSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__afericao:(AFER.reg||{})}));
-    if(postOk(r)) lastAferSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Aferições: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 function aferApplyPulled(map){
   if(!map || typeof map!=='object' || !AFER) return false;
   let changed=false;
@@ -4608,7 +4595,7 @@ function aferApplyPulled(map){
     const loc=AFER.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>lu){ AFER.reg[k]=inc; changed=true; } }
   const pend=aferSig()!==lastAferSig && !!lastAferSig;
-  if(changed){ try{ localStorage.setItem(AFER_KEY, JSON.stringify(AFER)); }catch(e){} if(!pend) lastAferSig=aferSig(); }
+  if(changed){ lsSet(AFER_KEY, JSON.stringify(AFER)); if(!pend) lastAferSig=aferSig(); }
   if(pend) scheduleAferPush();
   return changed;
 }
@@ -4779,23 +4766,14 @@ const OC_TIPOS={
   solo:{lbl:'Solo/Fertilidade',novo:'Nova ocorrência de solo',ico:'🌄',cls:'na-rosa',sub:'Compactação, erosão, mancha de fertilidade…'} };
 const OC_EVENTOS=['Chuva excessiva','Granizo','Geada','Seca / veranico','Vendaval / acamamento','Alagamento','Temperatura alta','Raio / queimada','Outro'];
 function loadOcor(){ try{ const d=JSON.parse(localStorage.getItem(OCOR_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
-function saveOcor(){ try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} scheduleOcorPush(); }
-function loadFotoPend(){ try{ const a=JSON.parse(localStorage.getItem(FOTO_PEND_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-function saveFotoPend(){ try{ localStorage.setItem(FOTO_PEND_KEY, JSON.stringify(fotoPend)); }catch(e){ toast('Memória do aparelho cheia: a foto não foi guardada'); } }
+function saveOcor(){ lsSet(OCOR_KEY, JSON.stringify(OCOR)); scheduleOcorPush(); }
+function saveFotoPend(){ filaSalvar(FOTO_PEND_KEY, fotoPend); }
 function ocorLista(){ return Object.values((OCOR&&OCOR.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
 // ---- sincronização (aba "OCORRENCIAS APP"; só envia se o Code.gs já tiver o ramo __ocorrencia) ----
-let ocorPushTimer=null, lastOcorSig='', fotoEnviando=false;
-function ocorSig(){ return JSON.stringify((OCOR&&OCOR.reg)||{}); }
+let lastOcorSig='', fotoEnviando=false;
+function ocorSig(){ return sigHash(JSON.stringify((OCOR&&OCOR.reg)||{})); }
 function ocorServerOk(){ return !!(DATA && DATA.ocorrencias_app && typeof DATA.ocorrencias_app==='object'); }
 function scheduleOcorPush(){ loteAgendar('__ocorrencia'); }
-async function ocorPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!ocorServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleOcorPush(); return; }
-  const sig=ocorSig(); if(opts.auto && sig===lastOcorSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__ocorrencia:(OCOR.reg||{})}));
-    if(postOk(r)) lastOcorSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Ocorrências: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 // sobe as fotos da fila, uma por vez; cada uma que chega vira link no registro
 async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length) return;
   fotoEnviando=true;
@@ -4803,7 +4781,7 @@ async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()|
       let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
       if(!(r&&r.foto&&r.foto.url)) break;                                  // sem sinal: tenta de novo na próxima sincronização
       rec.fotos=(rec.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
-      fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} } }
+      fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); lsSet(OCOR_KEY, JSON.stringify(OCOR)) } }
   finally{ fotoEnviando=false; }
   if(document.body.dataset.view==='ocorrencia') route({keepScroll:true});
 }
@@ -4814,7 +4792,7 @@ function ocorApplyPulled(map){
     const loc=OCOR.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>lu){ OCOR.reg[k]=inc; changed=true; } }
   const pend=ocorSig()!==lastOcorSig && !!lastOcorSig;
-  if(changed){ try{ localStorage.setItem(OCOR_KEY, JSON.stringify(OCOR)); }catch(e){} if(!pend) lastOcorSig=ocorSig(); }
+  if(changed){ lsSet(OCOR_KEY, JSON.stringify(OCOR)); if(!pend) lastOcorSig=ocorSig(); }
   if(pend||fotoPend.length) scheduleOcorPush();
   return changed;
 }
@@ -4823,7 +4801,7 @@ function ocorApplyPulled(map){
 // reentrada, classe toxicológica, grupo/modo de ação, links (bula e FISPQ) e PDFs no Drive (pasta "Bulas").
 // A recomendação puxa daqui o ingrediente ativo, a carência e a reentrada, e avisa dose fora da faixa da bula.
 const BULAS_KEY='planejamento_bulas', BULA_ARQ_KEY='planejamento_bulas_arq';
-let BULAS=null, bulaArqPend=[], bulaArqEnviando=false, bulaPushTimer=null, lastBulaSig='', bulaEditProd=null;
+let BULAS=null, bulaArqPend=[], bulaArqEnviando=false, lastBulaSig='', bulaEditProd=null;
 const BULA_CAMPOS=[
   ['ia','Ingrediente ativo','text','ex.: Glifosato'],['conc','Concentração','text','ex.: 480 g/L'],['ph','pH ideal da calda','text','ex.: 5 a 6'],
   ['doseMin','Dose mínima (bula)','num','0'],['doseMax','Dose máxima (bula)','num','0'],['doseUn','Unidade da dose','text','ex.: L/ha'],
@@ -4836,21 +4814,12 @@ function bulaDe(p){ const k=bulaKey(p), r=BULAS&&BULAS.reg&&BULAS.reg[k]; return
 function bulaTem(r){ return !!r && BULA_CAMPOS.some(([k])=>String(r[k]==null?'':r[k]).trim()!==''); }
 function bulaNum(v){ return (v===''||v==null||isNaN(+v))?null:+v; }
 function loadBulas(){ try{ const d=JSON.parse(localStorage.getItem(BULAS_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
-function saveBulas(){ try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} scheduleBulaPush(); }
-function loadBulaArq(){ try{ const a=JSON.parse(localStorage.getItem(BULA_ARQ_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-function saveBulaArq(){ try{ localStorage.setItem(BULA_ARQ_KEY, JSON.stringify(bulaArqPend)); }catch(e){ toast('Memória do aparelho cheia: o PDF não ficou guardado para envio'); } }
+function saveBulas(){ lsSet(BULAS_KEY, JSON.stringify(BULAS)); scheduleBulaPush(); }
+function saveBulaArq(){ filaSalvar(BULA_ARQ_KEY, bulaArqPend); }
 // ---- sincronização (só envia se o Code.gs já tiver o ramo __bula) ----
 function bulasServerOk(){ return !!(DATA && DATA.bulas_app && typeof DATA.bulas_app==='object'); }
-function bulaSig(){ return JSON.stringify((BULAS&&BULAS.reg)||{}); }
+function bulaSig(){ return sigHash(JSON.stringify((BULAS&&BULAS.reg)||{})); }
 function scheduleBulaPush(){ loteAgendar('__bula'); }
-async function bulaPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!bulasServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleBulaPush(); return; }
-  const sig=bulaSig(); if(opts.auto && sig===lastBulaSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__bula:(BULAS.reg||{})}));
-    if(postOk(r)) lastBulaSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Bulas: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 // sobe os PDFs da fila (bula / FISPQ), um por vez; cada um que chega vira link na ficha
 async function bulaArqEnviar(){ const url=syncUrl(); if(!url||!bulasServerOk()||bulaArqEnviando||!bulaArqPend.length) return;
   bulaArqEnviando=true;
@@ -4858,7 +4827,7 @@ async function bulaArqEnviar(){ const url=syncUrl(); if(!url||!bulasServerOk()||
       let r=null; try{ r=await syncPost(url, JSON.stringify({__bulaArquivo:{nome:p.nome, mime:'application/pdf', b64:p.b64}})); }catch(e){ r=null; }
       if(!(r&&r.arquivo&&r.arquivo.url)) break;                            // sem sinal: tenta de novo na próxima sincronização
       rec[p.tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[p.tipo+'Arq']=p.nome; rec._u=Date.now();
-      bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} } }
+      bulaArqPend=bulaArqPend.filter(x=>x!==p); saveBulaArq(); lsSet(BULAS_KEY, JSON.stringify(BULAS)) } }
   finally{ bulaArqEnviando=false; }
   if(bulaEditProd) bulaRender();
 }
@@ -4869,7 +4838,7 @@ function bulaApplyPulled(map){
     const loc=BULAS.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>lu){ BULAS.reg[k]=inc; changed=true; } }
   const pend=bulaSig()!==lastBulaSig && !!lastBulaSig;
-  if(changed){ try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} if(!pend) lastBulaSig=bulaSig(); if(bulaEditProd) bulaRender(); }
+  if(changed){ lsSet(BULAS_KEY, JSON.stringify(BULAS)); if(!pend) lastBulaSig=bulaSig(); if(bulaEditProd) bulaRender(); }
   if(pend||bulaArqPend.length) scheduleBulaPush();
   return changed;
 }
@@ -4920,27 +4889,26 @@ async function bulaBaixar(tipo){ const p=bulaEditProd, ov=document.getElementByI
   if(!(r&&r.arquivo&&r.arquivo.url)){ toast('Não baixou: '+((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha')); return; }
   const k=bulaKey(p), rec=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete rec.del;
   rec[tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[tipo+'Arq']=r.arquivo.nome||'arquivo.pdf'; rec[tipo+'Origem']=url; rec._u=Date.now();
-  BULAS.reg[k]=rec; try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){}
+  BULAS.reg[k]=rec; lsSet(BULAS_KEY, JSON.stringify(BULAS));
   if(inp) inp.value=r.arquivo.url; bulaRender(); scheduleBulaPush(); toast(`PDF anexado no Drive (${r.arquivo.nome||''}${r.arquivo.kb?` · ${r.arquivo.kb} KB`:''})`); }
 async function bulaArqAdd(file, tipo){ if(!file||!bulaEditProd) return;
   if(!/pdf/i.test(file.type||'') && !/\.pdf$/i.test(file.name||'')){ toast('Envie um arquivo PDF'); return; }
-  if(file.size>8*1024*1024){ toast('PDF muito grande (máximo 8 MB)'); return; }
+  if(file.size>2*1024*1024){ toast('PDF muito grande para subir pelo celular (máximo 2 MB) — use "Baixar e anexar pelo link"'); return; }
   const b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file); });
   const k=bulaKey(bulaEditProd);
   bulaArqPend=bulaArqPend.filter(x=>!(bulaKey(x.prod)===k&&x.tipo===tipo)); bulaArqPend.push({prod:bulaEditProd, tipo, nome:file.name, b64}); saveBulaArq();
-  if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:Date.now()}; try{ localStorage.setItem(BULAS_KEY, JSON.stringify(BULAS)); }catch(e){} }   // a ficha precisa existir para o link chegar
+  if(!BULAS.reg[k]||BULAS.reg[k].del){ BULAS.reg[k]={produto:bulaEditProd, _u:Date.now()}; lsSet(BULAS_KEY, JSON.stringify(BULAS)) }   // a ficha precisa existir para o link chegar
   bulaRender(); scheduleBulaPush(); toast(syncUrl()?'PDF na fila — sobe para o Drive ao sincronizar':'PDF guardado; configure a Sincronização para enviar ao Drive'); }
 // ===== MISTURAS (banco de misturas de produtos e eficácia) — aba "MISTURAS APP" =====
 // Toda recomendação de APLICAÇÃO aprovada vira um registro de mistura (produtos e doses, alvo, talhão, cultura,
 // estádio, data, calda, condições, máquina, operador). Depois a dona avalia: Eficaz / Parcial / Não eficaz, com
 // dias após a aplicação, observação e foto. A tela Misturas agrupa combinações iguais e mostra o % de eficácia.
 const MIST_KEY='planejamento_misturas', MIST_FOTO_KEY='planejamento_misturas_fotos';
-let MIST=null, mistFotoPend=[], mistFotoEnviando=false, mistPushTimer=null, lastMistSig='', mistAvalId=null, mistAvalForm=null, mistFiltro='';
+let MIST=null, mistFotoPend=[], mistFotoEnviando=false, lastMistSig='', mistAvalId=null, mistAvalForm=null, mistFiltro='';
 const MIST_NOTAS={ eficaz:{lbl:'Eficaz',ico:'✅',cls:'mi-ok'}, parcial:{lbl:'Parcial',ico:'➖',cls:'mi-par'}, ineficaz:{lbl:'Não eficaz',ico:'❌',cls:'mi-nao'} };
 function loadMist(){ try{ const d=JSON.parse(localStorage.getItem(MIST_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
-function saveMist(){ try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} scheduleMistPush(); }
-function loadMistFoto(){ try{ const a=JSON.parse(localStorage.getItem(MIST_FOTO_KEY)); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-function saveMistFoto(){ try{ localStorage.setItem(MIST_FOTO_KEY, JSON.stringify(mistFotoPend)); }catch(e){ toast('Memória do aparelho cheia: a foto não ficou guardada'); } }
+function saveMist(){ lsSet(MIST_KEY, JSON.stringify(MIST)); scheduleMistPush(); }
+function saveMistFoto(){ filaSalvar(MIST_FOTO_KEY, mistFotoPend); }
 function mistLista(){ return Object.values((MIST&&MIST.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
 function mistDeOp(opKey){ return opKey?(mistLista().find(m=>m.opKey===opKey)||null):null; }
 function mistDeRecom(id){ return id?(mistLista().find(m=>m.recomId===id)||null):null; }
@@ -4955,22 +4923,14 @@ function misturaDeRecom(r){
   const m=Object.assign(old||{id:'mi'+now.toString(36)+Math.random().toString(36).slice(2,6), ts:now, aval:null}, {
     recomId:r.id, opKey:r.opKey||'', talhao:r.talhao, talhaoNome:t?tNome(t):r.talhao, data:String(r.data||'').slice(0,10)||_hojeISO(), cultura:r.cultura||'', estadio:r.estadio||'',
     alvo:r.alvo||'', nivel:r.nivel||'', opNome:r.opNome||'', calda:_mmC(r.calda)||0, cond:recomCondTxt(r), adjuvante:r.adjuvante||'', maquina:r.maquina||'',
-    operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:now });
+    operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:tsAgora() });
   delete m.del; MIST.reg[m.id]=m; saveMist(); return m;
 }
 function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.aval.nota)){ m.del=true; m._u=Date.now(); saveMist(); } }   // reprovar/reabrir: some se ainda não foi avaliada
 // ---- sincronização (aba MISTURAS APP; só envia se o Code.gs já tiver o ramo __mistura) ----
 function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.misturas_app==='object'); }
-function mistSig(){ return JSON.stringify((MIST&&MIST.reg)||{}); }
+function mistSig(){ return sigHash(JSON.stringify((MIST&&MIST.reg)||{})); }
 function scheduleMistPush(){ loteAgendar('__mistura'); }
-async function mistPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!mistServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleMistPush(); return; }
-  const sig=mistSig(); if(opts.auto && sig===lastMistSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__mistura:(MIST.reg||{})}));
-    if(postOk(r)) lastMistSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Misturas: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 // fotos da avaliação → Drive (pasta "Fotos do Campo"), uma por vez; cada uma que chega vira link no registro
 async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length) return;
   mistFotoEnviando=true;
@@ -4978,7 +4938,7 @@ async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()|
       let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
       if(!(r&&r.foto&&r.foto.url)) break;
       rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=Date.now();
-      mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} } }
+      mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); lsSet(MIST_KEY, JSON.stringify(MIST)) } }
   finally{ mistFotoEnviando=false; }
   if(document.body.dataset.view==='misturas') route({keepScroll:true});
 }
@@ -4989,7 +4949,7 @@ function mistApplyPulled(map){
     const loc=MIST.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>lu){ MIST.reg[k]=inc; changed=true; } }
   const pend=mistSig()!==lastMistSig && !!lastMistSig;
-  if(changed){ try{ localStorage.setItem(MIST_KEY, JSON.stringify(MIST)); }catch(e){} if(!pend) lastMistSig=mistSig(); }
+  if(changed){ lsSet(MIST_KEY, JSON.stringify(MIST)); if(!pend) lastMistSig=mistSig(); }
   if(pend||mistFotoPend.length) scheduleMistPush();
   return changed;
 }
@@ -5022,7 +4982,7 @@ function mistAvalSalvar(){ const m=MIST&&MIST.reg[mistAvalId], f=mistAvalForm, o
   const obs=(ov.querySelector('[data-mist="obs"]')||{}).value||'', data=(ov.querySelector('[data-mist="data"]')||{}).value||_hojeISO();
   if(!f.nota){ toast('Escolha: Eficaz, Parcial ou Não eficaz'); return; }
   const u=sessUsuario(), now=Date.now();
-  m.aval={nota:f.nota, data, dias:mistDias(m,data), obs:obs.trim(), fotos:(m.aval&&m.aval.fotos)||[], quem:(u&&u.nome)||'', ts:now}; m._u=now;
+  m.aval={nota:f.nota, data, dias:mistDias(m,data), obs:obs.trim(), fotos:(m.aval&&m.aval.fotos)||[], quem:(u&&u.nome)||'', ts:now}; m._u=tsAgora();
   f.fotos.forEach((d,i)=>mistFotoPend.push({id:m.id, nome:`mistura-${m.id}-${now.toString(36)}-${i+1}.jpg`, dataUrl:d})); if(f.fotos.length) saveMistFoto();
   saveMist(); mistAvalFechar(); route({keepScroll:true}); toast(`Eficácia registrada: ${MIST_NOTAS[m.aval.nota].lbl}${f.fotos.length?` · ${f.fotos.length} foto(s) enviando`:''}`); }
 function mistAvalLimpar(){ const m=MIST&&MIST.reg[mistAvalId]; if(!m||!ask('Limpar a avaliação desta mistura?')) return; m.aval=null; m._u=Date.now(); mistFotoPend=mistFotoPend.filter(x=>x.id!==m.id); saveMistFoto(); saveMist(); mistAvalFechar(); route({keepScroll:true}); }
@@ -5137,14 +5097,14 @@ function _dataUrlFile(u,nome){ const [h,b]=String(u).split(','), bin=atob(b||'')
 function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f);
   if(falta.length){ toast('Falta: '+falta.join(', ')); return; }
   const now=Date.now(), id='oc'+now.toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario();
-  const rec={id, tipo:f.tipo, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), quem:(u&&u.nome)||'', fotos:[], ts:now, _u:now};
+  const rec={id, tipo:f.tipo, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), quem:(u&&u.nome)||'', fotos:[], ts:now, _u:tsAgora()};
   if(f.tipo==='anotacao') rec.texto=f.texto.trim();
   if(f.tipo==='climatica') Object.assign(rec,{evento:f.evento, situacao:f.situacao.trim(), estadio:f.estadio, ini:f.ini, fim:f.fim});
   if(f.tipo==='manutencao') rec.acao=f.acao.trim();
   if(f.tipo==='solo') Object.assign(rec,{situacao:f.situacao.trim(), acao:f.acao.trim()});
   if(f.tipo==='manutencao' && f.tarefa && TAREFAS){       // vira tarefa no quadro do módulo Tarefas
     const tf={ id:'t'+now.toString(36)+Math.random().toString(36).slice(2,6), titulo:'Manutenção: '+rec.acao.slice(0,70), talhaoId:f.talhao, funcionarioId:'',
-      inicio:_hojeISO(), dias:1, status:'afazer', obs:`Ocorrência de manutenção (${rec.talhaoNome})${rec.quem?' · '+rec.quem:''}`, ocId:id, ts:now };
+      inicio:_hojeISO(), dias:1, status:'afazer', obs:`Ocorrência de manutenção (${rec.talhaoNome})${rec.quem?' · '+rec.quem:''}`, ocId:id, ts:now, _u:tsAgora() };
     TAREFAS.tarefas.push(tf); saveTarefas(); rec.tarefaId=tf.id; }
   const nomeBase=`${(rec.talhaoNome||'talhao').replace(/[^\w-]+/g,'_')}-${rec.data}-${f.tipo}`;
   f.fotos.forEach((d,i)=>fotoPend.push({ocId:id, nome:`${nomeBase}-${i+1}.jpg`, dataUrl:d}));
@@ -5163,21 +5123,13 @@ function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f
 const PROD_KEY='planejamento_produtividade';
 let PRODE=null, prForm={}, prTec=null;
 function loadProdE(){ try{ const d=JSON.parse(localStorage.getItem(PROD_KEY)); if(d&&d.reg&&typeof d.reg==='object') return d; }catch(e){} return {reg:{}}; }
-function saveProdE(){ try{ localStorage.setItem(PROD_KEY, JSON.stringify(PRODE)); }catch(e){} schedulePrPush(); }
+function saveProdE(){ lsSet(PROD_KEY, JSON.stringify(PRODE)); schedulePrPush(); }
 function prLista(){ return Object.values((PRODE&&PRODE.reg)||{}).filter(r=>r&&!r.del).sort((a,b)=>(b.data||'').localeCompare(a.data||'')||(b.ts||0)-(a.ts||0)); }
 // ---- sincronização (aba "PRODUTIVIDADE APP"; só envia se o Code.gs já tiver o ramo __produtividade) ----
-let prPushTimer=null, lastPrSig='';
-function prSig(){ return JSON.stringify((PRODE&&PRODE.reg)||{}); }
+let lastPrSig='';
+function prSig(){ return sigHash(JSON.stringify((PRODE&&PRODE.reg)||{})); }
 function prServerOk(){ return !!(DATA && DATA.produtividade_app && typeof DATA.produtividade_app==='object'); }
 function schedulePrPush(){ loteAgendar('__produtividade'); }
-async function prPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!prServerOk()) return;
-  if(syncBusy){ if(opts.auto) schedulePrPush(); return; }
-  const sig=prSig(); if(opts.auto && sig===lastPrSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__produtividade:(PRODE.reg||{})}));
-    if(postOk(r)) lastPrSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Produtividade: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 function prApplyPulled(map){
   if(!map || typeof map!=='object' || !PRODE) return false;
   let changed=false;
@@ -5185,7 +5137,7 @@ function prApplyPulled(map){
     const loc=PRODE.reg[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
     if(!loc || iu>lu){ PRODE.reg[k]=inc; changed=true; } }
   const pend=prSig()!==lastPrSig && !!lastPrSig;
-  if(changed){ try{ localStorage.setItem(PROD_KEY, JSON.stringify(PRODE)); }catch(e){} if(!pend) lastPrSig=prSig(); }
+  if(changed){ lsSet(PROD_KEY, JSON.stringify(PRODE)); if(!pend) lastPrSig=prSig(); }
   if(pend) schedulePrPush();
   return changed;
 }
@@ -5266,7 +5218,7 @@ function prSalvar(){ const f=prFormAtual(); if(!f) return; const c=prCalc(f);
   const now=Date.now(), id='pr'+now.toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario(), r1=v=>Math.round(v*10)/10;
   PRODE.reg[id]={id, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), pms:numBR(f.pms), fator:c.fator, estadio:f.estadio,
     amostragem:f.amostragem, estab:Math.round(c.estab), produtivas:Math.round(c.prod), graosPl:r1(c.graosPl), scHa:r1(c.sc), plantas:f.plantas.map(p=>Object.assign({},p)),
-    quem:(u&&u.nome)||'', ts:now, _u:now};
+    quem:(u&&u.nome)||'', ts:now, _u:tsAgora()};
   saveProdE(); const nv=prFormNovo(f.talhao); ['ativ','pms','fator','estadio','amostragem','estab','estabStand'].forEach(k=>nv[k]=f[k]); prForm[f.talhao]=nv;
   route({keepScroll:true}); toast(`Estimativa salva: ${afN(c.sc,1)} sc/ha`); }
 // ---- teclado "Adicionar planta" (números grandes; o botão da categoria guarda o número digitado) ----
@@ -5344,7 +5296,7 @@ window.addEventListener('hashchange', ()=>{ prTecFechar(); standTrenaFechar(); }
 const RECOM_KEY='planejamento_recomendacao';
 let RECOM=null;
 function loadRecom(){ try{ const d=JSON.parse(localStorage.getItem(RECOM_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveRecom(){ try{ localStorage.setItem(RECOM_KEY, JSON.stringify(RECOM)); }catch(e){} }
+function saveRecom(){ lsSet(RECOM_KEY, JSON.stringify(RECOM)) }
 const RECOM_ST={
   rascunho:{lbl:'Rascunho',cls:'rc-rasc',ico:'✏️'},
   enviada:{lbl:'Enviada ao operador',cls:'rc-env',ico:'📲'},
@@ -6050,25 +6002,19 @@ function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]
 // removidos que dá para restaurar (o publicado com o app ou o importado guardado)
 function limRemovidos(){ const o=(OV&&OV.limites)||{}; return Object.keys(o).filter(k=>o[k]&&o[k].del&&(o[k].prev||(LIM_BASE&&LIM_BASE[k]))); }
 // ---- sincronização (aba "LIMITES APP"; só envia se o Code.gs já tiver o ramo __limites) ----
-let limitesPushTimer=null, lastLimitesSig='';
-function limitesSig(){ return JSON.stringify((OV&&OV.limites)||{}); }
+let lastLimitesSig='';
+function limitesSig(){ return sigHash(JSON.stringify((OV&&OV.limites)||{})); }
 function limitesServerOk(){ return !!(DATA && DATA.limites_app && typeof DATA.limites_app==='object'); }
 function scheduleLimitesPush(){ loteAgendar('__limites'); }
-async function limitesPush(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!limitesServerOk()) return;
-  if(syncBusy){ if(opts.auto) scheduleLimitesPush(); return; }
-  const sig=limitesSig(); if(opts.auto && sig===lastLimitesSig) return;
-  syncBusy=true; setSyncStatus('busy');
-  try{ const r=await syncPost(url, JSON.stringify({__limites:(OV.limites||{})}));
-    if(postOk(r)) lastLimitesSig=sig; syncBusy=false; setSyncStatus(postOk(r)?'ok':'err'); markSynced(); addHist('push', !(r&&r.fail), 'Limites: '+((r&&r.ok)||0)); }
-  catch(e){ syncBusy=false; setSyncStatus('err'); }
-}
 function limitesApplyPulled(map){
   if(!map || typeof map!=='object' || !OV) return false;
   OV.limites=OV.limites||{}; let changed=false;
   for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
     const loc=OV.limites[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0;
-    if(!loc || iu>=lu){ OV.limites[k]=inc; changed=true; } }
-  if(changed){ saveOverrides(); lastLimitesSig=limitesSig(); }
+    if(!loc || iu>lu){ OV.limites[k]=inc; changed=true; } }
+  const pend=limitesSig()!==lastLimitesSig && !!lastLimitesSig;   // limite desenhado aqui e ainda não enviado
+  if(changed){ saveOverrides(); if(!pend) lastLimitesSig=limitesSig(); }
+  if(pend) scheduleLimitesPush();
   return changed;
 }
 // semáforo do talhão pelas operações: 🔴 atrasada · 🟡 vence em até 7 dias / em andamento · 🟢 em dia · ⚪ sem programação
@@ -6517,7 +6463,7 @@ V.mapa=function(){
 // nomes dos talhões no mapa: liga/desliga (lembrado neste aparelho)
 const MAPA_NOMES_KEY='planejamento_mapa_nomes';
 function mapaNomesOn(){ try{ return localStorage.getItem(MAPA_NOMES_KEY)!=='0'; }catch(e){ return true; } }
-function mapaNomesAlternar(btn){ const on=!mapaNomesOn(); try{ localStorage.setItem(MAPA_NOMES_KEY, on?'1':'0'); }catch(e){}
+function mapaNomesAlternar(btn){ const on=!mapaNomesOn(); lsSet(MAPA_NOMES_KEY, on?'1':'0');
   const c=document.getElementById('mapa-canvas'); if(c) c.classList.toggle('mapa-sem-nome', !on);   // sem redesenhar o mapa (não perde o zoom)
   if(btn){ btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); btn.textContent=on?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'; } }
 function limZoom(tid){ const lm=limitesAll()[tid]; if(!_map||!lm||!window.L) return; try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); document.getElementById('mapa-canvas').scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} }
@@ -6541,15 +6487,22 @@ function opSaidaPayload(key){
   const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0}));
   return { id:opBaixaId(key), talhao:talId, data:r.data||'', operador:(r.app&&r.app.operador)||'', itens };
 }
-function pushOpSaida(key){
-  const url=syncUrl(), r=OV.realizado&&OV.realizado[key]; if(!r) return Promise.resolve(false);
-  if(!url) return Promise.resolve(false);
-  return syncPost(url, JSON.stringify({__saida:opSaidaPayload(key)})).then(j=>{ if(!postOk(j)) return false; r.saidaPushed=true; saveOverrides(); return true; }).catch(()=>false);
+// espera a sincronização ficar livre (puxar/lote em andamento) antes de mandar a baixa — em paralelo dava "planilha ocupada"
+function esperaLivre(ms){ return new Promise(res=>{ const t0=Date.now(); (function tick(){ if(!syncBusy||Date.now()-t0>(ms||15000)) return res(!syncBusy); setTimeout(tick,300); })(); }); }
+async function pushOpSaida(key){
+  const url=syncUrl(), r=OV.realizado&&OV.realizado[key]; if(!r||!url) return false;
+  await esperaLivre(); const meu=!syncBusy; if(meu){ syncBusy=true; setSyncStatus('busy'); }
+  try{ const j=await syncPost(url, JSON.stringify({__saida:opSaidaPayload(key)})); if(!postOk(j)) return false; r.saidaPushed=true; delete r.saidaClearPend; saveOverrides(); return true; }
+  catch(e){ return false; } finally{ if(meu){ syncBusy=false; setSyncStatus('ok'); } }
 }
-function clearOpSaida(key){
+// tira do razão a saída de uma operação reaberta; se não conseguir agora, fica marcada (saidaClearPend) e pushSaidasPendentes tenta de novo
+async function clearOpSaida(key){
   const r=OV.realizado&&OV.realizado[key]; const url=syncUrl();
-  if(r){ r.saidaPushed=false; saveOverrides(); }
-  if(url) syncPost(url, JSON.stringify({__saida:{id:opBaixaId(key), itens:[]}})).catch(()=>{});
+  if(r){ r.saidaPushed=false; r.saidaClearPend=true; saveOverrides(); }
+  if(!url) return false;
+  await esperaLivre(); const meu=!syncBusy; if(meu){ syncBusy=true; setSyncStatus('busy'); }
+  try{ const j=await syncPost(url, JSON.stringify({__saida:{id:opBaixaId(key), itens:[]}})); if(postOk(j)){ if(r){ delete r.saidaClearPend; saveOverrides(); } return true; } return false; }
+  catch(e){ return false; } finally{ if(meu){ syncBusy=false; setSyncStatus('ok'); } }
 }
 // modal: operador informa o VOLUME real usado por insumo -> conclui, dá baixa e vai pro histórico
 function finalizarOpModal(key){
@@ -7720,23 +7673,24 @@ document.addEventListener('click',e=>{
     else if(a.act==='fluxoDel'){ if(ask('Excluir este lançamento?')){ FLUXO.lancamentos=FLUXO.lancamentos.filter(l=>l.id!==a.id); saveFluxo(); route(); toast('Lançamento excluído'); } }
     else if(a.act==='tarSalvar'){ const d=tarefaDraft; if(!d||!(d.titulo||'').trim()){ toast('Informe a tarefa/operação'); return; }
       const rec={ titulo:(d.titulo||'').trim(), talhaoId:d.talhaoId||'', funcionarioId:d.funcionarioId||'', inicio:d.inicio||new Date().toISOString().slice(0,10), dias:Math.max(1,+d.dias||1), status:(TAR_ORDER.indexOf(d.status)>=0?d.status:'afazer'), obs:(d.obs||'').trim() };
+      rec._u=tsAgora();
       if(d.id){ const t=TAREFAS.tarefas.find(x=>x.id===d.id); if(t) Object.assign(t,rec); }
       else { rec.id='t'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); rec.ts=Date.now(); TAREFAS.tarefas.push(rec); }
       saveTarefas(); tarefaDraft=tarefaNovoDraft(); route(); toast(d.id?'Tarefa salva':'Tarefa adicionada'); }
     else if(a.act==='tarCancelar'){ tarefaDraft=tarefaNovoDraft(); route(); }
     else if(a.act==='tarEdit'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ tarefaDraft={...t}; route({toTop:true}); } }
-    else if(a.act==='tarDel'){ if(ask('Excluir esta tarefa?')){ TAREFAS.tarefas=TAREFAS.tarefas.filter(x=>x.id!==a.id); saveTarefas(); route(); toast('Tarefa excluída'); } }
-    else if(a.act==='tarMove'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ const i=TAR_ORDER.indexOf(t.status)+(+a.dir||0); if(i>=0&&i<TAR_ORDER.length){ t.status=TAR_ORDER[i]; saveTarefas(); route({keepScroll:true}); } } }
+    else if(a.act==='tarDel'){ if(ask('Excluir esta tarefa?')){ TAREFAS.tarefas=TAREFAS.tarefas.filter(x=>x.id!==a.id); (TAREFAS.excl=TAREFAS.excl||{})[a.id]=tsAgora(); saveTarefas(); route(); toast('Tarefa excluída'); } }
+    else if(a.act==='tarMove'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ const i=TAR_ORDER.indexOf(t.status)+(+a.dir||0); if(i>=0&&i<TAR_ORDER.length){ t.status=TAR_ORDER[i]; t._u=tsAgora(); saveTarefas(); route({keepScroll:true}); } } }
     else if(a.act==='ganttGrp'){ ganttGrupo=a.g||'func'; route({keepScroll:true}); }
     else if(a.act==='tarImport'){ const n=importarOperacoes(); route(); toast(n?`${n} operação(ões) importada(s) como tarefa`:'Nenhuma operação nova para importar'); }
-    else if(a.act==='agToggle'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t && !t.opKey){ t.status=(t.status==='concluida')?'afazer':'concluida'; saveTarefas(); route({keepScroll:true}); } }
+    else if(a.act==='agToggle'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t && !t.opKey){ t.status=(t.status==='concluida')?'afazer':'concluida'; t._u=tsAgora(); saveTarefas(); route({keepScroll:true}); } }
     else if(a.act==='calEv'){ const t=TAREFAS.tarefas.find(x=>x.id===a.id); if(t){ if(t.opKey){ location.hash='#/campo'; } else { tarefaDraft={...t}; location.hash='#/tarefas'; } } }
     else if(a.act==='calPrev'||a.act==='calNext'){ const Y=+calMesAtual().split('-')[0], M=+calMesAtual().split('-')[1]; const d=new Date(Y,M-1+(a.act==='calNext'?1:-1),1); calMes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); route({keepScroll:true}); }
     else if(a.act==='calHoje'){ calMes=null; route({keepScroll:true}); }
     else if(a.act==='funcAdd'){ const nome=(equipeDraft.nome||'').trim(); if(!nome){ toast('Informe o nome'); return; }
-      EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim() });
+      EQUIPE.funcionarios.push({ id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), nome, funcao:(equipeDraft.funcao||'').trim(), _u:tsAgora() });
       saveEquipe(); equipeDraft={nome:'',funcao:''}; route(); toast('Integrante adicionado'); }
-    else if(a.act==='funcDel'){ if(ask('Remover este integrante? As tarefas dele ficam sem responsável.')){ EQUIPE.funcionarios=EQUIPE.funcionarios.filter(f=>f.id!==a.id); (TAREFAS.tarefas||[]).forEach(t=>{ if(t.funcionarioId===a.id) t.funcionarioId=''; }); saveEquipe(); saveTarefas(); route(); toast('Integrante removido'); } }
+    else if(a.act==='funcDel'){ if(ask('Remover este integrante? As tarefas dele ficam sem responsável.')){ EQUIPE.funcionarios=EQUIPE.funcionarios.filter(f=>f.id!==a.id); (EQUIPE.excl=EQUIPE.excl||{})[a.id]=tsAgora(); (TAREFAS.tarefas||[]).forEach(t=>{ if(t.funcionarioId===a.id){ t.funcionarioId=''; t._u=tsAgora(); } }); saveEquipe(); saveTarefas(); route(); toast('Integrante removido'); } }
     else if(a.act==='prAlimVista'){ _alimPrev=alimentarPreview('vista'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimPrazo'){ _alimPrev=alimentarPreview('prazo'); prAlimModal(_alimPrev); }
     else if(a.act==='prAlimClose'){ const ov=document.getElementById('pr-alim-ov'); if(ov) ov.remove(); }
@@ -8254,7 +8208,7 @@ const PUSH_DEBOUNCE=1500;                   // espera após a última edição a
    planilha. Com Code.gs antigo (sem "cap.lote" no puxar) manda um por vez, como antes. ---- */
 const LOTE={ pend:new Set(), timer:null };
 const LOTE_TIPOS={
-  __tarefas:     { lbl:'Tarefas',       ok:()=>true,              dados:()=>({funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas}), sig:()=>tarefasSig(),   last:()=>lastTarefasPushSig, set:v=>{ lastTarefasPushSig=v; } },
+  __tarefas:     { lbl:'Tarefas',       ok:()=>true,              dados:()=>({funcionarios:EQUIPE.funcionarios, tarefas:TAREFAS.tarefas, excl:{f:(EQUIPE.excl||{}), t:(TAREFAS.excl||{})}, merge:1}), sig:()=>tarefasSig(),   last:()=>lastTarefasPushSig, set:v=>{ lastTarefasPushSig=v; } },
   __realizado:   { lbl:'Operações',     ok:()=>true,              dados:()=>(OV.realizado||{}),  sig:()=>realizadoSig(), last:()=>lastRealizadoSig, set:v=>{ lastRealizadoSig=v; } },
   __result:      { lbl:'Resultados',    ok:()=>true,              dados:()=>(OV.result||{}),     sig:()=>resultSig(),    last:()=>lastResultSig,    set:v=>{ lastResultSig=v; } },
   __limites:     { lbl:'Limites',       ok:()=>limitesServerOk(), dados:()=>(OV.limites||{}),    sig:()=>limitesSig(),   last:()=>lastLimitesSig,   set:v=>{ lastLimitesSig=v; } },
@@ -8273,20 +8227,27 @@ async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) re
   try{
     for(const k of ks){ const T=LOTE_TIPOS[k]; if(T&&T.antes&&T.ok()){ try{ await T.antes(); }catch(e){} } }   // fotos/PDFs primeiro (viram link no registro)
     const itens=[], usados=[], sigs={};
-    ks.forEach(k=>{ const T=LOTE_TIPOS[k]; if(!T||!T.ok()) return; const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:T.dados()}); usados.push(k); });
+    ks.forEach(k=>{ const T=LOTE_TIPOS[k]; if(!T) return; if(!T.ok()){ LOTE.pend.add(k); return; }   // aba ainda não confirmada pela planilha: fica para depois da puxada
+      const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:T.dados()}); usados.push(k); });
     if(!itens.length){ syncBusy=false; setSyncStatus('ok'); return true; }
     let res;
     if(itens.length===1){ res=[await syncPost(url, JSON.stringify(itens[0]))]; }
     else if(loteSuporta()){ const r=await syncPost(url, JSON.stringify({__lote:itens})); res=(r&&Array.isArray(r.itens)&&r.itens.length===itens.length)?r.itens:itens.map(()=>r); }
     else { res=[]; for(const it of itens){ let r=null; try{ r=await syncPost(url, JSON.stringify(it)); }catch(e){ r=null; } res.push(r); } }   // Code.gs antigo: um por vez
     let okAll=true; usados.forEach((k,i)=>{ if(postOk(res[i])) LOTE_TIPOS[k].set(sigs[k]); else okAll=false; });
-    syncBusy=false; setSyncStatus(okAll?'ok':'err'); markSynced();
+    sigsSalvar(); syncBusy=false; setSyncStatus(okAll?'ok':'err'); if(okAll) markSynced();
     addHist('push', okAll, (usados.length>1?'Lote · ':'')+usados.map((k,i)=>`${LOTE_TIPOS[k].lbl}: ${(res[i]&&res[i].ok)||0}`).join(' · '));
     return okAll;
   }catch(e){ syncBusy=false; setSyncStatus('err'); addHist('push',false,'Envio: '+(e&&e.message||'')); return false; }
 }
 // tudo o que estiver diferente do último envio, de uma vez (ao entrar/sair do app e no "Enviar agora")
 async function loteEnviarTudo(){ Object.keys(LOTE_TIPOS).forEach(k=>LOTE.pend.add(k)); return loteEnviar({agora:true}); }
+// as marcas "último envio" ficam guardadas no aparelho: ao reabrir o app, o que foi feito sem internet continua pendente
+// (antes, a primeira puxada carimbava tudo como enviado e a operação concluída offline ficava presa no celular)
+const SIGS_KEY='planejamento_sync_sigs';
+function sigsSalvar(){ const o={}; for(const k in LOTE_TIPOS){ try{ o[k]=LOTE_TIPOS[k].last()||''; }catch(e){} } lsSet(SIGS_KEY, JSON.stringify(o)); }
+function sigsCarregar(){ let o=null; try{ o=JSON.parse(localStorage.getItem(SIGS_KEY)||'null'); }catch(e){} if(!o||typeof o!=='object') return;
+  for(const k in LOTE_TIPOS){ if(typeof o[k]==='string' && o[k] && !LOTE_TIPOS[k].last()) LOTE_TIPOS[k].set(o[k]); } }
 let syncBusy=false, pushTimer=null, pollTimer=null;
 let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
 let lastPullTs=0;   // último puxar que trouxe dados
@@ -8301,7 +8262,8 @@ const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
   __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
-  __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador'};
+  __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
+  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
 function syncLogTipo(body){
   try{ const o=JSON.parse(body); if(Array.isArray(o)) return 'Edições de campo ('+o.length+')';
@@ -8499,6 +8461,8 @@ function applyPulledData(d, raw){
   try{ comprasApplyPulled(d.compras_app); }catch(e){}      // lista "Compras registradas" (todos os aparelhos)
   try{ deparaApplyPulled(d.depara_nfe); }catch(e){}        // NF-e: de-para confirmado pela planilha
   try{ setTimeout(nfeNavBadge, 50); }catch(e){}
+  try{ sigsSalvar(); }catch(e){}
+  if(LOTE.pend.size){ clearTimeout(LOTE.timer); LOTE.timer=setTimeout(()=>loteEnviar(), PUSH_DEBOUNCE); }   // o que esperava a confirmação das abas sai agora
 }
 const near=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-4;
 function baseDoseOf(tid,tagoi,ii){ const tag=tagoi[0],oi=+tagoi.slice(1),seq=tag==='S'?'safrinha':'principal';
@@ -8556,7 +8520,8 @@ async function syncGet(url, opts){
       const txt=await r.text(), d=JSON.parse(txt);
       if(d && d.login){ syncLogAdd('down', 'Puxar planilha', t0, false, 'precisa entrar: '+(d.erro||'')); return d; }
       if(d && d.ok===false && d.erro) throw new Error(d.erro);   // a planilha explicou o erro (ex.: "timed out")
-      const sv=d&&d._srv, abas=(sv&&Array.isArray(sv.app))?sv.app:[], lida=sv?((sv.base||abas.length||sv.app===true)?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',abas.length?abas.length+' aba(s): '+abas.map(k=>k.replace(/_app$/,'')).join(', '):(sv.app===true?'compras/NF-e/execução':'')].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
+      const sv=d&&d._srv; try{ srvRelogio(sv&&sv.now); }catch(e){}
+      const abas=(sv&&Array.isArray(sv.app))?sv.app:[], lida=sv?((sv.base||abas.length||sv.app===true)?` · planilha leu em ${(sv.ms/1000).toFixed(1).replace('.',',')} s (${[sv.base?'talhões':'',abas.length?abas.length+' aba(s): '+abas.map(k=>k.replace(/_app$/,'')).join(', '):(sv.app===true?'compras/NF-e/execução':'')].filter(Boolean).join(' + ')})`:' · pronto no cache da planilha'):'';
       const cacheAviso=(sv&&sv.cacheErro)?` · ⚠️ a planilha não conseguiu guardar o cache (${sv.cacheErro})`:'';
       syncLogAdd('down', 'Puxar planilha', t0, !!(d&&d.produtos), (d&&d.produtos)?`ok · ${Math.round(txt.length/1024)} KB${lida}${cacheAviso}${attempt?' (2ª tentativa)':''}`:'resposta inesperada: '+txt.slice(0,120));
       return d;
@@ -9076,6 +9041,7 @@ function flushOnLeave(){
   Promise.resolve().then(()=>syncPush({auto:true})).catch(()=>{}).finally(()=>{ syncKeepalive=false; });
 }
 document.addEventListener('visibilitychange',()=>{
+  try{ sigsSalvar(); }catch(e){}
   if(document.visibilityState==='hidden'){ lastHiddenTs=Date.now(); flushOnLeave(); return; }
   // voltou: se ficou fora por mais de 1 min, sincroniza de verdade (envia + puxa); senão só o tick leve
   if(lastHiddenTs && Date.now()-lastHiddenTs>60000){ checkNewVersion(); syncOnReturn(); } else pollTick();
@@ -9119,7 +9085,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p);
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=loadFotoPend(); BULAS=loadBulas(); bulaArqPend=loadBulaArq(); MIST=loadMist(); mistFotoPend=loadMistFoto(); PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
@@ -9133,7 +9099,12 @@ function boot(d){
     if(!Object.keys(OV.realizado||{}).length) lastRealizadoSig=realizadoSig();
     if(!Object.keys(OV.result||{}).length) lastResultSig=resultSig();
     if(!Object.keys(OV.limites||{}).length) lastLimitesSig=limitesSig();
+    sigsCarregar();   // marcas do último envio guardadas no aparelho (o que não subiu segue pendente)
   }catch(e){}
+  // filas de fotos/PDFs: IndexedDB (sem o limite do localStorage); o que ficou pendente sobe na próxima sincronização
+  filaCarregar(FOTO_PEND_KEY).then(a=>{ fotoPend=a; if(a.length) scheduleOcorPush(); });
+  filaCarregar(MIST_FOTO_KEY).then(a=>{ mistFotoPend=a; if(a.length) scheduleMistPush(); });
+  filaCarregar(BULA_ARQ_KEY).then(a=>{ bulaArqPend=a; if(a.length) scheduleBulaPush(); });
   checkNewVersion();   // versão publicada mais nova? atualiza sozinho (nada fica em cache no aparelho)
   if(syncUrl()){
     // ao ENTRAR: portão de sincronização (envia o pendente e puxa a última versão; offline = pode seguir local)
