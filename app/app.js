@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-218';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-219';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -466,7 +466,9 @@ function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/prec
 const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
 function applyModule(){
   const m=currentModule();
-  document.querySelectorAll('#nav a').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m) || !podeTela(a.dataset.view||''); });
+  document.querySelectorAll('#nav a[data-view]').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m) || !podeTela(a.dataset.view||'');
+    a.dataset.fold=(a.dataset.mais||'').split(' ').includes(m)?'1':''; });   // celular: item dobrado no botão ⋯ Mais deste módulo
+  const mais=document.querySelector('#nav .nav-mais'); if(mais) mais.hidden=!navMaisItens(m).length;
   try{ acessoChip(); }catch(e){}
   const cur=document.getElementById('mod-cur');
   if(cur){ const info=MOD_INFO[m]; cur.innerHTML=`<span class="mc-ico">${info.ico}</span><span class="mc-name">${info.nome}</span>`; }
@@ -5255,6 +5257,14 @@ const NA_ITENS=[
   {k:'stand',lbl:'Stand',sub:'Registrar contagens de stand.',ico:'📏',cls:'na-ciano',go:t=>'#/stand/'+t},
   {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',go:t=>'#/produtividade/'+t},
   {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',sub2:'outras'} ];
+// ---- MENU ⋯ MAIS (celular): no módulo Campo o menu de baixo fica com Painel · Mapa · Campo · Timeline · Mais;
+// o resto (itens com data-mais="campo" no index.html) abre numa folha. Respeita as telas liberadas do login (hidden).
+function navMaisItens(m){ m=m||currentModule(); return Array.from(document.querySelectorAll('#nav a[data-view]')).filter(a=>(a.dataset.mais||'').split(' ').includes(m) && !a.hidden); }
+function navMaisOpen(){ novaAcaoFechar(); const view=(location.hash.split('/')[1]||'').split('?')[0];
+  const itens=navMaisItens().map(a=>`<a class="na-item${a.dataset.view===view?' nm-atual':''}" data-go="${esc(a.getAttribute('href'))}"><span class="na-ico nm-ico">${(a.querySelector('.ico')||{}).textContent||''}</span><span class="na-tx"><b>${esc((a.querySelector('.lbl')||a).textContent.trim())}</b></span><span class="na-seta">›</span></a>`).join('');
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>Mais</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div><div class="na-list">${itens}</div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function novaAcaoFechar(){ const o=document.getElementById('na-ov'); if(o) o.remove(); }
 function novaAcaoOpen(tid, sub){
   const t=findTalhao(tid); if(!t){ toast('Talhão não encontrado'); return; }
@@ -7085,6 +7095,7 @@ function _route(opts){
   document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
+  { const mais=document.querySelector('#nav .nav-mais'); if(mais) mais.classList.toggle('active', navMaisItens().some(a=>a.dataset.view===view)); }   // celular: tela que está dentro do ⋯ Mais
   try{ const html=(EMBED&&view!=='login'?embedBarHtml(view):'') + (fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`);
     if(!toTop && MORPH_VIEWS.has(view) && _lastView===view && _lastArg===(arg||'')) morphInto($('#content'), html);   // mesma tela: só o que mudou
     else $('#content').innerHTML=html; }
@@ -7538,6 +7549,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
     else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
     else if(a.act==='naVoltar'){ novaAcaoOpen(a.id); return; }
+    else if(a.act==='navMais'){ e.preventDefault(); navMaisOpen(); return; }
     else if(a.act==='naFechar'){ novaAcaoFechar(); return; }
     else if(a.act==='afAba'){ afAba=a.val==='hist'?'hist':'dados'; route({keepScroll:true}); return; }
     else if(a.act==='afAmAdd'){ const f=afFormAtual(); if(f){ f.am.push(''); route({keepScroll:true}); const ins=document.querySelectorAll('[data-afam]'); if(ins.length) ins[ins.length-1].focus(); } return; }
