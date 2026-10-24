@@ -220,6 +220,7 @@ function readRealizadoApp(){
   return out;
 }
 function writeRealizadoApp(map){
+  var inc = writeMapIncr_(REALIZADO_SHEET_APP, map); if (inc) return inc;   // incremental (só as linhas que mudaram)
   map = map || {}; var b = ss(), s = b.getSheetByName(REALIZADO_SHEET_APP) || b.insertSheet(REALIZADO_SHEET_APP);
   var cur = readRealizadoApp();                       // merge por chave: mantém o mais recente (_u)
   for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;

@@ -107,6 +107,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **Datas no fuso da planilha** (`tz_()` = `getSpreadsheetTimeZone()`) em todos os `formatDate` e em `dateISO`.
   `sync/appsscript.json` com `America/Sao_Paulo` (opcional: colar se o projeto mostrar o manifesto).
 - Recusas (sessão vencida/sem permissão) não invalidam o cache; o conserto leve da NF-e invalida as chaves de NF-e.
+- **Fase 3:** `writeRealizadoApp` (aba REALIZADO APP) também usa `writeMapIncr_` — o app passou a mandar só as
+  operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
+  nos mesmos casos dos outros mapas.
 
 ## Tarefas/Equipe com merge por registro e hora do servidor (v216)
 - **`__tarefas`** com `merge:1`: `{funcionarios, tarefas, excl:{f:{id:_u}, t:{id:_u}}}`. As abas **EQUIPE APP**
