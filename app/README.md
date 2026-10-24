@@ -291,6 +291,27 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - Números digitados: `numBR` — "2,5" e "2.5" = 2,5; "1.500" = 1500.
 - Operação concluída / TS feito: PDF e WhatsApp não criam outro link de baixa (o PDF diz "Baixa já registrada").
 
+## Revisão fase 1 — nada se perde entre aparelhos (v216)
+- **Tarefas e Equipe com merge por registro.** Cada tarefa/integrante leva `_u` (hora da última mudança) e as
+  exclusões viram lápides (`TAREFAS.excl` / `EQUIPE.excl` = `{id:_u}`). O envio vai com `merge:1` e a planilha
+  mescla por id (abas EQUIPE APP / TAREFAS APP ganham colunas ATUALIZADO e DEL). `tarefasApplyPulled` mescla
+  registro a registro (`tarefasMerge`): o celular B não apaga mais a tarefa que A criou, e uma tarefa criada sem
+  internet não some ao reabrir.
+- **Marcas de envio guardadas no aparelho.** As assinaturas de cada conjunto viram um hash curto (`sigHash`) e
+  ficam em `planejamento_sync_sigs` (`sigsSalvar`/`sigsCarregar`). Ao reabrir, o que foi feito offline continua
+  pendente e sobe no portão de entrada — antes, a primeira puxada carimbava tudo como enviado.
+- **Fotos e PDFs pendentes no IndexedDB** (`idbGet`/`idbSet`, `filaCarregar`/`filaSalvar`), fora do limite de 5 MB
+  do localStorage; o que estava no localStorage migra sozinho. PDF pelo celular limitado a 2 MB (acima disso,
+  "Baixar e anexar pelo link"). `lsSet` avisa uma vez por minuto quando a memória do aparelho enche.
+- **Baixas de estoque na fila.** `pushOpSaida`/`clearOpSaida` esperam a sincronização ficar livre
+  (`esperaLivre`); limpeza de saída que falhou fica marcada (`saidaClearPend`) e `pushSaidasPendentes` reenvia.
+- **Hora da planilha nos carimbos.** O puxar traz `_srv.now`; `srvRelogio` calcula o desvio do relógio do celular
+  e `tsAgora()` é usado em todo `_u` (um celular com hora errada não vence nem perde o conflito à toa). Desvio
+  acima de 2 min aparece no Log detalhado.
+- Tipo cuja aba a planilha ainda não confirmou fica pendente no lote (não é descartado); `limitesApplyPulled`
+  igual aos demais mapas; `realEnsure` nasce com `_u`; funções de envio antigas (`ocorPush`, `realizadoPush`…)
+  removidas; `SYNC_TIPO` completo.
+
 ## Sincronização mais rápida (v211)
 - **Envio em lote.** Os registros do Campo (execução, ocorrências + fotos, misturas, bulas, stand, aferições,
   produtividade, limites, resultados, tarefas) não têm mais um temporizador e um pedido cada: `scheduleXxxPush`
