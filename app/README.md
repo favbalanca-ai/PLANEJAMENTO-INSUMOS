@@ -88,6 +88,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Não troca o módulo salvo do app normal.
 - **Mapa → 🏷️ Mostrar/Ocultar nomes** — botão no topo do mapa que liga/desliga o nome dos talhões sobre os
   contornos (sem redesenhar o mapa: mantém o zoom). A escolha fica guardada no aparelho.
+- **Celular → menu ⋯ Mais (v219)** — no módulo Campo o menu de baixo fica com **Painel · Mapa · Campo ·
+  Timeline · ⋯ Mais**; Monitoramento, Chuva, Stand, Aferição, Recomendação, Misturas, Relatórios e Sincronizar
+  abrem pela folha **Mais** (`navMaisOpen`; itens marcados com `data-mais="campo"` no `index.html` e
+  `data-fold` pelo `applyModule`). Só mostra as telas liberadas pelo login; a tela atual fica destacada e o
+  botão Mais fica ativo quando ela está dentro dele. No computador a lista lateral continua completa.
 - **Mapa → Ficha do talhão (v218)** — tocar no limite do talhão abre um cartão (`talFichaOpen`) com nome,
   área do limite e do cadastro, **resumo** (cultura, variedade, plantio + DAP, estádio, status das operações)
   e as operações das duas safras agrupadas por tipo (`talFichaTipo`): **Semeadura**, **Adubação**,

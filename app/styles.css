@@ -26,6 +26,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Ar
 #nav a{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:9px;color:#c7dde2;
   text-decoration:none;font-weight:500;font-size:13.5px;transition:background .15s,color .15s}
 #nav a[hidden]{display:none!important}   /* esconde itens fora do módulo (a regra acima sobrepunha o [hidden]) */
+#nav .nav-mais{display:none}   /* ⋯ Mais só existe no celular */
+.nm-ico{width:40px;height:40px;font-size:20px;background:#eef3f5}
+.na-item.nm-atual{background:#e6f1f3}
+.na-item.nm-atual b{color:var(--teal)}
 #nav a .ico{font-size:15px;width:20px;text-align:center}
 #nav a:hover{background:rgba(255,255,255,.07);color:#fff}
 #nav a.active{background:var(--teal);color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
@@ -741,6 +745,10 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #nav a .ico{font-size:17px;width:auto}
   #nav a .lbl{display:none}
   #nav a .lbl-s{display:block;font-size:8.5px;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  #nav a[data-fold="1"]{display:none}   /* celular: dobrado no ⋯ Mais */
+  body[data-mod="campo"] #nav a[data-view="campopainel"]{order:-2} body[data-mod="campo"] #nav a[data-view="mapa"]{order:-1} body[data-mod="campo"] #nav a[data-view="timeline"]{order:1} #nav .nav-mais{order:2}   /* Painel · Mapa · Campo · Timeline · Mais */
+  #nav .nav-mais:not([hidden]){display:flex}
+  #nav a .lbl-s{font-size:10px}
   .sidebar{padding-bottom:env(safe-area-inset-bottom,0px)}
   /* não deixa a barra do topo entrar embaixo do relógio/notch do celular */
   .topbar{padding:calc(10px + env(safe-area-inset-top,0px)) 12px 10px;gap:8px;flex-wrap:wrap}.safra-chip{display:none}
