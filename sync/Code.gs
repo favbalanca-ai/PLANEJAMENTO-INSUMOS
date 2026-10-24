@@ -104,18 +104,20 @@ function readBase_(){
   }
 
   return { safra:'2026/2027', produtos:produtos, talhoes:talhoes, planos:planos, abas_faltando:semAba,
-    precos_cultura:precos, maquinas:maquinas, precos_app:readPrecosSheet(), equipe_sst:readEquipeSST() };
+    precos_cultura:precos, maquinas:maquinas };   // precos_app e equipe_sst: chaves próprias do cache (6 h), fora da leitura fria da base
 }
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
-  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados'];
+  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst'];
+var APP_TTL_ = { precos_app:21600, equipe_sst:21600 };   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
   limites_app:function(){ return readMapApp('LIMITES APP'); }, afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
   ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
-  nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); } };
+  nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
+  precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); } };
 function readAppKeys_(keys){
   _LER_MEMO_ = {}; var out = {};
   try {
@@ -163,7 +165,7 @@ function readEquipeSST(){
   return [];
 }
 function _parseEquipeSheet(sh){
-  if (!sh) return []; var last = sh.getLastRow(); if (last < 1) return [];
+  if (!sh) return []; var last = Math.min(sh.getLastRow(), 600); if (last < 1) return [];   // equipe: 600 linhas bastam (aba gigante da SST não trava o puxar)
   var lastCol = Math.max(2, Math.min(30, sh.getLastColumn()));
   var grid = sh.getRange(1, 1, last, lastCol).getValues();
   var hdrRow=-1, cFull=-1, cShort=-1, cFunc=-1, cSetor=-1, cUnid=-1, cStatus=-1, cId=-1;
@@ -239,7 +241,33 @@ function readMapApp(name){
   return out;
 }
 function _keyTexto_(s, n){ try { s.getRange(1, 1, Math.max(n, 2), 1).setNumberFormat('@'); } catch (e) {} }
+// GRAVAÇÃO INCREMENTAL: lê só KEY e ATUALIZADO, grava só as linhas que mudaram (linha existente → setValues nela;
+// chave nova → linhas novas no fim). Antes, cada envio relia e regravava a aba inteira (minutos com milhares de linhas).
+// Devolve null quando é melhor o caminho completo: aba nova/cabeçalho diferente, KEY virada número (conserto) ou
+// muitas mudanças. Registro com JSON acima de 49 mil letras é recusado com aviso (o limite da célula é 50 mil).
+var _MAP_ERROS_ = [];
+function writeMapIncr_(name, map, cab, linhaFn){
+  map = map || {}; var b = ss(), s = b.getSheetByName(name); if (!s) return null;
+  var head = ['KEY','JSON','ATUALIZADO'].concat(cab || []), ncol = head.length, last = s.getLastRow(), lastCol = s.getLastColumn();
+  if (last < 1 || lastCol < ncol) return null;
+  var h = s.getRange(1, 1, 1, ncol).getValues()[0]; for (var i = 0; i < ncol; i++) if (S(h[i]) !== head[i]) return null;
+  var keys = last >= 2 ? s.getRange(2, 1, last - 1, 1).getValues() : [], upd = last >= 2 ? s.getRange(2, 3, last - 1, 1).getValues() : [];
+  var rowOf = {}; for (var r = 0; r < keys.length; r++){ var k = keys[r][0]; if (k === '' || k == null) continue; if (typeof k !== 'string') return null; rowOf[k] = r + 2; }
+  var muda = [];
+  for (var kk in map){ var inc = map[kk]; if (!inc || typeof inc !== 'object') continue;
+    var js = JSON.stringify(inc); if (js.length > 49000){ _MAP_ERROS_.push(name + ': registro ' + kk + ' grande demais (' + js.length + ' letras) — não foi gravado'); continue; }
+    var rw = rowOf[kk], iu = +inc._u || 0, lu = rw ? N(upd[rw - 2][0]) : 0;
+    if (rw && iu < lu) continue;                                              // a planilha tem versão mais nova
+    muda.push({ k:kk, r:rw, inc:inc, js:js }); }
+  if (muda.length > 80) return null;
+  var linha = function(m){ return [m.k, m.js, m.inc._u || ''].concat(cab ? linhaFn(m.inc) : []); };
+  var novos = [];
+  muda.forEach(function(m){ if (m.r) s.getRange(m.r, 1, 1, ncol).setValues([linha(m)]); else novos.push(m); });
+  if (novos.length){ var r0 = _novaLinha_(s); s.getRange(r0, 1, novos.length, 1).setNumberFormat('@'); s.getRange(r0, 1, novos.length, ncol).setValues(novos.map(linha)); }
+  return { rows: keys.length + novos.length, mudou: muda.length };
+}
 function writeMapApp(name, map){
+  var inc = writeMapIncr_(name, map); if (inc) return inc;
   map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
   var cur = readMapApp(name);
   for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;
@@ -255,6 +283,7 @@ function writeMapApp(name, map){
 var AFER_SHEET = 'AFERICOES APP', STAND_SHEET = 'STAND APP', OCOR_SHEET = 'OCORRENCIAS APP', PROD_SHEET = 'PRODUTIVIDADE APP', BULAS_SHEET = 'BULAS APP', MIST_SHEET = 'MISTURAS APP';
 // mapa KEY|JSON|ATUALIZADO (merge por chave, o mais recente vence) + colunas legíveis calculadas por linhaFn(registro)
 function writeMapAppLeg_(name, map, cab, linhaFn){
+  var inc = writeMapIncr_(name, map, cab, linhaFn); if (inc) return inc;
   map = map || {}; var b = ss(), s = b.getSheetByName(name) || b.insertSheet(name);
   var cur = readMapApp(name);
   for (var k in map){ var inc = map[k]; if(!inc || typeof inc!=='object') continue;
@@ -340,7 +369,10 @@ function writeStandApp(map){
 }
 // ---- Módulo Tarefas: equipe + tarefas (sincroniza entre aparelhos) ----
 var EQUIPE_SHEET = 'EQUIPE APP', TAREFAS_SHEET_APP = 'TAREFAS APP';
-function _fmtISO(v){ if (v instanceof Date){ return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd'); } return S(v).slice(0,10); }
+// fuso horário: o DA PLANILHA (Arquivo → Configurações), não o do projeto do script — senão 10/03 podia virar 09/03
+var _TZ_ = null;
+function tz_(){ if (!_TZ_){ try { _TZ_ = ss().getSpreadsheetTimeZone(); } catch (e) {} if (!_TZ_) _TZ_ = Session.getScriptTimeZone(); } return _TZ_; }
+function _fmtISO(v){ if (v instanceof Date){ return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd'); } return S(v).slice(0,10); }
 // EQUIPE APP: ID · NOME · FUNCAO · ATUALIZADO · DEL   |   TAREFAS APP: … · OPKEY · ATUALIZADO · DEL
 // ATUALIZADO (_u) e DEL (lápide 'X') permitem o MERGE por registro entre aparelhos (o app manda merge:1 + excl).
 function readTarefasApp(){
@@ -426,7 +458,7 @@ function readMovimentacao(){
     var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]);
     // NF-e que já deu entrada: etiqueta [#chave de 44 dígitos] no ORIGEM (o app bloqueia importar de novo)
     var mk = S(v[i][5]).match(/\[#(\d{44})\]/);
-    if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
+    if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (!prod || !qtd) continue;
     if (tipo.indexOf('ENTRADA') === 0) ent[prod] = (ent[prod] || 0) + qtd;
     else if (tipo.indexOf('SA') === 0) sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
@@ -497,7 +529,7 @@ function readDeParaNfe(){
     var ig = S(g(r,'IGNORAR')).toUpperCase();
     out[cnpj + '|' + cprod] = { cnpj:cnpj, cprod:cprod, xprod:S(g(r,'XPROD')), produto:S(g(r,'PRODUTO APP')), fator:N(g(r,'FATOR')) || 1,
       ignorar:(ig === 'SIM' || ig === 'TRUE' || ig === 'X' || ig === '1'), custo:N(g(r,'ÚLTIMO CUSTO')), por:S(g(r,'CONFIRMADO POR')),
-      data:(g(r,'DATA') instanceof Date) ? Utilities.formatDate(g(r,'DATA'), Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(g(r,'DATA')).slice(0,10) }; }
+      data:(g(r,'DATA') instanceof Date) ? Utilities.formatDate(g(r,'DATA'), tz_(), 'yyyy-MM-dd') : S(g(r,'DATA')).slice(0,10) }; }
   return out;
 }
 // grava/atualiza o de-para (chave CNPJ + CPROD): atualiza a linha existente ou acrescenta no fim
@@ -506,7 +538,7 @@ function writeDeParaNfe(itens){
   var d = deParaSheet_(), s = d.s, ix = d.idx, last = s.getLastRow(), rows = {}, n = 0, novos = 0;
   var v = last >= 2 ? s.getRange(2,1,last-1,d.ncol).getValues() : [];
   for (var i = 0; i < v.length; i++){ var k = S(v[i][ix[_hkey('CNPJ EMITENTE')]]).replace(/\D/g,'') + '|' + S(v[i][ix[_hkey('CPROD')]]); if (k !== '|') rows[k] = i; }
-  var hoje = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  var hoje = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
   itens.forEach(function(it){
     var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
     var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = T_(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : T_(it.produto);
@@ -546,8 +578,8 @@ function sheetCols_(name, cols){
   return { s:s, idx:idx, ncol:lastC, col:function(h){ return idx[_hkey(h)]; } };
 }
 function _rowObj(t, r){ var o = {}; Object.keys(t.idx).forEach(function(k){ o[k] = r[t.idx[k]]; }); return o; }
-function _fmtD(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd') : S(v).slice(0,10); }
-function _fmtDT(v){ return (v instanceof Date) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') : S(v); }
+function _fmtD(v){ return (v instanceof Date) ? Utilities.formatDate(v, tz_(), 'yyyy-MM-dd') : S(v).slice(0,10); }
+function _fmtDT(v){ return (v instanceof Date) ? Utilities.formatDate(v, tz_(), 'yyyy-MM-dd HH:mm') : S(v); }
 
 // ---- configuração (aba CONFIG NFE: CHAVE | VALOR | OBS) ----
 // Durante a captura, config e pastas são lidas 1x só (_NFE_MEMO_); antes eram relidas a cada XML (lento no Drive).
@@ -676,7 +708,7 @@ function nfeRepararAbas_(){
   var feito = [];
   [[NFE_IDX_SHEET, NFE_IDX_COLS], [NFE_ITENS_SHEET, NFE_ITENS_COLS], [NFE_PEND_SHEET, NFE_PEND_COLS]].forEach(function(a){
     var s = sh(a[0]); if (!_cabecalhoEstragado_(s)) return;
-    s.setName(a[0] + ' (COM ERRO ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm') + ')');
+    s.setName(a[0] + ' (COM ERRO ' + Utilities.formatDate(new Date(), tz_(), 'dd/MM HH:mm') + ')');
     sheetCols_(a[0], a[1]); feito.push(a[0]); });
   if (feito.indexOf(NFE_IDX_SHEET) >= 0){   // refaz o índice das notas a partir dos XML guardados (notas antes, cancelamentos depois)
     var cfg = nfeConfig_(); if (cfg.pasta){ var xml = nfePastas_(cfg).xml, arqs = [], it = xml.getFolders();
@@ -827,7 +859,7 @@ function capturarNfe(maxMs){
 }
 function _nfeCapturaSalva_(res, erros, parcial){
   try {
-    var c = { em:Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial };
+    var c = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial };
     res.forEach(function(r){ if (r.status === 'nova' || r.status === 'casada') c.novas++; else if (r.status === 'duplicada') c.repetidas++;
       else if (r.status === 'ignorada') c.ignoradas++; else if (r.status === 'rejeitada') c.rejeitadas.push((r.arq ? r.arq + ': ' : '') + (r.motivo || '')); });
     c.rejeitadas = c.rejeitadas.slice(0,10);
@@ -856,7 +888,7 @@ function nfeReabrir_(r){
 function _nfeConsertoLeve_(){
   var c = CacheService.getScriptCache(); try { if (c.get('nfe_conserto')) return; c.put('nfe_conserto', '1', 600); } catch (e) {}
   var lk = LockService.getScriptLock(); if (!lk.tryLock(3000)) return;
-  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); } catch (e) {} finally { lk.releaseLock(); }
+  try { nfeRepararChaves_(); nfeReavaliarIgnoradas_(); cacheClearAppKeys_(NFE_KEYS_); } catch (e) {} finally { lk.releaseLock(); }   // mexeu em STATUS → resumo/estados saem do cache
 }
 function nfeLista_(status){
   _nfeConsertoLeve_();
@@ -1238,7 +1270,7 @@ function escreveUnPortifolio(list){
 // Suporta o layout NOVO (igual ao app) e o ORIGINAL (retrocompatível: Classe=B, Produto=C, Un=F, Dose=I).
 // data -> "yyyy-mm-dd" (aceita célula de data, "dd/mm/yyyy" ou ISO); vazio se não for data
 function dateISO(v){
-  if (v instanceof Date && !isNaN(v)){ var z = function(n){ return (n < 10 ? '0' : '') + n; }; return v.getFullYear() + '-' + z(v.getMonth() + 1) + '-' + z(v.getDate()); }
+  if (v instanceof Date && !isNaN(v)) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd');   // no fuso da planilha
   var s = S(v); if (!s) return '';
   var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return m[1] + '-' + m[2] + '-' + m[3];
   var b = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (b) return b[3] + '-' + (b[2].length < 2 ? '0' : '') + b[2] + '-' + (b[1].length < 2 ? '0' : '') + b[1];
@@ -1362,7 +1394,7 @@ function applyDelTalhao(ed, out){
       if (last >= 2){ var idv = A.getRange(2, 1, last - 1, 1).getValues();
         for (var i = idv.length - 1; i >= 0; i--){ if (S(idv[i][0]) === id) A.deleteRow(2 + i); } } }
     // a aba NÃO é apagada: vira "TL01 (excluído 30/09 14:50)" — dá para recuperar (renomear de volta)
-    var s = ss().getSheetByName(id); if (s) s.setName(id + ' (excluído ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM HH:mm') + ')');
+    var s = ss().getSheetByName(id); if (s) s.setName(id + ' (excluído ' + Utilities.formatDate(new Date(), tz_(), 'dd/MM HH:mm') + ')');
     out.ok++;
   } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
 }
@@ -1776,9 +1808,9 @@ function cacheGetK_(pfx){
 }
 function cachePutK_(pfx, str, ttl){
   try {
-    var c = CacheService.getScriptCache(), size = 45000, n = Math.ceil(str.length / size), obj = {};   // 45 mil letras ≤ 100 KB mesmo com acentos
+    var c = CacheService.getScriptCache(), size = 30000, n = Math.ceil(str.length / size), obj = {};   // 30 mil letras: < 100 KB mesmo com emojis (4 bytes)
     for (var i = 0; i < n; i++) obj[pfx + i] = str.substr(i * size, size);
-    obj[pfx + 'meta'] = String(n);
+    obj[pfx + 'meta'] = String(n); obj[pfx + 'ts'] = String(Date.now()) + '.' + Math.random().toString(36).slice(2, 6);   // carimbo: muda a cada releitura (hash leve)
     c.putAll(obj, ttl || CACHE_TTL);
   } catch (e) { _CACHE_ERRO_ = String(e && e.message || e).slice(0, 120); }   // aparece no Log detalhado do app
 }
@@ -1788,6 +1820,7 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe'];
+var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
 var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
@@ -1795,8 +1828,21 @@ var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[],
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
   __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'] };
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
-function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }))); } catch (e) {} }
-function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; })); } catch (e) {} }
+function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
+function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
+// hash LEVE para a checagem "?h=1": MD5 dos carimbos das partes do cache (+ quem está logado), sem montar o pacote nem
+// calcular MD5 de 1 MB. Parte sem carimbo (vencida/invalidada) → '' = "frio": o app faz o puxar completo direto.
+function cacheStamps_(acc, cfg){
+  try { var c = CacheService.getScriptCache(), ks = ['pb_ts'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; })), got = c.getAll(ks), parts = [];
+    for (var i = 0; i < ks.length; i++){ if (got[ks[i]] == null) return ''; parts.push(got[ks[i]]); }
+    parts.push(JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }));
+    return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, parts.join('|'), Utilities.Charset.UTF_8));
+  } catch (e) { return ''; } }
+// cache gravado por versão antiga (sem carimbo): carimba agora, senão a checagem leve ficaria "fria" para sempre
+function cacheCarimbaFaltantes_(){
+  try { var c = CacheService.getScriptCache(), ks = ['pb_ts'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; })), got = c.getAll(ks), obj = {}, n = 0;
+    ks.forEach(function(k){ if (got[k] == null){ obj[k] = String(Date.now()) + '.v'; n++; } });
+    if (n) c.putAll(obj, CACHE_TTL); } catch (e) {} }
 function cacheClearApp_(){ cacheClearAppKeys_(APP_TODAS_); }
 // edição À MÃO na planilha -> o próximo puxar traz o dado novo (gatilho simples: não precisa instalar)
 function onEdit(e){ cacheClear(); }
@@ -1831,10 +1877,11 @@ function currentJson(soCache){
         if (ainda.length){
           var gens = {}; ainda.forEach(function(k){ gens[k] = cacheGen_('ga_' + k); });
           var lidas = readAppKeys_(ainda);
-          ainda.forEach(function(k){ var str = JSON.stringify(lidas[k] === undefined ? null : lidas[k]); partes[k] = str; if (cacheGen_('ga_' + k) === gens[k]) cachePutK_('pa_' + k + '_', str, CACHE_TTL); });
+          ainda.forEach(function(k){ var str = JSON.stringify(lidas[k] === undefined ? null : lidas[k]); partes[k] = str; if (cacheGen_('ga_' + k) === gens[k]) cachePutK_('pa_' + k + '_', str, APP_TTL_[k] || CACHE_TTL); });
           info.app = ainda; } }
     } finally { if (tem) try { lk.releaseLock(); } catch (e) {} }
   }
+  cacheCarimbaFaltantes_();
   info.ms = Date.now() - t0; info.now = Date.now(); if (_CACHE_ERRO_){ info.cacheErro = _CACHE_ERRO_; _CACHE_ERRO_ = ''; } _SRV_ = info;   // now: hora do servidor (o app alinha o relógio do celular)
   var a = '{' + APP_TODAS_.map(function(k){ return JSON.stringify(k) + ':' + partes[k]; }).join(',') + '}';
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
@@ -1875,15 +1922,9 @@ function doGet_(e){
   // Se o cache está frio (parte vencida ou invalidada), responde na hora hash vazio: o app faz o puxar completo
   // direto, em vez de ler a planilha duas vezes (uma p/ o hash e outra p/ os dados).
   var leve = !!(e && e.parameter && e.parameter.h);
-  var cj = currentJson(leve);
-  if (leve && cj == null) return jsonStr(JSON.stringify({ hash:'', frio:1 }));
-  var str = acessoFiltra_(cj, acc);
+  if (leve){ var hs = cacheStamps_(acc, cfg); return jsonStr(JSON.stringify(hs ? { hash:hs } : { hash:'', frio:1 })); }   // sem montar o pacote
+  var str = acessoFiltra_(currentJson(false), acc);
   str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + ',"cap":{"lote":1,"cacheAba":1}}';
-  if (leve){
-    var dig = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, str, Utilities.Charset.UTF_8);
-    var hash = Utilities.base64Encode(dig);
-    return jsonStr(JSON.stringify({ hash: hash }));
-  }
   if (_SRV_) str = str.slice(0, -1) + ',"_srv":' + JSON.stringify(_SRV_) + '}';   // fora do hash (muda a cada leitura)
   return jsonStr(str);
 }
@@ -1893,10 +1934,14 @@ function doPost(e){
   var out = { ok:0, fail:0, msgs:[] }, base = false, inval = {};
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
   // apagar a linha errada do razão ou perder uma compra na COMPRAS APP. Quem chega depois espera.
-  var lock = LockService.getScriptLock();
-  if (!lock.tryLock(45000)){ out.fail = 1; out.msgs.push('planilha ocupada — tente de novo'); return json(out); }
+  var payload = null; try { payload = JSON.parse(e.postData.contents); } catch (err){ out.msgs.push('payload inválido: ' + err); return json(out); }
+  // foto/PDF para o Drive e download de bula não mexem na planilha: ficam FORA da trava (uma foto de 1 MB segurava todo mundo)
+  var ks1 = (payload && !Array.isArray(payload) && typeof payload === 'object') ? Object.keys(payload).filter(function(k){ return k.indexOf('__') === 0; }) : [];
+  var semTrava = ks1.length === 1 && SEM_TRAVA_[ks1[0]];
+  var lock = semTrava ? null : LockService.getScriptLock();
+  if (lock && !lock.tryLock(20000)){ out.fail = 1; out.msgs.push('planilha ocupada — tente de novo'); return json(out); }
   try {
-    var payload = JSON.parse(e.postData.contents), acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
+    var acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
     _ACC_ = acc;
     // __lote: vários payloads (um tipo cada) numa requisição só — grava um a um, na ordem, e responde um resultado por item
     if (payload && Array.isArray(payload.__lote)){
@@ -1910,7 +1955,7 @@ function doPost(e){
   finally {
     // invalida o cache: o próximo puxar traz o dado fresco. Mexeu na BASE = tudo; senão só as chaves da parte APP que a gravação muda.
     if (base) cacheClear(); else cacheClearAppKeys_(Object.keys(inval));
-    lock.releaseLock();
+    if (lock) lock.releaseLock();
   }
   return json(out);
 }
@@ -1921,9 +1966,9 @@ function gravaUm_(payload, acc, cfg, out){
     var chaves = (payload && !Array.isArray(payload) && typeof payload === 'object') ? Object.keys(payload).filter(function(k){ return k.indexOf('__') === 0; }) : [];
     var livre = chaves.length === 1 && (chaves[0] === '__login' || chaves[0] === '__retorno');   // login e retorno do operador (retorno.html) não pedem sessão
     if (chaves.length > 1){ out.fail = 1; out.msgs.push('pedido inválido: um tipo de gravação por vez'); semCache = true; }
-    else if (!livre && acc && acc.erro){ out.fail = 1; out.login = true; out.msgs.push(acc.erro); }
-    else if (!livre && cfg.exigido && !(acc && acc.u)){ out.fail = 1; out.login = true; out.msgs.push('entre com seu login e PIN'); }
-    else if (!livre && acc && acc.u && acessoPodeGravar_(acc, payload)){ out.fail = 1; out.msgs.push(acessoPodeGravar_(acc, payload)); }
+    else if (!livre && acc && acc.erro){ out.fail = 1; out.login = true; out.msgs.push(acc.erro); semCache = true; }
+    else if (!livre && cfg.exigido && !(acc && acc.u)){ out.fail = 1; out.login = true; out.msgs.push('entre com seu login e PIN'); semCache = true; }
+    else if (!livre && acc && acc.u && acessoPodeGravar_(acc, payload)){ out.fail = 1; out.msgs.push(acessoPodeGravar_(acc, payload)); semCache = true; }
     else if (payload && payload.__login){          // login + PIN → sessão
       semCache = true; var lg = loginFaz_(payload.__login); out.ok = lg.ok ? 1 : 0; if (!lg.ok){ out.fail = 1; out.msgs.push(lg.erro); } else { out.token = lg.token; out.usuario = lg.usuario; out.exigido = lg.exigido; }
     } else if (payload && payload.__trocarPin){    // a própria pessoa troca o PIN
@@ -1989,6 +2034,7 @@ function gravaUm_(payload, acc, cfg, out){
       applyEditsBatch(payload, out); base = true;   // edições de campo (dose, estoque, área…): mexem na BASE
     }
   } catch(err){ out.msgs.push('payload inválido: ' + err); }
+  if (_MAP_ERROS_.length){ out.msgs = out.msgs.concat(_MAP_ERROS_); _MAP_ERROS_ = []; }   // registro grande demais: avisa, o resto foi gravado
   var ch = chaves && chaves.length === 1 ? chaves[0] : '';
   return { base:base, inval: base ? [] : (semCache ? [] : (ch && APP_INVALIDA_[ch]) ? APP_INVALIDA_[ch] : APP_TODAS_) };
 }
