@@ -1539,6 +1539,37 @@ body[data-embed] .content{padding:10px 10px 24px}
 .na-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;font-size:22px}
 .na-azul{background:#e3edfc}.na-rosa{background:#fbe1ea}.na-ciano{background:#dff6fb}.na-verde{background:#dcf7ec}.na-amarelo{background:#fdf9d7}
 .na-links{text-align:center;font-size:13px;padding:12px 0 2px;border-top:1px solid var(--line)}
+/* ficha do talhão (mapa) */
+.tf-sheet{padding-top:6px}
+.tf-h{display:flex;align-items:flex-start;gap:10px;padding:4px 0 8px}
+.tf-h>div{flex:1;min-width:0}
+.tf-h h3{font-size:20px;font-weight:800;color:var(--ink);line-height:1.2}
+.tf-h .mut{font-size:12.5px}
+.tf-resumo{border-top:1px solid var(--line);padding:6px 0}
+.tf-lin{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:14px}
+.tf-lin span:first-child{color:var(--muted)}
+.tf-lin b{text-align:right}
+.tf-btns{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 10px;border-bottom:1px solid var(--line)}
+.tf-btns .btn{flex:1;text-align:center;justify-content:center}
+.tf-sec{border-bottom:1px solid var(--line);padding:4px 0}
+.tf-sec summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:8px 0}
+.tf-sec summary::-webkit-details-marker{display:none}
+.tf-sec summary h4{font-size:17px;font-weight:800;color:var(--ink);margin:0}
+.tf-sec summary::after{content:'▾';color:var(--muted);margin-left:8px}
+.tf-sec:not([open]) summary::after{content:'▸'}
+.tf-vazio{font-size:13px;padding:2px 0 8px}
+.tf-op{padding:6px 0 8px;border-top:1px dashed var(--line)}
+.tf-op-h{display:flex;align-items:center;gap:8px;font-size:14px;flex-wrap:wrap}
+.tf-op-h b{flex:1;min-width:0}
+.tf-data{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:13px;min-width:78px}
+.tf-plan .tf-op-h, .tf-plan .tf-its{color:var(--muted)}
+.tf-canc{opacity:.55;text-decoration:line-through}
+.tf-atras .tf-data{color:#a61b1b;font-weight:700}
+.tf-feita .tf-data{color:#1b5e20;font-weight:700}
+.tf-its{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:13px;padding:4px 0 0 8px}
+.tf-its .num{font-variant-numeric:tabular-nums;text-align:right}
+.tf-ev{display:flex;gap:8px;font-size:13.5px;padding:5px 0;border-top:1px dashed var(--line)}
+.cp-tag.ok{background:#dcf7ec;color:#1b5e20}
 .cp-topbtns{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 /* ===== Aferições ===== */
 .af-head{display:flex;align-items:center;gap:10px;margin:4px 0 8px}
@@ -1903,7 +1934,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-217';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-218';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7178,6 +7209,53 @@ function novaAcaoOpen(tid, sub){
   document.body.appendChild(ov);
 }
 window.addEventListener('hashchange', novaAcaoFechar);
+// ---- FICHA DO TALHÃO (mapa): tocar no limite abre um cartão com resumo da safra, operações agrupadas por tipo
+// (Semeadura, Adubação, Correção de solo, Pulverizações — planejadas em cinza, realizadas em destaque, atrasadas em
+// vermelho) e as últimas ocorrências/aferições. Botões: Nova Ação (menu de antes), Campo e Centralizar.
+const TF_TIPOS={sem:{lbl:'Semeadura',ico:'🌱'}, adub:{lbl:'Adubação',ico:'🧂'}, corr:{lbl:'Correção de solo',ico:'⛰️'}, pulv:{lbl:'Pulverizações',ico:'🚿'}};
+function talFichaTipo(items){ if(items.some(_isSemente)) return 'sem';
+  const c=items.map(it=>String(it.classe||((PROD[it.produto]||{}).classe)||'').toUpperCase()); if(!c.length) return 'pulv';
+  if(c.every(x=>/CORRETIV|CALC/.test(x))) return 'corr';
+  if(c.every(x=>/FERTILIZ|ADUBO|CORRETIV|CALC/.test(x))) return 'adub';
+  return 'pulv'; }
+function talFichaOpen(tid){
+  const t=findTalhao(tid); if(!t){ toast('Talhão não encontrado'); return; }
+  novaAcaoFechar(); const id=encodeURIComponent(tid), hj=_hojeISO(), lm=limitesAll()[tid], haLim=lm?(lm.ha||limAreaHa(lm.coords)):0;
+  const seq=talSafraAtual(t), emp=(seq==='safrinha'?empSafDe(t):empDe(t))||'', pl=plantioRealDe(tid,seq), plPrev=plantioPrevDe(tid,seq);
+  const st=estadioEm(estadiosDe(t,seq),hj), sem=tsSemDe(tid,seq), so=talStatusOps(t), sc=OPST[so.nivel];
+  const dap=pl?Math.round((new Date(hj+'T00:00:00')-new Date(pl+'T00:00:00'))/86400000):null;
+  const lin=(k,v)=>v?`<div class="tf-lin"><span>${k}</span><b>${v}</b></div>`:'';
+  const resumo=lin('Cultura', esc(emp||'sem cultura')+(seq==='safrinha'?' <small class="mut">(2ª safra)</small>':''))
+    +lin('Variedade', sem?esc(sem.produto):'')
+    +lin('Plantio', pl?`${fmtData(pl)}${dap!=null?` <small class="mut">· ${dap} DAP</small>`:''}`:(plPrev?`<span class="mut">previsto ${fmtData(plPrev)}</span>`:''))
+    +lin('Estádio', st?`${esc(st.cod)} <small class="mut">${esc(st.desc||'')}</small>`:'')
+    +lin('Operações', `${sc.ico} ${so.nivel==='late'?`${so.late.length} atrasada(s)`:esc(sc.lbl)}${so.prox?` <small class="mut">· próxima: ${esc(so.prox.nome)} ${fmtData(so.prox.dp)}</small>`:''}`);
+  // operações por tipo (as duas safras), em ordem de data
+  const grupos={sem:[],adub:[],corr:[],pulv:[]};
+  campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key)||{}, items=campoItems(t.id,o.tagoi,o.op.itens,r), dp=opDataPlan(t.id,o.tagoi,o.op.dap)||'';
+    const feita=r.status==='concluido', canc=r.status==='cancelado', and=r.status==='andamento', data=feita&&_isISO(r.data)?String(r.data).slice(0,10):dp;
+    const atras=!feita&&!canc&&!and&&dp&&dp<hj, cls=feita?'tf-feita':canc?'tf-canc':atras?'tf-atras':'tf-plan';
+    const tag=feita?'<span class="cp-tag ok">realizada</span>':canc?'<span class="cp-tag">cancelada</span>':and?'<span class="cp-tag today">em andamento</span>':atras?'<span class="cp-tag late">atrasada</span>':'<span class="cp-tag">planejada</span>';
+    grupos[talFichaTipo(items)].push({data, html:`<div class="tf-op ${cls}"><div class="tf-op-h"><span class="tf-data">${data?fmtData(data):'<span class="mut">sem data</span>'}</span><b>${esc(o.op.nome||('Operação '+(o.oi+1)))}${o.seq==='safrinha'?' <small class="mut">(2ª)</small>':''}</b>${tag}</div>
+        ${items.length?`<div class="tf-its">${items.map(it=>`<span>${esc(it.produto)}</span><span class="num">${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join('')}</div>`:''}</div>`}); });
+  const secs=Object.keys(TF_TIPOS).map(k=>{ const g=grupos[k].sort((a,b)=>(a.data||'9').localeCompare(b.data||'9'));
+    return `<details class="tf-sec"${g.length?' open':''}><summary><h4>${TF_TIPOS[k].ico} ${TF_TIPOS[k].lbl}</h4><span class="mut">${g.length?g.length:'—'}</span></summary>${g.length?g.map(x=>x.html).join(''):'<p class="mut tf-vazio">Nenhum item.</p>'}</details>`; }).join('');
+  // ocorrências e aferições recentes
+  const ev=[]; Object.values((OCOR&&OCOR.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=OC_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📝'} ${esc(ocResumo(r))}`}); });
+  Object.values((AFER&&AFER.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=AF_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📏'} ${esc(T.lbl||'Aferição')}${r.resumo?' · '+esc(r.resumo):''}`}); });
+  ev.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const evHtml=ev.length?ev.slice(0,6).map(x=>`<div class="tf-ev"><span class="tf-data">${x.data?fmtData(x.data):'—'}</span><span>${x.html}</span></div>`).join('')+(ev.length>6?`<p class="mut tf-vazio">+${ev.length-6} na Timeline</p>`:''):'<p class="mut tf-vazio">Nenhuma ocorrência ou aferição.</p>';
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>${esc(tNome(t))}</h3><span class="mut">${haLim?`${nf2.format(haLim)} ha no limite`:''}${areaDe(t)?` · ${num(areaDe(t))} ha cadastro`:''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <div class="tf-resumo">${resumo}</div>
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button></div>
+    ${secs}
+    <details class="tf-sec" open><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
+    <div class="na-links"><a class="link" data-go="#/timeline/${id}">Timeline</a> · <a class="link" data-go="#/campo/${id}">Operações</a></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); });
+  document.body.appendChild(ov);
+}
 // celular: a janela não rola (só .main) — ver styles.css; rolar ao topo = os dois
 function rolarTopo(){ try{ const m=$('.main'); if(m) m.scrollTop=0; }catch(e){} window.scrollTo(0,0); }
 document.addEventListener('input', e=>{ const el=e.target; if(!el.matches) return;
@@ -7945,7 +8023,7 @@ async function mapaInit(){
     const pg=L.polygon(lm.coords,{color:sc.cor,weight:3,fillColor:sc.cor,fillOpacity:.38}).addTo(_map);
     pg.bindTooltip(`${esc(tNome(t||tid))}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
     const li=(arr,fn)=>arr.slice(0,4).map(fn).join('')+(arr.length>4?`<li class="mut">+${arr.length-4}…</li>`:'');
-    pg.on('click', ()=>novaAcaoOpen(tid));   // tocar no talhão: menu Nova Ação (ocorrência, aferição, stand…)
+    pg.on('click', ()=>talFichaOpen(tid));   // tocar no talhão: ficha do talhão (resumo, operações por tipo, ocorrências); Nova Ação fica no botão
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
   pts.forEach(r=>{
@@ -9466,6 +9544,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='limSalvar'){ limSalvarImport(); }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
+    else if(a.act==='tfZoom'){ novaAcaoFechar(); limZoom(a.id); }
     else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(`Remover o limite de ${tNome(t||a.id)} do mapa?\n(dá para restaurar depois)`)) limRemover(a.id); }
     else if(a.act==='limRestaurar'){ limRestaurar(a.id); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }

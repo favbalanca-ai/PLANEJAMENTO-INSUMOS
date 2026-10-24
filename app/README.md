@@ -88,7 +88,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   Não troca o módulo salvo do app normal.
 - **Mapa → 🏷️ Mostrar/Ocultar nomes** — botão no topo do mapa que liga/desliga o nome dos talhões sobre os
   contornos (sem redesenhar o mapa: mantém o zoom). A escolha fica guardada no aparelho.
-- **Mapa → Nova Ação** — tocar no talhão do mapa (ou ➕ *Ação* na lista de limites / ➕ *Nova ação* na tela
+- **Mapa → Ficha do talhão (v218)** — tocar no limite do talhão abre um cartão (`talFichaOpen`) com nome,
+  área do limite e do cadastro, **resumo** (cultura, variedade, plantio + DAP, estádio, status das operações)
+  e as operações das duas safras agrupadas por tipo (`talFichaTipo`): **Semeadura**, **Adubação**,
+  **Correção de solo** e **Pulverizações** — realizada com a data real e as doses realizadas, planejada em cinza,
+  atrasada em vermelho, cancelada riscada — mais as últimas **ocorrências e aferições**. Botões ➕ Nova Ação,
+  📋 Campo e 🔍 Centralizar; tocar fora fecha.
+- **Nova Ação** — botão da ficha do talhão no mapa (ou ➕ *Ação* na lista de limites / ➕ *Nova ação* na tela
   do talhão no Campo) abre a folha **Nova Ação**: Ocorrência e Outras ocorrências → Monitoramento;
   Recomendação; **Aferição**; Aplicação → operações do talhão; Stand; Anotação e Estimativa de
   produtividade aparecem como *em breve*. Embaixo, links para Operações e Timeline.

@@ -1522,6 +1522,37 @@ body[data-embed] .content{padding:10px 10px 24px}
 .na-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:48px;height:48px;border-radius:12px;font-size:22px}
 .na-azul{background:#e3edfc}.na-rosa{background:#fbe1ea}.na-ciano{background:#dff6fb}.na-verde{background:#dcf7ec}.na-amarelo{background:#fdf9d7}
 .na-links{text-align:center;font-size:13px;padding:12px 0 2px;border-top:1px solid var(--line)}
+/* ficha do talhão (mapa) */
+.tf-sheet{padding-top:6px}
+.tf-h{display:flex;align-items:flex-start;gap:10px;padding:4px 0 8px}
+.tf-h>div{flex:1;min-width:0}
+.tf-h h3{font-size:20px;font-weight:800;color:var(--ink);line-height:1.2}
+.tf-h .mut{font-size:12.5px}
+.tf-resumo{border-top:1px solid var(--line);padding:6px 0}
+.tf-lin{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:14px}
+.tf-lin span:first-child{color:var(--muted)}
+.tf-lin b{text-align:right}
+.tf-btns{display:flex;gap:8px;flex-wrap:wrap;padding:8px 0 10px;border-bottom:1px solid var(--line)}
+.tf-btns .btn{flex:1;text-align:center;justify-content:center}
+.tf-sec{border-bottom:1px solid var(--line);padding:4px 0}
+.tf-sec summary{display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none;padding:8px 0}
+.tf-sec summary::-webkit-details-marker{display:none}
+.tf-sec summary h4{font-size:17px;font-weight:800;color:var(--ink);margin:0}
+.tf-sec summary::after{content:'▾';color:var(--muted);margin-left:8px}
+.tf-sec:not([open]) summary::after{content:'▸'}
+.tf-vazio{font-size:13px;padding:2px 0 8px}
+.tf-op{padding:6px 0 8px;border-top:1px dashed var(--line)}
+.tf-op-h{display:flex;align-items:center;gap:8px;font-size:14px;flex-wrap:wrap}
+.tf-op-h b{flex:1;min-width:0}
+.tf-data{font-variant-numeric:tabular-nums;color:var(--ink2);font-size:13px;min-width:78px}
+.tf-plan .tf-op-h, .tf-plan .tf-its{color:var(--muted)}
+.tf-canc{opacity:.55;text-decoration:line-through}
+.tf-atras .tf-data{color:#a61b1b;font-weight:700}
+.tf-feita .tf-data{color:#1b5e20;font-weight:700}
+.tf-its{display:grid;grid-template-columns:1fr auto;gap:2px 12px;font-size:13px;padding:4px 0 0 8px}
+.tf-its .num{font-variant-numeric:tabular-nums;text-align:right}
+.tf-ev{display:flex;gap:8px;font-size:13.5px;padding:5px 0;border-top:1px dashed var(--line)}
+.cp-tag.ok{background:#dcf7ec;color:#1b5e20}
 .cp-topbtns{display:flex;justify-content:space-between;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 /* ===== Aferições ===== */
 .af-head{display:flex;align-items:center;gap:10px;margin:4px 0 8px}
