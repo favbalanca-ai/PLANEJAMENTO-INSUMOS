@@ -91,6 +91,23 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   com `%PDF`, até 15 MB, resposta 200), grava na pasta "Bulas" e responde `arquivo:{url,id,nome,kb}`; erro vem em
   `msgs`. Não invalida o cache.
 
+## Revisão fase 2 — planilha rápida de verdade (Code.gs, out/2026)
+- **Gravação incremental nas abas KEY|JSON** (`writeMapIncr_`, usada por `writeMapApp` e `writeMapAppLeg_`): lê só
+  KEY e ATUALIZADO, atualiza a linha de quem mudou e acrescenta as chaves novas no fim. Antes, cada envio relia e
+  regravava a aba inteira. Cai no caminho completo quando a aba é nova/tem cabeçalho diferente, quando KEY virou
+  número (conserto) ou com mais de 80 mudanças. Registro com JSON acima de 49 mil letras é **recusado com aviso**
+  em `msgs` (o resto grava) — antes estourava o limite da célula e travava o tipo inteiro.
+- **Trava do `doPost` não segura upload**: `__campoFoto`, `__bulaArquivo`, `__bulaBaixar`, `__nfeFoto` rodam sem a
+  trava (só Drive/UrlFetch); o `tryLock` caiu de 45 s para 20 s. O payload é lido antes da trava.
+- **Banco de preços e SST fora da leitura fria da base**: `precos_app` e `equipe_sst` são chaves próprias do cache
+  com TTL de 6 h (`APP_TTL_`); `__precos` continua limpando tudo na hora. A leitura da equipe para em 600 linhas.
+- **Checagem leve sem MD5 do pacote**: `?h=1` responde o MD5 dos **carimbos** das partes do cache (`pa_<k>_ts`,
+  gravados a cada releitura) + usuário logado (`cacheStamps_`). Parte invalidada/vencida → `frio`. Cache gravado
+  por versão antiga ganha carimbo na primeira leitura (`cacheCarimbaFaltantes_`). Pedaços de cache de 30 mil letras.
+- **Datas no fuso da planilha** (`tz_()` = `getSpreadsheetTimeZone()`) em todos os `formatDate` e em `dateISO`.
+  `sync/appsscript.json` com `America/Sao_Paulo` (opcional: colar se o projeto mostrar o manifesto).
+- Recusas (sessão vencida/sem permissão) não invalidam o cache; o conserto leve da NF-e invalida as chaves de NF-e.
+
 ## Tarefas/Equipe com merge por registro e hora do servidor (v216)
 - **`__tarefas`** com `merge:1`: `{funcionarios, tarefas, excl:{f:{id:_u}, t:{id:_u}}}`. As abas **EQUIPE APP**
   (ID · NOME · FUNCAO · ATUALIZADO · DEL) e **TAREFAS APP** (… · OPKEY · ATUALIZADO · DEL) guardam `_u` e a lápide
