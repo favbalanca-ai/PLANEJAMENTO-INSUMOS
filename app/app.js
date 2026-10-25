@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-225';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-226';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6387,7 +6387,7 @@ function mapaFabEscolher(){ const lims=limitesAll(), pos=MAPA_GEO.pos, tals=talh
 const NDVI_KEY='planejamento_cdse';
 const MAPA_NDVI={layer:null, avisou:false};
 function ndviCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(NDVI_KEY)||'{}')||{}; }catch(e){}
-  return Object.assign({inst:'', layer:'NDVI', on:false, dias:30, maxcc:30, fim:''}, c); }
+  return Object.assign({inst:'', layer:'VEGETATION_INDEX', on:false, dias:30, maxcc:30, fim:''}, c); }   // mesma camada do Monitor de Irrigação
 function ndviSalvar(c){ lsSet(NDVI_KEY, JSON.stringify(c)); }
 function ndviPeriodo(c){ const fim=_isISO(c.fim)?c.fim:_hojeISO(), d=new Date(fim+'T12:00:00'); d.setDate(d.getDate()-(+c.dias||30)); return {ini:d.toISOString().slice(0,10), fim}; }
 function ndviAplicar(){ const L=window.L, c=ndviCfg(); if(!_map||!L) return;
@@ -6400,7 +6400,7 @@ function ndviAplicar(){ const L=window.L, c=ndviCfg(); if(!_map||!L) return;
   MAPA_NDVI.layer.addTo(_map); const st=document.getElementById('ndvi-st'); if(st) st.textContent=`imagem mais recente entre ${fmtData(per.ini)} e ${fmtData(per.fim)} · nuvem ≤ ${c.maxcc}%`; }
 function ndviToggle(){ const c=ndviCfg(); if(!c.inst){ const d=document.getElementById('ndvi-cfg'); if(d) d.open=true; toast('Cole o ID da configuração do Copernicus para ligar o NDVI'); return; } c.on=!c.on; ndviSalvar(c); ndviAplicar(); ndviBotao(); }
 function ndviBotao(){ const b=document.querySelector('[data-act="mapaNdvi"]'), c=ndviCfg(); if(b){ b.classList.toggle('on', !!(c.on&&c.inst)); b.setAttribute('aria-pressed', String(!!(c.on&&c.inst))); } const ctr=document.getElementById('ndvi-ctr'); if(ctr) ctr.hidden=!(c.on&&c.inst); }
-function ndviCampo(el){ const c=ndviCfg(); const k=el.dataset.ndvi; if(k==='inst') c.inst=el.value.trim(); else if(k==='layer') c.layer=el.value.trim()||'NDVI'; else if(k==='dias') c.dias=+el.value||30; else if(k==='maxcc') c.maxcc=+el.value||30; else if(k==='fim') c.fim=el.value;
+function ndviCampo(el){ const c=ndviCfg(); const k=el.dataset.ndvi; if(k==='inst') c.inst=el.value.trim(); else if(k==='layer') c.layer=el.value.trim()||'VEGETATION_INDEX'; else if(k==='dias') c.dias=+el.value||30; else if(k==='maxcc') c.maxcc=+el.value||30; else if(k==='fim') c.fim=el.value;
   ndviSalvar(c); if(c.on&&c.inst) ndviAplicar(); ndviBotao(); }
 /* ============ Módulo Campo: Painel, Timeline e Relatórios (visão consolidada) ============ */
 function _capf(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
@@ -6790,8 +6790,8 @@ V.mapa=function(){
       <label>nuvem ≤<select class="sel" data-ndvi="maxcc">${[10,20,30,50,80].map(d=>`<option value="${d}"${+c.maxcc===d?' selected':''}>${d}%</option>`).join('')}</select></label>
       <span id="ndvi-st" class="mut"></span></div>
     <details id="ndvi-cfg" class="ndvi-cfg"><summary>⚙️ Configurar NDVI (Copernicus Sentinel-2)</summary>
-      <div class="app-grid" style="padding:6px 14px 4px"><label>ID da configuração (instance)<input class="txt" data-ndvi="inst" value="${esc(c.inst)}" placeholder="ex.: 1a2b3c4d-…"></label><label>Nome da camada<input class="txt" data-ndvi="layer" value="${esc(c.layer||'NDVI')}" placeholder="NDVI"></label></div>
-      <ol class="mut ndvi-passos"><li>Crie uma conta grátis em <b>dataspace.copernicus.eu</b> (botão Register).</li><li>Entre no <b>Dashboard</b> → <b>Configuration Utility</b> → <b>New configuration</b>, nome livre, modelo <b>Default (Sentinel-2 L2A)</b> → Create.</li><li>Copie o <b>ID</b> da configuração e cole acima. A camada padrão chama <b>NDVI</b>.</li><li>Ligue com o botão 🛰️ NDVI. O app pede a imagem mais recente da janela escolhida, com nuvem até o limite.</li></ol>
+      <div class="app-grid" style="padding:6px 14px 4px"><label>ID da configuração (instance)<input class="txt" data-ndvi="inst" value="${esc(c.inst)}" placeholder="ex.: 1a2b3c4d-…"></label><label>Nome da camada<input class="txt" data-ndvi="layer" value="${esc(c.layer||'VEGETATION_INDEX')}" placeholder="VEGETATION_INDEX"></label></div>
+      <ol class="mut ndvi-passos"><li>Crie uma conta grátis em <b>dataspace.copernicus.eu</b> (botão Register).</li><li>Entre no <b>Dashboard</b> → <b>Configuration Utility</b> → <b>New configuration</b>, nome livre, modelo <b>Default (Sentinel-2 L2A)</b> → Create.</li><li>Copie o <b>ID</b> da configuração e cole acima. É o mesmo <b>Instance ID</b> do Monitor de Irrigação (planilha dele, aba CONFIG APP, chave COPERNICUS INSTANCE ID) — pode usar o mesmo. A camada padrão chama <b>VEGETATION_INDEX</b> (se a sua configuração usar outro nome, como NDVI, troque ao lado).</li><li>Ligue com o botão 🛰️ NDVI. O app pede a imagem mais recente da janela escolhida, com nuvem até o limite.</li></ol>
       <p class="mut" style="font-size:11px;padding:0 14px 10px">O ID fica só neste aparelho (como a URL da planilha). Cota grátis do Copernicus: milhares de imagens por mês, mais que suficiente para a fazenda.</p></details>`; })()}
     <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
       <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
