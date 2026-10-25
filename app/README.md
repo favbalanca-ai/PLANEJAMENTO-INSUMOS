@@ -102,7 +102,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   **Copernicus Data Space** (Sentinel-2, 10 m) com o ID da configuração que a dona cola em *⚙️ Configurar NDVI*
   (guardado só no aparelho, `planejamento_cdse`; é o mesmo Instance ID do Monitor de Irrigação, camada padrão `VEGETATION_INDEX`). **v227:** se a planilha tiver a aba **CONFIG APP** com `COPERNICUS INSTANCE ID`, o puxar traz `config_app` e o app usa esse ID em todos os aparelhos (`ndviPlanilha`); o ID colado no aparelho continua vencendo; controles de data final, janela (7–90 dias) e nuvem máxima;
   o serviço devolve a imagem mais recente da janela (`PRIORITY=mostRecent`); legenda no mapa; erro de tile avisa
-  uma vez. A ficha do talhão passou a abrir com as seções **encolhidas**.
+  uma vez. **Talhão em foco (v228)**: escolhendo um talhão com limite, o app pede ao FIS do Sentinel Hub as
+  estatísticas do NDVI dentro do limite por passagem (90 dias, nuvem ≤ 60 %, histograma de 20 faixas;
+  `ndviCenas` — direto do celular ou, se o navegador bloquear, pela planilha `?acao=fis`), calcula o 5º e o 95º
+  percentil da passagem escolhida e desenha a camada **recortada no limite** (`GEOMETRY` em WKT) com um evalscript
+  de **6 faixas** entre esses percentis (`ndviEvalFaixas`, cores RdYlBu, vermelho = baixo, azul = alto). A legenda
+  mostra os 6 intervalos, a média e a variação; seletor de passagem (mais nova primeiro); mapa enquadra o talhão;
+  com o NDVI ligado os limites ficam só no contorno tracejado. A ficha do talhão passou a abrir com as seções **encolhidas**.
 - **Mapa → Ficha do talhão (v218)** — tocar no limite do talhão abre um cartão (`talFichaOpen`) com nome,
   área do limite e do cadastro, **resumo** (cultura, variedade, plantio + DAP, estádio, status das operações)
   e as operações das duas safras agrupadas por tipo (`talFichaTipo`): **Semeadura**, **Adubação**,
