@@ -23,3 +23,7 @@ cd app && python3 -m http.server 8091   # abra http://localhost:8091
 
 Detalhes e publicação no GitHub Pages: `app/README.md`.
 Para regerar os dados: `python3 scripts/extract_data.py PLANEJAMENTO_SAFRA_2627_ORIGINAL.xlsx`.
+
+**Catálogo MAPA (Agrofit):** `app/agrofit/*.json` é gerado pela ação do GitHub *Catálogo MAPA (Agrofit)*
+(todo dia 1 ou em Actions → Run workflow) a partir dos dados abertos do Ministério da Agricultura, com
+`scripts/agrofit_build.py`; as culturas com alvos ficam em `scripts/agrofit_culturas.txt`.

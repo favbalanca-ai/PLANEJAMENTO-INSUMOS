@@ -323,10 +323,10 @@ function campoFoto_(f){ return driveArquivo_(f, 'Fotos do Campo', 'image/jpeg', 
 // ---- BULAS dos produtos (módulo Preços): ingrediente ativo, concentração, pH, dose da bula, carência, reentrada, links ----
 // KEY = nome do produto (como no PORTIFÓLIO). Bula/FISPQ em PDF vão para a pasta "Bulas" ao lado da planilha.
 function writeBulasApp(map){
-  return writeMapAppLeg_(BULAS_SHEET, map, ['PRODUTO','INGREDIENTE ATIVO','CONCENTRAÇÃO','pH CALDA','DOSE MÍN','DOSE MÁX','UN DOSE','CARÊNCIA (dias)','REENTRADA (h)','CLASSE TOX.','GRUPO / MODO DE AÇÃO','EMBALAGEM','BULA','FISPQ','OBS','REGISTRO'], function(r){
+  return writeMapAppLeg_(BULAS_SHEET, map, ['PRODUTO','INGREDIENTE ATIVO','CONCENTRAÇÃO','pH CALDA','DOSE MÍN','DOSE MÁX','UN DOSE','CARÊNCIA (dias)','REENTRADA (h)','CLASSE TOX.','GRUPO / MODO DE AÇÃO','FORMULAÇÃO','REGISTRO MAPA','EMBALAGEM','BULA','FISPQ','OBS','REGISTRO'], function(r){
     var emb = (r.emb !== '' && r.emb != null && +r.emb > 0) ? (+r.emb + ' ' + S(r.embUn)).trim() : '';   // ex.: "5 L", "15 kg" (arredondar a calda pela embalagem)
     return [T_(r.produto), T_(r.ia), T_(r.conc), T_(r.ph), r.doseMin!==''&&r.doseMin!=null?+r.doseMin:'', r.doseMax!==''&&r.doseMax!=null?+r.doseMax:'', T_(r.doseUn),
-      r.carencia!==''&&r.carencia!=null?+r.carencia:'', r.reentrada!==''&&r.reentrada!=null?+r.reentrada:'', T_(r.tox), T_(r.grupo), T_(emb), T_(r.bulaUrl), T_(r.fispqUrl), T_(r.obs), r.del ? 'EXCLUÍDA' : '']; });
+      r.carencia!==''&&r.carencia!=null?+r.carencia:'', r.reentrada!==''&&r.reentrada!=null?+r.reentrada:'', T_(r.tox), T_(r.grupo), T_(r.form), (S(r.reg) ? "'" + S(r.reg) : ''), T_(emb), T_(r.bulaUrl), T_(r.fispqUrl), T_(r.obs), r.del ? 'EXCLUÍDA' : '']; });
 }
 function bulaArquivo_(f){ return driveArquivo_(f, 'Bulas', 'application/pdf', 'bula-' + Date.now() + '.pdf'); }
 // baixa um PDF (bula / FISPQ) de um LINK da web e guarda na pasta "Bulas" — o navegador do app não consegue

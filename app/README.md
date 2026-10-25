@@ -276,6 +276,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   (`.content:has(.oq-wrap)`), e no modo *Por data (semanas)* a semana com **3+ cartões** num talhão vira
   coluna **dupla** e com **6+** vira **tripla** (`oq-cell-2`/`oq-cell-3`, cabeçalho com a mesma largura);
   no celular continua uma coluna simples.
+- **🏛️ Catálogo MAPA (Agrofit)** (`#/catalogo`, v222; menu do módulo Preços e ⋯ Mais do Campo) — todos os
+  **defensivos registrados no Ministério da Agricultura** (4.4 mil produtos): chips por classe com contagem,
+  busca por marca / ingrediente ativo / registro / fabricante e filtro por cultura (produtos "todas as culturas"
+  entram em qualquer filtro). A ficha mostra tipo, nome comercial, princípio ativo com concentração, fabricante,
+  registro MAPA, formulação, classes toxicológica e ambiental, modo de ação, categoria, uso em orgânicos,
+  culturas registradas e, para as culturas da fazenda, os **alvos registrados** (nome comum + científico).
+  Os dados são `app/agrofit/produtos.json` (1,7 MB) e `pragas_<cultura>.json` (50–150 KB cada), gerados pela
+  ação do GitHub **Catálogo MAPA (Agrofit)** (`scripts/agrofit_build.py`, culturas em
+  `scripts/agrofit_culturas.txt`) todo dia 1 ou por *Run workflow*; o app baixa ao abrir a tela e guarda no
+  IndexedDB (`agrofitCarregar`), então funciona sem internet depois da primeira vez. Nada vai para a planilha.
+  - **Bula → 🏛️ Buscar no catálogo MAPA**: procura o produto pelo nome (ou pelo registro já preenchido), lista
+    os candidatos e, ao escolher, preenche **ingrediente ativo, concentração, classe tox., grupo/modo de ação,
+    formulação e registro MAPA** (campos novos `form` e `reg`); você confere e salva.
 - **Bula → 🔎 Buscar na web e ⬇ Baixar e anexar pelo link** — embaixo de "Link da bula" e "Link da FISPQ".
   Buscar abre o Google com a pesquisa pronta (`"PRODUTO" bula pdf` / `FISPQ pdf`); a dona copia o endereço do PDF
   para o campo e toca em Baixar: o app manda `__bulaBaixar:{url,tipo}` e a **planilha** baixa o arquivo (o navegador

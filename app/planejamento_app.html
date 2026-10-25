@@ -1862,6 +1862,42 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .tk-emb{color:var(--ink2);font-weight:700;font-size:11px;white-space:nowrap}
 .bula-web{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
 
+/* ===== Catálogo MAPA (Agrofit) ===== */
+.ag-tb{align-items:center}
+.ag-tb .search{max-width:none}
+.ag-chips{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 8px;align-items:center}
+.ag-chips .chip-f{padding:5px 11px;font-size:12px;cursor:pointer}
+.ag-chips .chip-f b{margin-left:4px;font-size:11px;opacity:.8}
+.ag-chips .chip-f.ag-semalvo{opacity:.7}
+.ag-outras{font-size:12px;padding:5px 8px}
+.ag-n{font-size:12px;padding:4px 14px}
+.ag-lista{display:flex;flex-direction:column}
+.ag-item{display:block;padding:10px 14px;border-top:1px solid var(--line);text-decoration:none;color:var(--ink);cursor:pointer}
+.ag-item:hover{background:#f7fafb}
+.ag-it-h{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.ag-it-h b{font-size:14px;line-height:1.25;min-width:0}
+.ag-cl{flex:none;font-size:11px;font-weight:700;padding:2px 9px;border-radius:10px;background:#e3f2e8;color:#1b5e20;white-space:nowrap}
+.ag-ia{font-size:12.5px;color:var(--muted);font-style:italic;margin-top:2px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.ag-sub{font-size:11.5px;color:var(--ink2);margin-top:3px}
+.ag-mais{margin:10px 14px 14px;align-self:center}
+.ag-ficha .panel-head{flex-wrap:wrap}
+.ag-ficha .panel-head h2{flex:1;min-width:0;font-size:18px}
+.ag-lins{padding:4px 14px}
+.ag-lin{display:grid;grid-template-columns:minmax(120px,36%) 1fr;gap:4px 14px;padding:7px 0;border-top:1px solid #eef2f4;font-size:14px}
+.ag-lin span{color:var(--muted)}
+.ag-lin b{font-weight:500;word-break:break-word}
+.ag-sec{padding:6px 14px 10px;border-top:1px solid var(--line)}
+.ag-sec h4{font-size:14px;font-weight:800;margin:6px 0}
+.ag-sec .ag-chips{padding:0}
+.ag-alvos{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:4px 14px;font-size:13px}
+.ag-alvos div{padding:4px 0;border-bottom:1px dashed #eef2f4}
+.ag-alvos i{display:block;color:var(--muted);font-size:12px}
+.bula-mapa{display:flex;flex-direction:column;gap:4px;width:100%}
+.ag-cand{text-align:left;border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px;cursor:pointer;font-size:13px;line-height:1.3}
+.ag-cand:hover{background:#eef7f9}
+.ag-cand small{color:var(--muted)}
+@media (max-width:640px){ .ag-lin{grid-template-columns:1fr;gap:1px} .ag-lin span{font-size:11.5px} .ag-chips{padding-left:10px;padding-right:10px} }
+
 </style>
 </head>
 <body>
@@ -1905,6 +1941,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
       <a href="#/afericao" data-view="afericao" data-mod="campo" data-mais="campo"><span class="ico">🧮</span><span class="lbl">Aferição</span><span class="lbl-s">Aferir</span></a>
       <a href="#/recomendacao" data-view="recomendacao" data-mod="campo" data-mais="campo"><span class="ico">💊</span><span class="lbl">Recomendação</span><span class="lbl-s">Recom.</span></a>
       <a href="#/misturas" data-view="misturas" data-mod="campo" data-mais="campo"><span class="ico">⚗️</span><span class="lbl">Misturas</span><span class="lbl-s">Mistur.</span></a>
+      <a href="#/catalogo" data-view="catalogo" data-mod="precos campo" data-mais="campo"><span class="ico">🏛️</span><span class="lbl">Catálogo MAPA</span><span class="lbl-s">MAPA</span></a>
       <a href="#/relatorios" data-view="relatorios" data-mod="campo" data-mais="campo"><span class="ico">📄</span><span class="lbl">Relatórios</span><span class="lbl-s">Relat.</span></a>
       <a href="#/mais" class="nav-mais" data-act="navMais" data-mod="campo" hidden><span class="ico">⋯</span><span class="lbl">Mais</span><span class="lbl-s">Mais</span></a>
       <a href="#/sync" data-view="sync" data-mod="planejamento campo" data-mais="campo"><span class="ico">🔄</span><span class="lbl">Sincronizar</span><span class="lbl-s">Sync</span></a>
@@ -1960,7 +1997,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-221';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-222';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2382,7 +2419,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -2393,7 +2430,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -3532,6 +3569,7 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
     setTimeout(()=>route({keepScroll:true}),0); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
+document.addEventListener('input',e=>{ if(e.target.id==='ag-q') agrofitBusca(e.target.value); });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
   const d=compraDraft;
@@ -6752,6 +6790,94 @@ function ocorApplyPulled(map){
   if(pend||fotoPend.length) scheduleOcorPush();
   return changed;
 }
+// ===== CATÁLOGO MAPA (AGROFIT): todos os defensivos registrados no Ministério da Agricultura =====
+// Os JSON em app/agrofit/ são gerados pela ação do GitHub (.github/workflows/agrofit-atualiza.yml) a partir dos
+// dados abertos do MAPA. O app baixa produtos.json ao abrir a tela e guarda no IndexedDB (funciona sem internet
+// depois). Pragas/alvos por cultura ficam em arquivos separados (pragas_<cultura>.json), baixados sob demanda.
+const AGROFIT={dados:null, carregando:null, erro:'', pragas:{}, q:'', classe:'', cultura:'', lim:60};
+const AGROFIT_IDB='agrofit_produtos';
+const _agNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+function agrofitIndexa(d){ if(!d||!Array.isArray(d.produtos)) return d; const cu=d.culturas||[];
+  d.produtos.forEach(p=>{ p._s=_agNorm([(p.m||[]).join(' '), p.ia, p.r, p.t, p.c].join(' | ')); p._cu=(p.cu||[]).map(i=>cu[i]||''); p._todas=p._cu.some(c=>/^todas as culturas$/i.test(c)); });
+  d._porReg={}; d.produtos.forEach(p=>{ d._porReg[p.r]=p; }); return d; }
+async function agrofitCarregar(force){
+  if(AGROFIT.dados&&!force) return AGROFIT.dados; if(AGROFIT.carregando) return AGROFIT.carregando;
+  AGROFIT.carregando=(async()=>{ let d=null; AGROFIT.erro='';
+    try{ const r=await fetch('agrofit/produtos.json',{cache:'no-cache'}); if(r.ok){ d=await r.json(); if(d&&d.produtos){ idbSet(AGROFIT_IDB,d); } else d=null; } }catch(e){}
+    if(!d){ d=await idbGet(AGROFIT_IDB); AGROFIT.erro=d?'Sem internet: mostrando o catálogo guardado no aparelho.':'Não consegui baixar o catálogo — precisa de internet na primeira vez.'; }
+    AGROFIT.dados=d?agrofitIndexa(d):null; AGROFIT.carregando=null; return AGROFIT.dados; })();
+  return AGROFIT.carregando; }
+// arquivo de pragas da cultura (chave em pragasCulturas; "Milho*" cobre "Milho (sementes)")
+function agrofitPragasArq(cultura){ const d=AGROFIT.dados; if(!d||!d.pragasCulturas||!cultura) return null; const n=_agNorm(cultura);
+  for(const k in d.pragasCulturas){ const kn=_agNorm(k); if(kn.endsWith('*')?n.startsWith(kn.slice(0,-1).trim()):kn===n) return {chave:k, arq:d.pragasCulturas[k]}; } return null; }
+async function agrofitPragas(cultura){ const a=agrofitPragasArq(cultura); if(!a) return null; if(AGROFIT.pragas[a.chave]) return AGROFIT.pragas[a.chave];
+  let d=null; try{ const r=await fetch('agrofit/'+a.arq,{cache:'no-cache'}); if(r.ok){ d=await r.json(); idbSet('agrofit_'+a.arq,d); } }catch(e){}
+  if(!d) d=await idbGet('agrofit_'+a.arq); if(d) AGROFIT.pragas[a.chave]=d; return d||null; }
+function agrofitFiltra(){ const d=AGROFIT.dados; if(!d) return []; const q=_agNorm(AGROFIT.q).trim(), toks=q.split(/\s+/).filter(Boolean), cu=_agNorm(AGROFIT.cultura);
+  return d.produtos.filter(p=>(!AGROFIT.classe||p.c===AGROFIT.classe) && (!cu||p._todas||p._cu.some(c=>_agNorm(c)===cu)) && toks.every(t=>p._s.indexOf(t)>=0)); }
+const AG_TOX={'1':'🔴','2':'🟠','3':'🟡','4':'🔵','5':'🟢'};
+function agToxCurto(t){ const m=/Categoria\s*(\d)/i.exec(t||''); return m?`${AG_TOX[m[1]]||''} Cat. ${m[1]}`:(t?'⚪ '+t.split(' - ')[0]:'—'); }
+function agItem(p){ return `<a class="ag-item" data-go="#/catalogo/${encodeURIComponent(p.r)}"><div class="ag-it-h"><b>${esc((p.m||[]).join(' · '))}</b><span class="ag-cl">${esc(p.c||'—')}</span></div>
+    <div class="ag-ia">${esc(p.ia||'—')}</div><div class="ag-sub">${esc(p.t||'')}${p.f?' · '+esc(p.f.split(' - ')[0]):''} · ${agToxCurto(p.tox)} · reg. ${esc(p.r)}</div></a>`; }
+function agrofitListaHtml(){ const d=AGROFIT.dados, lista=agrofitFiltra(), vis=lista.slice(0,AGROFIT.lim);
+  return `<div class="ag-n mut">${lista.length} de ${d.n} produto(s)${AGROFIT.cultura?' · '+esc(AGROFIT.cultura):''}</div>${vis.map(agItem).join('')||'<p class="mut" style="padding:14px">Nada encontrado.</p>'}
+    ${lista.length>vis.length?`<button class="btn btn-outline btn-sm ag-mais" data-act="agMais">Mostrar mais (${lista.length-vis.length})</button>`:''}`; }
+function agrofitListaRefresh(){ const el=document.getElementById('ag-lista'); if(el) el.innerHTML=agrofitListaHtml();
+  const d=AGROFIT.dados; if(!d) return; const cont={}; d.produtos.forEach(p=>{ const cu=_agNorm(AGROFIT.cultura); if(!cu||p._todas||p._cu.some(c=>_agNorm(c)===cu)) cont[p.c]=(cont[p.c]||0)+1; });
+  document.querySelectorAll('#ag-classes .chip-f').forEach(ch=>{ const c=ch.dataset.classe; const n=c?(cont[c]||0):Object.values(cont).reduce((a,b)=>a+b,0); const b=ch.querySelector('b'); if(b) b.textContent=n; ch.classList.toggle('on', c===AGROFIT.classe); }); }
+let _agQTimer=null;
+function agrofitBusca(v){ AGROFIT.q=v; AGROFIT.lim=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitListaRefresh, 120); }
+V.catalogo=function(){
+  const reg=decodeURIComponent(String(location.hash.split('/')[2]||''));
+  if(!AGROFIT.dados){ if(!AGROFIT.carregando) agrofitCarregar().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); });
+    return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">defensivos registrados no Ministério da Agricultura (AGROFIT)</span></div>
+      <p class="mut" style="padding:18px">${AGROFIT.erro?esc(AGROFIT.erro)+' <button class="btn btn-outline btn-sm" data-act="agRecarregar">Tentar de novo</button>':'⏳ Baixando o catálogo (uma vez; depois fica no aparelho)…'}</p></div>`; }
+  const d=AGROFIT.dados;
+  if(reg) return agrofitFichaHtml(reg);
+  const classes=Object.keys(d.classes||{}); const top=classes.slice(0,14), resto=classes.slice(14);
+  const chip=(c,lbl)=>`<button class="chip-f${AGROFIT.classe===c?' on':''}" data-act="agClasse" data-classe="${esc(c)}">${esc(lbl)} <b>${c?(d.classes[c]||0):d.n}</b></button>`;
+  const cultOpts=`<option value="">Todas as culturas</option>`+(d.culturas||[]).map(c=>`<option value="${esc(c)}"${c===AGROFIT.cultura?' selected':''}>${esc(c)}${agrofitPragasArq(c)?' ✓':''}</option>`).join('');
+  return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">${d.n} defensivos registrados · AGROFIT · atualizado em ${esc(fmtData(d.atualizado))}</span></div>
+    ${AGROFIT.erro?`<p class="lt-aviso">${esc(AGROFIT.erro)}</p>`:''}
+    <div class="toolbar ag-tb"><div class="search"><input id="ag-q" placeholder="Buscar marca, ingrediente ativo, registro ou fabricante…" value="${esc(AGROFIT.q)}"></div>
+      <select class="sel" id="ag-cult" title="Só produtos registrados para a cultura (✓ = com alvos no app)">${cultOpts}</select></div>
+    <div class="ag-chips" id="ag-classes">${chip('','Total')}${top.map(c=>chip(c,c)).join('')}${resto.length?`<select class="sel ag-outras" id="ag-outras"><option value="">Outras classes…</option>${resto.map(c=>`<option value="${esc(c)}"${AGROFIT.classe===c?' selected':''}>${esc(c)} (${d.classes[c]})</option>`).join('')}</select>`:''}</div>
+    <div id="ag-lista" class="ag-lista">${agrofitListaHtml()}</div>
+    <p class="mut" style="font-size:11px;padding:8px 14px 12px">Fonte: ${esc(d.fonte||'MAPA — AGROFIT')}. Informação de registro, não substitui a bula. Alvos por cultura disponíveis para: ${Object.keys(d.pragasCulturas||{}).map(k=>esc(k.replace('*',''))).join(', ')||'—'} (lista em <code>scripts/agrofit_culturas.txt</code>).</p></div>`;
+};
+function agrofitFichaHtml(reg){ const d=AGROFIT.dados, p=d._porReg[reg]; if(!p) return `<div class="panel"><p class="mut" style="padding:18px">Registro ${esc(reg)} não está no catálogo. <a class="link" data-go="#/catalogo">‹ Voltar</a></p></div>`;
+  const lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
+  const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&p._cu.some(c=>c===pref)?pref:(p._cu.find(c=>agrofitPragasArq(c))||'');   // cultura escolhida na ficha não mexe no filtro da lista
+  const a=cultSel?agrofitPragasArq(cultSel):null, pr=a&&AGROFIT.pragas[a.chave];
+  if(a&&!pr){ agrofitPragas(cultSel).then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); }
+  const alvos=pr?((pr.por[p.r]||[]).map(i=>pr.pragas[i]).filter(Boolean)):(p._todas&&pr?[]:null);
+  const chips=p._cu.map(c=>`<button class="chip-f${c===cultSel?' on':''}${agrofitPragasArq(c)?'':' ag-semalvo'}" data-act="agCult" data-cult="${esc(c)}" data-reg="${esc(p.r)}">${esc(c)}</button>`).join('');
+  return `<div class="panel ag-ficha"><div class="panel-head"><a class="link" data-go="#/catalogo">‹ Catálogo</a><h2>${esc((p.m||[]).join(' · '))}</h2><span class="ag-cl">${esc(p.c||'—')}</span></div>
+    <div class="ag-lins">${lin('Tipo','Defensivo agrícola (AGROFIT)')}${lin('Nome comercial',esc((p.m||[]).join('; ')))}${lin('Princípio ativo',esc(p.ia))}${lin('Fabricante / titular',esc(p.t))}${lin('Registro MAPA',esc(p.r))}
+      ${lin('Formulação',esc(p.f))}${lin('Classe toxicológica',esc(p.tox))}${lin('Classe ambiental',esc(p.amb))}${lin('Modo de ação',esc(p.ma))}${lin('Categoria',esc(p.c))}${lin('Uso em orgânicos',p.org==='SIM'?'Sim':(p.org==='OUTROS'?'Outros':'Não'))}</div>
+    <div class="ag-sec"><h4>Culturas registradas <span class="mut">(${p._cu.length})</span></h4><div class="ag-chips">${chips||'<span class="mut">—</span>'}</div></div>
+    <div class="ag-sec"><h4>Alvos registrados${cultSel?' em '+esc(cultSel):''}</h4>
+      ${!cultSel?'<p class="mut">Toque numa cultura acima.</p>':!a?'<p class="mut">Alvos desta cultura não estão no app (lista em scripts/agrofit_culturas.txt).</p>':!pr?'<p class="mut">⏳ carregando alvos…</p>':(alvos&&alvos.length?`<div class="ag-alvos">${alvos.map(x=>`<div><b>${esc(x[0]||'—')}</b>${x[1]?`<i>${esc(x[1])}</i>`:''}</div>`).join('')}</div>`:'<p class="mut">Nenhum alvo listado para esta cultura.</p>')}</div>
+    <div class="cp-btns"><button class="btn btn-outline btn-sm" data-act="agWeb" data-q="${esc((p.m||[])[0]||'')}">🔎 Bula na web</button><a class="btn btn-outline btn-sm" data-go="#/catalogo">‹ Voltar</a></div></div>`; }
+// busca no catálogo pelo nome do produto do app (marca): casa por nome normalizado, depois por palavras
+function agrofitBuscarNome(nome){ const d=AGROFIT.dados; if(!d) return []; const n=_agNorm(nome).replace(/[^a-z0-9]+/g,' ').trim(); if(!n) return [];
+  const toks=n.split(' ').filter(t=>t.length>1), pont=p=>{ let s=0; (p.m||[]).forEach(m=>{ const mn=_agNorm(m).replace(/[^a-z0-9]+/g,' ').trim(); if(mn===n) s=Math.max(s,100); else if(mn.startsWith(n)||n.startsWith(mn)) s=Math.max(s,60); else { const mt=mn.split(' '); const hit=toks.filter(t=>mt.includes(t)).length; if(hit) s=Math.max(s, 20*hit/toks.length + (mt[0]===toks[0]?15:0)); } }); return s; };
+  return d.produtos.map(p=>({p,s:pont(p)})).filter(x=>x.s>=20).sort((a,b)=>b.s-a.s).slice(0,6).map(x=>x.p); }
+// ingrediente ativo do MAPA → campos da bula: "2,4-D (ácido…) (406 g/L), picloram (…) (103.6 g/L)" → ia "2,4-D + picloram", conc "406 g/L + 103.6 g/L"
+function agrofitIaSplit(ia){ const partes=String(ia||'').split(/\s*(?:\+|,(?=\s*[a-zA-Z]))\s*/).map(x=>x.trim()).filter(Boolean), ias=[], concs=[];
+  partes.forEach(x=>{ const m=/\(([^()]*\d[^()]*(?:g|kg|ml|l|%)[^()]*)\)\s*$/i.exec(x); if(m){ concs.push(m[1].trim()); x=x.slice(0,m.index).trim(); } x=x.replace(/\s*\([^()]*\)\s*$/,'').trim(); if(x) ias.push(x); });
+  return {ia:ias.join(' + '), conc:concs.join(' + ')}; }
+async function bulaMapaBuscar(){ const p=bulaEditProd, box=document.getElementById('bula-mapa'); if(!p||!box) return; box.innerHTML='<span class="mut">⏳ catálogo…</span>';
+  const d=await agrofitCarregar(); if(!d){ box.innerHTML=`<span class="bula-warn">${esc(AGROFIT.erro||'catálogo indisponível')}</span>`; return; }
+  const ov=document.getElementById('bula-ov'), inp=ov&&ov.querySelector('input[data-bula="reg"]'), reg=((inp&&inp.value)||'').trim();
+  let lista=reg&&d._porReg[reg]?[d._porReg[reg]]:agrofitBuscarNome(p);
+  if(!lista.length){ box.innerHTML=`<span class="mut">Nenhum produto parecido com “${esc(p)}” no catálogo. <a class="link" data-go="#/catalogo">Abrir o catálogo</a></span>`; return; }
+  box.innerHTML=`<div class="mut" style="font-size:11px">Escolha o registro certo (${lista.length}):</div>`+lista.map(x=>`<button type="button" class="ag-cand" data-act="bulaMapaUsar" data-r="${esc(x.r)}"><b>${esc((x.m||[]).join(' · '))}</b> <span class="ag-cl">${esc(x.c)}</span><br><small>${esc(x.ia)} · ${esc(x.t)} · reg. ${esc(x.r)}</small></button>`).join(''); }
+function bulaMapaUsar(r){ const d=AGROFIT.dados, p=d&&d._porReg[r], ov=document.getElementById('bula-ov'); if(!p||!ov) return;
+  const sp=agrofitIaSplit(p.ia), tox=(m=>m?`${m[1]} — ${(p.tox.split(/\s[–—-]\s/)[1]||'').trim()}`:p.tox)(/Categoria\s*(\d)/i.exec(p.tox||''));
+  const vals={ia:sp.ia||p.ia, conc:sp.conc, tox, grupo:[p.c,p.ma].filter(Boolean).join(' · '), form:p.f, reg:p.r};
+  let n=0; for(const f in vals){ const i=ov.querySelector(`input[data-bula="${f}"]`); if(i&&vals[f]&&i.value.trim()!==vals[f]){ i.value=vals[f]; i.classList.add('edited'); n++; } }
+  const box=document.getElementById('bula-mapa'); if(box) box.innerHTML=`<span class="lim-ok">✔ ${(p.m||[])[0]} (reg. ${esc(p.r)}): ${n} campo(s) preenchido(s) — confira e Salvar.</span>`; }
 // ===== BULAS dos produtos (módulo Preços → aba "BULAS APP") =====
 // Uma ficha por produto: ingrediente ativo, concentração, pH ideal da calda, dose mín/máx da bula, carência,
 // reentrada, classe toxicológica, grupo/modo de ação, links (bula e FISPQ) e PDFs no Drive (pasta "Bulas").
@@ -6762,7 +6888,7 @@ const BULA_CAMPOS=[
   ['ia','Ingrediente ativo','text','ex.: Glifosato'],['conc','Concentração','text','ex.: 480 g/L'],['ph','pH ideal da calda','text','ex.: 5 a 6'],
   ['doseMin','Dose mínima (bula)','num','0'],['doseMax','Dose máxima (bula)','num','0'],['doseUn','Unidade da dose','text','ex.: L/ha'],
   ['carencia','Carência (dias)','num','dias'],['reentrada','Reentrada (horas)','num','horas'],['tox','Classe toxicológica','text','ex.: 3 — moderadamente tóxico'],
-  ['grupo','Grupo / modo de ação','text','ex.: HRAC 9 · inibidor da EPSPs'],['emb','Embalagem (tamanho)','num','ex.: 5'],['embUn','Unidade da embalagem','text','ex.: L, kg'],
+  ['grupo','Grupo / modo de ação','text','ex.: HRAC 9 · inibidor da EPSPs'],['form','Formulação','text','ex.: SL - Concentrado Solúvel'],['reg','Registro MAPA','text','ex.: 31918'],['emb','Embalagem (tamanho)','num','ex.: 5'],['embUn','Unidade da embalagem','text','ex.: L, kg'],
   ['bulaUrl','Link da bula','url','https://…'],['fispqUrl','Link da FISPQ','url','https://…'],
   ['obs','Observações (mistura, compatibilidade…)','text','']];
 function bulaKey(p){ return String(p||'').toUpperCase().replace(/\s+/g,' ').trim(); }
@@ -6817,6 +6943,7 @@ function bulaRender(){
       <label class="btn btn-outline btn-sm">Anexar PDF<input type="file" accept="application/pdf,.pdf" data-bulaarq="${t}" hidden></label></div>`; };
   ov.innerHTML=`<div class="modal-box bula-box"><div class="modal-head"><h3>📘 Bula — ${esc(p)}</h3><button class="icon-btn" data-act="bulaFechar" title="Fechar">✕</button></div>
     <div class="mut" style="font-size:12px">${[P.classe, P.empresa, P.un?'un. '+P.un:'', P.ativos?'planilha: '+P.ativos:''].filter(Boolean).map(esc).join(' · ')||'produto fora do portfólio da planilha'}</div>
+    <div class="bula-web" style="margin-top:6px"><button type="button" class="btn btn-outline btn-sm" data-act="bulaMapa" title="Procura o produto no catálogo do Ministério e preenche ingrediente ativo, concentração, classe tox., formulação e registro">🏛️ Buscar no catálogo MAPA</button><div id="bula-mapa" class="bula-mapa"></div></div>
     <div class="bula-body"><div class="app-grid bula-grid">${BULA_CAMPOS.map(([f,l,t,ph])=>`<label${f==='obs'||t==='url'?' class="w2"':''}>${l}<input ${t==='num'?'class="cell" inputmode="decimal"':'class="txt"'} data-bula="${f}" value="${esc(val(f))}" placeholder="${esc(ph)}">${t==='url'?`<span class="bula-web"><button type="button" class="btn btn-outline btn-sm" data-act="bulaBuscar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="Abre a busca na web já montada com o nome do produto">🔎 Buscar na web</button><button type="button" class="btn btn-outline btn-sm" data-act="bulaBaixar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="A planilha baixa o PDF deste link e guarda na pasta Bulas do Drive">⬇ Baixar e anexar pelo link</button></span>`:''}</label>`).join('')}</div>
       ${arq('bula','Bula')}${arq('fispq','FISPQ')}
       <p class="mut" style="font-size:11px;margin:6px 0 0">Vai para a aba <b>BULAS APP</b> da planilha e os PDFs para a pasta <b>Bulas</b> no Drive. A recomendação usa o ingrediente ativo, a carência, a reentrada e a faixa de dose.</p></div>
@@ -9001,7 +9128,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -9339,6 +9466,8 @@ document.addEventListener('change',e=>{
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
+  if(e.target.id==='ag-cult'){ AGROFIT.cultura=e.target.value; AGROFIT.lim=60; agrofitListaRefresh(); return; }
+  if(e.target.id==='ag-outras'){ if(e.target.value){ AGROFIT.classe=e.target.value; AGROFIT.lim=60; } agrofitListaRefresh(); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
@@ -9640,6 +9769,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='mistFotoDel'){ if(mistAvalForm){ mistAvalForm.fotos.splice(+a.i,1); mistAvalRender(); } }
     else if(a.act==='bulaAbrir'){ bulaAbrir(a.prod||''); }
     else if(a.act==='bulaBuscar'){ bulaBuscar(a.tipo); }
+    else if(a.act==='bulaMapa'){ bulaMapaBuscar(); }
+    else if(a.act==='bulaMapaUsar'){ bulaMapaUsar(a.r); }
+    else if(a.act==='agClasse'){ AGROFIT.classe=a.classe||''; AGROFIT.lim=60; const o=document.getElementById('ag-outras'); if(o&&!o.querySelector(`option[value="${CSS.escape(AGROFIT.classe)}"]`)) o.value=''; agrofitListaRefresh(); }
+    else if(a.act==='agMais'){ AGROFIT.lim+=120; agrofitListaRefresh(); }
+    else if(a.act==='agRecarregar'){ AGROFIT.erro=''; agrofitCarregar(true).then(()=>route({keepScroll:true})); route({keepScroll:true}); }
+    else if(a.act==='agCult'){ AGROFIT.cultFicha=a.cult; route({keepScroll:true}); }
+    else if(a.act==='agWeb'){ window.open('https://www.google.com/search?q='+encodeURIComponent(`"${a.q}" bula pdf`), '_blank', 'noopener'); }
     else if(a.act==='bulaBaixar'){ bulaBaixar(a.tipo); }
     else if(a.act==='bulaSalvar'){ bulaSalvar(); }
     else if(a.act==='bulaFechar'){ bulaFechar(); }

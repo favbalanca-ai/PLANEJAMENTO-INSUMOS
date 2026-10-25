@@ -81,8 +81,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 ## Bulas dos produtos (aba `BULAS APP`) e PDFs no Drive
 - **`__bula`** (Preços, Planejamento e Campo): uma ficha por produto (KEY = nome do produto), formato
   KEY|JSON|ATUALIZADO + colunas **PRODUTO · INGREDIENTE ATIVO · CONCENTRAÇÃO · pH CALDA · DOSE MÍN · DOSE MÁX ·
-  UN DOSE · CARÊNCIA (dias) · REENTRADA (h) · CLASSE TOX. · GRUPO / MODO DE AÇÃO · EMBALAGEM · BULA · FISPQ · OBS · REGISTRO**
-  (EMBALAGEM = tamanho + unidade, ex.: "5 L" / "15 kg" — usada para arredondar o volume por tanque).
+  UN DOSE · CARÊNCIA (dias) · REENTRADA (h) · CLASSE TOX. · GRUPO / MODO DE AÇÃO · FORMULAÇÃO · REGISTRO MAPA · EMBALAGEM · BULA · FISPQ · OBS · REGISTRO**
+  (EMBALAGEM = tamanho + unidade, ex.: "5 L" / "15 kg" — usada para arredondar o volume por tanque; FORMULAÇÃO e
+  REGISTRO MAPA vêm do botão "Buscar no catálogo MAPA" da bula — o registro é gravado como texto, para não perder o
+  zero à esquerda).
   Volta como **`bulas_app`** (também no puxar do módulo Preços). Pode editar na planilha: o merge é por chave e o
   mais recente vence.
 - **`__bulaArquivo`**: recebe a bula ou a FISPQ em PDF (até 8 MB) e grava na pasta **“Bulas”** ao lado da

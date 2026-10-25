@@ -1,0 +1,47 @@
+# Catálogo MAPA (AGROFIT): baixa os dados abertos do Ministério da Agricultura e regera app/agrofit/*.json.
+# Roda todo dia 1 (03:00 em Brasília) e quando você clicar em "Run workflow" na aba Actions do GitHub.
+# Se algo mudou, faz o commit na main e dispara a publicação do app (deploy-pages).
+name: Catálogo MAPA (Agrofit)
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: agrofit
+  cancel-in-progress: false
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar o CSV do MAPA (Produto Formulado)
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          CSV="https://dados.agricultura.gov.br/dataset/6c913699-e82e-4da3-a0a1-fb6c431e367f/resource/d30b30d7-e256-484e-9ab8-cd40974e1238/download/agrofitprodutosformulados.csv"
+          ok=0
+          for i in 1 2 3; do
+            if curl -sS -L --retry 2 --max-time 1500 -A "$UA" -o agrofit.csv "$CSV"; then ok=1; break; fi
+            echo "tentativa $i falhou; aguardando"; sleep 60
+          done
+          if [ "$ok" != "1" ]; then echo "MAPA fora do ar: usando a última cópia do Internet Archive"; curl -sS -L --max-time 1500 -o agrofit.csv "https://web.archive.org/web/2026id_/$CSV"; fi
+          ls -la agrofit.csv
+          head -c 300 agrofit.csv | head -1 | grep -q "NR_REGISTRO;MARCA_COMERCIAL" || { echo "arquivo inesperado"; head -c 500 agrofit.csv; exit 1; }
+      - name: Gerar os JSON do app
+        run: python3 scripts/agrofit_build.py agrofit.csv app/agrofit scripts/agrofit_culturas.txt
+      - name: Commit se mudou
+        id: commit
+        run: |
+          git add app/agrofit
+          if git diff --cached --quiet; then echo "sem mudanças"; echo "mudou=0" >> "$GITHUB_OUTPUT"; exit 0; fi
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Catálogo MAPA (Agrofit): atualização $(date -u +%Y-%m-%d)"
+          git push
+          echo "mudou=1" >> "$GITHUB_OUTPUT"
+      - name: Publicar o app (deploy-pages)
+        if: steps.commit.outputs.mudou == '1' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pages.yml --ref main
