@@ -1880,3 +1880,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ag-cand:hover{background:#eef7f9}
 .ag-cand small{color:var(--muted)}
 @media (max-width:640px){ .ag-lin{grid-template-columns:1fr;gap:1px} .ag-lin span{font-size:11.5px} .ag-chips{padding-left:10px;padding-right:10px} }
+.ag-abas{display:flex;gap:4px;padding:0 14px 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.ag-aba{padding:8px 12px;border-radius:9px 9px 0 0;font-weight:700;font-size:13px;color:var(--muted);text-decoration:none;cursor:pointer;border-bottom:3px solid transparent}
+.ag-aba.on{color:var(--teal);border-bottom-color:var(--teal);background:#f2f8f9}
+.ag-aba:hover{background:#f2f8f9}

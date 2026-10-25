@@ -26,4 +26,5 @@ Para regerar os dados: `python3 scripts/extract_data.py PLANEJAMENTO_SAFRA_2627_
 
 **Catálogo MAPA (Agrofit):** `app/agrofit/*.json` é gerado pela ação do GitHub *Catálogo MAPA (Agrofit)*
 (todo dia 1 ou em Actions → Run workflow) a partir dos dados abertos do Ministério da Agricultura, com
-`scripts/agrofit_build.py`; as culturas com alvos ficam em `scripts/agrofit_culturas.txt`.
+`scripts/agrofit_build.py` (defensivos e alvos; culturas com alvos em `scripts/agrofit_culturas.txt`) e
+`scripts/sigef_build.py` (cultivares com produção de sementes, SIGEF).

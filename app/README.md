@@ -286,6 +286,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ação do GitHub **Catálogo MAPA (Agrofit)** (`scripts/agrofit_build.py`, culturas em
   `scripts/agrofit_culturas.txt`) todo dia 1 ou por *Run workflow*; o app baixa ao abrir a tela e guarda no
   IndexedDB (`agrofitCarregar`), então funciona sem internet depois da primeira vez. Nada vai para a planilha.
+  - **Abas (v223)**: **🧪 Insumos** (acima) · **🐛 Alvos** · **🌱 Cultivares**. *Alvos* lista os ~1.700 alvos do
+    AGROFIT (`agrofit/alvos.json`): chips por tipo (praga, doença, planta daninha, nematoide — deduzido da classe dos
+    produtos registrados), busca por nome popular/científico, filtro por cultura; a ficha traz culturas com registro
+    e, nas culturas da fazenda, os **produtos registrados para o alvo** (abrem a ficha do insumo). *Cultivares*
+    (`agrofit/cultivares.json`, `scripts/sigef_build.py`) vem do **SIGEF** (dados abertos: campos de produção de
+    sementes inscritos no MAPA): 12,7 mil cultivares de 335 espécies, com espécie (nome comum + científico),
+    categorias de semente, campos por estado, safras e área inscrita; filtro por espécie e busca. O nº RNC não está
+    nos dados abertos — a ficha tem o botão *RNC no CultivarWeb* (site do Ministério, com código de imagem).
   - **Bula → 🏛️ Buscar no catálogo MAPA**: procura o produto pelo nome (ou pelo registro já preenchido), lista
     os candidatos e, ao escolher, preenche **ingrediente ativo, concentração, classe tox., grupo/modo de ação,
     formulação e registro MAPA** (campos novos `form` e `reg`); você confere e salva.

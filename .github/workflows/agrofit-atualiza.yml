@@ -1,4 +1,5 @@
-# Catálogo MAPA (AGROFIT): baixa os dados abertos do Ministério da Agricultura e regera app/agrofit/*.json.
+# Catálogo MAPA: baixa os dados abertos do Ministério da Agricultura (AGROFIT = defensivos e alvos; SIGEF = cultivares
+# com produção de sementes) e regera app/agrofit/*.json.
 # Roda todo dia 1 (03:00 em Brasília) e quando você clicar em "Run workflow" na aba Actions do GitHub.
 # Se algo mudou, faz o commit na main e dispara a publicação do app (deploy-pages).
 name: Catálogo MAPA (Agrofit)
@@ -31,6 +32,18 @@ jobs:
           head -c 300 agrofit.csv | head -1 | grep -q "NR_REGISTRO;MARCA_COMERCIAL" || { echo "arquivo inesperado"; head -c 500 agrofit.csv; exit 1; }
       - name: Gerar os JSON do app
         run: python3 scripts/agrofit_build.py agrofit.csv app/agrofit scripts/agrofit_culturas.txt
+      - name: Baixar o CSV do SIGEF (campos de produção de sementes) e gerar cultivares.json
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          SIGEF="https://dados.agricultura.gov.br/dataset/c7784a6e-f0ec-4196-a1ce-1d2d4784a58e/resource/6ab20c11-73a0-4ab0-8e13-2420d48dd6f5/download/sigefcamposproducaodesementes.csv"
+          ok=0
+          for i in 1 2 3; do
+            if curl -sS -L --retry 2 --max-time 900 -A "$UA" -o sigef.csv "$SIGEF"; then ok=1; break; fi
+            echo "tentativa $i falhou; aguardando"; sleep 60
+          done
+          if [ "$ok" != "1" ]; then echo "SIGEF indisponível: mantém o cultivares.json anterior"; exit 0; fi
+          head -c 300 sigef.csv | head -1 | grep -q "Safra;Especie;Categoria;Cultivar" || { echo "arquivo SIGEF inesperado — mantém o anterior"; head -c 300 sigef.csv; exit 0; }
+          python3 scripts/sigef_build.py sigef.csv app/agrofit
       - name: Commit se mudou
         id: commit
         run: |
