@@ -6,9 +6,6 @@ on:
   schedule:
     - cron: '0 6 1 * *'
   workflow_dispatch:
-  push:
-    branches: [ claude/empreendimentos-painel-visibilidade-anrppt ]
-    paths: [ '.github/workflows/agrofit-atualiza.yml', 'scripts/agrofit_build.py', 'scripts/agrofit_culturas.txt' ]
 permissions:
   contents: write
   actions: write
