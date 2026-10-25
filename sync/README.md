@@ -113,6 +113,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## CONFIG APP (opcional): Copernicus/NDVI para todos os aparelhos (v227)
+- Aba **CONFIG APP** no formato chave | valor (coluna A | B), igual à do Monitor de Irrigação. Chaves lidas hoje:
+  **COPERNICUS INSTANCE ID** (ID da configuração do Sentinel Hub no dataspace.copernicus.eu — pode ser o mesmo do
+  Monitor) e **COPERNICUS CAMADA NDVI** (padrão `VEGETATION_INDEX`; as de NDMI/infravermelho/cor natural também são
+  lidas para uso futuro). Aspas, tabulação e espaços na célula são descartados (`readConfigApp`).
+- Vai no puxar como **`config_app`** (`{copernicus:{instancia, camadas}}`), chave própria do cache com TTL de 6 h
+  (`APP_TTL_`), nos módulos Campo e Planejamento. O app usa esse ID quando não há um colado no aparelho
+  (⚙️ Configurar NDVI). Sem a aba, `instancia` vem vazia e nada muda.
+
 ## Tarefas/Equipe com merge por registro e hora do servidor (v216)
 - **`__tarefas`** com `merge:1`: `{funcionarios, tarefas, excl:{f:{id:_u}, t:{id:_u}}}`. As abas **EQUIPE APP**
   (ID · NOME · FUNCAO · ATUALIZADO · DEL) e **TAREFAS APP** (… · OPKEY · ATUALIZADO · DEL) guardam `_u` e a lápide

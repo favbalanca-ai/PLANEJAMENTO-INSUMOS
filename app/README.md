@@ -100,7 +100,7 @@ arquivo único `planejamento_app.html` para abrir localmente.
   satélite precisa de rede — o status avisa). O **＋** flutuante (`mapaFab`) abre o Nova Ação do talhão onde você
   está; fora dos limites ou sem GPS, abre a lista de talhões (mais próximos primeiro). **NDVI**: camada WMS do
   **Copernicus Data Space** (Sentinel-2, 10 m) com o ID da configuração que a dona cola em *⚙️ Configurar NDVI*
-  (guardado só no aparelho, `planejamento_cdse`; é o mesmo Instance ID do Monitor de Irrigação, camada padrão `VEGETATION_INDEX`); controles de data final, janela (7–90 dias) e nuvem máxima;
+  (guardado só no aparelho, `planejamento_cdse`; é o mesmo Instance ID do Monitor de Irrigação, camada padrão `VEGETATION_INDEX`). **v227:** se a planilha tiver a aba **CONFIG APP** com `COPERNICUS INSTANCE ID`, o puxar traz `config_app` e o app usa esse ID em todos os aparelhos (`ndviPlanilha`); o ID colado no aparelho continua vencendo; controles de data final, janela (7–90 dias) e nuvem máxima;
   o serviço devolve a imagem mais recente da janela (`PRIORITY=mostRecent`); legenda no mapa; erro de tile avisa
   uma vez. A ficha do talhão passou a abrir com as seções **encolhidas**.
 - **Mapa → Ficha do talhão (v218)** — tocar no limite do talhão abre um cartão (`talFichaOpen`) com nome,
