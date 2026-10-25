@@ -1897,6 +1897,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ag-cand:hover{background:#eef7f9}
 .ag-cand small{color:var(--muted)}
 @media (max-width:640px){ .ag-lin{grid-template-columns:1fr;gap:1px} .ag-lin span{font-size:11.5px} .ag-chips{padding-left:10px;padding-right:10px} }
+.ag-abas{display:flex;gap:4px;padding:0 14px 8px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.ag-aba{padding:8px 12px;border-radius:9px 9px 0 0;font-weight:700;font-size:13px;color:var(--muted);text-decoration:none;cursor:pointer;border-bottom:3px solid transparent}
+.ag-aba.on{color:var(--teal);border-bottom-color:var(--teal);background:#f2f8f9}
+.ag-aba:hover{background:#f2f8f9}
 
 </style>
 </head>
@@ -1997,7 +2001,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-222';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-223';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3569,7 +3573,7 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
     setTimeout(()=>route({keepScroll:true}),0); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
-document.addEventListener('input',e=>{ if(e.target.id==='ag-q') agrofitBusca(e.target.value); });
+document.addEventListener('input',e=>{ if(e.target.id==='ag-q') agrofitBusca(e.target.value); else if(e.target.id==='ag-qa'){ AGROFIT.qa=e.target.value; AGROFIT.limA=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitAlvosRefresh,120); } else if(e.target.id==='ag-qc'){ AGROFIT.qc=e.target.value; AGROFIT.limC=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitCvRefresh,120); } });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
   const d=compraDraft;
@@ -6794,7 +6798,7 @@ function ocorApplyPulled(map){
 // Os JSON em app/agrofit/ são gerados pela ação do GitHub (.github/workflows/agrofit-atualiza.yml) a partir dos
 // dados abertos do MAPA. O app baixa produtos.json ao abrir a tela e guarda no IndexedDB (funciona sem internet
 // depois). Pragas/alvos por cultura ficam em arquivos separados (pragas_<cultura>.json), baixados sob demanda.
-const AGROFIT={dados:null, carregando:null, erro:'', pragas:{}, q:'', classe:'', cultura:'', lim:60};
+const AGROFIT={dados:null, carregando:null, erro:'', pragas:{}, q:'', classe:'', cultura:'', lim:60, alvos:null, alvosCarregando:null, qa:'', tipo:'', limA:60, cv:null, cvCarregando:null, qc:'', esp:'', limC:60};
 const AGROFIT_IDB='agrofit_produtos';
 const _agNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 function agrofitIndexa(d){ if(!d||!Array.isArray(d.produtos)) return d; const cu=d.culturas||[];
@@ -6813,6 +6817,40 @@ function agrofitPragasArq(cultura){ const d=AGROFIT.dados; if(!d||!d.pragasCultu
 async function agrofitPragas(cultura){ const a=agrofitPragasArq(cultura); if(!a) return null; if(AGROFIT.pragas[a.chave]) return AGROFIT.pragas[a.chave];
   let d=null; try{ const r=await fetch('agrofit/'+a.arq,{cache:'no-cache'}); if(r.ok){ d=await r.json(); idbSet('agrofit_'+a.arq,d); } }catch(e){}
   if(!d) d=await idbGet('agrofit_'+a.arq); if(d) AGROFIT.pragas[a.chave]=d; return d||null; }
+// alvos (pragas, doenças, plantas daninhas…): agrofit/alvos.json, mesmo esquema (baixa 1 vez, guarda no aparelho)
+async function agrofitAlvosCarregar(force){ if(AGROFIT.alvos&&!force) return AGROFIT.alvos; if(AGROFIT.alvosCarregando) return AGROFIT.alvosCarregando;
+  AGROFIT.alvosCarregando=(async()=>{ let d=null; try{ const r=await fetch('agrofit/alvos.json',{cache:'no-cache'}); if(r.ok){ d=await r.json(); if(d&&d.alvos) idbSet('agrofit_alvos',d); else d=null; } }catch(e){}
+    if(!d) d=await idbGet('agrofit_alvos');
+    if(d){ const cu=d.culturas||[]; d.alvos.forEach((a,i)=>{ a._i=i; a._s=_agNorm((a.n||'')+' | '+(a.o||[]).join(' | ')+' | '+(a.c||'')); a._cu=(a.cu||[]).map(j=>cu[j]||''); a._todas=a._cu.some(c=>/^todas as culturas$/i.test(c)); }); }
+    AGROFIT.alvos=d||null; AGROFIT.alvosCarregando=null; return AGROFIT.alvos; })(); return AGROFIT.alvosCarregando; }
+const AG_TIPO_ICO={'Praga':'🐛','Doença':'🍂','Planta daninha':'🌿','Nematoide':'🪱','Outro':'•'};
+function agrofitAlvosFiltra(){ const d=AGROFIT.alvos; if(!d) return []; const toks=_agNorm(AGROFIT.qa).trim().split(/\s+/).filter(Boolean), cu=_agNorm(AGROFIT.cultura);
+  return d.alvos.filter(a=>(!AGROFIT.tipo||a.t===AGROFIT.tipo) && (!cu||a._todas||a._cu.some(c=>_agNorm(c)===cu)) && toks.every(t=>a._s.indexOf(t)>=0)); }
+function agAlvoItem(a){ return `<a class="ag-item" data-go="#/catalogo/alvos/${a._i}"><div class="ag-it-h"><b>${AG_TIPO_ICO[a.t]||'•'} ${esc(a.n||a.c||'—')}</b><span class="ag-cl">${esc(a.t)}</span></div>${a.n&&a.c?`<div class="ag-ia">${esc(a.c)}</div>`:''}<div class="ag-sub">${a.np} produto(s) registrado(s) · ${a._cu.length} cultura(s)</div></a>`; }
+function agrofitAlvosListaHtml(){ const d=AGROFIT.alvos, lista=agrofitAlvosFiltra(), vis=lista.slice(0,AGROFIT.limA);
+  return `<div class="ag-n mut">${lista.length} de ${d.n} alvo(s)${AGROFIT.cultura?' · '+esc(AGROFIT.cultura):''}</div>${vis.map(agAlvoItem).join('')||'<p class="mut" style="padding:14px">Nada encontrado.</p>'}
+    ${lista.length>vis.length?`<button class="btn btn-outline btn-sm ag-mais" data-act="agMaisA">Mostrar mais (${lista.length-vis.length})</button>`:''}`; }
+function agrofitAlvosRefresh(){ const el=document.getElementById('ag-lista-a'); if(el) el.innerHTML=agrofitAlvosListaHtml();
+  const d=AGROFIT.alvos; if(!d) return; const cu=_agNorm(AGROFIT.cultura), cont={}; d.alvos.forEach(a=>{ if(!cu||a._todas||a._cu.some(c=>_agNorm(c)===cu)) cont[a.t]=(cont[a.t]||0)+1; });
+  document.querySelectorAll('#ag-tipos .chip-f').forEach(ch=>{ const t=ch.dataset.tipo; const n=t?(cont[t]||0):Object.values(cont).reduce((x,y)=>x+y,0); const b=ch.querySelector('b'); if(b) b.textContent=n; ch.classList.toggle('on', t===AGROFIT.tipo); }); }
+function agrofitAlvoFichaHtml(i){ const d=AGROFIT.alvos, a=d.alvos[+i]; if(!a) return `<div class="panel"><p class="mut" style="padding:18px">Alvo não encontrado. <a class="link" data-go="#/catalogo/alvos">‹ Voltar</a></p></div>`;
+  const lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
+  const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&a._cu.some(c=>c===pref)?pref:(a._cu.find(c=>agrofitPragasArq(c))||'');
+  const arq=cultSel?agrofitPragasArq(cultSel):null, pr=arq&&AGROFIT.pragas[arq.chave];
+  if(arq&&!pr){ agrofitPragas(cultSel).then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); }
+  if(!AGROFIT.dados&&!AGROFIT.carregando) agrofitCarregar().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); });
+  let prods=null; if(pr&&AGROFIT.dados){ const cn=_agNorm(a.c||''), nn=_agNorm(a.n||'');   // o alvo junta grafias: casa pelo nome científico (ou pelo popular, quando não há científico)
+    const idx=new Set(pr.pragas.map((x,i)=>(cn?_agNorm(x[1])===cn:(!x[1]&&_agNorm(x[0]).split(/\s*;\s*/).some(z=>z.replace(/\s*\(\d+\)$/,'')===nn)))?i:-1).filter(i=>i>=0));
+    prods=Object.keys(pr.por).filter(r=>pr.por[r].some(i=>idx.has(i))).map(r=>AGROFIT.dados._porReg[r]).filter(Boolean).sort((x,y)=>(x.c||'').localeCompare(y.c||'')||(x.m[0]||'').localeCompare(y.m[0]||'')); }
+  const chips=a._cu.map(c=>`<button class="chip-f${c===cultSel?' on':''}${agrofitPragasArq(c)?'':' ag-semalvo'}" data-act="agCult" data-cult="${esc(c)}">${esc(c)}</button>`).join('');
+  return `<div class="panel ag-ficha"><div class="panel-head"><a class="link" data-go="#/catalogo/alvos">‹ Alvos</a><h2>${AG_TIPO_ICO[a.t]||'•'} ${esc(a.n||a.c)}</h2><span class="ag-cl">${esc(a.t)}</span></div>
+    <div class="ag-lins">${lin('Nome popular',esc(a.n))}${(a.o||[]).length?lin('Outros nomes',esc(a.o.join(', '))):''}${lin('Nome científico',a.c?`<i>${esc(a.c)}</i>`:'')}${lin('Tipo',esc(a.t))}${lin('Produtos registrados',a.np+' no Brasil')}${lin('Culturas',a._cu.length)}</div>
+    <div class="ag-sec"><h4>Culturas com registro <span class="mut">(${a._cu.length})</span></h4><div class="ag-chips">${chips||'<span class="mut">—</span>'}</div></div>
+    <div class="ag-sec"><h4>Produtos registrados${cultSel?' para '+esc(cultSel):''}</h4>
+      ${!cultSel?'<p class="mut">Toque numa cultura acima.</p>':!arq?'<p class="mut">Produtos por alvo só para as culturas da fazenda (scripts/agrofit_culturas.txt).</p>':(!pr||!AGROFIT.dados)?'<p class="mut">⏳ carregando…</p>':(prods.length?`<div class="ag-lista">${prods.slice(0,80).map(agItem).join('')}${prods.length>80?`<p class="mut ag-n">+${prods.length-80} — refine pela busca de insumos</p>`:''}</div>`:'<p class="mut">Nenhum produto nesta cultura.</p>')}</div>
+    <div class="cp-btns"><a class="btn btn-outline btn-sm" data-go="#/catalogo/alvos">‹ Voltar</a></div></div>`; }
+function agrofitAbas(ativa){ const t=[['', '🧪 Insumos'],['alvos','🐛 Alvos'],['cultivares','🌱 Cultivares']];
+  return `<div class="ag-abas">${t.map(([k,l])=>`<a class="ag-aba${ativa===k?' on':''}" data-go="#/catalogo${k?'/'+k:''}">${l}</a>`).join('')}</div>`; }
 function agrofitFiltra(){ const d=AGROFIT.dados; if(!d) return []; const q=_agNorm(AGROFIT.q).trim(), toks=q.split(/\s+/).filter(Boolean), cu=_agNorm(AGROFIT.cultura);
   return d.produtos.filter(p=>(!AGROFIT.classe||p.c===AGROFIT.classe) && (!cu||p._todas||p._cu.some(c=>_agNorm(c)===cu)) && toks.every(t=>p._s.indexOf(t)>=0)); }
 const AG_TOX={'1':'🔴','2':'🟠','3':'🟡','4':'🔵','5':'🟢'};
@@ -6828,7 +6866,9 @@ function agrofitListaRefresh(){ const el=document.getElementById('ag-lista'); if
 let _agQTimer=null;
 function agrofitBusca(v){ AGROFIT.q=v; AGROFIT.lim=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitListaRefresh, 120); }
 V.catalogo=function(){
-  const reg=decodeURIComponent(String(location.hash.split('/')[2]||''));
+  const seg=location.hash.split('/'), reg=decodeURIComponent(String(seg[2]||'')), sub=decodeURIComponent(String(seg[3]||''));
+  if(reg==='alvos') return agrofitAlvosView(sub);
+  if(reg==='cultivares') return agrofitCultivaresView(sub);
   if(!AGROFIT.dados){ if(!AGROFIT.carregando) agrofitCarregar().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); });
     return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">defensivos registrados no Ministério da Agricultura (AGROFIT)</span></div>
       <p class="mut" style="padding:18px">${AGROFIT.erro?esc(AGROFIT.erro)+' <button class="btn btn-outline btn-sm" data-act="agRecarregar">Tentar de novo</button>':'⏳ Baixando o catálogo (uma vez; depois fica no aparelho)…'}</p></div>`; }
@@ -6838,13 +6878,59 @@ V.catalogo=function(){
   const chip=(c,lbl)=>`<button class="chip-f${AGROFIT.classe===c?' on':''}" data-act="agClasse" data-classe="${esc(c)}">${esc(lbl)} <b>${c?(d.classes[c]||0):d.n}</b></button>`;
   const cultOpts=`<option value="">Todas as culturas</option>`+(d.culturas||[]).map(c=>`<option value="${esc(c)}"${c===AGROFIT.cultura?' selected':''}>${esc(c)}${agrofitPragasArq(c)?' ✓':''}</option>`).join('');
   return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">${d.n} defensivos registrados · AGROFIT · atualizado em ${esc(fmtData(d.atualizado))}</span></div>
-    ${AGROFIT.erro?`<p class="lt-aviso">${esc(AGROFIT.erro)}</p>`:''}
+    ${agrofitAbas('')}${AGROFIT.erro?`<p class="lt-aviso">${esc(AGROFIT.erro)}</p>`:''}
     <div class="toolbar ag-tb"><div class="search"><input id="ag-q" placeholder="Buscar marca, ingrediente ativo, registro ou fabricante…" value="${esc(AGROFIT.q)}"></div>
       <select class="sel" id="ag-cult" title="Só produtos registrados para a cultura (✓ = com alvos no app)">${cultOpts}</select></div>
     <div class="ag-chips" id="ag-classes">${chip('','Total')}${top.map(c=>chip(c,c)).join('')}${resto.length?`<select class="sel ag-outras" id="ag-outras"><option value="">Outras classes…</option>${resto.map(c=>`<option value="${esc(c)}"${AGROFIT.classe===c?' selected':''}>${esc(c)} (${d.classes[c]})</option>`).join('')}</select>`:''}</div>
     <div id="ag-lista" class="ag-lista">${agrofitListaHtml()}</div>
     <p class="mut" style="font-size:11px;padding:8px 14px 12px">Fonte: ${esc(d.fonte||'MAPA — AGROFIT')}. Informação de registro, não substitui a bula. Alvos por cultura disponíveis para: ${Object.keys(d.pragasCulturas||{}).map(k=>esc(k.replace('*',''))).join(', ')||'—'} (lista em <code>scripts/agrofit_culturas.txt</code>).</p></div>`;
 };
+function agrofitAlvosView(sub){
+  if(!AGROFIT.alvos){ if(!AGROFIT.alvosCarregando) agrofitAlvosCarregar().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); });
+    return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">alvos registrados (pragas, doenças, plantas daninhas…)</span></div>${agrofitAbas('alvos')}<p class="mut" style="padding:18px">⏳ Baixando os alvos (uma vez; depois fica no aparelho)…</p></div>`; }
+  const d=AGROFIT.alvos; if(sub!=='') return agrofitAlvoFichaHtml(sub);
+  const chip=(t,lbl)=>`<button class="chip-f${AGROFIT.tipo===t?' on':''}" data-act="agTipo" data-tipo="${esc(t)}">${esc(lbl)} <b>${t?(d.tipos[t]||0):d.n}</b></button>`;
+  const cultOpts=`<option value="">Todas as culturas</option>`+(d.culturas||[]).map(c=>`<option value="${esc(c)}"${c===AGROFIT.cultura?' selected':''}>${esc(c)}${agrofitPragasArq(c)?' ✓':''}</option>`).join('');
+  return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">${d.n} alvos registrados · AGROFIT · atualizado em ${esc(fmtData(d.atualizado))}</span></div>${agrofitAbas('alvos')}
+    <div class="toolbar ag-tb"><div class="search"><input id="ag-qa" placeholder="Buscar nome popular ou científico…" value="${esc(AGROFIT.qa)}"></div>
+      <select class="sel" id="ag-cult" title="Só alvos com registro na cultura">${cultOpts}</select></div>
+    <div class="ag-chips" id="ag-tipos">${chip('','Total')}${Object.keys(d.tipos||{}).map(t=>chip(t,`${AG_TIPO_ICO[t]||''} ${t}`)).join('')}</div>
+    <div id="ag-lista-a" class="ag-lista">${agrofitAlvosListaHtml()}</div>
+    <p class="mut" style="font-size:11px;padding:8px 14px 12px">O tipo (praga, doença, planta daninha, nematoide) vem da classe dos produtos registrados para o alvo. Produtos por alvo: só nas culturas da fazenda.</p></div>`; }
+// cultivares com produção de sementes (SIGEF): agrofit/cultivares.json
+async function agrofitCvCarregar(force){ if(AGROFIT.cv&&!force) return AGROFIT.cv; if(AGROFIT.cvCarregando) return AGROFIT.cvCarregando;
+  AGROFIT.cvCarregando=(async()=>{ let d=null; try{ const r=await fetch('agrofit/cultivares.json',{cache:'no-cache'}); if(r.ok){ d=await r.json(); if(d&&d.cultivares) idbSet('agrofit_cultivares',d); else d=null; } }catch(e){}
+    if(!d) d=await idbGet('agrofit_cultivares');
+    if(d){ d.especies.forEach((e,i)=>{ e._i=i; e._lbl=e.n?`${e.n} — ${e.c}`:e.c; }); d.cultivares.forEach((c,i)=>{ c._i=i; const e=d.especies[c.e]||{}; c._e=e; c._s=_agNorm(c.c+' | '+(e.n||'')+' | '+(e.c||'')); }); }
+    AGROFIT.cv=d||null; AGROFIT.cvCarregando=null; return AGROFIT.cv; })(); return AGROFIT.cvCarregando; }
+function agrofitCvFiltra(){ const d=AGROFIT.cv; if(!d) return []; const toks=_agNorm(AGROFIT.qc).trim().split(/\s+/).filter(Boolean), e=AGROFIT.esp===''?-1:+AGROFIT.esp;
+  return d.cultivares.filter(c=>(e<0||c.e===e) && toks.every(t=>c._s.indexOf(t)>=0)); }
+const _ufTxt=c=>(c.uf||[]).slice(0,5).map(x=>x[0]).join(', ')+((c.uf||[]).length>5?` +${c.uf.length-5}`:'');
+function agCvItem(c){ const e=c._e||{}; return `<a class="ag-item" data-go="#/catalogo/cultivares/${c._i}"><div class="ag-it-h"><b>🌱 ${esc(c.c)}</b><span class="ag-cl">${esc(e.n||'')||'<i>'+esc((e.c||'').split(' ').slice(0,2).join(' '))+'</i>'}</span></div>
+    <div class="ag-sub">${c.nc} campo(s) de semente · ${esc(_ufTxt(c))}${c.sf1?' · última safra '+esc(c.sf1):''}${(c.cat||[]).length?' · '+esc(c.cat.join('/')):''}</div></a>`; }
+function agrofitCvListaHtml(){ const d=AGROFIT.cv, lista=agrofitCvFiltra(), vis=lista.slice(0,AGROFIT.limC);
+  return `<div class="ag-n mut">${lista.length} de ${d.n} cultivar(es)${AGROFIT.esp!==''?' · '+esc((d.especies[+AGROFIT.esp]||{})._lbl||''):''}</div>${vis.map(agCvItem).join('')||'<p class="mut" style="padding:14px">Nada encontrado.</p>'}
+    ${lista.length>vis.length?`<button class="btn btn-outline btn-sm ag-mais" data-act="agMaisC">Mostrar mais (${lista.length-vis.length})</button>`:''}`; }
+function agrofitCvRefresh(){ const el=document.getElementById('ag-lista-c'); if(el) el.innerHTML=agrofitCvListaHtml(); }
+function agrofitCultivaresView(sub){
+  if(!AGROFIT.cv){ if(!AGROFIT.cvCarregando) agrofitCvCarregar().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); });
+    return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">cultivares com produção de sementes (SIGEF)</span></div>${agrofitAbas('cultivares')}<p class="mut" style="padding:18px">⏳ Baixando as cultivares (uma vez; depois fica no aparelho)…</p></div>`; }
+  const d=AGROFIT.cv; if(sub!=='') return agrofitCvFichaHtml(sub);
+  const comNome=d.especies.filter(e=>e.n), semNome=d.especies.filter(e=>!e.n);
+  const opt=e=>`<option value="${e._i}"${String(e._i)===String(AGROFIT.esp)?' selected':''}>${esc(e._lbl)} (${e.q})</option>`;
+  return `<div class="panel"><div class="panel-head"><h2>🏛️ Catálogo MAPA</h2><span class="sub">${d.n} cultivares com campos de semente · SIGEF · atualizado em ${esc(fmtData(d.atualizado))}</span></div>${agrofitAbas('cultivares')}
+    <div class="toolbar ag-tb"><div class="search"><input id="ag-qc" placeholder="Buscar cultivar (ex.: 18216IPRO) ou espécie…" value="${esc(AGROFIT.qc)}"></div>
+      <select class="sel" id="ag-esp"><option value="">Todas as espécies</option>${comNome.map(opt).join('')}${semNome.length?`<optgroup label="Outras espécies">${semNome.map(opt).join('')}</optgroup>`:''}</select></div>
+    <div id="ag-lista-c" class="ag-lista">${agrofitCvListaHtml()}</div>
+    <p class="mut" style="font-size:11px;padding:8px 14px 12px">Fonte: ${esc(d.fonte||'MAPA — SIGEF')}. Mostra as cultivares com campos de produção de sementes inscritos no Ministério (quem tem semente no mercado). O número RNC é consultado no CultivarWeb, pelo botão da ficha.</p></div>`; }
+function agrofitCvFichaHtml(i){ const d=AGROFIT.cv, c=d.cultivares[+i]; if(!c) return `<div class="panel"><p class="mut" style="padding:18px">Cultivar não encontrada. <a class="link" data-go="#/catalogo/cultivares">‹ Voltar</a></p></div>`;
+  const e=c._e||{}, lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
+  const ufs=(c.uf||[]).map(x=>`<span class="chip-f ag-semalvo">${esc(x[0])} <b>${x[1]}</b></span>`).join(' ');
+  return `<div class="panel ag-ficha"><div class="panel-head"><a class="link" data-go="#/catalogo/cultivares">‹ Cultivares</a><h2>🌱 ${esc(c.c)}</h2><span class="ag-cl">${esc(e.n||'cultivar')}</span></div>
+    <div class="ag-lins">${lin('Cultivar',esc(c.c))}${lin('Espécie',(e.n?esc(e.n)+' · ':'')+'<i>'+esc(e.c||'')+'</i>')}${lin('Categorias de semente',esc((c.cat||[]).join(', ')))}${lin('Campos de produção',c.nc+' inscrito(s)')}${lin('Safras',c.sf0===c.sf1?esc(c.sf1):esc(c.sf0)+' a '+esc(c.sf1))}${lin('Área inscrita (total)',nf1.format(c.ha)+' ha')}</div>
+    <div class="ag-sec"><h4>Campos por estado</h4><div class="ag-chips">${ufs||'<span class="mut">—</span>'}</div></div>
+    <div class="cp-btns"><a class="btn btn-outline btn-sm" href="https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php" target="_blank" rel="noopener" title="Consulta do Registro Nacional de Cultivares (abre o site do Ministério; tem código de imagem)">🏛️ RNC no CultivarWeb</a><button class="btn btn-outline btn-sm" data-act="agWeb" data-q="${esc(c.c+' '+(e.n||''))}">🔎 Buscar na web</button><a class="btn btn-outline btn-sm" data-go="#/catalogo/cultivares">‹ Voltar</a></div>
+    <p class="mut" style="font-size:11px;padding:0 14px 12px">Dados do SIGEF (campos de produção de sementes inscritos), não do registro da cultivar. O nº RNC e o mantenedor estão no CultivarWeb.</p></div>`; }
 function agrofitFichaHtml(reg){ const d=AGROFIT.dados, p=d._porReg[reg]; if(!p) return `<div class="panel"><p class="mut" style="padding:18px">Registro ${esc(reg)} não está no catálogo. <a class="link" data-go="#/catalogo">‹ Voltar</a></p></div>`;
   const lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
   const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&p._cu.some(c=>c===pref)?pref:(p._cu.find(c=>agrofitPragasArq(c))||'');   // cultura escolhida na ficha não mexe no filtro da lista
@@ -9466,8 +9552,9 @@ document.addEventListener('change',e=>{
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
-  if(e.target.id==='ag-cult'){ AGROFIT.cultura=e.target.value; AGROFIT.lim=60; agrofitListaRefresh(); return; }
+  if(e.target.id==='ag-cult'){ AGROFIT.cultura=e.target.value; AGROFIT.lim=60; AGROFIT.limA=60; agrofitListaRefresh(); agrofitAlvosRefresh(); return; }
   if(e.target.id==='ag-outras'){ if(e.target.value){ AGROFIT.classe=e.target.value; AGROFIT.lim=60; } agrofitListaRefresh(); return; }
+  if(e.target.id==='ag-esp'){ AGROFIT.esp=e.target.value; AGROFIT.limC=60; agrofitCvRefresh(); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
@@ -9773,6 +9860,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='bulaMapaUsar'){ bulaMapaUsar(a.r); }
     else if(a.act==='agClasse'){ AGROFIT.classe=a.classe||''; AGROFIT.lim=60; const o=document.getElementById('ag-outras'); if(o&&!o.querySelector(`option[value="${CSS.escape(AGROFIT.classe)}"]`)) o.value=''; agrofitListaRefresh(); }
     else if(a.act==='agMais'){ AGROFIT.lim+=120; agrofitListaRefresh(); }
+    else if(a.act==='agMaisA'){ AGROFIT.limA+=120; agrofitAlvosRefresh(); }
+    else if(a.act==='agMaisC'){ AGROFIT.limC+=120; agrofitCvRefresh(); }
+    else if(a.act==='agTipo'){ AGROFIT.tipo=a.tipo||''; AGROFIT.limA=60; agrofitAlvosRefresh(); }
     else if(a.act==='agRecarregar'){ AGROFIT.erro=''; agrofitCarregar(true).then(()=>route({keepScroll:true})); route({keepScroll:true}); }
     else if(a.act==='agCult'){ AGROFIT.cultFicha=a.cult; route({keepScroll:true}); }
     else if(a.act==='agWeb'){ window.open('https://www.google.com/search?q='+encodeURIComponent(`"${a.q}" bula pdf`), '_blank', 'noopener'); }

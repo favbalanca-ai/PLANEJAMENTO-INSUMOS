@@ -7,9 +7,6 @@ on:
   schedule:
     - cron: '0 6 1 * *'
   workflow_dispatch:
-  push:
-    branches: [ claude/empreendimentos-painel-visibilidade-anrppt ]
-    paths: [ 'scripts/sigef_build.py' ]
 permissions:
   contents: write
   actions: write
