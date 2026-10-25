@@ -1,0 +1,37 @@
+name: Agrofit probe (temporário)
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dataset (recursos)
+        run: |
+          curl -sSL "https://dados.agricultura.gov.br/api/3/action/package_show?id=sistema-de-agrotoxicos-fitossanitarios-agrofit" -o pkg.json || true
+          python3 - <<'PY'
+          import json
+          try:
+            d=json.load(open('pkg.json'))['result']
+            print('DATASET:', d.get('title')); print('NOTES:', (d.get('notes') or '')[:600])
+            for r in d.get('resources',[]): print('RES |', r.get('name'), '|', r.get('format'), '|', r.get('size'), '|', r.get('last_modified'), '|', r.get('url'))
+          except Exception as e: print('pkg erro', e)
+          PY
+      - name: CSV produtos formulados
+        run: |
+          curl -sSL "https://dados.agricultura.gov.br/dataset/6c913699-e82e-4da3-a0a1-fb6c431e367f/resource/d30b30d7-e256-484e-9ab8-cd40974e1238/download/agrofitprodutosformulados.csv" -o p.csv
+          ls -la p.csv; file p.csv
+          python3 - <<'PY'
+          import csv,sys,collections
+          raw=open('p.csv','rb').read()
+          for enc in ('utf-8-sig','latin-1'):
+            try: txt=raw.decode(enc); print('ENCODING', enc); break
+            except Exception: pass
+          head=txt.splitlines()[0]; print('HEADER:', head[:1500])
+          sep=';' if head.count(';')>head.count(',') else ','
+          rows=list(csv.DictReader(txt.splitlines(), delimiter=sep)); print('SEP', repr(sep), 'ROWS', len(rows), 'COLS', len(rows[0].keys()))
+          for k in rows[0].keys():
+            vals=[r[k] for r in rows if r.get(k)]; uniq=collections.Counter(vals)
+            ex=[v[:80] for v,_ in uniq.most_common(4)]
+            print('COL |', k, '| preenchidos', len(vals), '| distintos', len(uniq), '| maxlen', max((len(v) for v in vals), default=0), '| ex', ex)
+          for r in rows[:3]: print('ROW', {k:(v[:120] if v else v) for k,v in r.items()})
+          PY
