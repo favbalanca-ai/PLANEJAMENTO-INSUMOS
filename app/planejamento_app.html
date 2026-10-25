@@ -8380,11 +8380,13 @@ function geoSeguirOn(){ try{ return localStorage.getItem(GEO_SEGUIR_KEY)==='1'; 
 function geoStatus(txt, cls){ const el=document.getElementById('mapa-geo-st'); if(el){ el.textContent=txt||''; el.className='mapa-geo-st'+(cls?' '+cls:''); el.hidden=!txt; }
   const b=document.querySelector('[data-act="mapaLoc"]'); if(b){ const on=geoSeguirOn(); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); b.textContent=on?'📍 Seguindo':'📍 Seguir'; } }
 function geoDesenhar(){ const L=window.L, q=MAPA_GEO.pos; if(!_map||!L||!q) return; const ll=[q.lat,q.lng];
+  try{ const c=_map.getContainer(); if(!c||!document.body.contains(c)){ MAPA_GEO.marker=null; MAPA_GEO.circle=null; return; } }catch(e){ return; }   // mapa de uma tela já trocada (o GPS continua chegando)
+  try{
   if(!MAPA_GEO.marker){ MAPA_GEO.circle=L.circle(ll,{radius:q.acc||0,color:'#1e88e5',weight:1,fillColor:'#1e88e5',fillOpacity:.12,interactive:false}).addTo(_map);
     MAPA_GEO.marker=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1e88e5',fillOpacity:1,className:'mapa-eu'}).addTo(_map).bindTooltip('Você',{direction:'top',offset:[0,-8]}); }
   else { MAPA_GEO.marker.setLatLng(ll); MAPA_GEO.circle.setLatLng(ll).setRadius(q.acc||0); }
   try{ MAPA_GEO.marker.bringToFront(); }catch(e){}   // por cima dos limites e do rótulo do talhão
-  if(geoSeguirOn()){ if(!MAPA_GEO.centrou){ _map.setView(ll, Math.max(_map.getZoom(),16)); MAPA_GEO.centrou=true; } else if(!_map.getBounds().contains(ll)) _map.panTo(ll); } }
+  if(geoSeguirOn()){ if(!MAPA_GEO.centrou){ _map.setView(ll, Math.max(_map.getZoom(),16)); MAPA_GEO.centrou=true; } else if(!_map.getBounds().contains(ll)) _map.panTo(ll); } }catch(e){} }
 function geoAtualiza(p){ MAPA_GEO.pos={lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), ts:Date.now()}; geoDesenhar();
   const t=talhaoNaPosicao(MAPA_GEO.pos); geoStatus(`📍 ±${MAPA_GEO.pos.acc} m${t?' · em '+tNome(t):''}${navigator.onLine===false?' · sem internet (fundo indisponível)':''}`); }
 function geoSeguir(ligar){ if(!navigator.geolocation){ toast('Este aparelho não tem GPS disponível'); return; }
