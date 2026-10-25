@@ -7,50 +7,42 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Link da lista completa do CultivarWeb
+      - name: POST do formulário do CultivarWeb (lista completa e por espécie)
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-          curl -sS -L --max-time 120 -A "$UA" -c jar.txt -o pg.html "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php"
           python3 - <<'PY'
-          import re,html
-          h=open('pg.html','rb').read().decode('utf-8','ignore')
-          i=h.upper().find('LISTA COMPLETA'); print('CTX', html.unescape(h[max(0,i-900):i+300]).replace('\n',' ')[:1400])
-          for m in re.findall(r'<a[^>]*>(?:(?!</a>).)*AQUI(?:(?!</a>).)*</a>', h, re.I|re.S): print('A', m[:400].replace('\n',' '))
-          for m in re.findall(r'onclick="([^"]*)"', h, re.I)[:20]: print('ONCLICK', m[:200])
-          for m in re.findall(r'<script[^>]*src="([^"]*)"', h, re.I): print('SCRIPT', m)
-          for m in re.findall(r'function\s+\w+\s*\([^)]*\)\s*\{[^}]{0,300}\}', h)[:10]: print('FN', m[:300].replace('\n',' '))
-          hrefs=sorted(set(re.findall(r'href="([^"]*)"', h, re.I))); print('HREFS', [x for x in hrefs if not x.endswith('.css')][:40])
-          opts=re.findall(r'<option value="(\d+)">([^<]*Glycine max[^<]*|[^<]*Zea mays[^<]*|[^<]*Phaseolus vulgaris[^<]*|[^<]*Sorghum bicolor[^<]*)</option>', h)
-          print('ESPECIES', opts[:10])
-          PY
-      - name: Tentar a lista completa
-        run: |
+          import urllib.request, urllib.parse, http.cookiejar, re, html, collections, time
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-          python3 - <<'PY'
-          import re
-          h=open('pg.html','rb').read().decode('utf-8','ignore')
-          links=set()
-          for m in re.findall(r'<a[^>]*>(?:(?!</a>).)*AQUI(?:(?!</a>).)*</a>', h, re.I|re.S):
-            for u in re.findall(r'href="([^"]*)"', m): links.add(u)
-            for u in re.findall(r"(?:location|open)\(['\"]([^'\"]+)", m): links.add(u)
-          open('links.txt','w').write('\n'.join(links)); print('LINKS', links)
-          PY
-          while read -r u; do [ -z "$u" ] && continue; case "$u" in http*) full="$u";; /*) full="https://sistemas.agricultura.gov.br$u";; *) full="https://sistemas.agricultura.gov.br/snpc/cultivarweb/$u";; esac
-            echo "=== $full"; curl -sS -L --max-time 900 -A "$UA" -b jar.txt -o lista.bin -w "HTTP %{http_code} size %{size_download} type %{content_type}\n" "$full" || echo "curl falhou"
-            file lista.bin; head -c 1200 lista.bin | tr -d '\r' | tr -s ' \t' | head -c 1200; echo
-            python3 - <<'PY'
-          import re,html
-          raw=open('lista.bin','rb').read()
-          if raw[:2]==b'PK': print('ZIP/XLSX', len(raw)); import zipfile,io; z=zipfile.ZipFile(io.BytesIO(raw)); print(z.namelist()[:10])
-          else:
-            t=raw.decode('utf-8','ignore')
-            rows=re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.S|re.I); print('TR', len(rows))
-            for r in rows[:6]: print('ROW', [html.unescape(re.sub(r'<[^>]+>','',c)).strip()[:60] for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', r, re.S|re.I)])
-            if len(rows)>6:
-              import collections; esp=collections.Counter()
+          cj=http.cookiejar.CookieJar(); op=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+          base='https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php'
+          def get(u, data=None):
+            rq=urllib.request.Request(u, data=data, headers={'User-Agent':UA, 'Referer':base, **({'Content-Type':'application/x-www-form-urlencoded'} if data else {})})
+            t0=time.time(); r=op.open(rq, timeout=900); b=r.read(); print('  ->', r.status, len(b), 'bytes', r.headers.get('Content-Type'), '%.1fs'%(time.time()-t0)); return b.decode('utf-8','ignore')
+          h=get(base); tok=re.search(r'name="csrf_token" value="([0-9a-f]+)"', h).group(1); print('csrf', tok[:12])
+          def tabela(t, nome):
+            tabs=re.findall(r'<table[^>]*>(.*?)</table>', t, re.S|re.I); print(nome, 'tabelas', len(tabs))
+            best=max(tabs, key=len) if tabs else ''
+            rows=re.findall(r'<tr[^>]*>(.*?)</tr>', best, re.S|re.I); print(nome, 'linhas', len(rows))
+            cab=[html.unescape(re.sub(r'<[^>]+>','',c)).strip() for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', rows[0], re.S|re.I)] if rows else []
+            print(nome, 'CABEÇALHO', cab)
+            for r in rows[1:5]: print(nome, 'ROW', [html.unescape(re.sub(r'<[^>]+>','',c)).strip()[:70] for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', r, re.S|re.I)])
+            if len(rows)>5:
+              esp=collections.Counter(); links=0
               for r in rows[1:]:
                 c=[html.unescape(re.sub(r'<[^>]+>','',x)).strip() for x in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', r, re.S|re.I)]
                 if c: esp[c[0][:40]]+=1
-              print('ESP top', esp.most_common(12)); print('linhas', len(rows)-1)
+                if 'href' in r: links+=1
+              print(nome, 'ESP top', esp.most_common(8), '| linhas com link', links)
+              m=re.search(r'<tr[^>]*>(?:(?!</tr>).)*href(?:(?!</tr>).)*</tr>', best, re.S|re.I)
+              if m: print(nome, 'EXEMPLO LINHA COM LINK', re.sub(r'\s+',' ', m.group(0))[:700])
+            i=t.find('captcha'); print(nome, 'menciona captcha?', i>=0, '| texto:', re.sub(r'\s+',' ', re.sub(r'<[^>]+>',' ', t))[:300])
+          campos={'csrf_token':tok,'postado':'1','cod_pagina':'1','validar':'1','cod_especie':'','txt_nome_comum':'','txt_denominacao':'','txt_requerente':'','txt_num_formulario':'','cod_evento_ogm':'','ct_captcha':'','acao':'Pesquisar'}
+          print('=== lista completa (POST acao=pesquisar&postado=1)')
+          t=get(base+'?acao=pesquisar&postado=1', urllib.parse.urlencode(campos).encode()); tabela(t,'TUDO')
+          open('tudo.html','w').write(t)
+          print('=== soja (cod_especie=2746)')
+          c2=dict(campos); c2['cod_especie']='2746'
+          t=get(base, urllib.parse.urlencode(c2).encode()); tabela(t,'SOJA')
+          print('=== sem validar (validar=0) soja')
+          c3=dict(c2); c3['validar']='0'; t=get(base, urllib.parse.urlencode(c3).encode()); tabela(t,'SOJA0')
           PY
-          done < links.txt
+          ls -la tudo.html
