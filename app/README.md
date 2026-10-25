@@ -93,6 +93,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   abrem pela folha **Mais** (`navMaisOpen`; itens marcados com `data-mais="campo"` no `index.html` e
   `data-fold` pelo `applyModule`). Só mostra as telas liberadas pelo login; a tela atual fica destacada e o
   botão Mais fica ativo quando ela está dentro dele. No computador a lista lateral continua completa.
+- **Mapa → 📍 Seguir, botão ＋ e 🛰️ NDVI (v225)** — *Seguir* liga/desliga o acompanhamento do GPS
+  (`geoSeguir`, `watchPosition`): ponto azul com círculo de precisão, mapa centrado e seguindo; o status mostra
+  ±m e o talhão em que você está (`talhaoNaPosicao`, ponto-no-polígono). Lembrado no aparelho
+  (`planejamento_mapa_seguir`) e funciona **sem internet** (limites e ponto são desenhados localmente; só o fundo de
+  satélite precisa de rede — o status avisa). O **＋** flutuante (`mapaFab`) abre o Nova Ação do talhão onde você
+  está; fora dos limites ou sem GPS, abre a lista de talhões (mais próximos primeiro). **NDVI**: camada WMS do
+  **Copernicus Data Space** (Sentinel-2, 10 m) com o ID da configuração que a dona cola em *⚙️ Configurar NDVI*
+  (guardado só no aparelho, `planejamento_cdse`); controles de data final, janela (7–90 dias) e nuvem máxima;
+  o serviço devolve a imagem mais recente da janela (`PRIORITY=mostRecent`); legenda no mapa; erro de tile avisa
+  uma vez. A ficha do talhão passou a abrir com as seções **encolhidas**.
 - **Mapa → Ficha do talhão (v218)** — tocar no limite do talhão abre um cartão (`talFichaOpen`) com nome,
   área do limite e do cadastro, **resumo** (cultura, variedade, plantio + DAP, estádio, status das operações)
   e as operações das duas safras agrupadas por tipo (`talFichaTipo`): **Semeadura**, **Adubação**,
