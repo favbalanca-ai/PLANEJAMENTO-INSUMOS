@@ -7,6 +7,7 @@ separador ';') e gera:
   app/agrofit/produtos.json        todos os produtos registrados (1 registro por nº de registro MAPA)
   app/agrofit/pragas_<cultura>.json alvos registrados por produto, só para as culturas listadas em
                                      scripts/agrofit_culturas.txt (uma por linha; "Milho*" pega variantes)
+  app/agrofit/alvos.json           todos os alvos (praga, doença, planta daninha…) com culturas e nº de produtos
 
 Uso: python3 scripts/agrofit_build.py <csv> <pasta de saída> [culturas.txt]
 Sem dependências externas. Roda no GitHub Actions (.github/workflows/agrofit-atualiza.yml).
@@ -40,6 +41,15 @@ def marcas(s):
         if m and m not in out: out.append(m)
     return out
 
+def tipo_alvo(classe):
+    c = norm(classe)
+    if 'herbicida' in c: return 'Planta daninha'
+    if 'nematicida' in c: return 'Nematoide'
+    if any(x in c for x in ('fungicida', 'bactericida')): return 'Doença'
+    if any(x in c for x in ('inseticida', 'acaricida', 'formicida', 'cupinicida', 'feromonio', 'moluscicida', 'rodenticida', 'agente biologico')): return 'Praga'
+    if 'regulador' in c or 'estimulante' in c or 'protetor' in c: return 'Outro'
+    return 'Outro'
+
 def le_culturas(path):
     if not path or not os.path.exists(path): return ['Soja', 'Milho', 'Feijão', 'Sorgo', 'Trigo', 'Algodão', 'Pastagens', 'Café']
     out = []
@@ -63,6 +73,7 @@ def main(csv_path, out_dir, cult_path=None):
     prods, culturas = {}, set()
     alvos = le_culturas(cult_path)
     pragas = {a: {'nomes': {}, 'lista': [], 'por': collections.defaultdict(list)} for a in alvos}
+    todos = {}   # (nome comum, científico) -> {tipos: Counter, cult: set, prods: set}
     for r in rows:
         reg = limpa(r.get('NR_REGISTRO'))
         if not reg: continue
@@ -74,6 +85,12 @@ def main(csv_path, out_dir, cult_path=None):
         ma = modo_norm(r.get('MODO_DE_ACAO'))
         if ma: p['_ma'][ma] += 1
         cu = limpa(r.get('CULTURA'))
+        com0, cie0 = limpa(r.get('PRAGA_NOME_COMUM')), limpa(r.get('PRAGA_NOME_CIENTIFICO'))
+        if com0 or cie0:
+            T = todos.get((com0, cie0))
+            if not T: T = todos[(com0, cie0)] = {'tipos': collections.Counter(), 'cult': set(), 'prods': set()}
+            T['tipos'][tipo_alvo(p['c'])] += 1; T['prods'].add(reg)
+            if cu: T['cult'].add(cu)
         if cu:
             p['_cu'].add(cu); culturas.add(cu)
             for a in alvos:
@@ -105,10 +122,17 @@ def main(csv_path, out_dir, cult_path=None):
         arq_pragas[a] = nome
         json.dump({'v': 1, 'cultura': a, 'atualizado': hoje, 'pragas': P['lista'], 'por': dict(P['por'])},
                   open(os.path.join(out_dir, nome), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+    alv = []
+    for (com, cie), T in todos.items():
+        alv.append({'n': com, 'c': cie, 't': T['tipos'].most_common(1)[0][0], 'cu': sorted(cult_idx[c] for c in T['cult'] if c in cult_idx), 'np': len(T['prods'])})
+    alv.sort(key=lambda a: (norm(a['n'] or a['c']), norm(a['c'])))
+    tipos = collections.Counter(a['t'] for a in alv)
+    json.dump({'v': 1, 'atualizado': hoje, 'n': len(alv), 'tipos': dict(tipos.most_common()), 'culturas': cult_list, 'alvos': alv},
+              open(os.path.join(out_dir, 'alvos.json'), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     json.dump({'v': 1, 'atualizado': hoje, 'fonte': 'MAPA — AGROFIT (dados abertos, dados.agricultura.gov.br)', 'n': len(saida),
                'culturas': cult_list, 'pragasCulturas': arq_pragas, 'classes': dict(classes.most_common()), 'produtos': saida},
               open(os.path.join(out_dir, 'produtos.json'), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
-    print('produtos', len(saida), '| culturas', len(cult_list), '| classes', len(classes), '| pragas:', {a: len(pragas[a]['lista']) for a in arq_pragas})
+    print('produtos', len(saida), '| culturas', len(cult_list), '| classes', len(classes), '| alvos', len(alv), dict(tipos), '| pragas:', {a: len(pragas[a]['lista']) for a in arq_pragas})
     for f in sorted(os.listdir(out_dir)):
         print(' ', f, os.path.getsize(os.path.join(out_dir, f)), 'bytes')
 
