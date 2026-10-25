@@ -121,10 +121,8 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - Vai no puxar como **`config_app`** (`{copernicus:{instancia, camadas}}`), chave própria do cache com TTL de 6 h
   (`APP_TTL_`), nos módulos Campo e Planejamento. O app usa esse ID quando não há um colado no aparelho
   (⚙️ Configurar NDVI). Sem a aba, `instancia` vem vazia e nada muda.
-- **`?acao=fis&talhao=<id>&fim=AAAA-MM-DD`** (v228): a planilha pede ao FIS do Sentinel Hub as estatísticas do NDVI
-  dentro do limite do talhão (aba LIMITES APP → WKT; 90 dias até `fim`, MAXCC 60, 20 faixas) e devolve
-  `{ok, fis}` — usado quando o navegador do celular bloqueia a chamada direta ao Copernicus. Exige login quando o
-  login é obrigatório. Não mexe no cache.
+- O "talhão em foco" do NDVI calcula as estatísticas no próprio aparelho (WFS + imagem crua do Copernicus); a
+  planilha não participa (o `?acao=fis` da v228 foi retirado na v230: o Copernicus Data Space não tem o FIS).
 
 ## Tarefas/Equipe com merge por registro e hora do servidor (v216)
 - **`__tarefas`** com `merge:1`: `{funcionarios, tarefas, excl:{f:{id:_u}, t:{id:_u}}}`. As abas **EQUIPE APP**

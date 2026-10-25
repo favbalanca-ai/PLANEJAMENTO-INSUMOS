@@ -2037,7 +2037,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-229';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-230';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8430,8 +8430,8 @@ function ndviCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(NDVI_KEY)||
   const pl=ndviPlanilha(); o.inst=o.instLocal||(pl?pl.instancia:''); o.layer=o.layerLocal||(pl&&pl.camadas&&pl.camadas.ndvi)||'VEGETATION_INDEX'; o.daPlanilha=!o.instLocal&&!!pl; return o; }   // mesma camada do Monitor de Irrigação
 function ndviSalvar(c){ const {instLocal,layerLocal,on,dias,maxcc,fim,foco,cena}=c; lsSet(NDVI_KEY, JSON.stringify({instLocal,layerLocal,on,dias,maxcc,fim,foco,cena})); }
 // ---- TALHÃO EM FOCO: NDVI recortado no limite, com as cores esticadas entre o 5º e o 95º percentil DAQUELE talhão
-// (como nos apps de agricultura de precisão). As estatísticas por passagem vêm do FIS do Sentinel Hub; o celular
-// tenta direto e, se o navegador bloquear, pede pela planilha (?acao=fis). Legenda em 6 faixas com os números.
+// (como nos apps de agricultura de precisão). As datas das passagens vêm do WFS; o NDVI de cada passagem vem como
+// imagem crua recortada no limite e os percentis são calculados no aparelho. Legenda em 6 faixas com os números.
 const FOCO_CORES=['#d73027','#fc8d59','#fee08b','#d9ef8b','#91bfdb','#4575b4'];   // vermelho = baixo … azul = alto (RdYlBu)
 const FOCO_FORMULA='(s.B08 - s.B04) / (s.B08 + s.B04)';
 function limWkt(lm){ const an=(lm&&lm.coords&&lm.coords[0]||[]).slice(); if(!an.length) return ''; if(an[0][0]!==an[an.length-1][0]||an[0][1]!==an[an.length-1][1]) an.push(an[0]);
@@ -8440,20 +8440,33 @@ function b64utf(t){ return btoa(unescape(encodeURIComponent(t))); }
 function ndviEvalIndice(){ return '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:1,sampleType:"FLOAT32"}}}\nfunction evaluatePixel(s){if(!s.dataMask)return[NaN];return['+FOCO_FORMULA+'];}'; }
 function ndviEvalFaixas(lo,hi){ const C=FOCO_CORES.map(h=>[1,3,5].map(i=>(parseInt(h.slice(i,i+2),16)/255).toFixed(3)));
   return '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:4}}}\nvar C=['+C.map(c=>'['+c.join(',')+']').join(',')+'];\nfunction evaluatePixel(s){if(!s.dataMask)return[0,0,0,0];var v='+FOCO_FORMULA+';var t=(v-('+lo+'))/(('+hi+')-('+lo+'));var k=Math.max(0,Math.min(5,Math.floor(t*6)));return[C[k][0],C[k][1],C[k][2],1];}'; }
-function cenasDoFis(j){ const serie=(j&&(j.C0||j[Object.keys(j||{})[0]]))||[], out=[];
-  (Array.isArray(serie)?serie:[]).forEach(x=>{ const b=x.basicStats||{}; if(b.min==null||b.max==null||!isFinite(b.min)||!isFinite(b.max)) return; let p5=b.min, p95=b.max;
-    const h=x.histogram&&x.histogram.bins; if(Array.isArray(h)&&h.length){ const total=h.reduce((t,bb)=>t+(bb.count||0),0); let acc=0,a5=null,a95=null;
-      for(const bb of h){ acc+=bb.count||0; if(a5===null&&acc>=total*0.05) a5=bb.lowEdge; if(a95===null&&acc>=total*0.95){ a95=bb.lowEdge; break; } }
-      if(a5!=null&&a95!=null&&a95>a5){ p5=a5; p95=a95; } }
-    out.push({data:String(x.date).slice(0,10), min:b.min, max:b.max, media:b.mean, p5, p95}); });
-  return out.sort((a,b)=>a.data<b.data?1:-1); }
+// Estatísticas sem o FIS (o Copernicus Data Space não tem esse serviço — responde 404): as DATAS das passagens vêm do
+// WFS da configuração; o NDVI de cada passagem vem como imagem crua (GetMap com evalscript que grava o valor no
+// vermelho e a máscara no alfa), recortada no limite, e o app lê os pixels e calcula os percentis no próprio aparelho.
+function limBbox(lm){ let a=90,b=180,c=-90,d=-180; (lm.coords[0]||[]).forEach(q=>{ a=Math.min(a,q[0]); b=Math.min(b,q[1]); c=Math.max(c,q[0]); d=Math.max(d,q[1]); }); return {minLat:a,minLng:b,maxLat:c,maxLng:d}; }
+function ndviEvalCru(){ return '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:4}}}\nfunction evaluatePixel(s){if(!s.dataMask)return[0,0,0,0];var v='+FOCO_FORMULA+';var r=Math.max(0,Math.min(1,(v+1)/2));return[r,0,0,1];}'; }
+async function ndviDatas(c, lm, ini, fim){ const bb=limBbox(lm), base='https://sh.dataspace.copernicus.eu/ogc/wfs/'+encodeURIComponent(c.inst.trim())+'?';
+  let ultimoErro='';
+  for(const tipo of ['DSS10','DSS2']){   // DSS10 = Sentinel-2 L2A (a configuração padrão); DSS2 = L1C
+    try{ const q=new URLSearchParams({SERVICE:'WFS', REQUEST:'GetFeature', TYPENAMES:tipo, OUTPUTFORMAT:'application/json', SRSNAME:'CRS:84', BBOX:[bb.minLng,bb.minLat,bb.maxLng,bb.maxLat].map(x=>x.toFixed(6)).join(','), TIME:ini+'/'+fim, MAXCC:'60', MAXFEATURES:'100'});
+      const r=await fetch(base+q.toString()); if(!r.ok){ let tx=''; try{ tx=(await r.text()).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,160); }catch(e){} ultimoErro='Copernicus respondeu '+r.status+(tx?': '+tx:''); continue; }
+      const j=await r.json(), m={}; (j.features||[]).forEach(f=>{ const pr=f.properties||{}, d=String(pr.date||pr.time||'').slice(0,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(d)) return; const cc=+pr.cloudCoverPercentage; if(!(d in m)||(isFinite(cc)&&cc<m[d])) m[d]=isFinite(cc)?cc:null; });
+      const datas=Object.keys(m).sort().reverse().map(d=>({data:d, nuvem:m[d]})); if(datas.length||tipo==='DSS2') return datas; }
+    catch(e){ ultimoErro=String(e&&e.message||e); } }
+  if(ultimoErro) throw new Error(ultimoErro); return []; }
+// NDVI cru da passagem dentro do limite → {min,max,media,p5,p95,n}
+async function ndviStats(c, lm, data){ const bb=limBbox(lm), R=6371008.8, rad=Math.PI/180;
+  const wM=(bb.maxLng-bb.minLng)*rad*R*Math.cos((bb.minLat+bb.maxLat)/2*rad), hM=(bb.maxLat-bb.minLat)*rad*R;
+  const W=Math.max(32,Math.min(512,Math.ceil(wM/10))), H=Math.max(32,Math.min(512,Math.ceil(hM/10)));
+  const q=new URLSearchParams({SERVICE:'WMS', REQUEST:'GetMap', LAYERS:c.layer||'VEGETATION_INDEX', FORMAT:'image/png', TRANSPARENT:'true', VERSION:'1.3.0', CRS:'CRS:84', BBOX:[bb.minLng,bb.minLat,bb.maxLng,bb.maxLat].map(x=>x.toFixed(6)).join(','), WIDTH:String(W), HEIGHT:String(H),
+    TIME:data+'/'+data, MAXCC:'100', GEOMETRY:limWkt(lm), EVALSCRIPT:b64utf(ndviEvalCru()), UPSAMPLING:'NEAREST', SHOWLOGO:'false'});
+  const r=await fetch('https://sh.dataspace.copernicus.eu/ogc/wms/'+encodeURIComponent(c.inst.trim())+'?'+q.toString()); if(!r.ok){ let tx=''; try{ tx=(await r.text()).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,160); }catch(e){} throw new Error('Copernicus respondeu '+r.status+(tx?': '+tx:'')); }
+  const bmp=await createImageBitmap(await r.blob()), cv=document.createElement('canvas'); cv.width=bmp.width; cv.height=bmp.height; const cx=cv.getContext('2d'); cx.drawImage(bmp,0,0);
+  const px=cx.getImageData(0,0,cv.width,cv.height).data, vals=[]; for(let i=0;i<px.length;i+=4){ if(px[i+3]>0) vals.push(px[i]/255*2-1); }
+  if(!vals.length) return null; vals.sort((a,b)=>a-b); const n=vals.length, at=f=>vals[Math.min(n-1,Math.floor(f*n))];
+  return {n, min:vals[0], max:vals[n-1], media:vals.reduce((t,v)=>t+v,0)/n, p5:at(0.05), p95:at(0.95)}; }
 async function ndviCenas(tid){ const c=ndviCfg(), lm=limitesAll()[tid]; if(!lm) throw new Error('talhão sem limite'); const fim=_isISO(c.fim)?c.fim:_hojeISO(), d0=new Date(fim+'T12:00:00'); d0.setDate(d0.getDate()-90); const ini=d0.toISOString().slice(0,10);
-  let j; try{ const q=new URLSearchParams({LAYER:c.layer||'VEGETATION_INDEX', CRS:'CRS:84', TIME:ini+'/'+fim, RESOLUTION:'10m', GEOMETRY:limWkt(lm), MAXCC:'60', BINS:'20', EVALSCRIPT:b64utf(ndviEvalIndice())});
-      const r=await fetch('https://sh.dataspace.copernicus.eu/ogc/fis/'+encodeURIComponent(c.inst)+'?'+q.toString()); if(!r.ok){ let tx=''; try{ tx=(await r.text()).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,160); }catch(e){} throw new Error('Copernicus respondeu '+r.status+(tx?': '+tx:'')); } j=await r.json(); }
-  catch(e1){ const url=syncUrl(); if(!url) throw new Error('direto do aparelho: '+(e1&&e1.message||e1)+' (sem planilha configurada para tentar por ela)');   // 2º: pela planilha (CORS no celular)
-    const r2=await syncFetch(url+(url.indexOf('?')<0?'?':'&')+'acao=fis&talhao='+encodeURIComponent(tid)+'&fim='+encodeURIComponent(fim)+'&t='+Date.now(),{method:'GET',cache:'no-store',redirect:'follow'},60000).then(x=>x.json());
-    if(!r2||!r2.ok){ const er=(r2&&r2.erro)||'sem resposta'; throw new Error('pela planilha: '+er+(/ação desconhecida|token/i.test(er)?' — o Code.gs da planilha ainda é antigo (cole o novo e crie Nova versão)':'')+' · direto do aparelho: '+(e1&&e1.message||e1)); } j=r2.fis; }
-  return cenasDoFis(j); }
+  return ndviDatas(c, lm, ini, fim); }
 function legendaFoco(cena, t){ const lo=cena.p5, hi=cena.p95, passo=(hi-lo)/6, f=v=>(+v).toFixed(3).replace('.',',');
   return `<div class="foco-legenda"><b>NDVI · ${esc(tNome(t))} · ${esc(fmtData(cena.data))}</b>${FOCO_CORES.map((c,i)=>`<div><i style="background:${c}"></i><span>${i===5?'≥ '+f(lo+passo*5):f(lo+passo*i)+' – '+f(lo+passo*(i+1))}</span></div>`).join('')}
     <small>média ${f(cena.media)} · <b>variação ${f(hi-lo)}</b> (5% a 95% dos pixels). Cores esticadas <u>neste talhão</u>: a mesma cor em outro talhão não quer dizer o mesmo valor.</small></div>`; }
@@ -8466,16 +8479,20 @@ async function ndviFocoAplicar(c){ const L=window.L, t=findTalhao(c.foco), lm=li
     try{ const cen=await ndviCenas(c.foco); if(MAPA_NDVI.buscando!==chave) return true; MAPA_NDVI.cenas=cen; MAPA_NDVI.cenasDe=chave; }
     catch(e){ MAPA_NDVI.cenas=[]; MAPA_NDVI.cenasDe=chave; const msg='Não consegui as estatísticas de '+tNome(t)+': '+(e&&e.message||e); toast(msg); if(st) st.textContent=msg+' Mostrando a região inteira.'; if(sel){ sel.disabled=true; sel.innerHTML='<option value="">sem passagens (erro)</option>'; } return false; } }
   const cenas=MAPA_NDVI.cenas; if(!_map||!L) return true;
-  if(!cenas.length){ if(st) st.textContent='Nenhuma passagem com pouca nuvem sobre '+tNome(t)+' nos últimos 90 dias.'; if(leg){ leg.innerHTML=''; leg.hidden=true; } if(sel){ sel.disabled=true; sel.innerHTML='<option value="">nenhuma passagem</option>'; } return true; }
-  if(sel){ sel.disabled=false; sel.innerHTML=cenas.map((x,i)=>`<option value="${esc(x.data)}"${(c.cena&&c.cena===x.data)||(!c.cena&&i===0)?' selected':''}>${esc(fmtData(x.data))} · média ${(+x.media).toFixed(2).replace('.',',')}</option>`).join(''); }
+  if(!cenas.length){ if(st) st.textContent='Nenhuma passagem com até 60% de nuvem sobre '+tNome(t)+' nos 90 dias até '+fmtData(_isISO(c.fim)?c.fim:_hojeISO())+'.'; if(leg){ leg.innerHTML=''; leg.hidden=true; } if(sel){ sel.disabled=true; sel.innerHTML='<option value="">nenhuma passagem</option>'; } return true; }
   const cena=cenas.find(x=>x.data===c.cena)||cenas[0];
+  if(cena.p5==null){ if(st) st.textContent='⏳ lendo o NDVI de '+fmtData(cena.data)+' dentro de '+tNome(t)+'…'; const chave2=chave+'|'+cena.data; MAPA_NDVI.buscando=chave2;
+    try{ const e=await ndviStats(c, lm, cena.data); if(MAPA_NDVI.buscando!==chave2) return true; if(!e){ cena.vazia=true; } else Object.assign(cena, e); }
+    catch(e){ const msg='Não consegui ler o NDVI de '+fmtData(cena.data)+': '+(e&&e.message||e); toast(msg); if(st) st.textContent=msg+' Mostrando a região inteira.'; return false; } }
+  if(sel){ sel.disabled=false; sel.innerHTML=cenas.map((x,i)=>`<option value="${esc(x.data)}"${x===cena?' selected':''}>${esc(fmtData(x.data))}${x.nuvem!=null?' · nuvem '+Math.round(x.nuvem)+'%':''}${x.media!=null?' · média '+(+x.media).toFixed(2).replace('.',','):''}</option>`).join(''); }
+  if(cena.vazia){ if(st) st.textContent='A passagem de '+fmtData(cena.data)+' não tem pixel válido dentro de '+tNome(t)+' (nuvem/fora da cena) — escolha outra passagem.'; if(leg){ leg.innerHTML=''; leg.hidden=true; } return true; }
   if(MAPA_NDVI.layer){ try{ _map.removeLayer(MAPA_NDVI.layer); }catch(e){} MAPA_NDVI.layer=null; }
   MAPA_NDVI.layer=L.tileLayer.wms('https://sh.dataspace.copernicus.eu/ogc/wms/'+encodeURIComponent(c.inst.trim()), {layers:c.layer||'VEGETATION_INDEX', format:'image/png', transparent:true, version:'1.3.0', time:cena.data+'/'+cena.data, maxcc:100, showlogo:false,
     upsampling:'NEAREST', downsampling:'BICUBIC', className:'ndvi-nitida', geometry:limWkt(lm), evalscript:b64utf(ndviEvalFaixas(cena.p5,cena.p95)), opacity:1, maxZoom:20, attribution:'NDVI: Copernicus Sentinel-2'});
   MAPA_NDVI.avisou=false; MAPA_NDVI.layer.on('tileerror', ()=>{ if(!MAPA_NDVI.avisou){ MAPA_NDVI.avisou=true; toast('NDVI do talhão não carregou — confira o ID/camada do Copernicus'); } });
   MAPA_NDVI.layer.addTo(_map); ndviFormas(true);
   if(leg){ leg.innerHTML=legendaFoco(cena,t); leg.hidden=false; leg.classList.add('foco'); }
-  if(st) st.textContent=`Sentinel-2, 10 m, recortado em ${tNome(t)} · ${cenas.length} passagem(ns) com até 60% de nuvem nos 90 dias até ${fmtData(_isISO(c.fim)?c.fim:_hojeISO())}.`;
+  if(st) st.textContent=`Sentinel-2, 10 m, recortado em ${tNome(t)} · ${cenas.length} passagem(ns) com até 60% de nuvem nos 90 dias até ${fmtData(_isISO(c.fim)?c.fim:_hojeISO())} · ${cena.n} pixels lidos.`;
   try{ _map.fitBounds(L.polygon(lm.coords).getBounds().pad(0.25)); }catch(e){}
   return true; }
 function ndviPeriodo(c){ const fim=_isISO(c.fim)?c.fim:_hojeISO(), d=new Date(fim+'T12:00:00'); d.setDate(d.getDate()-(+c.dias||30)); return {ini:d.toISOString().slice(0,10), fim}; }

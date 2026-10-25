@@ -160,22 +160,6 @@ function readConfigApp(){
   return { copernicus: { instancia: lim(m['COPERNICUS INSTANCE ID']), camadas: { ndvi: lim(m['COPERNICUS CAMADA NDVI']) || 'VEGETATION_INDEX', ndmi: lim(m['COPERNICUS CAMADA NDMI']) || 'MOISTURE_INDEX',
     cir: lim(m['COPERNICUS CAMADA INFRAVERMELHO']) || 'COLOR_INFRARED', cor: lim(m['COPERNICUS CAMADA COR NATURAL']) || 'TRUE_COLOR' } } };
 }
-// Estatísticas do NDVI dentro do limite do talhão por passagem do Sentinel-2 (FIS do Sentinel Hub / Copernicus):
-// últimos 90 dias até `fim`, nuvem até 60%, histograma de 20 faixas. O app calcula os percentis e pinta o talhão.
-function fisTalhao_(tid, fim){
-  var cop = readConfigApp().copernicus; if (!cop.instancia) throw new Error('Sem COPERNICUS INSTANCE ID na aba CONFIG APP.');
-  var lm = readMapApp('LIMITES APP')[String(tid || '')]; if (!lm || !lm.coords || !lm.coords[0] || !lm.coords[0].length) throw new Error('Talhão sem limite: ' + tid);
-  var an = lm.coords[0].slice(); if (an[0][0] !== an[an.length-1][0] || an[0][1] !== an[an.length-1][1]) an.push(an[0]);
-  var wkt = 'POLYGON((' + an.map(function(q){ return Number(q[1]).toFixed(6) + ' ' + Number(q[0]).toFixed(6); }).join(',') + '))';
-  var fimIso = /^\d{4}-\d{2}-\d{2}$/.test(String(fim || '')) ? fim : dateISO(new Date());
-  var d0 = new Date(fimIso + 'T12:00:00'); d0.setDate(d0.getDate() - 90); var ini = dateISO(d0);
-  var ev = '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:1,sampleType:"FLOAT32"}}}\nfunction evaluatePixel(s){if(!s.dataMask)return[NaN];return[(s.B08-s.B04)/(s.B08+s.B04)];}';
-  var url = 'https://sh.dataspace.copernicus.eu/ogc/fis/' + encodeURIComponent(cop.instancia) + '?LAYER=' + encodeURIComponent(cop.camadas.ndvi) + '&CRS=CRS:84&TIME=' + ini + '/' + fimIso +
-    '&RESOLUTION=10m&MAXCC=60&BINS=20&GEOMETRY=' + encodeURIComponent(wkt) + '&EVALSCRIPT=' + encodeURIComponent(Utilities.base64Encode(ev, Utilities.Charset.UTF_8));
-  var r = UrlFetchApp.fetch(url, { muteHttpExceptions:true }); var code = r.getResponseCode(), txt = r.getContentText();
-  if (code !== 200) throw new Error('Copernicus respondeu ' + code + ': ' + String(txt).slice(0, 160));
-  return JSON.parse(txt);
-}
 function readEquipeSST(){
   var b = sstSS(); if (!b) return [];               // ID configurado mas ilegível
   var all = b.getSheets();
@@ -1930,9 +1914,6 @@ function doGet_(e){
   if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
     if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
     return json({ ok:true, usuarios:usuariosLista_() }); }
-  if (prm.acao === 'fis'){   // NDVI "talhão em foco": estatísticas do Sentinel-2 dentro do limite (o celular tenta direto; se o navegador bloquear, pede aqui)
-    if (loginCfg_().exigido && !(acc && acc.u)) return json({ ok:false, erro:'entre com seu login' });
-    try { return json({ ok:true, fis:fisTalhao_(prm.talhao, prm.fim) }); } catch (ef){ return json({ ok:false, erro:(ef && ef.message) || String(ef) }); } }
   // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE OU login com Administrativo)
   if (e && e.parameter && e.parameter.acao){
     var p = e.parameter;
