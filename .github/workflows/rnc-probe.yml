@@ -7,59 +7,50 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: CultivarWeb (RNC) e alternativas
+      - name: Link da lista completa do CultivarWeb
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-          try(){ echo "=== $1"; curl -sS -L --max-time 120 -A "$UA" -o out.bin -w "HTTP %{http_code} size %{size_download} type %{content_type}\n" "$1" || echo "curl falhou $?"; }
-          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php"
+          curl -sS -L --max-time 120 -A "$UA" -c jar.txt -o pg.html "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php"
+          python3 - <<'PY'
+          import re,html
+          h=open('pg.html','rb').read().decode('utf-8','ignore')
+          i=h.upper().find('LISTA COMPLETA'); print('CTX', html.unescape(h[max(0,i-900):i+300]).replace('\n',' ')[:1400])
+          for m in re.findall(r'<a[^>]*>(?:(?!</a>).)*AQUI(?:(?!</a>).)*</a>', h, re.I|re.S): print('A', m[:400].replace('\n',' '))
+          for m in re.findall(r'onclick="([^"]*)"', h, re.I)[:20]: print('ONCLICK', m[:200])
+          for m in re.findall(r'<script[^>]*src="([^"]*)"', h, re.I): print('SCRIPT', m)
+          for m in re.findall(r'function\s+\w+\s*\([^)]*\)\s*\{[^}]{0,300}\}', h)[:10]: print('FN', m[:300].replace('\n',' '))
+          hrefs=sorted(set(re.findall(r'href="([^"]*)"', h, re.I))); print('HREFS', [x for x in hrefs if not x.endswith('.css')][:40])
+          opts=re.findall(r'<option value="(\d+)">([^<]*Glycine max[^<]*|[^<]*Zea mays[^<]*|[^<]*Phaseolus vulgaris[^<]*|[^<]*Sorghum bicolor[^<]*)</option>', h)
+          print('ESPECIES', opts[:10])
+          PY
+      - name: Tentar a lista completa
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
           python3 - <<'PY'
           import re
-          h=open('out.bin','rb').read().decode('latin-1','ignore')
-          print('TITLE', re.findall(r'<title>(.*?)</title>', h, re.S|re.I)[:1])
-          for m in re.findall(r'<form[^>]*>', h, re.I): print('FORM', m[:300])
-          for m in re.findall(r'<(?:input|select|textarea)[^>]*>', h, re.I)[:60]: print('FIELD', m[:200])
-          for m in re.findall(r'href="([^"]*)"', h, re.I):
-            if re.search(r'xls|csv|export|download|pdf|relat', m, re.I): print('LINK', m[:200])
-          print('TEXTO', re.sub(r'<[^>]+>',' ', h)[:1500].replace('\n',' '))
+          h=open('pg.html','rb').read().decode('utf-8','ignore')
+          links=set()
+          for m in re.findall(r'<a[^>]*>(?:(?!</a>).)*AQUI(?:(?!</a>).)*</a>', h, re.I|re.S):
+            for u in re.findall(r'href="([^"]*)"', m): links.add(u)
+            for u in re.findall(r"(?:location|open)\(['\"]([^'\"]+)", m): links.add(u)
+          open('links.txt','w').write('\n'.join(links)); print('LINKS', links)
           PY
-          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php?acao=pesquisar&especie=&nome_cultivar=&detentor=&cadastro_total=&cadastro_total=1"
-          head -c 1500 out.bin | tr -d '\r' | sed 's/<[^>]*>/ /g' | tr -s ' ' | head -c 1500; echo
-          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/index.php"
-          head -c 400 out.bin; echo
-          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php?formato=xls"
-          try "https://www.gov.br/agricultura/pt-br/assuntos/insumos-agropecuarios/insumos-agricolas/sementes-e-mudas/registro-nacional-de-cultivares"
-          python3 - <<'PY'
-          import re
-          h=open('out.bin','rb').read().decode('utf-8','ignore')
-          for m in sorted(set(re.findall(r'href="([^"]*)"', h, re.I))):
-            if re.search(r'cultivar|rnc|xls|csv|lista|registrad', m, re.I): print('LINK', m[:220])
+          while read -r u; do [ -z "$u" ] && continue; case "$u" in http*) full="$u";; /*) full="https://sistemas.agricultura.gov.br$u";; *) full="https://sistemas.agricultura.gov.br/snpc/cultivarweb/$u";; esac
+            echo "=== $full"; curl -sS -L --max-time 900 -A "$UA" -b jar.txt -o lista.bin -w "HTTP %{http_code} size %{size_download} type %{content_type}\n" "$full" || echo "curl falhou"
+            file lista.bin; head -c 1200 lista.bin | tr -d '\r' | tr -s ' \t' | head -c 1200; echo
+            python3 - <<'PY'
+          import re,html
+          raw=open('lista.bin','rb').read()
+          if raw[:2]==b'PK': print('ZIP/XLSX', len(raw)); import zipfile,io; z=zipfile.ZipFile(io.BytesIO(raw)); print(z.namelist()[:10])
+          else:
+            t=raw.decode('utf-8','ignore')
+            rows=re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.S|re.I); print('TR', len(rows))
+            for r in rows[:6]: print('ROW', [html.unescape(re.sub(r'<[^>]+>','',c)).strip()[:60] for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', r, re.S|re.I)])
+            if len(rows)>6:
+              import collections; esp=collections.Counter()
+              for r in rows[1:]:
+                c=[html.unescape(re.sub(r'<[^>]+>','',x)).strip() for x in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', r, re.S|re.I)]
+                if c: esp[c[0][:40]]+=1
+              print('ESP top', esp.most_common(12)); print('linhas', len(rows)-1)
           PY
-      - name: SIGEF campos de produção de sementes (cabeçalho e estatísticas)
-        run: |
-          UA="Mozilla/5.0"
-          curl -sS -L --max-time 900 -A "$UA" -o sigef.csv "https://dados.agricultura.gov.br/dataset/c7784a6e-f0ec-4196-a1ce-1d2d4784a58e/resource/6ab20c11-73a0-4ab0-8e13-2420d48dd6f5/download/sigefcamposproducaodesementes.csv" || echo falhou
-          ls -la sigef.csv
-          python3 - <<'PY'
-          import csv,collections
-          raw=open('sigef.csv','rb').read()
-          try: txt=raw.decode('utf-8-sig'); print('ENC utf8')
-          except Exception: txt=raw.decode('latin-1'); print('ENC latin1')
-          lines=txt.splitlines(); head=lines[0]; print('HEADER:', head[:1000])
-          sep=';' if head.count(';')>=head.count(',') else ','
-          rows=list(csv.DictReader(lines, delimiter=sep)); print('SEP', repr(sep), 'ROWS', len(rows))
-          for k in rows[0].keys():
-            vals=[(r.get(k) or '').strip() for r in rows]; vals=[v for v in vals if v]; c=collections.Counter(vals)
-            print('COL |', k, '| preenchidos', len(vals), '| distintos', len(c), '| ex', [v[:50] for v,_ in c.most_common(6)])
-          for r in rows[:2]: print('ROW', {k:(v or '')[:60] for k,v in r.items()})
-          ks=[k for k in rows[0].keys() if 'espec' in k.lower()]; kc=[k for k in rows[0].keys() if 'cultivar' in k.lower()]
-          if ks and kc:
-            soja=[r for r in rows if 'soja' in (r.get(ks[0]) or '').lower()]; cv=collections.Counter((r.get(kc[0]) or '').strip() for r in soja)
-            print('SOJA linhas', len(soja), 'cultivares distintas', len(cv), list(cv.most_common(10)))
-            for esp in ['milho','feij','sorgo','trigo','algod']:
-              rr=[r for r in rows if esp in (r.get(ks[0]) or '').lower()]; print(esp, 'linhas', len(rr), 'cultivares', len(set((r.get(kc[0]) or '').strip() for r in rr)))
-          PY
-      - name: ZARC cultivares (cabeçalho)
-        run: |
-          curl -sS -L --max-time 600 -o z.csv.gz "https://dados.agricultura.gov.br/dataset/d68e269e-dbe5-44d9-83ec-1f0871427773/resource/97038867-7afc-4f93-85ef-f39cf8368581/download/siszarc_cronograma.csv.gz" || echo falhou
-          ls -la z.csv.gz; (gzip -dc z.csv.gz 2>/dev/null || cat z.csv.gz) | head -3 | cut -c1-800
-          (gzip -dc z.csv.gz 2>/dev/null || cat z.csv.gz) | wc -l
+          done < links.txt
