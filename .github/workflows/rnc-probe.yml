@@ -7,57 +7,59 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Procurar o Registro Nacional de Cultivares nos dados abertos
+      - name: CultivarWeb (RNC) e alternativas
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-          for q in cultivares "registro nacional de cultivares" RNC CNCR sementes; do
-            curl -sS -L --max-time 120 -A "$UA" "https://dados.agricultura.gov.br/api/3/action/package_search?q=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1]))" "$q")&rows=20" -o "s_$q.json" || true
-          done
+          try(){ echo "=== $1"; curl -sS -L --max-time 120 -A "$UA" -o out.bin -w "HTTP %{http_code} size %{size_download} type %{content_type}\n" "$1" || echo "curl falhou $?"; }
+          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php"
           python3 - <<'PY'
-          import json,glob
-          vistos=set()
-          for f in glob.glob('s_*.json'):
-            try: d=json.load(open(f))['result']
-            except Exception as e: print('erro', f, e); continue
-            for ds in d.get('results',[]):
-              if ds['id'] in vistos: continue
-              vistos.add(ds['id'])
-              print('DATASET |', ds.get('title'), '|', ds.get('name'), '|', (ds.get('notes') or '')[:160].replace('\n',' '))
-              for r in ds.get('resources',[]): print('   RES |', r.get('name'), '|', r.get('format'), '|', r.get('size'), '|', r.get('last_modified'), '|', r.get('url'))
+          import re
+          h=open('out.bin','rb').read().decode('latin-1','ignore')
+          print('TITLE', re.findall(r'<title>(.*?)</title>', h, re.S|re.I)[:1])
+          for m in re.findall(r'<form[^>]*>', h, re.I): print('FORM', m[:300])
+          for m in re.findall(r'<(?:input|select|textarea)[^>]*>', h, re.I)[:60]: print('FIELD', m[:200])
+          for m in re.findall(r'href="([^"]*)"', h, re.I):
+            if re.search(r'xls|csv|export|download|pdf|relat', m, re.I): print('LINK', m[:200])
+          print('TEXTO', re.sub(r'<[^>]+>',' ', h)[:1500].replace('\n',' '))
           PY
-      - name: Baixar e resumir os CSV de cultivares
+          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php?acao=pesquisar&especie=&nome_cultivar=&detentor=&cadastro_total=&cadastro_total=1"
+          head -c 1500 out.bin | tr -d '\r' | sed 's/<[^>]*>/ /g' | tr -s ' ' | head -c 1500; echo
+          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/index.php"
+          head -c 400 out.bin; echo
+          try "https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php?formato=xls"
+          try "https://www.gov.br/agricultura/pt-br/assuntos/insumos-agropecuarios/insumos-agricolas/sementes-e-mudas/registro-nacional-de-cultivares"
+          python3 - <<'PY'
+          import re
+          h=open('out.bin','rb').read().decode('utf-8','ignore')
+          for m in sorted(set(re.findall(r'href="([^"]*)"', h, re.I))):
+            if re.search(r'cultivar|rnc|xls|csv|lista|registrad', m, re.I): print('LINK', m[:220])
+          PY
+      - name: SIGEF campos de produção de sementes (cabeçalho e estatísticas)
         run: |
-          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+          UA="Mozilla/5.0"
+          curl -sS -L --max-time 900 -A "$UA" -o sigef.csv "https://dados.agricultura.gov.br/dataset/c7784a6e-f0ec-4196-a1ce-1d2d4784a58e/resource/6ab20c11-73a0-4ab0-8e13-2420d48dd6f5/download/sigefcamposproducaodesementes.csv" || echo falhou
+          ls -la sigef.csv
           python3 - <<'PY'
-          import json,glob,re
-          urls=[]
-          for f in glob.glob('s_*.json'):
-            try: d=json.load(open(f))['result']
-            except Exception: continue
-            for ds in d.get('results',[]):
-              for r in ds.get('resources',[]):
-                u=r.get('url') or ''
-                if re.search(r'cultivar', (ds.get('title','')+ds.get('name','')+r.get('name','')+u), re.I) and re.search(r'csv|xlsx|json', (r.get('format') or '')+u, re.I) and u not in urls: urls.append(u)
-          open('urls.txt','w').write('\n'.join(urls[:6])); print('URLS', urls[:6])
+          import csv,collections
+          raw=open('sigef.csv','rb').read()
+          try: txt=raw.decode('utf-8-sig'); print('ENC utf8')
+          except Exception: txt=raw.decode('latin-1'); print('ENC latin1')
+          lines=txt.splitlines(); head=lines[0]; print('HEADER:', head[:1000])
+          sep=';' if head.count(';')>=head.count(',') else ','
+          rows=list(csv.DictReader(lines, delimiter=sep)); print('SEP', repr(sep), 'ROWS', len(rows))
+          for k in rows[0].keys():
+            vals=[(r.get(k) or '').strip() for r in rows]; vals=[v for v in vals if v]; c=collections.Counter(vals)
+            print('COL |', k, '| preenchidos', len(vals), '| distintos', len(c), '| ex', [v[:50] for v,_ in c.most_common(6)])
+          for r in rows[:2]: print('ROW', {k:(v or '')[:60] for k,v in r.items()})
+          ks=[k for k in rows[0].keys() if 'espec' in k.lower()]; kc=[k for k in rows[0].keys() if 'cultivar' in k.lower()]
+          if ks and kc:
+            soja=[r for r in rows if 'soja' in (r.get(ks[0]) or '').lower()]; cv=collections.Counter((r.get(kc[0]) or '').strip() for r in soja)
+            print('SOJA linhas', len(soja), 'cultivares distintas', len(cv), list(cv.most_common(10)))
+            for esp in ['milho','feij','sorgo','trigo','algod']:
+              rr=[r for r in rows if esp in (r.get(ks[0]) or '').lower()]; print(esp, 'linhas', len(rr), 'cultivares', len(set((r.get(kc[0]) or '').strip() for r in rr)))
           PY
-          i=0; while read -r u; do i=$((i+1)); echo "=== $u"; curl -sS -L --max-time 600 -A "$UA" -o "c_$i.bin" "$u" || echo "falhou"; ls -la "c_$i.bin" || true; done < urls.txt
-          python3 - <<'PY'
-          import csv,glob,collections,io
-          for f in sorted(glob.glob('c_*.bin')):
-            raw=open(f,'rb').read(); print('#####', f, len(raw), 'bytes')
-            if raw[:2]==b'PK': print('xlsx/zip — pular'); continue
-            txt=None
-            for enc in ('utf-8-sig','latin-1'):
-              try: txt=raw.decode(enc); print('ENC', enc); break
-              except Exception: pass
-            if not txt: continue
-            lines=txt.splitlines(); head=lines[0]; print('HEADER:', head[:800])
-            sep=';' if head.count(';')>=head.count(',') else ','
-            rows=list(csv.DictReader(lines, delimiter=sep)); print('SEP', repr(sep), 'ROWS', len(rows))
-            if not rows: continue
-            for k in rows[0].keys():
-              vals=[(r.get(k) or '').strip() for r in rows]; vals=[v for v in vals if v]; c=collections.Counter(vals)
-              print('COL |', k, '| preenchidos', len(vals), '| distintos', len(c), '| ex', [v[:60] for v,_ in c.most_common(5)])
-            for r in rows[:3]: print('ROW', {k:(v or '')[:80] for k,v in r.items()})
-            soja=[r for r in rows if any('soja' in (v or '').lower() for v in r.values())]; print('linhas com soja', len(soja))
-          PY
+      - name: ZARC cultivares (cabeçalho)
+        run: |
+          curl -sS -L --max-time 600 -o z.csv.gz "https://dados.agricultura.gov.br/dataset/d68e269e-dbe5-44d9-83ec-1f0871427773/resource/97038867-7afc-4f93-85ef-f39cf8368581/download/siszarc_cronograma.csv.gz" || echo falhou
+          ls -la z.csv.gz; (gzip -dc z.csv.gz 2>/dev/null || cat z.csv.gz) | head -3 | cut -c1-800
+          (gzip -dc z.csv.gz 2>/dev/null || cat z.csv.gz) | wc -l
