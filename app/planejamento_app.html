@@ -1467,27 +1467,27 @@ body[data-embed] .content{padding:10px 10px 24px}
   .oq-top{grid-template-columns:1fr 1fr}
   .oq-print{align-self:end}
   /* celular: fonte menor no quadro (cabem mais cartões na tela) */
-  .oq-legs{font-size:11px;gap:4px 10px;margin:2px 0 8px}
-  .oq-sw{width:13px;height:13px}
-  .oq-tl{padding:6px 10px 8px}
-  .oq-tl-cab{font-size:11.5px;margin-bottom:4px}
-  .oq-tl-bar{height:40px}
-  .oq-tl-m{font-size:9.5px;height:38px}
-  .oq-tl-hoje b{font-size:9.5px;top:14px}
-  .oq-hd{flex-basis:98px;width:98px;padding:7px 6px}
-  .oq-nome{font-size:12px}
-  .oq-sub{font-size:10.5px}
-  .oq-area{font-size:11px}
-  .oq-det{font-size:11px}
-  .oq-cards{gap:5px;padding:7px 6px}
-  .oq-card{width:106px;min-height:76px;font-size:10.5px;padding:7px 26px 7px 8px;border-radius:9px}
-  .oq-c-n{font-size:11px}
-  .oq-c-at{font-size:9.5px}
-  .oq-plus{width:24px;height:24px;line-height:24px;right:4px;bottom:4px}
-  .oq-colbtn{font-size:11px}
-  .oq-colbtn.oq-wk b{font-size:12px}
-  .oq-colbtn.oq-wk small{font-size:9.5px}
-  .oq-colbtn.oq-wk i{font-size:9px}
+  .oq-legs{font-size:10px;gap:3px 9px;margin:2px 0 6px}
+  .oq-sw{width:11px;height:11px}
+  .oq-tl{padding:5px 8px 6px}
+  .oq-tl-cab{font-size:10.5px;margin-bottom:3px}
+  .oq-tl-bar{height:36px}
+  .oq-tl-m{font-size:9px;height:34px}
+  .oq-tl-hoje b{font-size:9px;top:12px}
+  .oq-hd{flex-basis:88px;width:88px;padding:6px 5px}
+  .oq-nome{font-size:11px}
+  .oq-sub{font-size:9.5px}
+  .oq-area{font-size:10px}
+  .oq-det{font-size:10px}
+  .oq-cards{gap:4px;padding:6px 5px}
+  .oq-card{width:96px;min-height:68px;font-size:9.5px;padding:6px 22px 6px 7px;border-radius:8px}
+  .oq-c-n{font-size:10px}
+  .oq-c-at{font-size:8.5px}
+  .oq-plus{width:22px;height:22px;line-height:22px;right:3px;bottom:3px;font-size:14px}
+  .oq-colbtn{font-size:10px}
+  .oq-colbtn.oq-wk b{font-size:11px}
+  .oq-colbtn.oq-wk small{font-size:9px}
+  .oq-colbtn.oq-wk i{font-size:8.5px}
 }
 @media print{ .oq-wrap{overflow:visible;border:0} .oq-hd{position:static;box-shadow:none} .oq-plus{display:none}
   .oq-row{break-inside:avoid;min-width:0} .oq-cards{flex-wrap:wrap} .oq-card{padding-right:10px}
@@ -1525,7 +1525,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-st{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;font-weight:700;white-space:nowrap}
 .oq-st.oq-canc{text-decoration:line-through}
 @media (max-width:640px){
-  .oq-colbtn{width:106px;font-size:11px}
+  .oq-colbtn{width:96px;font-size:10px}
   /* "Mais detalhes" no celular: cada talhão vira um bloco (sem tabela larga) */
   .oq-col-t thead{display:none}
   .oq-col-t,.oq-col-t tbody{display:block}
@@ -1782,7 +1782,7 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oq-colrow .oq-cell-hoje::before{top:auto;bottom:-7px;height:14px}
 .oq-colrow .oq-cell-hoje::after{content:'HOJE';position:absolute;left:var(--hoje,50%);bottom:4px;transform:translateX(-50%);font-size:9.5px;font-weight:800;color:#fff;background:#d32f2f;border-radius:6px;padding:1px 5px;letter-spacing:.3px;z-index:4}
 .oq-colrow .oq-cell-hoje small{visibility:hidden}
-@media (max-width:640px){ .oq-cell{flex-basis:118px;width:118px} .oq-cell-v{flex-basis:14px;width:14px} .oq-cell-sem{flex-basis:124px;width:124px} }
+@media (max-width:640px){ .oq-cell{flex-basis:98px;width:98px;gap:4px} .oq-cell-v{flex-basis:12px;width:12px} .oq-cell-sem{flex-basis:104px;width:104px} }
 @media print{ .oq-cell-hoje::before{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
 
 /* "Ver planejamento" do quadro: a operação aberta no talhão pisca para ser achada */
@@ -1853,7 +1853,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .oq-cell-2 .oq-card{min-width:0}
 .oq-cell-3{flex-basis:412px;width:412px;grid-template-columns:1fr 1fr 1fr}
 .oq-colbtn.oq-cell-2{display:flex}
-@media (max-width:640px){ .oq-cell-2,.oq-cell-3{flex-basis:118px;width:118px;display:flex} }
+@media (max-width:640px){ .oq-cell-2,.oq-cell-3{flex-basis:98px;width:98px;display:flex} }
 /* ===== dose por tanque editável (Campo → Recomendação de aplicação) ===== */
 .tk-in{width:92px;text-align:right}
 .tk-dose{font-size:11px}
@@ -1960,7 +1960,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-220';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-221';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';

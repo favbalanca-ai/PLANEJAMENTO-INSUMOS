@@ -150,7 +150,7 @@ arquivo único `planejamento_app.html` para abrir localmente.
   cinza = dentro do prazo · riscado = *não será realizada*. Filtros de safra (1ª, 2ª, ambas), atividade
   (pela classe dos produtos: Herbicida, Fungicida, Plantio…) e talhão; botão 🖨 Imprimir. O **+** do cartão
   abre o talhão já com a operação aberta. No celular a coluna do talhão fica fixa e os cartões rolam de lado;
-  a fonte é menor (v220: cartões de 106 px e 10,5 px, legenda e linha do tempo compactas) para caber mais na tela.
+  a fonte é menor (v221: cartões de 96 px e 9,5 px, legenda e linha do tempo compactas) para caber mais na tela.
   - **Tocar no cartão** abre uma janelinha: data estimada, data efetiva (em vermelho com ⚠ e quantos dias
     antes/depois, se diferente da estimada), dias após aplicado, situação e a tabela **Produto · Dose/ha ·
     Total** no talhão (dose realizada quando informada, senão a do plano; extras incluídos) + *Ver aplicação ›*.
