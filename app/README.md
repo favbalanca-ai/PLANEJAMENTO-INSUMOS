@@ -103,9 +103,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   (guardado só no aparelho, `planejamento_cdse`; é o mesmo Instance ID do Monitor de Irrigação, camada padrão `VEGETATION_INDEX`). **v227:** se a planilha tiver a aba **CONFIG APP** com `COPERNICUS INSTANCE ID`, o puxar traz `config_app` e o app usa esse ID em todos os aparelhos (`ndviPlanilha`); o ID colado no aparelho continua vencendo; controles de data final, janela (7–90 dias) e nuvem máxima;
   o serviço devolve a imagem mais recente da janela (`PRIORITY=mostRecent`); legenda no mapa; erro de tile avisa
   uma vez. **Talhão em foco (v228)**: escolhendo um talhão com limite, o app pede ao FIS do Sentinel Hub as
-  estatísticas do NDVI dentro do limite por passagem (90 dias, nuvem ≤ 60 %, histograma de 20 faixas;
-  `ndviCenas` — direto do celular ou, se o navegador bloquear, pela planilha `?acao=fis`), calcula o 5º e o 95º
-  percentil da passagem escolhida e desenha a camada **recortada no limite** (`GEOMETRY` em WKT) com um evalscript
+  datas das passagens pelo **WFS** da configuração (`ndviDatas`, 90 dias até a data, nuvem ≤ 60 %, DSS10 = L2A com
+  reserva DSS2) e, para a passagem escolhida, pede o **NDVI cru** (`ndviStats`: GetMap em CRS:84 com evalscript
+  que grava o valor no vermelho e a máscara no alfa, ~10 m por pixel até 512 px, `GEOMETRY` do limite), lê os pixels
+  numa canvas e calcula mín/máx/média e o 5º e 95º percentil no aparelho (o FIS do Sentinel Hub não existe no
+  Copernicus Data Space — responde 404). Depois desenha a camada **recortada no limite** com um evalscript
   de **6 faixas** entre esses percentis (`ndviEvalFaixas`, cores RdYlBu, vermelho = baixo, azul = alto). A legenda
   mostra os 6 intervalos, a média e a variação; seletor de passagem (mais nova primeiro); mapa enquadra o talhão;
   com o NDVI ligado os limites ficam só no contorno tracejado. A ficha do talhão passou a abrir com as seções **encolhidas**.
