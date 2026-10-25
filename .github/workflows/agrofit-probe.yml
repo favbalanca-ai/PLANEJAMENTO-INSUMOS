@@ -1,5 +1,8 @@
 name: Agrofit probe (temporário)
 on:
+  push:
+    branches: [ claude/empreendimentos-painel-visibilidade-anrppt ]
+    paths: [ '.github/workflows/agrofit-probe.yml' ]
   workflow_dispatch:
 jobs:
   probe:
