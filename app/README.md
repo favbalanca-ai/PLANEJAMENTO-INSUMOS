@@ -294,6 +294,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
     sementes inscritos no MAPA): 12,7 mil cultivares de 335 espécies, com espécie (nome comum + científico),
     categorias de semente, campos por estado, safras e área inscrita; filtro por espécie e busca. O nº RNC não está
     nos dados abertos — a ficha tem o botão *RNC no CultivarWeb* (site do Ministério, com código de imagem).
+  - **Catálogo nos cadastros (v224)** — folha de busca (`agPickOpen`, mesmo padrão do Nova Ação) filtrada pela
+    cultura do talhão: **Preços → 🏛️ na linha do produto** (Defensivos: preenche marca, classe do app
+    (`agClasseApp`), fabricante curto e unidade pela formulação (`agUnDe`: SL/EC/SC… = L, WG/WP/SP… = KG) e cria a
+    **ficha da bula** com ingrediente ativo, concentração, classe tox., grupo, formulação e registro; Sementes:
+    cultivar do SIGEF vira produto SEMENTE em SC); **Monitoramento → 🏛️ ao lado de Alvo** (alvos registrados para
+    a cultura; preenche o alvo e marca a categoria praga/doença/daninha); **Recomendação → 🏛️ em Alvo e em
+    Cultivar** (cultivares da espécie do talhão). O que for digitado à mão continua valendo.
   - **Bula → 🏛️ Buscar no catálogo MAPA**: procura o produto pelo nome (ou pelo registro já preenchido), lista
     os candidatos e, ao escolher, preenche **ingrediente ativo, concentração, classe tox., grupo/modo de ação,
     formulação e registro MAPA** (campos novos `form` e `reg`); você confere e salva.
