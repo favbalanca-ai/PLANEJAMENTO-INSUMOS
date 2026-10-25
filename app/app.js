@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-224';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-225';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5543,7 +5543,7 @@ function talFichaOpen(tid){
     grupos[talFichaTipo(items)].push({data, html:`<div class="tf-op ${cls}"><div class="tf-op-h"><span class="tf-data">${data?fmtData(data):'<span class="mut">sem data</span>'}</span><b>${esc(o.op.nome||('Operação '+(o.oi+1)))}${o.seq==='safrinha'?' <small class="mut">(2ª)</small>':''}</b>${tag}</div>
         ${items.length?`<div class="tf-its">${items.map(it=>`<span>${esc(it.produto)}</span><span class="num">${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`).join('')}</div>`:''}</div>`}); });
   const secs=Object.keys(TF_TIPOS).map(k=>{ const g=grupos[k].sort((a,b)=>(a.data||'9').localeCompare(b.data||'9'));
-    return `<details class="tf-sec"${g.length?' open':''}><summary><h4>${TF_TIPOS[k].ico} ${TF_TIPOS[k].lbl}</h4><span class="mut">${g.length?g.length:'—'}</span></summary>${g.length?g.map(x=>x.html).join(''):'<p class="mut tf-vazio">Nenhum item.</p>'}</details>`; }).join('');
+    return `<details class="tf-sec"><summary><h4>${TF_TIPOS[k].ico} ${TF_TIPOS[k].lbl}</h4><span class="mut">${g.length?g.length:'—'}</span></summary>${g.length?g.map(x=>x.html).join(''):'<p class="mut tf-vazio">Nenhum item.</p>'}</details>`; }).join('');
   // ocorrências e aferições recentes
   const ev=[]; Object.values((OCOR&&OCOR.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=OC_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📝'} ${esc(ocResumo(r))}`}); });
   Object.values((AFER&&AFER.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=AF_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📏'} ${esc(T.lbl||'Aferição')}${r.resumo?' · '+esc(r.resumo):''}`}); });
@@ -5555,7 +5555,7 @@ function talFichaOpen(tid){
     <div class="tf-resumo">${resumo}</div>
     <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button></div>
     ${secs}
-    <details class="tf-sec" open><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
+    <details class="tf-sec"><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
     <div class="na-links"><a class="link" data-go="#/timeline/${id}">Timeline</a> · <a class="link" data-go="#/campo/${id}">Operações</a></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); });
   document.body.appendChild(ov);
@@ -6317,6 +6317,10 @@ async function mapaInit(){
   _map=L.map(el).setView(pts.length?[pts[0].lat,pts[0].lng]:[-15.78,-47.93], pts.length?14:4);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:19, attribution:'Esri World Imagery'}).addTo(_map);
+  MAPA_GEO.marker=null; MAPA_GEO.circle=null; MAPA_NDVI.layer=null;
+  if(ndviCfg().on) ndviAplicar();                       // camada NDVI (Sentinel-2) se estava ligada
+  if(geoSeguirOn()) geoSeguir(true);                     // acompanhar a posição se estava ligado
+  else if(MAPA_GEO.pos) geoDesenhar();
   const bounds=[];
   // contornos dos talhões, coloridos pela cultura da safra atual
   const lims=limitesAll();
@@ -6340,14 +6344,64 @@ async function mapaInit(){
   else if(bounds.length===1){ _map.setView(bounds[0],15); }
   setTimeout(()=>{ try{ _map.invalidateSize(); }catch(e){} }, 120);
 }
-function mapaLocate(){
-  if(!_map||!navigator.geolocation){ toast('Mapa/GPS indisponível'); return; }
-  navigator.geolocation.getCurrentPosition(p=>{
-    const ll=[p.coords.latitude,p.coords.longitude];
-    window.L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#1e88e5',fillOpacity:1}).addTo(_map).bindPopup('Você').openPopup();
-    _map.setView(ll,15);
-  }, ()=>toast('Não foi possível obter o GPS'), {enableHighAccuracy:true,timeout:12000});
-}
+// ---- POSIÇÃO DO CELULAR no mapa: botão "Seguir" liga/desliga o acompanhamento (watchPosition); ponto azul + círculo
+// de precisão; segue você no mapa. Funciona sem internet (os limites e o ponto são desenhados no aparelho; só o
+// fundo de satélite precisa de rede). A escolha fica guardada no aparelho.
+const MAPA_GEO={watch:null, pos:null, marker:null, circle:null, centrou:false};
+const GEO_SEGUIR_KEY='planejamento_mapa_seguir';
+function geoSeguirOn(){ try{ return localStorage.getItem(GEO_SEGUIR_KEY)==='1'; }catch(e){ return false; } }
+function geoStatus(txt, cls){ const el=document.getElementById('mapa-geo-st'); if(el){ el.textContent=txt||''; el.className='mapa-geo-st'+(cls?' '+cls:''); el.hidden=!txt; }
+  const b=document.querySelector('[data-act="mapaLoc"]'); if(b){ const on=geoSeguirOn(); b.classList.toggle('on',on); b.setAttribute('aria-pressed',String(on)); b.textContent=on?'📍 Seguindo':'📍 Seguir'; } }
+function geoDesenhar(){ const L=window.L, q=MAPA_GEO.pos; if(!_map||!L||!q) return; const ll=[q.lat,q.lng];
+  if(!MAPA_GEO.marker){ MAPA_GEO.circle=L.circle(ll,{radius:q.acc||0,color:'#1e88e5',weight:1,fillColor:'#1e88e5',fillOpacity:.12,interactive:false}).addTo(_map);
+    MAPA_GEO.marker=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1e88e5',fillOpacity:1,className:'mapa-eu'}).addTo(_map).bindTooltip('Você',{direction:'top',offset:[0,-8]}); }
+  else { MAPA_GEO.marker.setLatLng(ll); MAPA_GEO.circle.setLatLng(ll).setRadius(q.acc||0); }
+  try{ MAPA_GEO.marker.bringToFront(); }catch(e){}   // por cima dos limites e do rótulo do talhão
+  if(geoSeguirOn()){ if(!MAPA_GEO.centrou){ _map.setView(ll, Math.max(_map.getZoom(),16)); MAPA_GEO.centrou=true; } else if(!_map.getBounds().contains(ll)) _map.panTo(ll); } }
+function geoAtualiza(p){ MAPA_GEO.pos={lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), ts:Date.now()}; geoDesenhar();
+  const t=talhaoNaPosicao(MAPA_GEO.pos); geoStatus(`📍 ±${MAPA_GEO.pos.acc} m${t?' · em '+tNome(t):''}${navigator.onLine===false?' · sem internet (fundo indisponível)':''}`); }
+function geoSeguir(ligar){ if(!navigator.geolocation){ toast('Este aparelho não tem GPS disponível'); return; }
+  if(MAPA_GEO.watch!=null){ try{ navigator.geolocation.clearWatch(MAPA_GEO.watch); }catch(e){} MAPA_GEO.watch=null; }
+  if(!ligar){ lsSet(GEO_SEGUIR_KEY,'0'); MAPA_GEO.centrou=false; geoStatus(''); return; }
+  lsSet(GEO_SEGUIR_KEY,'1'); MAPA_GEO.centrou=false; geoStatus('📍 procurando o GPS…');
+  MAPA_GEO.watch=navigator.geolocation.watchPosition(geoAtualiza, err=>{ geoStatus('✖ GPS indisponível ('+((err&&err.message)||'')+') — permita a localização', 'err'); }, {enableHighAccuracy:true, maximumAge:5000, timeout:20000}); }
+function mapaLocate(){ geoSeguir(!geoSeguirOn()); }
+// ponto dentro do limite do talhão (anel externo; raio-casting)
+function pontoNoAnel(lat,lng,anel){ let dentro=false; for(let i=0,j=anel.length-1;i<anel.length;j=i++){ const yi=anel[i][0], xi=anel[i][1], yj=anel[j][0], xj=anel[j][1];
+  if(((yi>lat)!==(yj>lat)) && (lng < (xj-xi)*(lat-yi)/((yj-yi)||1e-12)+xi)) dentro=!dentro; } return dentro; }
+function talhaoNaPosicao(pos){ if(!pos) return null; const lims=limitesAll(); for(const tid in lims){ const lm=lims[tid]; if(lm&&lm.coords&&lm.coords[0]&&pontoNoAnel(pos.lat,pos.lng,lm.coords[0])){ return findTalhao(tid)||{id:tid,nome:tid}; } } return null; }
+function distKm(a,b){ const R=6371, r=Math.PI/180, dLat=(b[0]-a[0])*r, dLng=(b[1]-a[1])*r, x=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
+function limCentro(lm){ const an=lm.coords[0]||[]; if(!an.length) return null; let la=0,lo=0; an.forEach(p=>{ la+=p[0]; lo+=p[1]; }); return [la/an.length, lo/an.length]; }
+// botão flutuante ＋ do mapa: Nova Ação do talhão onde você está; sem posição (ou fora dos limites) escolhe o talhão
+function mapaFab(){ const t=talhaoNaPosicao(MAPA_GEO.pos); if(t){ novaAcaoOpen(t.id); return; }
+  if(navigator.geolocation && !MAPA_GEO.pos){ geoStatus('📍 procurando o GPS…'); navigator.geolocation.getCurrentPosition(p=>{ geoAtualiza(p); const t2=talhaoNaPosicao(MAPA_GEO.pos); if(t2) novaAcaoOpen(t2.id); else mapaFabEscolher(); }, ()=>{ geoStatus(''); mapaFabEscolher(); }, {enableHighAccuracy:true, timeout:5000, maximumAge:30000}); return; }
+  mapaFabEscolher(); }
+function mapaFabEscolher(){ const lims=limitesAll(), pos=MAPA_GEO.pos, tals=talhoesAll().map(t=>{ const lm=lims[t.id], c=lm&&limCentro(lm); return {t, d:(pos&&c)?distKm([pos.lat,pos.lng],c):null}; });
+  tals.sort((a,b)=>(a.d==null)-(b.d==null) || (a.d||0)-(b.d||0) || String(a.t.id).localeCompare(String(b.t.id),'pt',{numeric:true}));
+  novaAcaoFechar(); const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>Nova Ação em…</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="na-sub"><small>${pos?'Você não está dentro de nenhum talhão — os mais próximos primeiro':'Sem posição do GPS — escolha o talhão'}</small></p>
+    <div class="na-list">${tals.map(x=>`<a class="na-item" data-act="naOpen" data-id="${esc(x.t.id)}"><span class="na-ico na-verde">🌱</span><span class="na-tx"><b>${esc(tNome(x.t))}</b><span>${esc((talSafraAtual(x.t)==='safrinha'?empSafDe(x.t):empDe(x.t))||'sem cultura')} · ${num(areaDe(x.t))} ha${x.d!=null?' · '+(x.d<1?Math.round(x.d*1000)+' m':nf1.format(x.d)+' km'):''}</span></span><span class="na-seta">›</span></a>`).join('')}</div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
+// ---- NDVI Sentinel-2 (Copernicus Data Space, WMS): a dona cria a conta grátis e cola o ID da configuração
+const NDVI_KEY='planejamento_cdse';
+const MAPA_NDVI={layer:null, avisou:false};
+function ndviCfg(){ let c={}; try{ c=JSON.parse(localStorage.getItem(NDVI_KEY)||'{}')||{}; }catch(e){}
+  return Object.assign({inst:'', layer:'NDVI', on:false, dias:30, maxcc:30, fim:''}, c); }
+function ndviSalvar(c){ lsSet(NDVI_KEY, JSON.stringify(c)); }
+function ndviPeriodo(c){ const fim=_isISO(c.fim)?c.fim:_hojeISO(), d=new Date(fim+'T12:00:00'); d.setDate(d.getDate()-(+c.dias||30)); return {ini:d.toISOString().slice(0,10), fim}; }
+function ndviAplicar(){ const L=window.L, c=ndviCfg(); if(!_map||!L) return;
+  if(MAPA_NDVI.layer){ try{ _map.removeLayer(MAPA_NDVI.layer); }catch(e){} MAPA_NDVI.layer=null; }
+  const leg=document.getElementById('ndvi-leg'); if(leg) leg.hidden=!(c.on&&c.inst);
+  if(!c.on||!c.inst) return; const per=ndviPeriodo(c);
+  MAPA_NDVI.layer=L.tileLayer.wms('https://sh.dataspace.copernicus.eu/ogc/wms/'+encodeURIComponent(c.inst.trim()), {layers:c.layer||'NDVI', format:'image/png', transparent:true, version:'1.3.0',
+    time:per.ini+'/'+per.fim, maxcc:+c.maxcc||30, priority:'mostRecent', showlogo:false, opacity:.85, maxZoom:19, attribution:'NDVI: Copernicus Sentinel-2'});
+  MAPA_NDVI.avisou=false; MAPA_NDVI.layer.on('tileerror', ()=>{ if(!MAPA_NDVI.avisou){ MAPA_NDVI.avisou=true; toast(navigator.onLine===false?'Sem internet: o NDVI não carrega offline':'NDVI não carregou — confira o ID da configuração e a camada no Copernicus'); } });
+  MAPA_NDVI.layer.addTo(_map); const st=document.getElementById('ndvi-st'); if(st) st.textContent=`imagem mais recente entre ${fmtData(per.ini)} e ${fmtData(per.fim)} · nuvem ≤ ${c.maxcc}%`; }
+function ndviToggle(){ const c=ndviCfg(); if(!c.inst){ const d=document.getElementById('ndvi-cfg'); if(d) d.open=true; toast('Cole o ID da configuração do Copernicus para ligar o NDVI'); return; } c.on=!c.on; ndviSalvar(c); ndviAplicar(); ndviBotao(); }
+function ndviBotao(){ const b=document.querySelector('[data-act="mapaNdvi"]'), c=ndviCfg(); if(b){ b.classList.toggle('on', !!(c.on&&c.inst)); b.setAttribute('aria-pressed', String(!!(c.on&&c.inst))); } const ctr=document.getElementById('ndvi-ctr'); if(ctr) ctr.hidden=!(c.on&&c.inst); }
+function ndviCampo(el){ const c=ndviCfg(); const k=el.dataset.ndvi; if(k==='inst') c.inst=el.value.trim(); else if(k==='layer') c.layer=el.value.trim()||'NDVI'; else if(k==='dias') c.dias=+el.value||30; else if(k==='maxcc') c.maxcc=+el.value||30; else if(k==='fim') c.fim=el.value;
+  ndviSalvar(c); if(c.on&&c.inst) ndviAplicar(); ndviBotao(); }
 /* ============ Módulo Campo: Painel, Timeline e Relatórios (visão consolidada) ============ */
 function _capf(s){ s=String(s||''); return s.charAt(0).toUpperCase()+s.slice(1); }
 function _talNomeC(id){ const t=talhoesAll().find(x=>x.id===id); return t?tNome(t):(id||'—'); }
@@ -6724,9 +6778,21 @@ V.mapa=function(){
       <div class="spacer"></div>
       <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
       <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
-      <button class="btn btn-outline btn-sm" data-act="mapaLoc">📍 Minha localização</button>
+      <button class="btn btn-outline btn-sm mapa-seguir${geoSeguirOn()?' on':''}" data-act="mapaLoc" aria-pressed="${geoSeguirOn()}" title="Mostrar e acompanhar a posição do celular no mapa (funciona sem internet)">${geoSeguirOn()?'📍 Seguindo':'📍 Seguir'}</button>
+      <button class="btn btn-outline btn-sm mapa-ndvi${(ndviCfg().on&&ndviCfg().inst)?' on':''}" data-act="mapaNdvi" aria-pressed="${!!(ndviCfg().on&&ndviCfg().inst)}" title="Camada NDVI do Sentinel-2 (Copernicus)">🛰️ NDVI</button>
       <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div>
-    <div id="mapa-canvas" class="mapa-canvas${mapaNomesOn()?'':' mapa-sem-nome'}"></div>
+    <div class="mapa-wrap"><div id="mapa-canvas" class="mapa-canvas${mapaNomesOn()?'':' mapa-sem-nome'}"></div>
+      <span id="mapa-geo-st" class="mapa-geo-st" hidden></span>
+      <button class="mapa-fab" data-act="mapaFab" title="Nova Ação no talhão onde você está">＋</button>
+      <div id="ndvi-leg" class="ndvi-leg"${(ndviCfg().on&&ndviCfg().inst)?'':' hidden'}><span>NDVI</span><i></i><small>baixo</small><small style="margin-left:auto">alto</small></div></div>
+    ${(()=>{ const c=ndviCfg(); return `<div id="ndvi-ctr" class="ndvi-ctr"${(c.on&&c.inst)?'':' hidden'}><label>até<input type="date" class="txt" data-ndvi="fim" value="${esc(c.fim||_hojeISO())}"></label>
+      <label>janela<select class="sel" data-ndvi="dias">${[7,15,30,60,90].map(d=>`<option value="${d}"${+c.dias===d?' selected':''}>${d} dias</option>`).join('')}</select></label>
+      <label>nuvem ≤<select class="sel" data-ndvi="maxcc">${[10,20,30,50,80].map(d=>`<option value="${d}"${+c.maxcc===d?' selected':''}>${d}%</option>`).join('')}</select></label>
+      <span id="ndvi-st" class="mut"></span></div>
+    <details id="ndvi-cfg" class="ndvi-cfg"><summary>⚙️ Configurar NDVI (Copernicus Sentinel-2)</summary>
+      <div class="app-grid" style="padding:6px 14px 4px"><label>ID da configuração (instance)<input class="txt" data-ndvi="inst" value="${esc(c.inst)}" placeholder="ex.: 1a2b3c4d-…"></label><label>Nome da camada<input class="txt" data-ndvi="layer" value="${esc(c.layer||'NDVI')}" placeholder="NDVI"></label></div>
+      <ol class="mut ndvi-passos"><li>Crie uma conta grátis em <b>dataspace.copernicus.eu</b> (botão Register).</li><li>Entre no <b>Dashboard</b> → <b>Configuration Utility</b> → <b>New configuration</b>, nome livre, modelo <b>Default (Sentinel-2 L2A)</b> → Create.</li><li>Copie o <b>ID</b> da configuração e cole acima. A camada padrão chama <b>NDVI</b>.</li><li>Ligue com o botão 🛰️ NDVI. O app pede a imagem mais recente da janela escolhida, com nuvem até o limite.</li></ol>
+      <p class="mut" style="font-size:11px;padding:0 14px 10px">O ID fica só neste aparelho (como a URL da planilha). Cota grátis do Copernicus: milhares de imagens por mês, mais que suficiente para a fazenda.</p></details>`; })()}
     <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
       <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
       <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
@@ -7610,6 +7676,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='ag-cult'){ AGROFIT.cultura=e.target.value; AGROFIT.lim=60; AGROFIT.limA=60; agrofitListaRefresh(); agrofitAlvosRefresh(); return; }
   if(e.target.id==='ag-outras'){ if(e.target.value){ AGROFIT.classe=e.target.value; AGROFIT.lim=60; } agrofitListaRefresh(); return; }
   if(e.target.id==='ag-esp'){ AGROFIT.esp=e.target.value; AGROFIT.limC=60; agrofitCvRefresh(); return; }
+  if(e.target.matches('[data-ndvi]')){ ndviCampo(e.target); return; }
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
@@ -7842,6 +7909,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
+    else if(a.act==='mapaFab'){ mapaFab(); return; }
+    else if(a.act==='mapaNdvi'){ ndviToggle(); }
     else if(a.act==='mapaNomes'){ mapaNomesAlternar(act); }
     else if(a.act==='pendDiscardOrfas'){ const orf=edicoesOrfas(buildFieldEdits());
       if(orf.length && confirm(`Descartar ${orf.length} edição(ões) de talhões sem aba na planilha?\nElas voltam a valer o que está na planilha.`)){ let n=0; orf.forEach(e=>{ try{ if(discardEdit(e)) n++; }catch(err){} }); saveOverrides(); toast(n+' edição(ões) descartada(s)'); updateEditBadge(); route({keepScroll:true}); } }
