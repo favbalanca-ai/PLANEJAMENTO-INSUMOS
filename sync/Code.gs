@@ -109,15 +109,15 @@ function readBase_(){
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
-  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst'];
-var APP_TTL_ = { precos_app:21600, equipe_sst:21600 };   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
+  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app'];
+var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600 };   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
   limites_app:function(){ return readMapApp('LIMITES APP'); }, afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
   ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
-  precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); } };
+  precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); }, config_app:function(){ return readConfigApp(); } };
 function readAppKeys_(keys){
   _LER_MEMO_ = {}; var out = {};
   try {
@@ -149,6 +149,17 @@ function sstSS(){
 function _isAppTab(nm){ nm = String(nm||'').toUpperCase(); return / APP$/.test(nm) || nm.indexOf('MOVIMENTA')>=0 || nm.indexOf(' APP ')>=0; }
 // Detecta a aba (FUNCIONARIOS / BancoDeDados / SST / EQUIPE / RH...) e as colunas
 // (nome, função, setor/unidade, status) pelo cabeçalho. Retorna só quem está ATIVO.
+// ---- CONFIG APP: aba opcional de chave | valor (coluna A = chave, B = valor), igual à do Monitor de Irrigação.
+// Hoje só o Copernicus (NDVI Sentinel-2): COPERNICUS INSTANCE ID e os nomes das camadas. O app usa o ID da planilha
+// quando não tem um ID colado no aparelho — assim todos os celulares ganham o NDVI sem configurar um por um.
+var CONFIG_APP_SHEET = 'CONFIG APP';
+function readConfigApp(){
+  var s = ss().getSheetByName(CONFIG_APP_SHEET); var m = {};
+  if (s && s.getLastRow() >= 1){ s.getRange(1, 1, s.getLastRow(), 2).getValues().forEach(function(l){ var k = S(l[0]).toUpperCase().replace(/\s+/g,' ').trim(); if (k) m[k] = S(l[1]).trim(); }); }
+  var lim = function(x){ return S(x).replace(/[^A-Za-z0-9_-]/g, ''); };   // tira aspas, tab, espaço (a célula pode vir com "\t…")
+  return { copernicus: { instancia: lim(m['COPERNICUS INSTANCE ID']), camadas: { ndvi: lim(m['COPERNICUS CAMADA NDVI']) || 'VEGETATION_INDEX', ndmi: lim(m['COPERNICUS CAMADA NDMI']) || 'MOISTURE_INDEX',
+    cir: lim(m['COPERNICUS CAMADA INFRAVERMELHO']) || 'COLOR_INFRARED', cor: lim(m['COPERNICUS CAMADA COR NATURAL']) || 'TRUE_COLOR' } } };
+}
 function readEquipeSST(){
   var b = sstSS(); if (!b) return [];               // ID configurado mas ilegível
   var all = b.getSheets();
@@ -1657,8 +1668,8 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados'],
-  campo:['equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app'],
   precos:['precos_app','bulas_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
