@@ -41,6 +41,10 @@ def marcas(s):
         if m and m not in out: out.append(m)
     return out
 
+def nome_limpo(s):
+    s = limpa(s)
+    return '' if not re.search(r'[A-Za-zÀ-ÿ0-9]', s) else s   # ",", "." ou "--" no arquivo do MAPA = sem nome
+
 def tipo_alvo(classe):
     c = norm(classe)
     if 'herbicida' in c: return 'Planta daninha'
@@ -73,7 +77,7 @@ def main(csv_path, out_dir, cult_path=None):
     prods, culturas = {}, set()
     alvos = le_culturas(cult_path)
     pragas = {a: {'nomes': {}, 'lista': [], 'por': collections.defaultdict(list)} for a in alvos}
-    todos = {}   # (nome comum, científico) -> {tipos: Counter, cult: set, prods: set}
+    todos = {}   # alvo (chave = nome científico; sem ele, nome comum) -> {nomes: Counter, cie, tipos: Counter, cult: set, prods: set}
     for r in rows:
         reg = limpa(r.get('NR_REGISTRO'))
         if not reg: continue
@@ -85,10 +89,14 @@ def main(csv_path, out_dir, cult_path=None):
         ma = modo_norm(r.get('MODO_DE_ACAO'))
         if ma: p['_ma'][ma] += 1
         cu = limpa(r.get('CULTURA'))
-        com0, cie0 = limpa(r.get('PRAGA_NOME_COMUM')), limpa(r.get('PRAGA_NOME_CIENTIFICO'))
+        com0, cie0 = nome_limpo(r.get('PRAGA_NOME_COMUM')), nome_limpo(r.get('PRAGA_NOME_CIENTIFICO'))
         if com0 or cie0:
-            T = todos.get((com0, cie0))
-            if not T: T = todos[(com0, cie0)] = {'tipos': collections.Counter(), 'cult': set(), 'prods': set()}
+            ka = norm(cie0) or ('#' + norm(com0))
+            T = todos.get(ka)
+            if not T: T = todos[ka] = {'nomes': collections.Counter(), 'cie': cie0, 'tipos': collections.Counter(), 'cult': set(), 'prods': set()}
+            for nm in re.split(r'\s*;\s*', com0):
+                nm = re.sub(r'\s*\(\d+\)\s*$', '', nm).strip()   # "carrapichinho (1)" -> "carrapichinho"
+                if nm: T['nomes'][nm] += 1
             T['tipos'][tipo_alvo(p['c'])] += 1; T['prods'].add(reg)
             if cu: T['cult'].add(cu)
         if cu:
@@ -123,8 +131,10 @@ def main(csv_path, out_dir, cult_path=None):
         json.dump({'v': 1, 'cultura': a, 'atualizado': hoje, 'pragas': P['lista'], 'por': dict(P['por'])},
                   open(os.path.join(out_dir, nome), 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     alv = []
-    for (com, cie), T in todos.items():
-        alv.append({'n': com, 'c': cie, 't': T['tipos'].most_common(1)[0][0], 'cu': sorted(cult_idx[c] for c in T['cult'] if c in cult_idx), 'np': len(T['prods'])})
+    for ka, T in todos.items():
+        nomes = [n for n, _ in T['nomes'].most_common()]
+        alv.append({'n': nomes[0] if nomes else '', 'o': nomes[1:8], 'c': T['cie'], 't': T['tipos'].most_common(1)[0][0],
+                    'cu': sorted(cult_idx[c] for c in T['cult'] if c in cult_idx), 'np': len(T['prods'])})
     alv.sort(key=lambda a: (norm(a['n'] or a['c']), norm(a['c'])))
     tipos = collections.Counter(a['t'] for a in alv)
     json.dump({'v': 1, 'atualizado': hoje, 'n': len(alv), 'tipos': dict(tipos.most_common()), 'culturas': cult_list, 'alvos': alv},

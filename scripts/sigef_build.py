@@ -12,7 +12,9 @@ import csv, json, os, re, sys, unicodedata, collections, datetime
 
 # nome comum das espécies mais usadas (o resto mostra o nome científico; o app busca pelos dois)
 NOMES = [
-    ('glycine max', 'Soja'), ('zea mays', 'Milho'), ('phaseolus vulgaris', 'Feijão'), ('vigna unguiculata', 'Feijão-caupi'),
+    ('glycine max', 'Soja'), ('glicina max', 'Soja'), ('sorghum spp', 'Sorgo'), ('cucumis sativus', 'Pepino'), ('solanum melongena', 'Berinjela'),
+    ('coriandrum', 'Coentro'), ('eruca', 'Rúcula'), ('cichorium', 'Chicória / almeirão'), ('abelmoschus', 'Quiabo'), ('beta vulgaris', 'Beterraba'), ('spinacia', 'Espinafre'),
+    ('petroselinum', 'Salsa'), ('allium', 'Alho / cebola'), ('fragaria', 'Morango'), ('passiflora', 'Maracujá'), ('carica', 'Mamão'), ('musa', 'Banana'), ('citrus', 'Citros'), ('zea mays', 'Milho'), ('phaseolus vulgaris', 'Feijão'), ('vigna unguiculata', 'Feijão-caupi'),
     ('sorghum bicolor', 'Sorgo'), ('triticum aestivum', 'Trigo'), ('triticum', 'Trigo'), ('gossypium', 'Algodão'), ('oryza sativa', 'Arroz'),
     ('avena sativa', 'Aveia-branca'), ('avena strigosa', 'Aveia-preta'), ('avena', 'Aveia'), ('hordeum', 'Cevada'), ('secale', 'Centeio'),
     ('helianthus', 'Girassol'), ('saccharum', 'Cana-de-açúcar'), ('coffea', 'Café'), ('arachis hypogaea', 'Amendoim'), ('arachis', 'Amendoim forrageiro'),
