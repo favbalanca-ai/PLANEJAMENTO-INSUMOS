@@ -1954,3 +1954,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .agp-sec{font-size:11.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);padding:10px 2px 4px;border-top:1px solid var(--line)}
 .agp-novo .na-tx b{color:var(--green)}
 .rc-tbl .agp-row .btn{padding:4px 6px}
+/* ===== Recomendação: cartões encolhidos + Finalizadas (v235) ===== */
+.rc-head[data-act]{cursor:pointer;user-select:none}
+.rc-chev{font-size:14px;color:var(--muted);transition:transform .15s;margin-left:2px}
+.recom-card.rc-fech .rc-chev{transform:rotate(-90deg)}
+.rc-resumo{display:none;padding:8px 12px 10px;font-size:12.5px;cursor:pointer;line-height:1.35}
+.recom-card.rc-fech .rc-resumo{display:block}
+.recom-card.rc-fech .rc-body{display:none}
+.rcv-fin{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:#f6f9f8}
+.rcv-fin>summary{cursor:pointer;padding:12px 14px;font-weight:700;color:var(--ink2);list-style:none;display:flex;align-items:center;gap:8px}
+.rcv-fin>summary::-webkit-details-marker{display:none}.rcv-fin>summary::before{content:"▸";color:var(--muted);transition:transform .15s}.rcv-fin[open]>summary::before{transform:rotate(90deg)}
+.rcv-fin>summary b{background:var(--green);color:#fff;border-radius:12px;padding:1px 8px;font-size:12px;flex:none}.rcv-fin>summary small{font-weight:400;flex:1;min-width:0;line-height:1.25}.rcv-fin-t{white-space:nowrap;flex:none}
+.rcv-fin .recom-list{padding:0 10px 10px}

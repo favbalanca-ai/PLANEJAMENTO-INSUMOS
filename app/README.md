@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Recomendação → cartões encolhidos e Finalizadas (v235)** — cada cartão nasce **encolhido** (cabeçalho + linha de
+  resumo: nº de produtos, área, cultura, primeiros produtos); tocar no cabeçalho expande/encolhe (`recomToggle`,
+  memória em `RECOM_UI.aberto`, sobrevive ao redesenho). **Rascunho** (em edição) e **Retorno recebido** (pede
+  aprovação) ficam sempre abertos. As **aprovadas** saem da lista principal e ficam na seção **✅ Finalizadas (n)**
+  recolhida no fim (abre sozinha no chip Aprovadas), ordenadas pela data da aplicação.
 - **Recomendação → folha Buscar insumo (v233)** — no cartão em edição, o botão **🔍** da linha e o **🔍 Buscar
   insumo** do rodapé abrem a folha (`recomInsumoOpen`, modo `insumo` do `agPickOpen`): filtro por **categoria**
   (classes do portfólio + do catálogo), busca por nome / ingrediente ativo / fabricante, **📦 No app (portfólio)**
