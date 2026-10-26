@@ -67,6 +67,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **🏛️ Catálogo MAPA no Administrativo (v231)** — na **conferência da NF-e**, em **Nova compra** e em
+  **Receber sem XML**, o campo *Produto do app* ganhou o botão **🏛️** que abre a folha do catálogo (defensivos do
+  AGROFIT e cultivares do SIGEF). Se o produto escolhido ainda não existe no app, ele é **criado no portfólio**
+  (linha na lista de Preços da safra com classe, fabricante e unidade pela formulação) e, para defensivos, a
+  **bula** é preenchida pelo catálogo (`agProdutoGarantir`, mesma rotina do 🏛️ da tela de Preços). Na NF-e a
+  folha já abre buscando pelo nome do item; o item fica **Confirmado** com o fator recalculado para a unidade do
+  produto. Item **Novo** (nada parecido no portfólio) recebe, depois que o catálogo carrega, a caixa *"🏛️ Catálogo
+  MAPA sugere: marca · classe"* com **✓ Usar** — só quando a marca do catálogo está escrita no nome do item
+  (`nfeSugereCatalogo`); itens Sugerido/Automático não ganham sugestão do catálogo. Nada muda na planilha nem no
+  `Code.gs`: o produto novo sobe pelo mesmo caminho da lista de Preços.
 - **Estoque (também no Administrativo)** — a mesma tela aparece nos módulos Planejamento e
   Administrativo (`VIEW_MOD.estoque='both'`, `TELA_MODS.estoque`); abrir por um módulo não troca de módulo.
   Operador com acesso ao Administrativo vê e edita o estoque inicial e o "em pedido".

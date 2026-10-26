@@ -1937,6 +1937,9 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .foco-legenda div{display:flex;align-items:center;gap:6px}
 .foco-legenda i{width:18px;height:12px;border-radius:3px;flex:none;border:1px solid rgba(0,0,0,.08)}
 .foco-legenda small{grid-column:1/-1;color:var(--muted);line-height:1.3;margin-top:3px}
+.nfe-catsug{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 2px;padding:6px 10px;border:1px dashed var(--teal);border-radius:9px;font-size:12.5px;background:#f2f8f9}
+.nfe-it-map .agp-row .btn{padding:6px 7px}
+.rec-sx-row .agp-row{flex:1;min-width:0}
 
 </style>
 </head>
@@ -2037,7 +2040,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-230';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-231';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3614,7 +3617,7 @@ V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
   const d=compraDraft;
   const draftRows=d.itens.map((it,i)=>`<tr>
-    <td class="c-full"><input list="prodlist" class="txt prod-in" data-cmpi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="produto"></td>
+    <td class="c-full"><span class="agp-row"><input list="prodlist" class="txt prod-in" data-cmpi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="produto"><button type="button" class="btn btn-outline btn-sm" data-act="cmpMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button></span></td>
     <td class="num"><input class="cell" inputmode="decimal" data-cmpi="qtd" data-i="${i}" value="${it.qtd||''}" placeholder="0"></td>
     <td data-cmpu="${i}">${esc(it.un||(PROD[it.produto]&&PROD[it.produto].un)||'')}</td>
     <td class="num"><input class="cell" inputmode="decimal" data-cmpi="preco" data-i="${i}" value="${it.preco||''}" placeholder="0"></td>
@@ -3773,6 +3776,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     if(!nota.itens.length) throw new Error('a nota não tem itens');
     nota.tipo=nfeTipoNota(nota.itens);
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
+    nfeSugereCatalogo();   // itens sem parecido no portfólio: sugestão pelo catálogo MAPA (assíncrono)
     if(opts.reclass) nfeImport.reclass={data:ja||''};   // regrava a entrada desta nota (mesma chave = substitui, não duplica)
     // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
     if(origem==='arquivo' && nfeServerOk()){ nfeImport.xml=txt; nfeImport.uploadP=nfePost({__nfeUpload:{xml:txt}}).catch(()=>null); }
@@ -4055,11 +4059,12 @@ function nfeConferirHtml(){
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
       <div class="nfe-it-sub">cód. ${esc(it.cprod)} · CFOP ${esc(it.cfop)} · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
       ${it.ignorar?'':`<div class="nfe-it-map">
-        <label class="nfe-prod">Produto do app<input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"></label>
+        <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button></span></label>
         <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
         <div class="nfe-kv"><small>Entra no estoque</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
         <div class="nfe-kv"><small>Custo real</small><b>${c>0?brl(c):'—'}${un(it)?'/'+esc(un(it)):''}</b><span class="${dif==null?'':(dif>5?'up':(dif<-5?'down':''))}">${ref>0?(dif!=null?`${dif>=0?'+':''}${nf1.format(dif)}% vs ref. ${brl(ref)}`:`ref. ${brl(ref)}`):'sem preço de referência'}</span></div>
       </div>`}
+      ${st==='novo'&&it.catSug?`<div class="nfe-catsug">🏛️ Catálogo MAPA sugere: <b>${esc(it.catSug.marca)}</b> <span class="ag-cl">${esc(it.catSug.classe)}</span> <button class="btn btn-outline btn-sm" data-act="nfiMapaUsar" data-i="${i}" title="Usa este produto (e cadastra no portfólio se faltar)">✓ Usar</button></div>`:''}
       <div class="nfe-it-act">${st==='sug'?`<button class="btn btn-outline btn-sm" data-act="nfeAceitar" data-i="${i}">✓ Aceitar sugestão</button>`:''}
         <label class="nfe-ign"><input type="checkbox" data-nfi="ignorar" data-i="${i}"${it.ignorar?' checked':''}> Ignorar (não é insumo: palete, frete, peça…)</label></div>
     </div>`; }).join('');
@@ -4348,7 +4353,7 @@ function recConferirHtml(){
 }
 function recSemXmlHtml(){
   const p=nfeChavePartes(REC.chave), [a,m]=[p.aamm.slice(0,2),p.aamm.slice(2)];
-  const rows=REC.itens.map((i,k)=>`<div class="rec-sx-row"><input list="prodlist" class="txt" data-reci="produto" data-i="${k}" value="${esc(i.produto)}" placeholder="produto do app">
+  const rows=REC.itens.map((i,k)=>`<div class="rec-sx-row"><span class="agp-row"><input list="prodlist" class="txt" data-reci="produto" data-i="${k}" value="${esc(i.produto)}" placeholder="produto do app"><button type="button" class="btn btn-outline btn-sm" data-act="recMapa" data-i="${k}" title="Escolher no catálogo MAPA">🏛️</button></span>
     <input class="cell" inputmode="decimal" data-reci="qtd" data-i="${k}" value="${i.qtd||''}" placeholder="qtd"><span class="mut">${esc((PROD[i.produto]||{}).un||'')}</span>
     <button class="icon-btn del" data-act="recSxDel" data-i="${k}" title="Remover">🗑</button></div>`).join('');
   return `${prodDatalist()}<div class="panel rec-conf"><div class="panel-head"><h2>📦 Nota ainda não chegou ao sistema</h2><span class="sub">recebimento sem XML</span></div>
@@ -6896,11 +6901,11 @@ function agClasseApp(c){ const n=_agNorm(c); if(/microbiol|biolog|agente/.test(n
   if(/inseticida|acaricida|formicida|cupinicida|feromon/.test(n)) return 'INSETICIDA'; if(/nematicida/.test(n)) return 'NEMATICIDA'; if(/adjuvante|espalhante|oleo/.test(n)) return 'ADJUVANTE'; if(/regulador/.test(n)) return 'RC'; return String(c||'').toUpperCase(); }
 function agUnDe(form){ const cod=String(form||'').split(' - ')[0].trim().toUpperCase(); if(/^(SL|EC|SC|EW|OD|ME|CS|SE|SO|FS|UL|DC|FF|GL|LS|ES|EO|SD)$/.test(cod)) return 'L'; if(/^(WG|WP|SP|SG|GR|DP|GE|GB|PA|RB|FD|FU|WS|DS|TB|MG)$/.test(cod)) return 'KG'; return ''; }
 function agEmpresaCurta(t){ return String(t||'').split(' - ')[0].replace(/\s*(ltda\.?|s\.?a\.?|s\/a|eireli|me)\s*$/i,'').trim(); }
-function agPickOpen(opts){ novaAcaoFechar(); _agPick=Object.assign({q:'', modo:opts.tipo}, opts);
+function agPickOpen(opts){ novaAcaoFechar(); _agPick=Object.assign({q:'', modo:opts.tipo}, opts); _agPick.q=String(opts.q||'');
   const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
   ov.innerHTML=`<div class="na-sheet agp-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>${esc(opts.titulo||'Catálogo MAPA')}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
     ${opts.modos?`<div class="ag-chips agp-modos">${opts.modos.map(m=>`<button class="chip-f${m[0]===_agPick.modo?' on':''}" data-act="agpModo" data-modo="${m[0]}">${esc(m[1])}</button>`).join('')}</div>`:''}
-    <div class="agp-top"><input class="txt" id="agp-q" placeholder="${esc(opts.placeholder||'Buscar…')}" autocomplete="off">${opts.cultura?`<span class="cp-tag" title="filtrado pela cultura do talhão">${esc(opts.cultura)}</span>`:''}</div>
+    <div class="agp-top"><input class="txt" id="agp-q" placeholder="${esc(opts.placeholder||'Buscar…')}" value="${esc(_agPick.q)}" autocomplete="off">${opts.cultura?`<span class="cp-tag" title="filtrado pela cultura do talhão">${esc(opts.cultura)}</span>`:''}</div>
     <div id="agp-lista" class="na-list agp-lista"><p class="mut" style="padding:12px">⏳ carregando o catálogo…</p></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov);
   setTimeout(()=>{ const i=document.getElementById('agp-q'); if(i&&window.innerWidth>700) i.focus(); }, 50);
@@ -6929,15 +6934,35 @@ function agPickRender(){ const el=document.getElementById('agp-lista'); if(!el||
     else { tit=x.a.n||x.a.c; sub=(x.a.n&&x.a.c?x.a.c+' · ':'')+x.a.np+' produto(s)'; tag=x.a.t; }
     return `<a class="na-item agp-item" data-act="agpPick" data-i="${i}"><span class="na-tx"><b>${esc(tit)}</b><span>${esc(sub)}</span></span>${tag?`<span class="ag-cl">${esc(tag)}</span>`:''}</a>`; }).join('')+(itens.length>=60?'<p class="mut" style="padding:8px 12px;font-size:12px">Mostrando 60 — refine a busca.</p>':''); }
 function agPickEscolher(i){ const P=_agPick, x=P&&P.lista&&P.lista[+i]; if(!x) return; novaAcaoFechar(); _agPick=null; try{ P.onPick(x); }catch(e){ console.error(e); toast('Não consegui preencher: '+(e&&e.message||'')); } }
+// bula do produto preenchida pelo catálogo (só campos vazios)
+function agBulaDe(p, nome){ const k=bulaKey(nome), r=Object.assign({}, (BULAS.reg[k]&&!BULAS.reg[k].del)?BULAS.reg[k]:{}, {produto:nome}); const sp=agrofitIaSplit(p.ia), m=/Categoria\s*(\d)/i.exec(p.tox||'');
+  const novo={ia:sp.ia||p.ia, conc:sp.conc, tox:m?`${m[1]} — ${(p.tox.split(/\s[–—-]\s/)[1]||'').trim()}`:p.tox, grupo:[p.c,p.ma].filter(Boolean).join(' · '), form:p.f, reg:p.r};
+  let n=0; for(const f in novo){ if(novo[f]&&!String(r[f]||'').trim()){ r[f]=novo[f]; n++; } } if(n){ r._u=tsAgora(); BULAS.reg[k]=r; saveBulas(); } return n; }
+// dados do item do catálogo → {produto, classe, empresa, un}
+function agItemDados(x){ if(x.k==='p'){ const p=x.p; return {produto:x.marca, classe:agClasseApp(p.c), empresa:agEmpresaCurta(p.t), un:agUnDe(p.f), p}; }
+  const e=x.c._e||{}; return {produto:x.c.c, classe:'SEMENTE', empresa:'', un:'SC', cultivar:e.n||''}; }
+// garante o produto no PORTFÓLIO (lista de Preços da safra + PROD) — usado pela NF-e, compras e recebimento;
+// devolve o nome. Produto que já existe não é mexido.
+function agProdutoGarantir(x){ const d=agItemDados(x), nome=d.produto; if(!nome) return '';
+  if(!PROD[nome]){ const s=safraAtual(); if(s&&s.itens&&!s.itens.some(i=>bulaKey(i.produto)===bulaKey(nome))){ s.itens.push({produto:nome, classe:d.classe, empresa:d.empresa, un:d.un, precoVista:'', precoPrazo:'', pct:0}); savePrecos(); }
+    const pobj={produto:nome, classe:d.classe, un:d.un, empresa:d.empresa, preco:0, estoque:0, pedido:0, _precos:true}; (DATA.produtos=DATA.produtos||[]).push(pobj); PROD[nome]=pobj; _mpKey=''; }
+  if(d.p) agBulaDe(d.p, nome); return nome; }
 // Preços: preencher a linha do produto pelo catálogo (defensivo ou cultivar) e criar a ficha da bula
+const AG_PICK_PROD={tipo:'produto', titulo:'Produto do catálogo MAPA', placeholder:'Marca, ingrediente ativo, registro ou cultivar…', modos:[['produto','🧪 Defensivos'],['cultivar','🌱 Sementes (cultivares)']]};
 function prMapaOpen(i){ const s=safraAtual(), it=s.itens[i]; if(!it) return;
-  agPickOpen({tipo:'produto', titulo:'Produto do catálogo MAPA', placeholder:'Marca, ingrediente ativo, registro ou cultivar…', modos:[['produto','🧪 Defensivos'],['cultivar','🌱 Sementes (cultivares)']], onPick:x=>{
-    if(x.k==='p'){ const p=x.p; it.produto=x.marca; it.classe=agClasseApp(p.c); it.empresa=agEmpresaCurta(p.t)||it.empresa; it.un=agUnDe(p.f)||it.un; savePrecos();
-      const k=bulaKey(it.produto), r=Object.assign({}, (BULAS.reg[k]&&!BULAS.reg[k].del)?BULAS.reg[k]:{}, {produto:it.produto}); const sp=agrofitIaSplit(p.ia), m=/Categoria\s*(\d)/i.exec(p.tox||'');
-      const novo={ia:sp.ia||p.ia, conc:sp.conc, tox:m?`${m[1]} — ${(p.tox.split(/\s[–—-]\s/)[1]||'').trim()}`:p.tox, grupo:[p.c,p.ma].filter(Boolean).join(' · '), form:p.f, reg:p.r};
-      for(const f in novo){ if(novo[f]&&!String(r[f]||'').trim()) r[f]=novo[f]; } r._u=tsAgora(); BULAS.reg[k]=r; saveBulas();
-      route(); toast(`${it.produto}: produto e bula preenchidos pelo catálogo`); }
-    else if(x.k==='c'){ const e=x.c._e||{}; it.produto=x.c.c; it.classe='SEMENTE'; it.un=it.un||'SC'; if(e.n&&!it.empresa) it.empresa=''; savePrecos(); route(); toast(`${it.produto}: cultivar ${e.n?'de '+e.n+' ':''}do SIGEF`); } } }); }
+  agPickOpen(Object.assign({}, AG_PICK_PROD, {onPick:x=>{ const d=agItemDados(x); it.produto=d.produto; it.classe=d.classe; it.empresa=d.empresa||it.empresa; it.un=d.un||it.un; savePrecos(); _mpKey=''; mergePrecosProdutos();
+    if(d.p){ agBulaDe(d.p, it.produto); route(); toast(`${it.produto}: produto e bula preenchidos pelo catálogo`); } else { route(); toast(`${it.produto}: cultivar ${d.cultivar?'de '+d.cultivar+' ':''}do SIGEF`); } }})); }
+// NF-e / compras / recebimento: escolher no catálogo e já deixar o produto no portfólio
+function agPickProduto(q, onNome){ agPickOpen(Object.assign({}, AG_PICK_PROD, {q:q||'', onPick:x=>{ const nome=agProdutoGarantir(x); if(nome) onNome(nome); }})); }
+// sugestão pelo catálogo para os itens "novos" da nota (sem parecido no portfólio): roda depois de importar
+async function nfeSugereCatalogo(){ const imp=nfeImport; if(!imp) return; const d=await agrofitCarregar(); if(!d||nfeImport!==imp) return; let mudou=false;
+  imp.itens.forEach(it=>{ if(it.catSug!==undefined || nfeItemStatus(it)!=='novo') return; const toks=_nfeTok(it.xprod); const c=agrofitBuscarNome(toks.join(' '))[0];
+    // só sugere quando a marca do catálogo está escrita no nome do item (evita chute por uma palavra solta)
+    const marca=c?(c.m||[]).find(m=>{ const mt=_nfeTok(m); return mt.length && mt.every(t=>toks.includes(t)); }):null; it.catSug=marca?{r:c.r, marca, classe:c.c}:null; mudou=true; });
+  if(mudou) recRerender(); }
+function nfiMapaUsar(i){ const it=nfeImport&&nfeImport.itens[i], d=AGROFIT.dados; if(!it||!it.catSug||!d) return; const p=d._porReg[it.catSug.r]; if(!p) return;
+  nfiMapaSet(it, agProdutoGarantir({k:'p', p, marca:it.catSug.marca})); }
+function nfiMapaSet(it, nome){ if(!nome) return; it.produto=nome; it.ok=true; it.fonte='manual'; if(!it.fatorEdit) it.fator=nfeFatorDe(it.xprod,it.ucom,(PROD[nome]||{}).un); recRerender(); }
 function agCatPorAlvo(t){ return t==='Doença'?'doenca':t==='Planta daninha'?'daninha':(t==='Praga'||t==='Nematoide')?'praga':'outro'; }
 function agrofitAbas(ativa){ const t=[['', '🧪 Insumos'],['alvos','🐛 Alvos'],['cultivares','🌱 Cultivares']];
   return `<div class="ag-abas">${t.map(([k,l])=>`<a class="ag-aba${ativa===k?' on':''}" data-go="#/catalogo${k?'/'+k:''}">${l}</a>`).join('')}</div>`; }
@@ -10098,6 +10123,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='agpPick'){ agPickEscolher(a.i); return; }
     else if(a.act==='agpModo'){ if(_agPick){ _agPick.modo=a.modo; document.querySelectorAll('.agp-modos .chip-f').forEach(c=>c.classList.toggle('on', c.dataset.modo===a.modo)); agPickCarregar(); } return; }
     else if(a.act==='prMapa'){ prMapaOpen(+a.i); return; }
+    else if(a.act==='nfiMapa'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it) agPickProduto(_nfeTok(it.xprod).slice(0,2).join(' '), nome=>nfiMapaSet(it,nome)); return; }
+    else if(a.act==='nfiMapaUsar'){ nfiMapaUsar(+a.i); return; }
+    else if(a.act==='cmpMapa'){ const it=compraDraft&&compraDraft.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; it.un=(PROD[nome]||{}).un||it.un; route({keepScroll:true}); }); return; }
+    else if(a.act==='recMapa'){ const it=REC.itens&&REC.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; recRerender(); }); return; }
     else if(a.act==='monitAlvoMapa'){ const sel=document.getElementById('monit-talhao'), t=sel&&findTalhao(sel.value); const cult=t?agCulturaDe(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t)):'';
       agPickOpen({tipo:'alvo', titulo:'Alvo (catálogo MAPA)', placeholder:'Nome popular ou científico…', cultura:cult, onPick:x=>{ const i=document.getElementById('monit-alvo'), c=document.getElementById('monit-cat'); if(i) i.value=x.a.n||x.a.c; if(c) c.value=agCatPorAlvo(x.a.t); }}); return; }
     else if(a.act==='recAlvoMapa'||a.act==='recCultivarMapa'){ const r=recomById(a.id); if(!r) return; const ck=culturaKey(r.cultura||''), f=a.act==='recAlvoMapa'?'alvo':'cultivar';
