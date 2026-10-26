@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-231';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-232';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1574,6 +1574,7 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
     setTimeout(()=>route({keepScroll:true}),0); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
+document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });   // busca da Recomendação: filtra os cartões sem redesenhar
 document.addEventListener('input',e=>{ if(e.target.id==='agp-q'){ if(_agPick){ _agPick.q=e.target.value; clearTimeout(_agQTimer); _agQTimer=setTimeout(agPickRender,100); } return; } if(e.target.id==='ag-q') agrofitBusca(e.target.value); else if(e.target.id==='ag-qa'){ AGROFIT.qa=e.target.value; AGROFIT.limA=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitAlvosRefresh,120); } else if(e.target.id==='ag-qc'){ AGROFIT.qc=e.target.value; AGROFIT.limC=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitCvRefresh,120); } });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
@@ -5620,7 +5621,7 @@ function recomNorm(r){
   if(r.opNome==null) r.opNome='';
   // modelo agronômico (registros antigos ganham os campos com padrão)
   if(r.cultura==null){ const t=findTalhao(r.talhao); r.cultura=(t?empDe(t):'')||''; }
-  ['estadio','cultivar','nivel','justif','crea','maquina','ponta','pressao','velocidade','horario','reentrada'].forEach(k=>{ if(r[k]==null) r[k]=''; });
+  ['estadio','cultivar','nivel','justif','crea','maquina','ponta','pressao','velocidade','horario','reentrada','nome','tipoApl'].forEach(k=>{ if(r[k]==null) r[k]=''; });
   if(r.tmax==null) r.tmax=30; if(r.urmin==null) r.urmin=55; if(r.vmax==null) r.vmax=10;   // limites climáticos usuais
   if(r.epi==null) r.epi=RECOM_EPI_PADRAO;
   if(!r.resp){ try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); if(d.resp) r.resp=d.resp; if(d.crea&&!r.crea) r.crea=d.crea; }catch(e){} }
@@ -5630,6 +5631,50 @@ function recomNorm(r){
   return r;
 }
 const RECOM_TEC_KEY='planejamento_recom_tec';   // último responsável técnico/CREA usado (vira padrão)
+// tipo de aplicação (v232): lista fixa, como nos apps de manejo
+const RECOM_TIPOS=['Terrestre','Drone','Avião','Pivô Central','Gotejo','Fertirrigação','Sulco de Plantio','Lanço','Incorporado'];
+// situação da recomendação para os contadores da visão geral: pendente (aguarda retorno/aprovação), atrasada (data passou e não aprovada), agendada (data de hoje em diante)
+function recomSit(r){ const hj=_hojeISO(), d=String(r.data||'').slice(0,10), s=r.status||'rascunho';
+  return { aprovada:s==='aprovada', pendente:(s==='enviada'||s==='retorno'), atrasada:(s!=='aprovada' && !!d && d<hj), agendada:(s!=='aprovada' && (!d || d>=hj)) }; }
+let RECOM_UI={f:'total', q:''};   // filtro (chip) e busca da visão geral — só na memória
+function recomFiltra(regs){ const f=RECOM_UI.f; if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
+// texto de busca do cartão (talhão, operação, nome, alvo, cultura, produtos, status)
+function recomBuscaTxt(r){ const t=findTalhao(r.talhao); return _agNorm([t?tNome(t):r.talhao, r.opNome, r.nome, r.alvo, r.cultura, r.tipoApl, (RECOM_ST[r.status]||{}).lbl, ...(r.itens||[]).map(i=>i.produto)].filter(Boolean).join(' ')); }
+function recomAplicaBusca(){ const q=_agNorm(RECOM_UI.q||'').trim().split(/\s+/).filter(Boolean); let n=0;
+  document.querySelectorAll('.recom-card[data-busca]').forEach(c=>{ const ok=q.every(t=>c.dataset.busca.indexOf(t)>=0); c.hidden=!ok; if(ok) n++; });
+  const v=document.getElementById('rcv-vazio'); if(v) v.hidden=n>0; const k=document.getElementById('rcv-n'); if(k) k.textContent=n; }
+// replicar: cópia da recomendação para outros talhões (status rascunho, nova data; operação casada pelo nome, se o talhão tiver)
+function recomReplicar(srcId, talIds, data){ const src=recomById(srcId); if(!src) return []; const out=[];
+  (talIds||[]).forEach(tid=>{ const t=findTalhao(tid); if(!t) return; const o=src.opNome?opsDoTalhao(t).find(x=>x.op&&x.op.nome===src.opNome):null;
+    const r=JSON.parse(JSON.stringify(src)); r.id=recomNovoId(); r.talhao=tid; r.opKey=o?o.key:''; r.area=areaDe(t)||0; r.cultura=((o&&o.seq==='safrinha')?empSafDe(t):empDe(t))||src.cultura||'';
+    r.data=data||_hojeISO(); r.status='rascunho'; r.enviadaTs=0; r.retorno=null; r.aprov=null; r.saidaPushed=false; r.replDe=src.id; r.ts=Date.now()+out.length;
+    delete r.tsCfg; delete r.linkPushed; (r.itens||[]).forEach(it=>{ it.real=null; }); if(src.tipo==='ts') r.tipo='ts';
+    RECOM.registros.push(r); out.push(r); });
+  if(out.length) saveRecom(); return out; }
+// folha do botão ＋ da tela Recomendação: do planejamento / direta / replicar
+function recomNovaOpen(sub, tid, src){ novaAcaoFechar(); const all=talhoesAll(), ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  const H=(tit,voltar)=>`<div class="na-grab"></div><div class="na-h">${voltar?`<button class="icon-btn" data-act="recomNovaSub" data-sub="${voltar}" title="Voltar">‹</button>`:'<span></span>'}<h3>${tit}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>`;
+  const tals=(act,extra)=>`<div class="na-list">${all.map(t=>`<a class="na-item" data-act="${act}" data-t="${esc(t.id)}"${extra||''}><span class="na-ico na-ciano">📍</span><span class="na-tx"><b>${esc(tNome(t))}</b><span>${esc(empDe(t)||'sem cultura')} · ${num(areaDe(t))} ha</span></span><span class="na-seta">›</span></a>`).join('')}</div>`;
+  let corpo='';
+  if(!sub){ corpo=H('Nova recomendação')+`<div class="na-list">
+      <a class="na-item" data-act="recomNovaSub" data-sub="plan"${tid?` data-t="${esc(tid)}"`:''}><span class="na-ico na-amarelo">📅</span><span class="na-tx"><b>A partir do planejamento</b><span>Escolha o talhão e a operação planejada: produtos, doses e data já vêm prontos.</span></span><span class="na-seta">›</span></a>
+      <a class="na-item" data-act="recomNovaSub" data-sub="direta"${tid?` data-t="${esc(tid)}"`:''}><span class="na-ico na-ciano">📝</span><span class="na-tx"><b>Recomendação direta</b><span>Em branco, para um talhão: você preenche produtos e doses.</span></span><span class="na-seta">›</span></a>
+      <a class="na-item" data-act="recomNovaSub" data-sub="repl"><span class="na-ico na-verde">🔁</span><span class="na-tx"><b>Replicar recomendação</b><span>Copia uma recomendação existente para outros talhões, com nova data.</span></span><span class="na-seta">›</span></a></div>`; }
+  else if(sub==='plan' && !tid){ corpo=H('Talhão','')+tals('recomNovaSub',' data-sub="plan"'); }
+  else if(sub==='plan'){ const t=findTalhao(tid), ops=t?opsDoTalhao(t):[];
+    corpo=H(tNome(t),'plan')+(ops.length?`<div class="na-list">${ops.map(o=>`<a class="na-item" data-act="recomFromOp" data-t="${esc(tid)}" data-op="${esc(o.key)}"><span class="na-ico na-amarelo">📅</span><span class="na-tx"><b>${esc(o.op.nome)}</b><span>${o.op.dap?`${esc(String(o.op.dap))} DAP`:''}${o.seq==='safrinha'?' · 2ª safra':''}${(o.op.itens||[]).filter(i=>i.produto).length?` · ${(o.op.itens||[]).filter(i=>i.produto).length} produto(s)`:''}</span></span><span class="na-seta">›</span></a>`).join('')}</div>`
+      :`<p class="na-sub mut">Sem operações planejadas neste talhão.</p>`); }
+  else if(sub==='direta' && !tid){ corpo=H('Talhão','')+tals('recomNova'); }
+  else if(sub==='repl' && !src){ const regs=RECOM.registros.slice().sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,40);
+    corpo=H('Qual recomendação replicar?','')+(regs.length?`<div class="na-list">${regs.map(r=>{ const t=findTalhao(r.talhao), st=RECOM_ST[r.status]||RECOM_ST.rascunho; return `<a class="na-item" data-act="recomNovaSub" data-sub="repl" data-src="${esc(r.id)}"><span class="na-ico na-verde">${st.ico}</span><span class="na-tx"><b>${esc(r.nome||r.opNome||'Recomendação')} · ${esc(t?tNome(t):r.talhao)}</b><span>${esc(fmtData(r.data))} · ${(r.itens||[]).filter(i=>i.produto).map(i=>i.produto).slice(0,3).join(', ')||'sem produtos'}</span></span><span class="na-seta">›</span></a>`; }).join('')}</div>`
+      :`<p class="na-sub mut">Ainda não há recomendações para replicar.</p>`); }
+  else if(sub==='repl'){ const r=recomById(src), t0=r&&findTalhao(r.talhao);
+    corpo=H('Replicar para…','repl')+`<p class="na-sub"><b>${esc((r&&(r.nome||r.opNome))||'Recomendação')}</b> de ${esc(t0?tNome(t0):'')}<br><small>marque os talhões que vão receber a cópia</small></p>
+      <div class="rcv-rep"><label class="mut" style="font-size:12px;font-weight:700">Data da aplicação<input type="date" id="rcv-rep-data" class="txt" value="${esc(_hojeISO())}"></label>
+      <div class="rcv-rep-list">${all.filter(t=>!r||t.id!==r.talhao).map(t=>`<label class="rcv-rep-t"><input type="checkbox" value="${esc(t.id)}"> <b>${esc(tNome(t))}</b> <span class="mut">${esc(empDe(t)||'')} · ${num(areaDe(t))} ha</span></label>`).join('')}</div>
+      <button class="btn btn-primary" data-act="recomReplicarOk" data-src="${esc(src)}" style="width:100%;margin-top:10px">🔁 Replicar</button></div>`; }
+  ov.innerHTML=`<div class="na-sheet" role="dialog">${corpo}</div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 const RECOM_EPI_PADRAO='Luvas nitrílicas, óculos, respirador com filtro, macacão hidrorrepelente, botas e boné árabe';
 // cálculo da calda: ha por tanque, nº de tanques, volume total e produto por tanque
 function recomCalda(r){
@@ -5774,6 +5819,7 @@ function recomWhats(id){
   let x=`*RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO*\n`;
   x+=`Talhão: ${t?tNome(t):r.talhao}${area?` (${num(area)} ha)`:''}\n`;
   if(r.cultura||r.estadio) x+=`Cultura: ${r.cultura||'—'}${r.estadio?` · estádio ${r.estadio}`:''}\n`;
+  if(r.nome) x+=`Aplicação: ${r.nome}\n`;
   if(r.opNome) x+=`Operação: ${r.opNome}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}${r.janela?` · janela: ${r.janela}`:''}\n`;
   if(r.alvo) x+=`Alvo: ${r.alvo}${r.nivel?` (${r.nivel})`:''}\n`;
@@ -5785,7 +5831,7 @@ function recomWhats(id){
   }).join('\n')+'\n'; }
   if(cd.calda) x+=`\n*Calda:* ${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L (${num(cd.haTk)} ha/tanque)`:''}${cd.nTk?` · ${cd.nTk} tanque(s)${cd.ultimo&&cd.ultimo<cd.haTk-0.01?`, último com ${num(cd.ultimo)} ha`:''}`:''}${cd.total?` · total ${num(cd.total)} L`:''}\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
-  const apl=[r.maquina, r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
+  const apl=[r.tipoApl, r.maquina, r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
   if(apl) x+=`Aplicação: ${apl}\n`;
   const cond=recomCondTxt(r); if(cond) x+=`Condições: ${cond}\n`;
   const seg=[r.epi?`EPI: ${r.epi}`:'', r.reentrada?`reentrada ${r.reentrada} h`:''].filter(Boolean).join(' · ');
@@ -5861,6 +5907,8 @@ function recomCard(r,t){
   const sec=(titulo,inner)=>`<div class="rc-sec"><div class="rc-sec-t">${titulo}</div>${inner}</div>`;
   const head = editable ? `
     ${sec('Identificação',`<div class="app-grid" style="padding:6px 12px 10px">
+      <label style="grid-column:1/-1">Nome da aplicação<input class="txt" ${F('nome')} value="${esc(r.nome||'')}" placeholder="ex.: Dessecação pré-plantio · 2ª fungicida"></label>
+      <label>Tipo de aplicação<select class="sel" ${F('tipoApl')}><option value="">—</option>${RECOM_TIPOS.map(x=>`<option${r.tipoApl===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
       <label>Data<input type="date" ${F('data')} value="${esc(r.data||'')}"></label>
       <label>Área (ha)<input class="cell" inputmode="decimal" ${F('area')} value="${area||''}"></label>
       <label>Cultura<input class="txt" ${F('cultura')} value="${esc(r.cultura||'')}"></label>
@@ -5900,7 +5948,7 @@ function recomCard(r,t){
       <label>CREA / registro<input class="txt" ${F('crea')} value="${esc(r.crea||'')}"></label></div>`)}` : `
     <div class="rc-meta">
       ${caldaTxt?`<span>💧 ${caldaTxt}</span>`:''}${r.adjuvante?`<span>🧪 ${esc(r.adjuvante)}</span>`:''}${bulaPhTxt(its)?`<span title="pH ideal da calda, pela bula de cada produto">📘 ${esc(bulaPhTxt(its))}</span>`:''}
-      ${(r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.maquina,r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
+      ${(r.tipoApl||r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.tipoApl,r.maquina,r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
       ${recomCondTxt(r)?`<span>🌤 ${esc(recomCondTxt(r))}</span>`:''}
       ${(r.epi||r.reentrada)?`<span>⚠️ ${esc(r.epi||'')}${r.reentrada?` · reentrada ${esc(r.reentrada)} h`:''}</span>`:''}
       ${r.resp?`<span>👤 ${esc(r.resp)}${r.crea?` · ${esc(r.crea)}`:''}</span>`:''}
@@ -5934,10 +5982,12 @@ function recomCard(r,t){
       <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">↩️ Reabrir</button>`;
   }
   actions=`<button class="btn btn-outline btn-sm" data-act="recomPrint" data-id="${esc(r.id)}" title="Imprimir a recomendação técnica (receituário) em PDF">🖨 PDF</button> `+actions;
-  return `<div class="recom-card ${st.cls}">
+  const sit=recomSit(r);
+  return `<div class="recom-card ${st.cls}" data-busca="${esc(recomBuscaTxt(r))}">
     <div class="rc-head"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
-      ${r.opNome?`<span class="rc-op">${esc(r.opNome)}</span>`:''}<span class="spacer"></span>
-      <span class="mut" style="font-size:11px">${esc(fmtData(r.data))}</span></div>
+      ${t&&!editable?`<span class="rc-tal">📍 ${esc(tNome(t))}</span>`:''}${(r.nome||r.opNome)?`<span class="rc-op">${esc(r.nome||r.opNome)}</span>`:''}<span class="spacer"></span>
+      <span class="mut rc-data${sit.atrasada?' rc-atras':''}" style="font-size:11px">${sit.atrasada?'⚠️ ':''}${esc(fmtData(r.data))}</span></div>
+    ${editable&&t?`<div class="rc-tal-ed">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha${r.opNome?` · ${esc(r.opNome)}`:''}</div>`:''}
     ${head}
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
@@ -6094,7 +6144,8 @@ function exportRecomPDF_(r){
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
     ${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
-    ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}</div></div>
+    ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}
+    ${r.nome?kv('Aplicação',esc(r.nome),'w2'):''}${r.tipoApl?kv('Tipo de aplicação',esc(r.tipoApl)):''}</div></div>
   <div class="rx-sec"><h2>2. Diagnóstico</h2><div class="rx-kv">
     ${kv('Alvo',esc(r.alvo||''),'w2')}${kv('Nível / infestação',esc(r.nivel||''),'w2')}${kv('Justificativa técnica',esc(r.justif||''),'w4')}</div></div>
   <div class="rx-sec"><h2>3. Produtos — na ordem de mistura no tanque</h2>
@@ -6122,28 +6173,26 @@ function exportRecomPDF_(r){
 V.recomendacao=function(arg){
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
-  const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id, t=all.find(x=>x.id===selId);
-  const regs=RECOM.registros.filter(r=>r.talhao===selId).map(recomNorm).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const tOpt=all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
+  // #/recomendacao → todos os talhões; #/recomendacao/<id> → só aquele talhão (links do mapa, do Campo e do seletor)
+  const selId=(arg&&all.some(t=>t.id===arg))?arg:'', t=selId?all.find(x=>x.id===selId):null;
+  const base=RECOM.registros.filter(r=>!selId||r.talhao===selId).map(recomNorm);
+  const cnt={total:base.length, pendente:0, atrasada:0, agendada:0, aprovada:0}; base.forEach(r=>{ const st=recomSit(r); if(st.pendente) cnt.pendente++; if(st.atrasada) cnt.atrasada++; if(st.agendada) cnt.agendada++; if(st.aprovada) cnt.aprovada++; });
+  if(!cnt[RECOM_UI.f] && RECOM_UI.f!=='total') RECOM_UI.f='total';
+  const regs=recomFiltra(base).sort((a,b)=>{ const sa=recomSit(a), sb=recomSit(b); if(sa.aprovada!==sb.aprovada) return sa.aprovada?1:-1; if(sa.atrasada!==sb.atrasada) return sa.atrasada?-1:1; return (b.ts||0)-(a.ts||0); });   // atrasadas primeiro, aprovadas por último
+  const tOpt=`<option value=""${!selId?' selected':''}>Todos os talhões</option>`+all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n}`:''}</option>`; }).join('');
-  const ops=opsDoTalhao(t);
-  const opBtns=ops.map(o=>`<button class="btn btn-outline btn-sm" data-act="recomFromOp" data-t="${esc(selId)}" data-op="${esc(o.key)}">➕ ${esc(o.op.nome)}${o.op.dap?` · ${esc(String(o.op.dap))} DAP`:''}${o.seq==='safrinha'?' · 2ª':''}</button>`).join('')
-    || '<span class="mut" style="font-size:12px">Sem operações planejadas neste talhão.</span>';
-  const cards=regs.map(r=>recomCard(r,t)).join('')
-    || '<div class="mut" style="padding:14px">Sem recomendações neste talhão ainda. Crie a partir de uma operação do planejamento ou em branco.</div>';
+  const chip=(k,lbl,cls)=>`<button class="rcv-chip${RECOM_UI.f===k?' on':''}" data-act="recomFiltro" data-f="${k}"><b class="${cls}">${cnt[k]}</b> ${lbl}</button>`;
+  const cards=regs.map(r=>recomCard(r,findTalhao(r.talhao))).join('');
   return `${prodDatalist()}<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
-  <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div></div>
-  <div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>
-  <div class="panel"><div class="panel-head"><h2>Nova recomendação</h2><span class="sub">puxe do planejamento ou crie em branco</span></div>
-    <div class="bulk-add" style="flex-wrap:wrap;padding:12px 14px;gap:8px;align-items:center">
-      <span class="mut" style="font-size:12px;font-weight:700">Do planejamento:</span>${opBtns}
-      <span class="spacer"></span>
-      <button class="btn btn-primary btn-sm" data-act="recomNova" data-t="${esc(selId)}">✏️ Em branco</button>
-    </div></div>
-  <div class="panel"><div class="panel-head"><h2>Recomendações</h2><span class="sub">${regs.length} registro(s) · rascunho → enviada → retorno → aprovada</span>
-      <div class="spacer"></div>${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
-    <div class="recom-list">${cards}</div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Salvo <b>no aparelho</b>. Envie a recomendação por WhatsApp, registre o retorno do operador e aprove para gerar o histórico da aplicação no talhão.</p>`;
+  <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div>
+    ${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
+  ${t?`<div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>`:''}
+  <div class="rcv-chips">${chip('total','Total','c-tot')}${chip('pendente','Pendentes','c-pen')}${chip('atrasada','Atrasadas','c-atr')}${chip('agendada','Agendadas','c-age')}${chip('aprovada','Aprovadas','c-apr')}</div>
+  <div class="rcv-busca"><span>🔍</span><input class="txt" id="recom-q" value="${esc(RECOM_UI.q||'')}" placeholder="Buscar recomendação… (talhão, operação, produto, alvo)" autocomplete="off"></div>
+  <div class="recom-list rcv-list">${cards}</div>
+  <div class="rcv-vazio" id="rcv-vazio"${regs.length?' hidden':''}><div class="rcv-vazio-ico">📋</div>Nenhuma recomendação encontrada<small>${base.length?'Mude o filtro ou a busca.':'Toque em ＋ para criar a partir do planejamento, direta ou replicando outra.'}</small></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 70px">Pendentes: aguardam retorno ou aprovação · Atrasadas: data passou sem aprovar · Agendadas: data de hoje em diante. Salvo <b>no aparelho</b>; envie por WhatsApp, registre o retorno e aprove para gerar o histórico do talhão.</p>
+  <button class="rcv-fab" data-act="recomNovaFab"${selId?` data-t="${esc(selId)}"`:''} title="Nova recomendação">＋</button>`;
 };
 
 /* ================= MAPA (pontos de monitoramento em satélite) ================= */
@@ -7783,7 +7832,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
-  if(e.target.id==='recom-talhao'){ location.hash='#/recomendacao/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='recom-talhao'){ location.hash=e.target.value?'#/recomendacao/'+encodeURIComponent(e.target.value):'#/recomendacao'; return; }
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
   if(e.target.dataset && e.target.dataset.reci!=null){ const it=REC.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.reci;
@@ -8037,8 +8086,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='stTrFechar'){ standTrenaFechar(); }
     else if(a.act==='stTrOk'){ standTrenaOk(); }
     else if(a.act==='stTrDel'){ if(standTrena){ standTrena.pos.splice(+a.k,1); standTrenaRender(); } }
-    else if(a.act==='recomFromOp'){ if(recomCreate(a.t,a.op)){ route(); toast('Recomendação criada do planejamento'); } }
-    else if(a.act==='recomNova'){ if(recomCreate(a.t,'')){ route(); toast('Recomendação em branco criada'); } }
+    else if(a.act==='recomFromOp'){ novaAcaoFechar(); if(recomCreate(a.t,a.op)){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação criada do planejamento'); } }
+    else if(a.act==='recomNova'){ novaAcaoFechar(); if(recomCreate(a.t,'')){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação em branco criada'); } }
+    else if(a.act==='recomNovaFab'){ recomNovaOpen('', a.t||''); return; }
+    else if(a.act==='recomNovaSub'){ recomNovaOpen(a.sub||'', a.t||'', a.src||''); return; }
+    else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
+      if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
+    else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
