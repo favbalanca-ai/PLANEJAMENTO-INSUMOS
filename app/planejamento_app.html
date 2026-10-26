@@ -1971,6 +1971,18 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .agp-sec{font-size:11.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;color:var(--muted);padding:10px 2px 4px;border-top:1px solid var(--line)}
 .agp-novo .na-tx b{color:var(--green)}
 .rc-tbl .agp-row .btn{padding:4px 6px}
+/* ===== Recomendação: cartões encolhidos + Finalizadas (v235) ===== */
+.rc-head[data-act]{cursor:pointer;user-select:none}
+.rc-chev{font-size:14px;color:var(--muted);transition:transform .15s;margin-left:2px}
+.recom-card.rc-fech .rc-chev{transform:rotate(-90deg)}
+.rc-resumo{display:none;padding:8px 12px 10px;font-size:12.5px;cursor:pointer;line-height:1.35}
+.recom-card.rc-fech .rc-resumo{display:block}
+.recom-card.rc-fech .rc-body{display:none}
+.rcv-fin{margin-top:14px;border:1px solid var(--line);border-radius:12px;background:#f6f9f8}
+.rcv-fin>summary{cursor:pointer;padding:12px 14px;font-weight:700;color:var(--ink2);list-style:none;display:flex;align-items:center;gap:8px}
+.rcv-fin>summary::-webkit-details-marker{display:none}.rcv-fin>summary::before{content:"▸";color:var(--muted);transition:transform .15s}.rcv-fin[open]>summary::before{transform:rotate(90deg)}
+.rcv-fin>summary b{background:var(--green);color:#fff;border-radius:12px;padding:1px 8px;font-size:12px;flex:none}.rcv-fin>summary small{font-weight:400;flex:1;min-width:0;line-height:1.25}.rcv-fin-t{white-space:nowrap;flex:none}
+.rcv-fin .recom-list{padding:0 10px 10px}
 
 </style>
 </head>
@@ -2071,7 +2083,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-234';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-235';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7727,7 +7739,9 @@ const RECOM_TIPOS=['Terrestre','Drone','Avião','Pivô Central','Gotejo','Fertir
 // situação da recomendação para os contadores da visão geral: pendente (aguarda retorno/aprovação), atrasada (data passou e não aprovada), agendada (data de hoje em diante)
 function recomSit(r){ const hj=_hojeISO(), d=String(r.data||'').slice(0,10), s=r.status||'rascunho';
   return { aprovada:s==='aprovada', pendente:(s==='enviada'||s==='retorno'), atrasada:(s!=='aprovada' && !!d && d<hj), agendada:(s!=='aprovada' && (!d || d>=hj)) }; }
-let RECOM_UI={f:'total', q:''};   // filtro (chip) e busca da visão geral — só na memória
+let RECOM_UI={f:'total', q:'', aberto:{}};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória
+// cartão aberto? rascunho (em edição) e retorno recebido (pede aprovação) sempre; os outros só depois de tocar no cabeçalho
+function recomAberto(r){ return r.status==='rascunho' || r.status==='retorno' || !!RECOM_UI.aberto[r.id]; }
 function recomFiltra(regs){ const f=RECOM_UI.f; if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
 // texto de busca do cartão (talhão, operação, nome, alvo, cultura, produtos, status)
 function recomBuscaTxt(r){ const t=findTalhao(r.talhao); return _agNorm([t?tNome(t):r.talhao, r.opNome, r.nome, r.alvo, r.cultura, r.tipoApl, (RECOM_ST[r.status]||{}).lbl, ...(r.itens||[]).map(i=>i.produto)].filter(Boolean).join(' ')); }
@@ -8081,11 +8095,14 @@ function recomCard(r,t){
       <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">↩️ Reabrir</button>`;
   }
   actions=`<button class="btn btn-outline btn-sm" data-act="recomPrint" data-id="${esc(r.id)}" title="Imprimir a recomendação técnica (receituário) em PDF">🖨 PDF</button> `+actions;
-  const sit=recomSit(r);
-  return `<div class="recom-card ${st.cls}" data-busca="${esc(recomBuscaTxt(r))}">
-    <div class="rc-head"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
+  const sit=recomSit(r), aberto=recomAberto(r), nProd=its.filter(i=>i.produto).length;
+  const resumo=[nProd?`${nProd} produto(s)`:'sem produtos', area?`${num(area)} ha`:'', r.cultura||'', its.filter(i=>i.produto).slice(0,3).map(i=>i.produto).join(', ')+(nProd>3?'…':'')].filter(Boolean).join(' · ');
+  return `<div class="recom-card ${st.cls}${aberto?'':' rc-fech'}" data-busca="${esc(recomBuscaTxt(r))}">
+    <div class="rc-head" data-act="recomToggle" data-id="${esc(r.id)}" title="${aberto?'Encolher':'Expandir'}"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
       ${t&&!editable?`<span class="rc-tal">📍 ${esc(tNome(t))}</span>`:''}${(r.nome||r.opNome)?`<span class="rc-op">${esc(r.nome||r.opNome)}</span>`:''}<span class="spacer"></span>
-      <span class="mut rc-data${sit.atrasada?' rc-atras':''}" style="font-size:11px">${sit.atrasada?'⚠️ ':''}${esc(fmtData(r.data))}</span></div>
+      <span class="mut rc-data${sit.atrasada?' rc-atras':''}" style="font-size:11px">${sit.atrasada?'⚠️ ':''}${esc(fmtData(r.data))}</span><span class="rc-chev">▾</span></div>
+    <div class="rc-resumo mut" data-act="recomToggle" data-id="${esc(r.id)}">${esc(resumo)}</div>
+    <div class="rc-body">
     ${editable&&t?`<div class="rc-tal-ed">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha${r.opNome?` · ${esc(r.opNome)}`:''}</div>`:''}
     ${head}
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
@@ -8096,7 +8113,7 @@ function recomCard(r,t){
     ${tail}
     ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
     ${retBlock}
-    <div class="rc-actions">${actions}</div></div>`;
+    <div class="rc-actions">${actions}</div></div></div>`;
 }
 // impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
 // bloco do LINK de baixa no PDF (clicável no PDF salvo; no papel, o operador abre pelo WhatsApp)
@@ -8281,7 +8298,9 @@ V.recomendacao=function(arg){
   const tOpt=`<option value=""${!selId?' selected':''}>Todos os talhões</option>`+all.map(x=>{ const n=RECOM.registros.filter(r=>r.talhao===x.id).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n}`:''}</option>`; }).join('');
   const chip=(k,lbl,cls)=>`<button class="rcv-chip${RECOM_UI.f===k?' on':''}" data-act="recomFiltro" data-f="${k}"><b class="${cls}">${cnt[k]}</b> ${lbl}</button>`;
-  const cards=regs.map(r=>recomCard(r,findTalhao(r.talhao))).join('');
+  const ativas=regs.filter(r=>r.status!=='aprovada'), fins=regs.filter(r=>r.status==='aprovada').sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0));
+  const cards=ativas.map(r=>recomCard(r,findTalhao(r.talhao))).join('')
+    +(fins.length?`<details class="rcv-fin"${RECOM_UI.f==='aprovada'?' open':''}><summary><span class="rcv-fin-t">✅ Finalizadas</span> <b>${fins.length}</b> <small class="mut">aplicações aprovadas, já no histórico do talhão</small></summary><div class="recom-list rcv-list">${fins.map(r=>recomCard(r,findTalhao(r.talhao))).join('')}</div></details>`:'');
   return `${prodDatalist()}<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
   <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div>
     ${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
@@ -10197,6 +10216,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
+    else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
+      RECOM_UI.aberto[a.id]=!ab; c.classList.toggle('rc-fech', ab); c.querySelector('.rc-head').title=ab?'Expandir':'Encolher'; return; }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
