@@ -81,7 +81,8 @@ arquivo único `planejamento_app.html` para abrir localmente.
   passou sem aprovar; agendada = data de hoje em diante), **busca** que filtra os cartões sem redesenhar
   (`recomAplicaBusca`; talhão, operação, nome, alvo, cultura, produtos, status), atrasadas primeiro e aprovadas por
   último, estado vazio "Nenhuma recomendação encontrada". O painel "Nova recomendação" virou o botão flutuante
-  **＋** (`recomNovaOpen`): **📅 A partir do planejamento** (talhão → operação; com talhão selecionado vai direto às
+  **＋**, que abre as três opções em **pílulas** empilhadas acima dele e vira ✕ (v234; tocar fora recolhe) — os passos
+  seguintes sobem numa folha (`recomNovaOpen`): **📅 A partir do planejamento** (talhão → operação; com talhão selecionado vai direto às
   operações), **📝 Recomendação direta** (em branco) e **🔁 Replicar recomendação** (`recomReplicar`: copia para os
   talhões marcados como rascunho, com nova data, área/cultura do destino e operação casada pelo nome). Cartão ganhou
   **Nome da aplicação** e **Tipo de aplicação** (`RECOM_TIPOS`: Terrestre, Drone, Avião, Pivô Central, Gotejo,

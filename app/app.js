@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-233';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-234';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1574,7 +1574,8 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
     setTimeout(()=>route({keepScroll:true}),0); } });
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
-document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });   // busca da Recomendação: filtra os cartões sem redesenhar
+document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });
+document.addEventListener('click',e=>{ const w=document.getElementById('rcv-fabw'); if(w && w.classList.contains('open') && !w.contains(e.target)) w.classList.remove('open'); }, true);   // busca da Recomendação: filtra os cartões sem redesenhar
 document.addEventListener('input',e=>{ if(e.target.id==='agp-q'){ if(_agPick){ _agPick.q=e.target.value; clearTimeout(_agQTimer); _agQTimer=setTimeout(agPickRender,100); } return; } if(e.target.id==='ag-q') agrofitBusca(e.target.value); else if(e.target.id==='ag-qa'){ AGROFIT.qa=e.target.value; AGROFIT.limA=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitAlvosRefresh,120); } else if(e.target.id==='ag-qc'){ AGROFIT.qc=e.target.value; AGROFIT.limC=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitCvRefresh,120); } });
 V.entradas=function(){
   if(!compraDraft) compraDraft=compraNovoDraft();
@@ -6221,7 +6222,11 @@ V.recomendacao=function(arg){
   <div class="recom-list rcv-list">${cards}</div>
   <div class="rcv-vazio" id="rcv-vazio"${regs.length?' hidden':''}><div class="rcv-vazio-ico">📋</div>Nenhuma recomendação encontrada<small>${base.length?'Mude o filtro ou a busca.':'Toque em ＋ para criar a partir do planejamento, direta ou replicando outra.'}</small></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 70px">Pendentes: aguardam retorno ou aprovação · Atrasadas: data passou sem aprovar · Agendadas: data de hoje em diante. Salvo <b>no aparelho</b>; envie por WhatsApp, registre o retorno e aprove para gerar o histórico do talhão.</p>
-  <button class="rcv-fab" data-act="recomNovaFab"${selId?` data-t="${esc(selId)}"`:''} title="Nova recomendação">＋</button>`;
+  <div class="rcv-fabw" id="rcv-fabw"><div class="rcv-fab-menu">
+      <button class="rcv-pill" data-act="recomNovaSub" data-sub="plan"${selId?` data-t="${esc(selId)}"`:''}><span class="rcv-pill-ico">📅</span>A partir do planejamento</button>
+      <button class="rcv-pill" data-act="recomNovaSub" data-sub="direta"${selId?` data-t="${esc(selId)}"`:''}><span class="rcv-pill-ico">📝</span>Recomendação direta</button>
+      <button class="rcv-pill" data-act="recomNovaSub" data-sub="repl"><span class="rcv-pill-ico">🔁</span>Replicar recomendação</button></div>
+    <button class="rcv-fab" data-act="recomNovaFab" title="Nova recomendação"><span class="rcv-fab-mais">＋</span><span class="rcv-fab-x">✕</span></button></div>`;
 };
 
 /* ================= MAPA (pontos de monitoramento em satélite) ================= */
@@ -8118,8 +8123,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='stTrDel'){ if(standTrena){ standTrena.pos.splice(+a.k,1); standTrenaRender(); } }
     else if(a.act==='recomFromOp'){ novaAcaoFechar(); if(recomCreate(a.t,a.op)){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação criada do planejamento'); } }
     else if(a.act==='recomNova'){ novaAcaoFechar(); if(recomCreate(a.t,'')){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação em branco criada'); } }
-    else if(a.act==='recomNovaFab'){ recomNovaOpen('', a.t||''); return; }
-    else if(a.act==='recomNovaSub'){ recomNovaOpen(a.sub||'', a.t||'', a.src||''); return; }
+    else if(a.act==='recomNovaFab'){ const w=document.getElementById('rcv-fabw'); if(w) w.classList.toggle('open'); return; }   // ＋ abre as 3 opções em pílulas; vira ✕
+    else if(a.act==='recomNovaSub'){ const w=document.getElementById('rcv-fabw'); if(w) w.classList.remove('open'); recomNovaOpen(a.sub||'', a.t||'', a.src||''); return; }
     else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
