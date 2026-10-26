@@ -67,6 +67,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Recomendação → folha Buscar insumo (v233)** — no cartão em edição, o botão **🔍** da linha e o **🔍 Buscar
+  insumo** do rodapé abrem a folha (`recomInsumoOpen`, modo `insumo` do `agPickOpen`): filtro por **categoria**
+  (classes do portfólio + do catálogo), busca por nome / ingrediente ativo / fabricante, **📦 No app (portfólio)**
+  primeiro (fabricante, unidade, preço, ingrediente ativo) e **🏛️ Catálogo MAPA** depois, filtrado pela cultura
+  do talhão e sem repetir o que já existe no app. Escolher do catálogo cadastra o produto no portfólio + bula
+  (`agProdutoGarantir`); a linha recebe produto, unidade, ingrediente ativo e carência da bula. Nome que não existe
+  em lugar nenhum ganha a opção **➕ Cadastrar como novo insumo** (entra no portfólio sem classe/unidade). O
+  **+ linha** continua para digitar à mão. Nada muda na planilha.
 - **Recomendação → visão geral (v232)** — `#/recomendacao` abre **todos os talhões** (o seletor tem "Todos os
   talhões"; `#/recomendacao/<id>`, usado pelo mapa e pelo Campo, filtra um só). Contadores clicáveis **Total ·
   Pendentes · Atrasadas · Agendadas · Aprovadas** (`recomSit`: pendente = enviada/retorno recebido; atrasada = data
