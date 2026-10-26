@@ -67,6 +67,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Recomendação → visão geral (v232)** — `#/recomendacao` abre **todos os talhões** (o seletor tem "Todos os
+  talhões"; `#/recomendacao/<id>`, usado pelo mapa e pelo Campo, filtra um só). Contadores clicáveis **Total ·
+  Pendentes · Atrasadas · Agendadas · Aprovadas** (`recomSit`: pendente = enviada/retorno recebido; atrasada = data
+  passou sem aprovar; agendada = data de hoje em diante), **busca** que filtra os cartões sem redesenhar
+  (`recomAplicaBusca`; talhão, operação, nome, alvo, cultura, produtos, status), atrasadas primeiro e aprovadas por
+  último, estado vazio "Nenhuma recomendação encontrada". O painel "Nova recomendação" virou o botão flutuante
+  **＋** (`recomNovaOpen`): **📅 A partir do planejamento** (talhão → operação; com talhão selecionado vai direto às
+  operações), **📝 Recomendação direta** (em branco) e **🔁 Replicar recomendação** (`recomReplicar`: copia para os
+  talhões marcados como rascunho, com nova data, área/cultura do destino e operação casada pelo nome). Cartão ganhou
+  **Nome da aplicação** e **Tipo de aplicação** (`RECOM_TIPOS`: Terrestre, Drone, Avião, Pivô Central, Gotejo,
+  Fertirrigação, Sulco de Plantio, Lanço, Incorporado), que saem no WhatsApp e no PDF. Nada muda na planilha.
 - **🏛️ Catálogo MAPA no Administrativo (v231)** — na **conferência da NF-e**, em **Nova compra** e em
   **Receber sem XML**, o campo *Produto do app* ganhou o botão **🏛️** que abre a folha do catálogo (defensivos do
   AGROFIT e cultivares do SIGEF). Se o produto escolhido ainda não existe no app, ele é **criado no portfólio**
