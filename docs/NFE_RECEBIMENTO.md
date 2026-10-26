@@ -125,7 +125,9 @@ Lista **Notas a classificar**. Ao abrir uma nota:
   app, fator, quantidade convertida. Status do item:
   - **Automático:** `CNPJ + cProd` já está no `DE-PARA NFE`.
   - **Sugerido:** 1ª vez; o app sugere o produto do portfólio de nome mais parecido.
-  - **Novo:** nada parecido; escolher na lista ou cadastrar no portfólio.
+  - **Novo:** nada parecido; escolher na lista, ou pelo **🏛️ Catálogo MAPA** (v231):
+    o produto é criado no portfólio + bula. Quando a marca do catálogo aparece no
+    nome do item, o app mostra *"Catálogo MAPA sugere: …"* com **✓ Usar**.
   - **Ignorar:** não é insumo (palete, frete, peça). Também fica memorizado.
 - **Fator automático:** tentar extrair do `xProd` padrões como `CX 10X1KG` → 10,
   `GL 5L` → 5, `BB 20L` → 20. Sempre editável.
@@ -253,8 +255,8 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 - **Preço de referência:** **não é alterado** (vem de fórmula na planilha, regra 7).
   A tela só mostra a diferença do custo real para a referência; o último custo
   fica no `DE-PARA NFE`.
-- **Item "Novo":** escolher da lista do portfólio ou marcar "Ignorar".
-  Cadastrar produto novo no portfólio fica para depois.
+- **Item "Novo":** escolher da lista do portfólio, marcar "Ignorar" ou usar o
+  **🏛️ Catálogo MAPA** (cria o produto no portfólio + bula; v231).
 - **"Sugerido"** só conta como resolvido depois de "Aceitar sugestão" (ou de
   escolher o produto). "Automático" já vem resolvido.
 - **Token:** não usado na fase 1 (o de-para só tem nomes de produto); entra na fase 2.
