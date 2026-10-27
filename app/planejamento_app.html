@@ -1984,6 +1984,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rcv-fin>summary b{background:var(--green);color:#fff;border-radius:12px;padding:1px 8px;font-size:12px;flex:none}.rcv-fin>summary small{font-weight:400;flex:1;min-width:0;line-height:1.25}.rcv-fin-t{white-space:nowrap;flex:none}
 .rcv-fin .recom-list{padding:0 10px 10px}
 
+/* ===== Novo produto (conferência da NF-e, v238) ===== */
+.pn-form{display:flex;flex-direction:column;gap:10px;padding:2px 0 8px}
+.pn-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
+.pn-form .txt,.pn-form .sel{width:100%;font-weight:500;color:var(--ink)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2344,6 +2349,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-chev{font-size:11.5px}
   .rc-resumo{font-size:10px}
   .rcv-fin>summary b{font-size:9.5px}
+  .pn-form label{font-size:9.5px}
 }
 
 </style>
@@ -2445,7 +2451,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-237';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-238';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4466,7 +4472,7 @@ function nfeConferirHtml(){
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
       <div class="nfe-it-sub">cód. ${esc(it.cprod)} · CFOP ${esc(it.cfop)} · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
       ${it.ignorar?'':`<div class="nfe-it-map">
-        <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button></span></label>
+        <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button><button type="button" class="btn btn-outline btn-sm" data-act="nfiNovo" data-i="${i}" title="Cadastrar este item como produto novo no portfólio">➕</button></span></label>
         <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
         <div class="nfe-kv"><small>Entra no estoque</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
         <div class="nfe-kv"><small>Custo real</small><b>${c>0?brl(c):'—'}${un(it)?'/'+esc(un(it)):''}</b><span class="${dif==null?'':(dif>5?'up':(dif<-5?'down':''))}">${ref>0?(dif!=null?`${dif>=0?'+':''}${nf1.format(dif)}% vs ref. ${brl(ref)}`:`ref. ${brl(ref)}`):'sem preço de referência'}</span></div>
@@ -7367,7 +7373,7 @@ function agBulaDe(p, nome){ const k=bulaKey(nome), r=Object.assign({}, (BULAS.re
 // dados do item do catálogo → {produto, classe, empresa, un}
 function agItemDados(x){ if(x.k==='p'){ const p=x.p; return {produto:x.marca, classe:agClasseApp(p.c), empresa:agEmpresaCurta(p.t), un:agUnDe(p.f), p}; }
   if(x.k==='pf') return {produto:x.nome, classe:(x.p&&x.p.classe)||'', empresa:(x.p&&x.p.empresa)||'', un:(x.p&&x.p.un)||''};
-  if(x.k==='novo') return {produto:x.nome, classe:'', empresa:'', un:''};
+  if(x.k==='novo') return {produto:x.nome, classe:String(x.classe||'').trim().toUpperCase(), empresa:String(x.empresa||'').trim(), un:String(x.un||'').trim().toUpperCase()};
   const e=x.c._e||{}; return {produto:x.c.c, classe:'SEMENTE', empresa:'', un:'SC', cultivar:e.n||''}; }
 // garante o produto no PORTFÓLIO (lista de Preços da safra + PROD) — usado pela NF-e, compras e recebimento;
 // devolve o nome. Produto que já existe não é mexido.
@@ -7390,6 +7396,24 @@ async function nfeSugereCatalogo(){ const imp=nfeImport; if(!imp) return; const 
   if(mudou) recRerender(); }
 function nfiMapaUsar(i){ const it=nfeImport&&nfeImport.itens[i], d=AGROFIT.dados; if(!it||!it.catSug||!d) return; const p=d._porReg[it.catSug.r]; if(!p) return;
   nfiMapaSet(it, agProdutoGarantir({k:'p', p, marca:it.catSug.marca})); }
+// unidade do app sugerida pela unidade comercial da nota (uCom)
+function nfeUnApp(ucom){ const u=String(ucom||'').toUpperCase().replace(/\./g,''); if(/^(L|LT|LTS|LITRO|LITROS)$/.test(u)) return 'L'; if(/^(KG|KGS|QUILO)$/.test(u)) return 'KG'; if(/^(T|TN|TON|TONELADA)$/.test(u)) return 'TON'; if(/^(SC|SACO|SACOS|SAC)$/.test(u)) return 'SC'; return ''; }
+// folha "Novo produto" (Administrativo: conferência da nota) — cadastra à mão no portfólio: nome, classe, unidade, fabricante
+let _prodNovo=null;
+function prodNovoOpen(o){ novaAcaoFechar(); _prodNovo=o||{}; const uns=new Set(['KG','L','TON','SC','UN','5MM']); for(const n in PROD){ const u=String((PROD[n]||{}).un||'').trim().toUpperCase(); if(u&&u.length<=6) uns.add(u); }
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>Novo produto</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="na-sub"><small>Entra no <b>portfólio</b> (lista de Preços da safra) e já pode ser usado em notas, compras, estoque e recomendações.${o.dica?`<br>${esc(o.dica)}`:''}</small></p>
+    <div class="pn-form">
+      <label>Nome do produto<input class="txt" id="pn-nome" value="${esc(o.nome||'')}" placeholder="como vai aparecer no app" autocomplete="off"></label>
+      <label>Classe<input class="txt" id="pn-classe" list="pn-classes" value="${esc(o.classe||'')}" placeholder="ex.: FERTILIZANTES, HERBICIDA" autocomplete="off"><datalist id="pn-classes">${agClassesLista().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label>
+      <label>Unidade no app<select class="sel" id="pn-un"><option value="">—</option>${[...uns].sort().map(u=>`<option${(o.un||'')===u?' selected':''}>${esc(u)}</option>`).join('')}</select></label>
+      <label>Fabricante / fornecedor<input class="txt" id="pn-emp" value="${esc(o.empresa||'')}" placeholder="opcional" autocomplete="off"></label>
+      <button class="btn btn-primary" data-act="prodNovoOk" style="width:100%;margin-top:6px">➕ Cadastrar produto</button></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
+function prodNovoOk(){ const o=_prodNovo; if(!o) return; const g=id=>((document.getElementById(id)||{}).value||'').trim(); const nome=g('pn-nome'); if(!nome){ toast('Dê um nome ao produto'); return; }
+  const existia=!!PROD[nome]; const n=agProdutoGarantir({k:'novo', nome, classe:g('pn-classe'), un:g('pn-un'), empresa:g('pn-emp')}); novaAcaoFechar(); _prodNovo=null;
+  toast(existia?`${nome} já existia no portfólio — usado`:`${nome} cadastrado no portfólio`); if(n&&o.onOk) o.onOk(n); }
 function nfiMapaSet(it, nome){ if(!nome) return; it.produto=nome; it.ok=true; it.fonte='manual'; if(!it.fatorEdit) it.fator=nfeFatorDe(it.xprod,it.ucom,(PROD[nome]||{}).un); recRerender(); }
 function agCatPorAlvo(t){ return t==='Doença'?'doenca':t==='Planta daninha'?'daninha':(t==='Praga'||t==='Nematoide')?'praga':'outro'; }
 function agrofitAbas(ativa){ const t=[['', '🧪 Insumos'],['alvos','🐛 Alvos'],['cultivares','🌱 Cultivares']];
@@ -10630,6 +10654,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='prMapa'){ prMapaOpen(+a.i); return; }
     else if(a.act==='nfiMapa'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it) agPickProduto(_nfeTok(it.xprod).slice(0,2).join(' '), nome=>nfiMapaSet(it,nome)); return; }
     else if(a.act==='nfiMapaUsar'){ nfiMapaUsar(+a.i); return; }
+    else if(a.act==='nfiNovo'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(!it) return; const n=nfeImport.nota||{};
+      prodNovoOpen({nome:String(it.xprod||'').trim().toUpperCase(), un:nfeUnApp(it.ucom), empresa:agEmpresaCurta(n.fornecedor||''), dica:`Item da nota: ${it.xprod} (${it.ucom}).`, onOk:nome=>nfiMapaSet(it,nome)}); return; }
+    else if(a.act==='prodNovoOk'){ prodNovoOk(); return; }
     else if(a.act==='cmpMapa'){ const it=compraDraft&&compraDraft.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; it.un=(PROD[nome]||{}).un||it.un; route({keepScroll:true}); }); return; }
     else if(a.act==='recMapa'){ const it=REC.itens&&REC.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; recRerender(); }); return; }
     else if(a.act==='monitAlvoMapa'){ const sel=document.getElementById('monit-talhao'), t=sel&&findTalhao(sel.value); const cult=t?agCulturaDe(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t)):'';

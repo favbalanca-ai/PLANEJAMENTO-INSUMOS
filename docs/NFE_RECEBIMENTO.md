@@ -125,8 +125,9 @@ Lista **Notas a classificar**. Ao abrir uma nota:
   app, fator, quantidade convertida. Status do item:
   - **Automático:** `CNPJ + cProd` já está no `DE-PARA NFE`.
   - **Sugerido:** 1ª vez; o app sugere o produto do portfólio de nome mais parecido.
-  - **Novo:** nada parecido; escolher na lista, ou pelo **🏛️ Catálogo MAPA** (v231):
-    o produto é criado no portfólio + bula. Quando a marca do catálogo aparece no
+  - **Novo:** nada parecido; escolher na lista, pelo **🏛️ Catálogo MAPA** (v231:
+    o produto é criado no portfólio + bula) ou pelo **➕ Novo produto** (v238: cadastro
+    à mão — nome, classe, unidade, fabricante — para o que não está no catálogo). Quando a marca do catálogo aparece no
     nome do item, o app mostra *"Catálogo MAPA sugere: …"* com **✓ Usar**.
   - **Ignorar:** não é insumo (palete, frete, peça). Também fica memorizado.
 - **Fator automático:** tentar extrair do `xProd` padrões como `CX 10X1KG` → 10,

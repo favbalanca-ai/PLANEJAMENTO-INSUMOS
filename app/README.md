@@ -67,6 +67,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **NF-e → ➕ Novo produto (v238)** — ao lado do 🏛️ em cada item da conferência. Abre a folha *Novo produto*
+  (`prodNovoOpen`) já preenchida com o nome do item, a unidade sugerida pela uCom da nota (`nfeUnApp`: L, KG, TON, SC)
+  e o fornecedor; você ajusta nome, **classe** (lista das classes do portfólio + catálogo) e **unidade** e toca em
+  *Cadastrar*. O produto entra no portfólio (lista de Preços + PROD, via `agProdutoGarantir` com `k:'novo'`) e o
+  item fica **Confirmado** com o fator recalculado. Nome que já existe é reaproveitado, sem duplicar. Para
+  fertilizantes, corretivos e outros itens que não estão no catálogo MAPA.
 - **Celular: fonte ~20% menor em todos os módulos (v236 + v237)** — como já estava no quadro de operações. O bloco
   no fim de `styles.css` é gerado por `scripts/css_fonte_celular.py` (lê toda regra com `font-size` em px, aplica o
   fator `FATOR` = 0,81, arredonda em 0,5 px, mínimo 9,5 px; só `@media (max-width:640px)`). Ficam de fora: campos de texto (16 px — o iPhone
