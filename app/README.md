@@ -67,9 +67,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
-- **Celular: fonte ~10% menor em todos os módulos (v236)** — como já estava no quadro de operações. O bloco no fim
-  de `styles.css` é gerado por `scripts/css_fonte_celular.py` (lê toda regra com `font-size` em px, reduz 10%,
-  arredonda em 0,5 px, mínimo 10 px; só `@media (max-width:640px)`). Ficam de fora: campos de texto (16 px — o iPhone
+- **Celular: fonte ~20% menor em todos os módulos (v236 + v237)** — como já estava no quadro de operações. O bloco
+  no fim de `styles.css` é gerado por `scripts/css_fonte_celular.py` (lê toda regra com `font-size` em px, aplica o
+  fator `FATOR` = 0,81, arredonda em 0,5 px, mínimo 9,5 px; só `@media (max-width:640px)`). Ficam de fora: campos de texto (16 px — o iPhone
   não dá zoom ao tocar), o quadro de operações (já reduzido), PDF/impressão e os botões flutuantes. Mudou um tamanho
   de letra no CSS? Rode o script de novo — ele substitui o bloco.
 - **Recomendação → cartões encolhidos e Finalizadas (v235)** — cada cartão nasce **encolhido** (cabeçalho + linha de
