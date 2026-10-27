@@ -2451,7 +2451,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-238';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-239';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8507,7 +8507,7 @@ function recomPdfLink(r){
   if(r.status==='aprovada') return `<div class="rx-link" style="border-color:#555;background:#f3f3f3"><span>✅ <b>Baixa já registrada</b>${r.retorno&&r.retorno.quem?' por '+esc(r.retorno.quem):''}${r.aprov&&r.aprov.ts?' · aprovada em '+fmtDataBR(_dISO(r.aprov.ts)):''} — esta cópia não tem link de baixa.</span></div>`;
   const L=_PDFLINK||{link:recomLink(r), curto:false, qr:''};
   return `<div class="rx-link">${L.qr?`<div class="rx-qr">${L.qr}</div>`:''}<div class="rx-link-in"><a href="${esc(L.link)}">👉 ABRIR PARA DAR BAIXA</a>
-    <span>${L.qr?'<b>Aponte a câmera do celular para o QR Code</b> ou toque no botão':'Toque no botão'} para ver a recomendação e informar o que foi usado — o administrador confere e aprova a baixa no estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'}</span>
+    <span>${L.qr?'<b>Aponte a câmera do celular para o QR Code</b> ou toque no botão':'Toque no botão'} para ver a recomendação e informar o que foi usado — o administrador confere e aprova a baixa no estoque.${syncUrl()?'':' <b>(configure a Sincronização no app para a baixa voltar automática)</b>'} <i>No Android, se o botão não abrir, use o link enviado por mensagem ou abra o PDF no Google Drive/Chrome.</i></span>
     ${L.curto?`<span class="rx-url">${esc(L.link)}</span>`:''}</div></div>`;
 }
 const rxKv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
@@ -8563,13 +8563,14 @@ function exportPlantioPDF(r){
 }
 async function exportRecomPDF(id){
   const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
-  _PDFLINK=await recomPdfPrep(r);
+  _PDFLINK=await recomPdfPrep(r); const L=_PDFLINK;
   let h; try{ h=exportRecomPDF_(r); } finally { _PDFLINK=null; }
   if(!h) return;
+  const link=(r.status!=='aprovada'&&L)?L.link:'', curto=!!(L&&L.curto);
   const t=findTalhao(r.talhao), tipo=r.tipo==='ts'?'TS':((r.opKey&&plantioCalc(r.opKey))?'Plantio':'Aplicacao');
   const nome=`Recomendacao_${tipo}_${(t?tNome(t):r.talhao)}_${r.data||''}.pdf`.replace(/[\\/:*?"<>|\s]+/g,'_');
   pdfAguarde(true);
-  try{ const blob=await pdfArquivo(h); pdfPronto(blob, nome, h); }
+  try{ const blob=await pdfArquivo(h, curto?link:''); pdfPronto(blob, nome, h, link, t?tNome(t):r.talhao); }
   catch(e){ pdfAguarde(false); toast('Não consegui montar o arquivo ('+(e&&e.message||e)+') — abrindo a impressão'); printDoc(h); }
 }
 // ---- PDF montado no próprio app (html2canvas + jsPDF) ----
@@ -8592,7 +8593,7 @@ function pdfRenderCss(){
   st.textContent='#pdf-render{position:absolute;left:-10000px;top:0;width:688px;background:#fff;color:#000;font:12px/1.45 Arial,Helvetica,sans-serif}\n'+css;
   document.head.appendChild(st);
 }
-async function pdfArquivo(html){
+async function pdfArquivo(html, linkTxt){
   await Promise.all([loadScriptOnce(H2C_URL), loadScriptOnce(JSPDF_URL)]);
   pdfRenderCss();
   const box=document.createElement('div'); box.id='pdf-render'; box.innerHTML=html; document.body.appendChild(box);
@@ -8612,25 +8613,33 @@ async function pdfArquivo(html){
     const pw=W*mm, x0=(210-pw)/2;   // encolhido: centralizado na largura
     doc.addImage(canvas.toDataURL('image/png'), 'PNG', x0, M, pw, totH*mm, undefined, 'FAST');   // PNG comprimido: texto e QR nítidos, arquivo leve
     links.forEach(l=>doc.link(x0+l.x*mm, M+l.y*mm, l.w*mm, l.h*mm, {url:l.url}));
+    // link curto também como TEXTO de verdade no rodapé (selecionável/copiável e clicável) — leitores de PDF que
+    // ignoram os links sobre a imagem (vários do Android) ainda deixam copiar o endereço
+    if(linkTxt){ try{ doc.setFontSize(7); doc.setTextColor(60,60,60); doc.textWithLink('Link de baixa: '+linkTxt, M, pageH-4, {url:linkTxt}); }catch(e){} }
     return doc.output('blob');
   } finally { box.remove(); }
 }
+// mensagem curta com o link de baixa (vai junto do PDF ou sozinha): o Android nem sempre abre o link de dentro do PDF
+function pdfLinkMsg(P){ return `Recomendação${P.tal?' · '+P.tal:''}\n👉 Abrir para dosar e dar baixa:\n${P.link}`; }
 // janelinha "gerando…" e depois "PDF pronto" com Enviar (WhatsApp…) / Baixar / Abrir / Imprimir
 let _pdfPronto=null;
 function pdfAguarde(on){ const old=document.getElementById('pdf-ov'); if(old) old.remove(); if(!on) return;
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(420px,100%)"><div class="modal-head"><h3>📄 Gerando o PDF…</h3></div><p class="mut" style="font-size:13px;margin:0">Montando o arquivo com o link de baixa e o QR Code.</p></div>`;
   document.body.appendChild(ov); }
-function pdfPronto(blob, nome, html){
+function pdfPronto(blob, nome, html, link, tal){
   if(_pdfPronto && _pdfPronto.url) URL.revokeObjectURL(_pdfPronto.url);
   const file=new File([blob], nome, {type:'application/pdf'}), url=URL.createObjectURL(blob);
   let podeEnviar=false; try{ podeEnviar=!!(navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
-  _pdfPronto={file, url, nome, html};
+  const android=/Android/i.test(navigator.userAgent||'');
+  _pdfPronto={file, url, nome, html, link:link||'', tal:tal||''};
   pdfAguarde(false);
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(440px,100%)"><div class="modal-head"><h3>📄 PDF pronto</h3><button class="icon-btn" data-act="pdfFechar" title="Fechar">✕</button></div>
     <p class="mut" style="font-size:13px;margin:0 0 12px">${esc(nome)} · ${Math.max(1,Math.round(blob.size/1024))} KB<br>No PDF, o botão <b>ABRIR PARA DAR BAIXA</b> e o <b>QR Code</b> abrem a página do operador.</p>
+    ${link?`<div class="nfe-aviso ${android?'warn':'info'}" style="margin:0 0 12px;font-size:12.5px">📱 <b>Android:</b> o leitor de PDF do WhatsApp e de alguns celulares <b>não abre links dentro do PDF</b>. Envie também o <b>link de baixa</b> pelo botão abaixo (ele vai como mensagem) ou peça para abrir o PDF no <b>Google Drive</b> ou no <b>Chrome</b>.</div>`:''}
     <div class="pdf-acts">${podeEnviar?'<button class="btn btn-wa" data-act="pdfEnviar">📲 Enviar o PDF (WhatsApp…)</button>':''}
+      ${link?'<button class="btn btn-wa" data-act="pdfEnviarLink">🔗 Enviar o link de baixa (WhatsApp)</button>':''}
       <a class="btn btn-primary" href="${url}" download="${esc(nome)}">⬇️ Baixar PDF</a>
       <a class="btn btn-outline" href="${url}" target="_blank" rel="noopener">👁 Abrir</a>
       <button class="btn btn-ghost" data-act="pdfImprimir">🖨 Imprimir</button></div></div>`;
@@ -10790,7 +10799,9 @@ document.addEventListener('click',e=>{
     }
     else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
     else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
-    else if(a.act==='pdfEnviar'){ if(_pdfPronto) navigator.share({files:[_pdfPronto.file], title:_pdfPronto.nome}).catch(e=>{ if(e&&e.name!=='AbortError') toast('Não deu para enviar daqui — use "Baixar PDF"'); }); }
+    else if(a.act==='pdfEnviar'){ if(_pdfPronto){ const P=_pdfPronto, d={files:[P.file], title:P.nome}; if(P.link) d.text=pdfLinkMsg(P);   // o link vai junto como texto (apps que aceitam legenda mostram)
+      navigator.share(d).catch(e=>{ if(e&&e.name!=='AbortError') toast('Não deu para enviar daqui — use "Baixar PDF"'); }); } }
+    else if(a.act==='pdfEnviarLink'){ if(_pdfPronto&&_pdfPronto.link) window.open('https://wa.me/?text='+encodeURIComponent(pdfLinkMsg(_pdfPronto)),'_blank'); }
     else if(a.act==='pdfTs' && tsFeito(realOf(a.key))){ const id=realOf(a.key).ts.recom;
       if(id && recomById(id)) exportRecomPDF(id); else toast('TS já feito — a baixa já foi registrada'); }
     else if((a.act==='pdfOp'||a.act==='waApp') && (realOf(a.key)||{}).status==='concluido'){

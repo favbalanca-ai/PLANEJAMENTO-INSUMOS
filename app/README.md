@@ -67,6 +67,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **PDF da recomendação no Android (v239)** — o leitor de PDF do WhatsApp e de vários celulares Android **não abre
+  links dentro do PDF** (só mostra a imagem), então o botão *ABRIR PARA DAR BAIXA* não funcionava lá. Agora o link
+  de baixa também sai **fora** do PDF: a janela *PDF pronto* ganhou **🔗 Enviar o link de baixa (WhatsApp)**
+  (`pdfLinkMsg`, mesma mensagem curta com o link), *Enviar o PDF* manda o link como texto junto do arquivo
+  (`navigator.share` com `text`), e um aviso explica a limitação (em destaque no Android). No próprio PDF, o link
+  curto entra também como **texto de verdade no rodapé** (`doc.textWithLink`, selecionável/copiável e clicável nos
+  leitores que aceitam), e o bloco do botão avisa para abrir o PDF no Google Drive/Chrome se o botão não abrir.
 - **NF-e → ➕ Novo produto (v238)** — ao lado do 🏛️ em cada item da conferência. Abre a folha *Novo produto*
   (`prodNovoOpen`) já preenchida com o nome do item, a unidade sugerida pela uCom da nota (`nfeUnApp`: L, KG, TON, SC)
   e o fornecedor; você ajusta nome, **classe** (lista das classes do portfólio + catálogo) e **unidade** e toca em
