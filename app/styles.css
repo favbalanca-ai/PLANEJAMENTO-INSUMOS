@@ -1967,6 +1967,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rcv-fin>summary b{background:var(--green);color:#fff;border-radius:12px;padding:1px 8px;font-size:12px;flex:none}.rcv-fin>summary small{font-weight:400;flex:1;min-width:0;line-height:1.25}.rcv-fin-t{white-space:nowrap;flex:none}
 .rcv-fin .recom-list{padding:0 10px 10px}
 
+/* ===== Novo produto (conferência da NF-e, v238) ===== */
+.pn-form{display:flex;flex-direction:column;gap:10px;padding:2px 0 8px}
+.pn-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
+.pn-form .txt,.pn-form .sel{width:100%;font-weight:500;color:var(--ink)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2327,4 +2332,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-chev{font-size:11.5px}
   .rc-resumo{font-size:10px}
   .rcv-fin>summary b{font-size:9.5px}
+  .pn-form label{font-size:9.5px}
 }
