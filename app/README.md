@@ -67,6 +67,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Campo → área a aplicar: transpasse e aplicação parcial (v240)** — na 🚿 *Recomendação de aplicação* o campo
+  **Área a aplicar (ha)** (`r.app.area`; vazio = área do talhão, `opAreaDe`) aceita área **maior** (transpasse: 100 ha →
+  105) ou **menor** (parcial: 70). Calda, nº de tanques, totais, WhatsApp, recomendação/PDF e a baixa seguem essa área
+  (mudar a área na tela Recomendação também leva para o Campo). O **Finalizar** ganhou **Área aplicada (ha)** com o
+  aviso do que vai acontecer (`finAreaInfo`): maior ou igual ao talhão → **Concluída** (com a área registrada); menor →
+  status **Parcial** (`r.areaFeita`, baixa só do que foi aplicado, já conta no estoque — `opBaixou`), com **▶ Aplicar o
+  restante** (nova etapa com os ha que faltam; `r.etapas` guarda as anteriores e as baixas são **somadas**, mesmo id
+  `op:` no razão) e **✔ Finalizar sem aplicar o resto** (ou a caixa *Encerrar assim mesmo* já no Finalizar). Parcial
+  conta como "em andamento" nos filtros, no quadro e nas tarefas; a timeline mostra "Operação parcial (70 de 100 ha)";
+  Reabrir limpa etapas, área e baixa. Tudo dentro do JSON da aba REALIZADO APP: sem mudança no `Code.gs`.
 - **PDF da recomendação no Android (v239)** — o leitor de PDF do WhatsApp e de vários celulares Android **não abre
   links dentro do PDF** (só mostra a imagem), então o botão *ABRIR PARA DAR BAIXA* não funcionava lá. Agora o link
   de baixa também sai **fora** do PDF: a janela *PDF pronto* ganhou **🔗 Enviar o link de baixa (WhatsApp)**

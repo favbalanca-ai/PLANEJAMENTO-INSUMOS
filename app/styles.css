@@ -1972,6 +1972,17 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .pn-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
 .pn-form .txt,.pn-form .sel{width:100%;font-weight:500;color:var(--ink)}
 
+/* ===== Área a aplicar / operação Parcial (v240) ===== */
+.camp-badge.st-parc{background:#fff1e0;color:#b25e09}
+.camp-st.on.st-parc{background:#fff1e0;border-color:#e08a2e;color:#b25e09}
+.cp-card.st-parc{border-left-color:#e08a2e}.cp-card.st-parc .cp-n{background:#e08a2e}
+.cp-tag.parc{background:#fff1e0;color:#b25e09}
+.camp-done-tag.parc{color:#b25e09}
+.app-area-dif{display:block;font-size:10.5px;font-weight:600;color:#b25e09;line-height:1.2}
+.fin-area{font-size:12px;margin:0 0 8px;line-height:1.4}
+.fin-encerra{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+.fin-encerra input{width:18px;height:18px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2333,4 +2344,6 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-resumo{font-size:10px}
   .rcv-fin>summary b{font-size:9.5px}
   .pn-form label{font-size:9.5px}
+  .fin-area{font-size:9.5px}
+  .fin-encerra{font-size:10px}
 }

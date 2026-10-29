@@ -1989,6 +1989,17 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .pn-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
 .pn-form .txt,.pn-form .sel{width:100%;font-weight:500;color:var(--ink)}
 
+/* ===== Área a aplicar / operação Parcial (v240) ===== */
+.camp-badge.st-parc{background:#fff1e0;color:#b25e09}
+.camp-st.on.st-parc{background:#fff1e0;border-color:#e08a2e;color:#b25e09}
+.cp-card.st-parc{border-left-color:#e08a2e}.cp-card.st-parc .cp-n{background:#e08a2e}
+.cp-tag.parc{background:#fff1e0;color:#b25e09}
+.camp-done-tag.parc{color:#b25e09}
+.app-area-dif{display:block;font-size:10.5px;font-weight:600;color:#b25e09;line-height:1.2}
+.fin-area{font-size:12px;margin:0 0 8px;line-height:1.4}
+.fin-encerra{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin:0 0 10px;color:var(--ink)}
+.fin-encerra input{width:18px;height:18px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2350,6 +2361,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-resumo{font-size:10px}
   .rcv-fin>summary b{font-size:9.5px}
   .pn-form label{font-size:9.5px}
+  .fin-area{font-size:9.5px}
+  .fin-encerra{font-size:10px}
 }
 
 </style>
@@ -2451,7 +2464,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-239';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-240';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3462,7 +3475,7 @@ function custoInsumoRealSeq(t,seq){
   const tag=seq==='safrinha'?'S':'P', area=areaDe(t); let real=0;
   opsOf(t.id,seq).forEach((op,oi)=>{ const tagoi=`${tag}${oi}`, key=t.id+'|'+tagoi, r=OV.realizado&&OV.realizado[key];
     const planOp=effItems(t.id,tagoi,op.itens).reduce((s,it)=>s+(+it.dose||0)*area*precoDe(it.produto),0);
-    if(r && r.status==='concluido' && r.baixa){ let ro=0; const b=opBaixaEff(r); for(const pr in b) ro+=(+b[pr]||0)*precoDe(pr);
+    if(opBaixou(r)){ let ro=0; const b=opBaixaEff(r); for(const pr in b) ro+=(+b[pr]||0)*precoDe(pr);
       if(tsFeito(r)) for(const pr in (r.ts.baixa||{})) ro+=(+r.ts.baixa[pr]||0)*precoDe(pr);   // semente + TS baixados pelo TS
       real+=ro; }
     else real+=planOp;
@@ -3952,7 +3965,7 @@ function pushSaidasPendentes(){
   (RECOM.registros||[]).filter(r=>!r.opKey && recomNorm(r).status==='aprovada' && !r.saidaPushed).forEach(r=>tasks.push(()=>pushSaida(r)));
   // baixas de operações de campo concluídas ainda não enviadas
   const R=OV.realizado||{}; for(const k in R){ const r=R[k]; if(!r) continue;
-    if(r.status==='concluido'&&r.baixa&&!r.saidaPushed) tasks.push(()=>pushOpSaida(k));
+    if(opBaixou(r)&&!r.saidaPushed) tasks.push(()=>pushOpSaida(k));
     else if(r.saidaClearPend) tasks.push(()=>clearOpSaida(k)); }   // limpeza de saída (operação reaberta) que não tinha conseguido subir
   // uma de cada vez: a planilha grava uma por vez (em paralelo davam "planilha ocupada")
   return tasks.reduce((p,f)=>p.then(()=>f().catch(()=>false)), Promise.resolve());
@@ -4024,6 +4037,8 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });
+document.addEventListener('input',e=>{ if(!(e.target.dataset&&e.target.dataset.finmeta==='area')) return; const i=document.getElementById('fin-area-info'), enc=document.getElementById('fin-encerra'); if(!i) return;
+  const a=_mmC(e.target.value)||0, tal=+i.dataset.tal||0, feita=+i.dataset.feita||0; i.innerHTML=finAreaInfo(a,tal,feita); if(enc) enc.hidden=!((feita+a)<tal-0.005); });
 document.addEventListener('click',e=>{ const w=document.getElementById('rcv-fabw'); if(w && w.classList.contains('open') && !w.contains(e.target)) w.classList.remove('open'); }, true);   // busca da Recomendação: filtra os cartões sem redesenhar
 document.addEventListener('input',e=>{ if(e.target.id==='agp-q'){ if(_agPick){ _agPick.q=e.target.value; clearTimeout(_agQTimer); _agQTimer=setTimeout(agPickRender,100); } return; } if(e.target.id==='ag-q') agrofitBusca(e.target.value); else if(e.target.id==='ag-qa'){ AGROFIT.qa=e.target.value; AGROFIT.limA=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitAlvosRefresh,120); } else if(e.target.id==='ag-qc'){ AGROFIT.qc=e.target.value; AGROFIT.limC=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitCvRefresh,120); } });
 V.entradas=function(){
@@ -4917,7 +4932,7 @@ function estoqueSaidas(){
   const mov=(DATA&&DATA.movimentacao)||null;
   // baixas das operações de campo concluídas (id op:) — pendentes de envio (as enviadas já vêm da planilha)
   const opBaixas=(onlyPending)=>{ const R=OV.realizado||{}; for(const k in R){ const r=R[k];
-    if(!r||r.status!=='concluido'||!r.baixa) continue; if(onlyPending&&r.saidaPushed) continue; const b=opBaixaEff(r); for(const pr in b) add(pr, b[pr]); } };
+    if(!opBaixou(r)) continue; if(onlyPending&&r.saidaPushed) continue; const b=opBaixaEff(r); for(const pr in b) add(pr, b[pr]); } };
   if(mov&&mov.saidas){
     for(const k in mov.saidas) add(k, mov.saidas[k]);                         // planilha (todos os aparelhos)
     (RECOM&&RECOM.registros||[]).forEach(r0=>{ if(r0.saidaPushed||r0.opKey) return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
@@ -5275,7 +5290,7 @@ function _today0(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
 function tarefaStatusEff(t){
   if(t && t.opKey && OV && OV.realizado && OV.realizado[t.opKey]){
     const st=OV.realizado[t.opKey].status;
-    if(st==='concluido'||st==='cancelado') return 'concluida'; if(st==='andamento') return 'andamento'; return 'afazer';
+    if(st==='concluido'||st==='cancelado') return 'concluida'; if(st==='andamento'||st==='parcial') return 'andamento'; return 'afazer';
   }
   return (t&&t.status)||'afazer';
 }
@@ -6333,7 +6348,16 @@ async function usuSalvar(){
   catch(err){ toast('Não salvou: '+err.message); }
 }
 /* ================= MODO CAMPO (planejado × realizado) ================= */
-const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'}, cancelado:{lbl:'Não será realizada',cls:'st-canc'} };
+const REAL_ST = { pendente:{lbl:'Pendente',cls:'st-pend'}, andamento:{lbl:'Em andamento',cls:'st-and'}, concluido:{lbl:'Concluída',cls:'st-ok'}, parcial:{lbl:'Parcial',cls:'st-parc'}, cancelado:{lbl:'Não será realizada',cls:'st-canc'} };
+// ÁREA A APLICAR (v240): pode ser maior que o talhão (transpasse: 100 ha → 105 ha) ou menor (aplicação parcial: 70 ha).
+// Fica em r.app.area; vazia = área do talhão. Ao finalizar com área menor a operação fica PARCIAL (baixa do que foi
+// aplicado) e pode "aplicar o restante" (nova etapa, baixas somadas) ou "finalizar sem aplicar o resto".
+function opAreaDe(t, r){ const a=r&&r.app&&+r.app.area; return (a>0)?a:(areaDe(t)||0); }
+function opAreaTxt(t, r){ const a=opAreaDe(t,r), at=areaDe(t)||0; if(!at||Math.abs(a-at)<0.005) return ''; const p=(a/at-1)*100; return `${p>0?'+':''}${nf1.format(p)}% da área do talhão (${num(at)} ha)`; }
+function opAreaFeita(r){ return (r&&+r.areaFeita)||0; }
+function opRestante(t, r){ return Math.max(0, +((areaDe(t)||0)-opAreaFeita(r)).toFixed(2)); }
+// tem baixa no estoque? concluída, parcial, ou "em andamento" numa 2ª etapa (a baixa da 1ª etapa continua valendo)
+function opBaixou(r){ return !!(r && r.baixa && (r.status==='concluido' || r.status==='parcial' || (r.etapas&&r.etapas.length))); }
 // operação ENCERRADA: concluída ou "não será realizada" (não conta como atrasada nem aberta)
 function opEncerrada(r){ return !!r && (r.status==='concluido' || r.status==='cancelado'); }
 function opsDoTalhao(t){
@@ -6617,7 +6641,7 @@ function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
 // recomendação de aplicação: líquidos (calda/tanque) e sólidos (só total na área) separados
 function campoAppOut(talId, tagoi, opItens, r){
   const t=findTalhao(talId); if(!t) return '';
-  const area=areaDe(t), app=r.app||{};
+  const area=opAreaDe(t,r), app=r.app||{}, areaTxt=opAreaTxt(t,r);
   const vazao=+app.vazao||0, tanque=+app.tanque||0;
   const caldaTotal=vazao>0?vazao*area:0;
   const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
@@ -6637,7 +6661,8 @@ function campoAppOut(talId, tagoi, opItens, r){
       <td class="num">${fmtDose(x.dose)}<small> ${esc(x.un)}/ha</small></td>
       <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td></tr>`; }).join('');
   let html=`<div class="app-stats">
-      ${stat('Área do talhão',num(area)+' ha')}
+      ${stat(areaTxt?'Área a aplicar':'Área do talhão',num(area)+' ha'+(areaTxt?`<br><small class="app-area-dif">${esc(areaTxt)}</small>`:''))}
+      ${opAreaFeita(r)&&r.status!=='concluido'?stat('Já aplicados',num(opAreaFeita(r))+' ha<br><small class="app-area-dif">restam '+num(opRestante(t,r))+' ha</small>'):''}
       ${liq.length?stat('Calda total',caldaTotal?num(caldaTotal)+' L':'—'):''}
       ${liq.length?stat('Nº de tanques',nT?nT+' × '+num(tanque)+' L':'—'):''}
       ${stat('Duração',dur!=null?nf1.format(dur)+' h':'—')}
@@ -6662,7 +6687,7 @@ function campoAppMsg(key){
   const fk=opFromKey(key), t=findTalhao(fk.talId); if(!t) return '';
   const r=realOf(key)||{}, app=r.app||{};
   const tag=fk.tagoi[0], cultura=tag==='S'?empSafDe(t):empDe(t);
-  const area=areaDe(t), vazao=+app.vazao||0, tanque=+app.tanque||0;
+  const area=opAreaDe(t,r), vazao=+app.vazao||0, tanque=+app.tanque||0, areaTxt=opAreaTxt(t,r);
   const caldaTotal=vazao>0?vazao*area:0;
   const nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
   const haPorTanque=(vazao>0&&tanque>0)?tanque/vazao:0;
@@ -6670,7 +6695,7 @@ function campoAppMsg(key){
   const all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
   const liq=all.filter(vaiNoTanque), sol=all.filter(x=>!vaiNoTanque(x));
   const L=[];
-  L.push(`🚿 *Aplicação* — ${tNome(t)} (${num(area)} ha)`);
+  L.push(`🚿 *Aplicação* — ${tNome(t)} (${num(area)} ha${areaTxt?` · ${areaTxt}`:''})`);
   const l1=[]; if(cultura&&cultura!=='—') l1.push(cultura); if(fk.op) l1.push(fk.op.nome);
   if(l1.length) L.push(l1.join(' · '));
   { const i=key.indexOf('|'), tg=key.slice(i+1), mq=(r.status==='concluido'&&app.maq)?app.maq:(fk.op?opMaqDe(fk.talId,tg[0],+tg.slice(1),fk.op):''); if(mq) L.push(`🚜 ${mq}`); }
@@ -6702,7 +6727,7 @@ function campoAppMsg(key){
 function campoProgress(){
   let total=0, done=0, running=0;
   talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='cancelado') return; total++;
-    if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento') running++; } }));
+    if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento'||r.status==='parcial') running++; } }));
   return {total,done,running};
 }
 /* ================= MONITORAMENTO DE CAMPO (scouting, estilo Aqila) ================= */
@@ -8232,6 +8257,7 @@ function recomFromCampoOp(opKey){
   if(!ehPlantio && !r.retorno && rl && rl.app){
     if(rl.app.vazao!=null && rl.app.vazao!=='') r.calda=String(rl.app.vazao);
     if(rl.app.tanque!=null && rl.app.tanque!=='') r.tanque=String(rl.app.tanque); }
+  if(!r.retorno) r.area=opAreaDe(t, rl);   // área a aplicar do Campo (transpasse / restante da parcial)
   if(r.status==='rascunho'){ r.status='enviada'; r.enviadaTs=Date.now(); }
   saveRecom(); return r;
 }
@@ -8239,7 +8265,8 @@ function recomFromCampoOp(opKey){
 function recomSetField(el){
   const r=recomById(el.dataset.id); if(!r) return;
   const f=el.dataset.recf, i=el.dataset.reci, v=el.value; let rerender=false;
-  if(f==='area'){ r.area=_mmC(v); rerender=true; }
+  if(f==='area'){ r.area=_mmC(v); rerender=true;
+    if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(r.area>0 && t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } }   // e leva para o Campo
   else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
   else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true; }
@@ -9107,8 +9134,8 @@ function camposEventos(){
     }
   });
   talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key);
-    if(r&&r.status==='concluido') ev.push({ts:_tsC(r),data:r.data||'',tipo:'operacao',talhao:t.id,
-      titulo:'Operação concluída', resumo:(o.op&&o.op.nome)?o.op.nome:''}); }));
+    if(r&&(r.status==='concluido'||r.status==='parcial')) ev.push({ts:_tsC(r),data:r.data||'',tipo:'operacao',talhao:t.id,
+      titulo:r.status==='parcial'?`Operação parcial (${num(opAreaFeita(r))} de ${num(areaDe(t))} ha)`:'Operação concluída'+(opAreaFeita(r)?` (${num(opAreaFeita(r))} ha)`:''), resumo:(o.op&&o.op.nome)?o.op.nome:''}); }));
   ev.sort((a,b)=>(b.ts||0)-(a.ts||0));
   return ev;
 }
@@ -9312,7 +9339,7 @@ function usoProdutosDe(t){
   const out=[], add=(o)=>{ if(o.produto && +o.qtd>0){ const p=PROD[o.produto]||{}; out.push(Object.assign({classe:p.classe||'', un:p.un||'', valor:(+o.qtd||0)*precoDe(o.produto)}, o)); } };
   eachOp(t,(seq,tag,oi,op,tagoi)=>{ const key=`${t.id}|${tagoi}`, r=OV.realizado&&OV.realizado[key]; if(!r) return;
     const nome=op.nome||('Operação '+(oi+1));
-    if(r.status==='concluido' && r.baixa){ const b=opBaixaEff(r); for(const pr in b) add({data:_isISO(r.data)?r.data:'', seq, op:nome, origem:'Operação', produto:pr, qtd:+b[pr]||0, quem:(r.app&&r.app.operador)||''}); }
+    if(opBaixou(r)){ const b=opBaixaEff(r); for(const pr in b) add({data:_isISO(r.data)?r.data:'', seq, op:nome, origem:'Operação', produto:pr, qtd:+b[pr]||0, quem:(r.app&&r.app.operador)||''}); }
     if(tsFeito(r) && r.ts.baixa){ for(const pr in r.ts.baixa) add({data:r.ts.em?_dISO(r.ts.em):(_isISO(r.data)?r.data:''), seq, op:nome, origem:'TS', produto:pr, qtd:+r.ts.baixa[pr]||0, quem:r.ts.quem||''}); } });
   ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.talhao!==t.id || r0.opKey || r0.tipo==='ts') return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
     const data=_isISO(r.data)?String(r.data).slice(0,10):(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):'');
@@ -9488,7 +9515,7 @@ function opBaixaId(key){ return 'op:'+key; }
 function fillDosesFromBaixa(key){
   const rl=OV.realizado&&OV.realizado[key]; if(!rl||!rl.baixa) return;
   const i=key.indexOf('|'); if(i<0) return; const talId=key.slice(0,i), t=findTalhao(talId); if(!t) return;
-  const area=areaDe(t)||0; if(!area) return;
+  const area=opAreaFeita(rl)||opAreaDe(t,rl)||0; if(!area) return;
   const o=opsDoTalhao(t).find(x=>x.key===key); if(!o) return;
   rl.doses=rl.doses||{};
   effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto || itemFora(rl,it)) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
@@ -9521,7 +9548,7 @@ async function clearOpSaida(key){
 function finalizarOpModal(key){
   const i=key.indexOf('|'); if(i<0) return; const talId=key.slice(0,i), t=findTalhao(talId); if(!t){ toast('Talhão não encontrado'); return; }
   const o=opsDoTalhao(t).find(x=>x.key===key); if(!o){ toast('Operação não encontrada'); return; }
-  const area=areaDe(t), r=realEnsure(key), agg={};
+  const r=realEnsure(key), area=opAreaDe(t,r), areaTal=areaDe(t)||0, cont=!!(r.etapas&&r.etapas.length), feita=opAreaFeita(r), agg={};
   effItems(t.id,o.tagoi,o.op.itens).forEach(it=>{ if(!it.produto || itemFora(r,it)) return; const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const doseHa=(r.doses&&(iid in r.doses)&&r.doses[iid]!=='')?+r.doses[iid]:(+it.dose||0);
     if(!agg[it.produto]) agg[it.produto]={un:it.un||'',vol:0}; agg[it.produto].vol+=doseHa*area; });
@@ -9534,11 +9561,14 @@ function finalizarOpModal(key){
   ov.innerHTML=`<div class="modal-box">
     <div class="modal-head"><h3>Finalizar — ${esc(o.op.nome)} · ${esc(tNome(talId))}</h3><button class="icon-btn" data-act="finClose" title="Fechar">✕</button></div>
     <div style="overflow:auto;max-height:60vh">
-      <p class="mut" style="font-size:12px;margin:0 0 8px">Informe o <b>volume total usado</b> de cada insumo. Ao confirmar, dá <b>baixa no estoque</b> e entra no <b>histórico do talhão</b>.</p>
+      <p class="mut" style="font-size:12px;margin:0 0 8px">Informe a <b>área aplicada</b> e o <b>volume total usado</b> de cada insumo${cont?` <b>nesta etapa</b> (já aplicados ${num(feita)} ha antes)`:''}. Ao confirmar, dá <b>baixa no estoque</b> e entra no <b>histórico do talhão</b>.</p>
       <div class="app-grid" style="margin-bottom:8px">
+        <label>Área aplicada (ha)<input class="cell" inputmode="decimal" data-finmeta="area" value="${String(+(+area).toFixed(2)).replace('.',',')}" title="Talhão: ${num(areaTal)} ha. Maior = transpasse; menor = parcial."></label>
         <label>Operador<input class="txt" data-finmeta="operador" value="${esc((r.app&&r.app.operador)||'')}" placeholder="quem executou"></label>
         <label>Data<input type="date" data-finmeta="data" value="${esc(r.data||new Date().toISOString().slice(0,10))}"></label>
       </div>
+      <div class="fin-area mut" id="fin-area-info" data-tal="${areaTal}" data-feita="${feita}">${finAreaInfo(area, areaTal, feita)}</div>
+      <label class="fin-encerra" id="fin-encerra"${(feita+area)<areaTal-0.005?'':' hidden'}><input type="checkbox" data-finmeta="encerrar"> Encerrar a operação assim mesmo (não vou aplicar o restante)</label>
       <table class="camp-ins"><thead><tr><th>Insumo</th><th class="num">Volume usado</th></tr></thead><tbody>${rows}</tbody></table>
     </div>
     <div class="modal-foot"><span class="spacer"></span>
@@ -9547,6 +9577,11 @@ function finalizarOpModal(key){
     </div></div>`;
   document.body.appendChild(ov);
 }
+// texto da área no Finalizar: transpasse / parcial / igual ao talhão
+function finAreaInfo(area, areaTal, feita){ const tot=(+feita||0)+(+area||0); if(!areaTal) return '';
+  if(tot>areaTal+0.005) return `↗ ${num(tot)} ha = <b>+${nf1.format((tot/areaTal-1)*100)}%</b> sobre o talhão (${num(areaTal)} ha) — transpasse; a operação fica <b>concluída</b>.`;
+  if(tot<areaTal-0.005) return `◔ ${num(tot)} de ${num(areaTal)} ha (<b>${nf1.format(tot/areaTal*100)}%</b>) — a operação fica <b>Parcial</b>: restam <b>${num(areaTal-tot)} ha</b> para aplicar depois (ou marque abaixo para encerrar).`;
+  return `✔ Área igual à do talhão (${num(areaTal)} ha) — a operação fica <b>concluída</b>.`; }
 // ---- Operação de Campo: estado da tela (sessão) ----
 let campoFiltro='todas';                  // todas | pendente | andamento | concluido
 const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
@@ -9596,7 +9631,7 @@ function oqInfo(t,o,n){
   const r=realOf(o.key)||{}, hoje=_hojeISO(), dp=opDataPlan(t.id,o.tagoi,o.op.dap), pl=plantioEffDe(t.id,o.seq);
   const feita=r.status==='concluido', de=(feita&&_isISO(r.data))?String(r.data).slice(0,10):'', dt=de||dp;
   let st='prazo';
-  if(r.status==='cancelado') st='canc'; else if(feita) st='ok'; else if(r.status==='andamento') st='and';
+  if(r.status==='cancelado') st='canc'; else if(feita) st='ok'; else if(r.status==='andamento'||r.status==='parcial') st='and';
   else if(!dp) st='sem'; else { const dd=_dias(dp,hoje); st=dd<0?'late':(dd<=3?'breve':'prazo'); }
   const daa=(feita&&dt)?_dias(hoje,dt):null, pos=(dt&&pl)?_dias(dt,pl):null;
   const ret=RECOM.registros.some(x=>(x.opKey===o.key||(x.tipo==='ts'&&x.tsOp===o.key)) && x.status==='retorno');
@@ -9797,7 +9832,7 @@ V.campo = function(arg){
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))} — ${d}/${ops.length} ok</option>`; }).join('');
   const ops=campoOpsDoTalhao(t);
   const stOf=o=>((realOf(o.key)||{}).status)||'pendente';
-  const cnt={pendente:0,andamento:0,concluido:0,cancelado:0}; ops.forEach(o=>cnt[stOf(o)]=(cnt[stOf(o)]||0)+1);
+  const cnt={pendente:0,andamento:0,concluido:0,cancelado:0}; ops.forEach(o=>{ const sv=stOf(o)==='parcial'?'andamento':stOf(o); cnt[sv]=(cnt[sv]||0)+1; });
   const nValidas=ops.length-cnt.cancelado, pct=nValidas?Math.round(cnt.concluido/nValidas*100):0;
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   const diasAte=iso=>{ if(!iso) return null; const d=new Date(iso+'T00:00:00'); return Math.round((d-hoje)/86400000); };
@@ -9806,7 +9841,7 @@ V.campo = function(arg){
   const prox=abertas.slice().sort((a,b)=>{ const da=opDataPlan(t.id,a.tagoi,a.op.dap)||'9999', db=opDataPlan(t.id,b.tagoi,b.op.dap)||'9999'; return da<db?-1:da>db?1:0; })[0];
   if(!campoOpenInit.has(t.id)){ campoOpenInit.add(t.id); if(prox) campoOpen.add(prox.key); }
   const nPos={}; let nP=0, nS=0; ops.forEach(o=>{ nPos[o.key]=(o.seq==='safrinha')?++nS:++nP; });
-  const visiveis=ops.filter(o=>campoFiltro==='todas'||stOf(o)===campoFiltro);
+  const visiveis=ops.filter(o=>campoFiltro==='todas'||stOf(o)===campoFiltro||(campoFiltro==='andamento'&&stOf(o)==='parcial'));
   const chip=(v,l,n)=>`<button class="cp-chip${campoFiltro===v?' on':''}" data-act="campoFiltro" data-val="${v}">${l}${n!=null?` <b>${n}</b>`:''}</button>`;
   let lastSeq='';
   const opsHtml=visiveis.map(o=>{
@@ -9838,7 +9873,8 @@ V.campo = function(arg){
     // quando: DAE · data · (atrasada N d / hoje / em N d)
     let quando=[(dae||dp)?`DAE ${dae||0}`:'', dp?fmtDataBR(dp):''].filter(Boolean).join(' · ');
     let prazo='';
-    if(r.status==='concluido') prazo=`<span class="cp-tag ok">✔ ${r.data?fmtDataBR(r.data):'concluída'}</span>`;
+    if(r.status==='concluido') prazo=`<span class="cp-tag ok">✔ ${r.data?fmtDataBR(r.data):'concluída'}${opAreaFeita(r)&&Math.abs(opAreaFeita(r)-areaDe(t))>=0.005?` · ${num(opAreaFeita(r))} ha`:''}</span>`;
+    else if(r.status==='parcial') prazo=`<span class="cp-tag parc">◔ parcial · ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha</span>`;
     else if(r.status==='cancelado') prazo=`<span class="cp-tag">🚫 não será realizada</span>`;
     else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
     const resumo=(o.items||[]).map(it=>itemFora(r,it)?`<s class="mut" title="fora desta aplicação">${esc(it.produto)}</s>`:`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`)
@@ -9848,7 +9884,8 @@ V.campo = function(arg){
     const tsBtn=(tc && !soTS && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
     const acao= r.status==='cancelado' ? `<span class="cp-baixa">🚫 Não será realizada</span><button class="btn btn-ghost btn-sm" data-act="realStatus" data-key="${esc(o.key)}" data-val="pendente">↩ Voltar a pendente</button>`
       : r.status==='pendente' ? `${tsBtn}<button class="btn btn-wa btn-sm" data-act="${soTS?'waTs':'waApp'}" data-key="${esc(o.key)}">📲 ${soTS?'Enviar TS ao operador':pc?'Enviar plantio':'Enviar ao operador'}</button>`
-      : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="${soTS?'waTs':'waApp'}" data-key="${esc(o.key)}">📲 Reenviar${soTS?' TS':''}</button>`
+      : r.status==='andamento' ? `<button class="btn btn-primary btn-sm" data-act="opFinalizar" data-key="${esc(o.key)}">✅ Finalizar${(r.etapas&&r.etapas.length)?` (${num(opAreaDe(t,r))} ha restantes)`:''}</button>${tsBtn}<button class="btn btn-outline btn-sm" data-act="${soTS?'waTs':'waApp'}" data-key="${esc(o.key)}">📲 Reenviar${soTS?' TS':''}</button>`
+      : r.status==='parcial' ? `<span class="cp-baixa">◔ ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span><button class="btn btn-primary btn-sm" data-act="opRestante" data-key="${esc(o.key)}">▶ Aplicar o restante (${num(opRestante(t,r))} ha)</button><button class="btn btn-outline btn-sm" data-act="opFinalizarSem" data-key="${esc(o.key)}">✔ Finalizar sem aplicar o resto</button>`
       : `<span class="cp-baixa">${r.saidaPushed?'📦 baixa no estoque ✓':(r.baixa?'📦 baixa pendente de envio':'')}</span>${(()=>{ const m=mistDeOp(o.key); return m?mistChip(m)+mistBtn(m, m.aval&&m.aval.nota?'btn-ghost':'btn-outline'):''; })()}`;
     const tsLinha=!tc?'':(tsSt==='feito'?`<div class="cp-maq">🧪 TS feito${r.ts.quem?' por '+esc(r.ts.quem):''}${r.ts.em?' em '+fmtDataBR(_dISO(r.ts.em)):''} · ${soTS?'baixa dos produtos ✓':'baixa da semente e do TS ✓'}</div>`
       :(tsSt==='enviada'?`<div class="cp-maq">🧪 TS enviado ao operador — aguardando a baixa</div>`:`<div class="cp-maq mut">🧪 ${tc.nBat} batelada(s) de TS · ${esc(tc.sem.produto)}</div>`));
@@ -9875,7 +9912,8 @@ V.campo = function(arg){
         <summary><span>Detalhes · registrar execução</span><span class="panel-chevron">▸</span></summary>
         <div class="cp-det-in">
       <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}${sbtn('cancelado')}</div>
-      ${r.status==='concluido'?`<div class="camp-actbar"><span class="camp-done-tag">✔ Concluída${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
+      ${r.status==='parcial'?`<div class="camp-actbar"><span class="camp-done-tag parc">◔ Parcial — ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha${(r.etapas&&r.etapas.length)?` em ${r.etapas.length+1} etapas`:''}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
+      ${r.status==='concluido'?`<div class="camp-actbar"><span class="camp-done-tag">✔ Concluída${opAreaFeita(r)&&Math.abs(opAreaFeita(r)-areaDe(t))>=0.005?` · ${num(opAreaFeita(r))} ha${opAreaFeita(r)<areaDe(t)?' (parcial, encerrada)':' (com transpasse)'}`:''}${r.saidaPushed?' · baixa no estoque ✓':(r.baixa?' · baixa pendente de envio':'')}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
       ${(()=>{ const col=colheitaPrevDe(t.id,o.seq); return col?`<div class="camp-plan">🌾 Colheita estimada: <b>${fmtDataBR(col)}</b></div>`:''; })()}
       <div class="camp-date"><label>Data de execução</label><input type="date" data-edit="realData" data-key="${esc(o.key)}" value="${esc(r.data||'')}"></div>
       <div class="table-wrap"><table class="camp-ins">
@@ -9910,6 +9948,7 @@ V.campo = function(arg){
               <option value="">— máquina —</option>
               ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${(opMaqCampo(t,o,r)===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
             </select></label>
+            <label>Área a aplicar (ha)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="area" data-key="${esc(o.key)}" value="${r.app&&r.app.area!=null&&r.app.area!==''?r.app.area:''}" placeholder="${num(areaDe(t))}" title="Maior que o talhão = transpasse (ex.: 100 ha → 105). Menor = aplicação parcial: ao finalizar fica Parcial e dá para aplicar o restante depois."></label>
             <label>Tanque (L) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
             <label>Vazão (L/ha) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
             <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${esc(o.key)}" value="${esc((r.app&&r.app.hIni)||'')}"></label>
@@ -10198,7 +10237,7 @@ function applyEdit(el){
   }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
-    if(f==='vazao'||f==='tanque'){ r.app[f]=numBRn(el.value); }
+    if(f==='vazao'||f==='tanque'||f==='area'){ r.app[f]=numBRn(el.value); if(f==='area'&&!(+r.app.area>0)) delete r.app.area; }
     else { r.app[f]=el.value; }
     realClean(el.dataset.key); stampReal(el.dataset.key);
     // atualiza só o quadro de cálculo (sem re-render, para não rolar a tela)
@@ -10535,17 +10574,28 @@ document.addEventListener('click',e=>{
       if(was==='concluido' && a.val!=='concluido'){ clearOpSaida(a.key); delete r.baixa; }
       realClean(a.key); stampReal(a.key); route(); }
     else if(a.act==='opFinalizar'){ finalizarOpModal(a.key); return; }
-    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; stampReal(a.key); route(); toast('Operação reaberta'); return; }
+    else if(a.act==='opRestante'){ const r=realEnsure(a.key), t=findTalhao(a.key.slice(0,a.key.indexOf('|'))); if(!t) return;   // nova etapa com a área que falta
+      r.etapas=(r.etapas||[]).concat([r.etapaAtual||{data:r.data, area:opAreaFeita(r), baixa:r.baixa||{}}]); delete r.etapaAtual; r.app=r.app||{}; r.app.area=opRestante(t,r); r.status='andamento'; stampReal(a.key); campoOpen.add(a.key); route(); toast(`Nova etapa: ${num(r.app.area)} ha restantes`); return; }
+    else if(a.act==='opFinalizarSem'){ const r=realEnsure(a.key); if(!ask('Encerrar a operação sem aplicar o restante da área?')) return; r.status='concluido'; stampReal(a.key); route(); toast('Operação encerrada (parcial)'); return; }
+    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; delete r.etapas; delete r.etapaAtual; delete r.areaFeita; stampReal(a.key); route(); toast('Operação reaberta'); return; }
     else if(a.act==='finClose'){ const ov=document.getElementById('fin-ov'); if(ov) ov.remove(); return; }
     else if(a.act==='finConfirm'){ const key=a.key, r=realEnsure(key), baixa={};
       document.querySelectorAll('#fin-ov [data-finprod]').forEach(inp=>{ const p=inp.dataset.finprod, v=_mmC(inp.value); if(p && v>0) baixa[p]=(baixa[p]||0)+v; });
       const opEl=document.querySelector('#fin-ov [data-finmeta="operador"]'), dtEl=document.querySelector('#fin-ov [data-finmeta="data"]');
       r.app=r.app||{}; if(opEl) r.app.operador=opEl.value.trim();
       r.data=(dtEl&&dtEl.value)||r.data||new Date().toISOString().slice(0,10);
-      r.baixa=baixa; r.status='concluido'; r.saidaPushed=false; fillDosesFromBaixa(key); stampReal(key);
+      { const t=findTalhao(key.slice(0,key.indexOf('|'))), areaTal=t?areaDe(t):0, aEl=document.querySelector('#fin-ov [data-finmeta="area"]'), enc=document.querySelector('#fin-ov [data-finmeta="encerrar"]');
+        const areaEt=(aEl&&_mmC(aEl.value)>0)?_mmC(aEl.value):opAreaDe(t,r);
+        // 2ª etapa (aplicar o restante): soma a baixa e a área das etapas anteriores
+        const tot={}; (r.etapas||[]).forEach(e=>{ for(const p in (e.baixa||{})) tot[p]=(tot[p]||0)+(+e.baixa[p]||0); }); for(const p in baixa) tot[p]=(tot[p]||0)+baixa[p];
+        r.etapaAtual={data:r.data, area:areaEt, baixa}; r.baixa=tot; r.areaFeita=+(((r.etapas||[]).reduce((s,e)=>s+(+e.area||0),0))+areaEt).toFixed(2);
+        const parcial=areaTal>0 && r.areaFeita<areaTal-0.005 && !(enc&&enc.checked);
+        r.status=parcial?'parcial':'concluido'; if(r.app) delete r.app.area;   // a área da próxima etapa é definida em "Aplicar o restante"
+        if(!parcial && r.areaFeita>=areaTal-0.005 && !(r.etapas&&r.etapas.length) && Math.abs(r.areaFeita-areaTal)<0.005) delete r.areaFeita; }   // igual ao talhão: sem marca especial
+      r.saidaPushed=false; fillDosesFromBaixa(key); stampReal(key);
       try{ maybePlantioConcluido(key); }catch(e){}
       const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
-      route(); toast(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada');
+      route(); toast(r.status==='parcial'?`Aplicação parcial registrada (${num(r.areaFeita)} ha) — baixa do que foi aplicado`:(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada'));
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }
     else if(a.act==='realAddExtra'){ const r=realEnsure(a.key); r.extras.push({produto:'',dose:null}); saveOverrides(); route(); }
     else if(a.act==='realExcl'){ const r=realEnsure(a.key); r.excl=r.excl||{};
