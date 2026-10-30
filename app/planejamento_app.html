@@ -2464,7 +2464,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-241';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-242';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8070,7 +8070,7 @@ function talFichaOpen(tid){
   const resumo=lin('Empreendimento', esc(emp||'sem empreendimento')+(seq==='safrinha'?' <small class="mut">(2ª safra)</small>':''))
     +lin('Cultura', cult?esc(cult):'')
     +lin('Variedade', sem?esc(sem.produto):'')
-    +lin('Stand', stand?`${nf0.format(stand.pop||0)} pl/ha${stand.plm!=null?` <small class="mut">· ${nf1.format(stand.plm)} pl/m</small>`:''}${stand.pctMeta!=null?` <small class="mut">· ${stand.pctMeta}% da meta</small>`:''} <small class="mut">· ${fmtData(stand.data)}</small>`:'')
+    +lin('Stand', stand?`<a class="link" data-go="#/stand/${id}" title="Abrir as contagens de stand deste talhão">${nf0.format(stand.pop||0)} pl/ha${stand.plm!=null?` <small class="mut">· ${nf1.format(stand.plm)} pl/m</small>`:''}${stand.pctMeta!=null?` <small class="mut">· ${stand.pctMeta}% da meta</small>`:''} <small class="mut">· ${fmtData(stand.data)}</small></a>`:'')
     +lin('Plantio', pl?`${fmtData(pl)}${dap!=null?` <small class="mut">· ${dap} DAP</small>`:''}`:(plPrev?`<span class="mut">previsto ${fmtData(plPrev)}</span>`:''))
     +lin('Estádio', st?`${esc(st.cod)} <small class="mut">${esc(st.desc||'')}</small>`:'')
     +lin('Operações', `${sc.ico} ${so.nivel==='late'?`${so.late.length} atrasada(s)`:esc(sc.lbl)}${so.prox?` <small class="mut">· próxima: ${esc(so.prox.nome)} ${fmtData(so.prox.dp)}</small>`:''}`);
@@ -9313,7 +9313,9 @@ const FENO={
 const CULT_NOME={soja:'Soja', milho:'Milho', sorgo:'Sorgo', feijao:'Feijão', algodao:'Algodão', trigo:'Trigo', braquiaria:'Braquiária'};
 function culturaNome(emp){ return CULT_NOME[culturaKey(emp)]||''; }
 // última contagem de stand do talhão (ação Stand), pela data e depois pelo registro mais novo
-function standUltimo(tid){ return ((STAND&&STAND.registros)||[]).filter(r=>r&&r.talhao===tid&&!r.del&&r.pop!=null).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0))[0]||null; }
+// (contagem anterior ao plantio real da safra atual é de outra safra/teste e fica de fora)
+function standUltimo(tid){ const t=findTalhao(tid), pl=t?plantioRealDe(tid, talSafraAtual(t)):'';
+  return ((STAND&&STAND.registros)||[]).filter(r=>r&&r.talhao===tid&&!r.del&&r.pop!=null&&!(pl&&String(r.data||'').slice(0,10)<pl)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0))[0]||null; }
 function culturaKey(emp){ const s=String(emp||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
   return /SOJA/.test(s)?'soja':/MILHO/.test(s)?'milho':/SORGO/.test(s)?'sorgo':/FEIJ/.test(s)?'feijao':/ALGOD/.test(s)?'algodao':/TRIGO/.test(s)?'trigo':/BRAQ|BRACH/.test(s)?'braquiaria':''; }
 function _hojeISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
