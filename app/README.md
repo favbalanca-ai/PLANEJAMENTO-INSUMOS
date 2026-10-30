@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Mapa → ficha do talhão: cabeçalho (v241)** — o resumo passa a ter **Empreendimento** (nome completo, ex.: FA-SOJA
+  IRRIGADO 26-27), **Cultura** (só a cultura, deduzida do empreendimento: `culturaNome` → Soja, Milho…), Variedade e
+  **Stand** (última contagem da ação Stand do talhão — `standUltimo`: plantas/ha, plantas/m, % da meta e data; a linha
+  só aparece quando existe contagem), depois Plantio, Estádio e Operações.
 - **Campo → área a aplicar: transpasse e aplicação parcial (v240)** — na 🚿 *Recomendação de aplicação* o campo
   **Área a aplicar (ha)** (`r.app.area`; vazio = área do talhão, `opAreaDe`) aceita área **maior** (transpasse: 100 ha →
   105) ou **menor** (parcial: 70). Calda, nº de tanques, totais, WhatsApp, recomendação/PDF e a baixa seguem essa área
