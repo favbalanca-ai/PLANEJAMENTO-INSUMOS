@@ -70,7 +70,8 @@ arquivo único `planejamento_app.html` para abrir localmente.
 - **Mapa → ficha do talhão: cabeçalho (v241)** — o resumo passa a ter **Empreendimento** (nome completo, ex.: FA-SOJA
   IRRIGADO 26-27), **Cultura** (só a cultura, deduzida do empreendimento: `culturaNome` → Soja, Milho…), Variedade e
   **Stand** (última contagem da ação Stand do talhão — `standUltimo`: plantas/ha, plantas/m, % da meta e data; a linha
-  só aparece quando existe contagem), depois Plantio, Estádio e Operações.
+  só aparece quando existe contagem), depois Plantio, Estádio e Operações. v242: contagem anterior ao plantio real
+  da safra atual fica de fora (é de outra safra ou teste) e a linha Stand abre `#/stand/<talhão>`.
 - **Campo → área a aplicar: transpasse e aplicação parcial (v240)** — na 🚿 *Recomendação de aplicação* o campo
   **Área a aplicar (ha)** (`r.app.area`; vazio = área do talhão, `opAreaDe`) aceita área **maior** (transpasse: 100 ha →
   105) ou **menor** (parcial: 70). Calda, nº de tanques, totais, WhatsApp, recomendação/PDF e a baixa seguem essa área
