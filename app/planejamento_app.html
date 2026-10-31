@@ -2464,7 +2464,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-242';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-243';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4975,11 +4975,11 @@ V.estoque=function(){
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
       <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
+      <td class="num" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0" title="Quantidade já pedida ao fornecedor (vai para a coluna EM PEDIDO do PORTIFÓLIO)"></td>
       <td class="num" data-th="Entradas">${r.ent?num(r.ent):'·'}</td>
       <td class="num" data-th="Saídas (aplic.)">${r.sai?num(r.sai):'·'}</td>
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
       <td data-th="Un">${esc(r.un||'')}</td>
-      <td class="num c-more" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0"></td>
       <td class="num c-more" data-th="A entregar" title="contratos de entrega futura (NF-e de faturamento)">${r.aEnt?num(r.aEnt):'·'}</td>
       <td class="num c-more" data-th="Em trânsito" title="NF-e de mercadoria ainda não recebida na fazenda">${r.trans?num(r.trans):'·'}</td>
       <td class="num c-more" data-th="Avariado" title="recebido com avaria, fora do saldo disponível (a resolver)">${r.avar?`<span style="color:var(--red)">${num(r.avar)}</span>`:'·'}</td>
@@ -4997,7 +4997,7 @@ V.estoque=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
-    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">Em pedido</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more">Valor saldo</th></tr></thead>
+    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||'<tr><td colspan="11" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.</p>`;
 };
@@ -11382,7 +11382,7 @@ function sigsCarregar(){ let o=null; try{ o=JSON.parse(localStorage.getItem(SIGS
 let syncBusy=false, pushTimer=null, pollTimer=null;
 let dadosDaPlanilha=false;   // true depois do 1º puxar (DATA deixou de ser o data.json embutido)
 let lastPullTs=0;   // último puxar que trouxe dados
-let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false, lastServerHash='';
+let lastPushSig='', lastRawSig='', lastInputTs=0, lastPushOk=true, pendingRerender=false, lastServerHash='', _pushFalhaAviso='';
 function syncUrl(){ return localStorage.getItem(SYNC_KEY)||''; }
 function autoOn(){ return localStorage.getItem(AUTO_KEY)!=='0'; }
 function setAutoOn(b){ localStorage.setItem(AUTO_KEY, b?'1':'0'); if(b){ startPolling(); scheduleAutoPush(); } setSyncStatus(); }
@@ -11764,6 +11764,7 @@ async function syncPush(opts){
     addHist('push', res.fail===0, `${res.ok} gravadas, ${res.fail} falhas`);
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
     if(!opts.auto) toast(`Enviado à planilha (${res.ok} ok)`);
+    else if(res.fail){ const m=(res.msgs&&res.msgs[0])||`${res.fail} edição(ões)`; if(m!==_pushFalhaAviso){ _pushFalhaAviso=m; toast('⚠️ A planilha não aceitou: '+m+' — veja em Sincronizar'); } }   // antes ficava mudo: a pessoa achava que não tinha salvado
     // mudanças estruturais (insumo adicionado/removido) agora vivem na planilha:
     // limpa os overrides correspondentes e puxa a verdade (reconcilia, evita duplicar/ressurgir)
     const adds=eds.filter(e=>e.type==='additem'), dels=eds.filter(e=>e.type==='delitem'), newT=eds.filter(e=>e.type==='addtalhao'), delT=eds.filter(e=>e.type==='deltalhao'), reo=eds.filter(e=>e.type==='reorderops'), grow=eds.filter(e=>e.type==='addopblock');
