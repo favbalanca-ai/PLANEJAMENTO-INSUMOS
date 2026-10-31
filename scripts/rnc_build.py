@@ -204,7 +204,36 @@ def parse_desc(out):
             grupo = it[i:fim]; i = fim
             nome = ' '.join(x[0] for x in grupo if x[0]).strip(); val = ' '.join(x[1] for x in grupo if x[1]).strip()
             if nome and val and len(nome) < 160: desc[nome.upper()] = val
-    return desc
+    return consolida(desc)
+
+# nomes oficiais dos descritores (soja, milho e sorgo) — servem para juntar pedaços que o PDF separou
+DESC_CONHECIDOS = {
+    'COR DA FLOR', 'COR DO HILO', 'COR DA VAGEM', 'COR DO TEGUMENTO', 'TIPO DE CRESCIMENTO', 'FORMA DA SEMENTE', 'COR DA PUBESCÊNCIA',
+    'BRILHO DA SEMENTE', 'REAÇÃO À PEROXIDASE', 'DENSIDADE DA PUBESCÊNCIA', 'PIGM ANTOCIÂNICA HIPOCÓTILO',
+    'FORMA DA PONTA DA PRIMEIRA FOLHA', 'ÂNGULO ENTRE A LÂMINA FOLIAR E O CAULE, MEDIDO LOGO ACIMA DA ESPIGA SUPERIOR',
+    'COMPORTAMENTO DA LÂMINA FOLIAR ACIMA DA ESPIGA SUPERIOR', 'COMPRIMENTO DA HASTE PRINCIPAL DO PENDÃO, MEDIDO ENTRE O PONTO DE ORIGEM E O ÁPICE DA HASTE CENTRAL',
+    'ÂNGULO ENTRE A HASTE PRINCIPAL DO PENDÃO E A RAMIFICAÇÃO LATERAL, NO TERÇO INFERIOR DO PENDÃO', 'COLORAÇÃO DO ESTIGMA PELA ANTOCIANINA',
+    'TIPO DE GRÃO, MEDIDO NO TERÇO MÉDIO DA ESPIGA', 'ALTURA DA PLANTA (CM)',
+    'COR DA PLANTA', 'FORMA DA PANÍCULA', 'PIGMENTAÇÃO DO COLEÓPTILO PELA ANTOCIANINA', 'CEROSIDADE DA BAINHA DAS FOLHAS', 'COMPRIMENTO DA FLOR PEDICELADA',
+    'DENSIDADE DA PANÍCULA', 'PIGMENTAÇÃO DA NERVURA CENTRAL DAS FOLHAS (NA 3ª FOLHA A PARTIR DA FOLHA BANDEIRA)', 'PRESENÇA E COMPRIMENTO DA ARISTA NA LEMA'}
+VALORES_SOLTOS = ('PRESENTE', 'AUSENTE')
+def consolida(desc):
+    """Junta descritores que vieram partidos em 2–3 chaves seguidas (nome quebrado em linhas iguais ao valor)
+    e separa 'NOME PRESENTE' quando o valor caiu na coluna do nome. Mantém a ordem."""
+    ks = list(desc.items()); out = {}; i = 0
+    while i < len(ks):
+        feito = False
+        for n in (3, 2):
+            if i + n <= len(ks):
+                nome = ' '.join(k for k, _ in ks[i:i + n]).replace('  ', ' ')
+                if nome in DESC_CONHECIDOS:
+                    out[nome] = ' '.join(v for _, v in ks[i:i + n] if v).strip(); i += n; feito = True; break
+        if feito: continue
+        k, v = ks[i]; i += 1
+        for w in VALORES_SOLTOS:
+            if k.endswith(' ' + w) and k[:-len(w) - 1] in DESC_CONHECIDOS: k, v = k[:-len(w) - 1], (w + ' ' + v).strip(); break
+        out[k] = v
+    return out
 
 def detalhes(d, out_dir, cap=None):
     cap = int(cap or os.environ.get('RNC_DET_CAP') or 1500)
@@ -212,7 +241,7 @@ def detalhes(d, out_dir, cap=None):
     try: det = json.load(open(pathD, encoding='utf-8'))
     except Exception: det = {}
     esp = d.get('especies', []); alvo = {i for i, e in enumerate(esp) if e.get('n') in ESPECIES_DET}
-    cands = [c for c in d.get('cultivares', []) if c.get('e') in alvo and c.get('rnc') and c['rnc'].get('s') and c['rnc']['s'] not in det]
+    cands = [c for c in d.get('cultivares', []) if c.get('e') in alvo and c.get('rnc') and c['rnc'].get('s') and (c['rnc']['s'] not in det or det[c['rnc']['s']].get('descErro'))]
     cands.sort(key=lambda c: -int(re.sub(r'\D', '', c['rnc']['n']) or 0))   # nº de registro maior = mais nova primeiro
     print('RNC detalhes: já tem', len(det), '| faltam', len(cands), '| nesta rodada até', cap)
     n = 0; t0 = time.time()
