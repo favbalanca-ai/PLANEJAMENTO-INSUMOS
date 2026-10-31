@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Quadro de operações → seletor de Fazenda (v246)** — primeiro filtro do quadro (antes de Safra): *Todas as fazendas ·
+  Fazenda Água Viva (n) · Fazenda Espora (n)*. A fazenda é deduzida do **prefixo do empreendimento** do talhão
+  (`fazendaKey`: `FA-…` = Água Viva, `FE-…` = Espora; outro prefixo vira "Fazenda XX", sem prefixo = "Sem fazenda";
+  nomes em `FAZENDAS`). Filtra as linhas do quadro e a lista do seletor Talhão; a escolha fica no aparelho
+  (`planejamento_oq_faz`). O seletor só aparece quando há mais de uma fazenda.
 - **Estoque → extrato do produto (v245)** — tocar no **nome do produto**, no número de **Entradas** ou no de **Saídas**
   abre o *Extrato* (`estExtratoOpen`): saídas conhecidas por **data · talhão · operação · origem (Operação / TS /
   Recomendação) · operador · quantidade** (fonte: `usoProdutosDe`, as mesmas do relatório de uso) e entradas por
