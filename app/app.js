@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-249';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-250';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4304,9 +4304,9 @@ function campoAppMsg(key){
   L.push(replyUrl);
   return L.join('\n');
 }
-function campoProgress(){
+function campoProgress(filtro){
   let total=0, done=0, running=0;
-  talhoesAll().forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='cancelado') return; total++;
+  talhoesAll().filter(t=>!filtro||filtro(t)).forEach(t=>opsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='cancelado') return; total++;
     if(r){ if(r.status==='concluido') done++; else if(r.status==='andamento'||r.status==='parcial') running++; } }));
   return {total,done,running};
 }
@@ -6523,7 +6523,7 @@ async function mapaInit(){
   const bounds=[];
   // contornos dos talhões, coloridos pela cultura da safra atual
   const lims=limitesAll();
-  Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return;
+  Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return; if(oqFaz && t && !fazOk(t)) return;   // só a fazenda escolhida
     const seq=t?talSafraAtual(t):'principal', emp=t?(seq==='safrinha'?empSafDe(t):empDe(t)):'', ck=culturaKey(emp), cor=CULT_COR[ck]||'#90a4ae';
     const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
     const so=t?talStatusOps(t):{nivel:'none',late:[],soon:[],prox:null}, sc=OPST[so.nivel];
@@ -6731,19 +6731,20 @@ function tlRow(e){
       <div class="tl-sub">${e.talhao?`<span class="tl-tal">${esc(_talNomeC(e.talhao))}</span>${e.resumo?' · ':''}`:''}${esc(e.resumo||'')}</div></div></div>`;
 }
 V.campopainel = function(){
-  const tals=talhoesAll();
-  const prog=campoProgress(), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
-  const ev=camposEventos();
+  const tals=fazTalhoes(), okT=id=>!oqFaz||fazOk(findTalhao(id));   // v250: filtrado pela fazenda escolhida
+  const prog=campoProgress(fazOk), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
+  const ev=camposEventos().filter(e=>!e.talhao||okT(e.talhao));
   const d30=Date.now()-30*86400000;
-  const monit=(MONIT&&MONIT.registros||[]), monit30=monit.filter(r=>_tsC(r)>=d30);
-  const chuva=(CHUVA&&CHUVA.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
-  const mm30=(CHUVA&&CHUVA.registros||[]).filter(r=>_tsC(r)>=d30).reduce((a,r)=>a+_mmC(r.mm),0);
-  const stand=(STAND?standLista():[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
-  const recom=(RECOM&&RECOM.registros||[]).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const fT=r=>!r.talhao||okT(r.talhao);
+  const monit=(MONIT&&MONIT.registros||[]).filter(fT), monit30=monit.filter(r=>_tsC(r)>=d30);
+  const chuva=(CHUVA&&CHUVA.registros||[]).filter(fT).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const mm30=chuva.filter(r=>_tsC(r)>=d30).reduce((a,r)=>a+_mmC(r.mm),0);
+  const stand=(STAND?standLista():[]).filter(fT).slice().sort((a,b)=>_tsC(b)-_tsC(a));
+  const recom=(RECOM&&RECOM.registros||[]).filter(fT).slice().sort((a,b)=>_tsC(b)-_tsC(a));
   const talAtiv=new Set(ev.filter(e=>e.talhao).map(e=>e.talhao)).size;
   const ult=ev[0];
   const ultTxt=ult?(_diasC(ult.ts)===0?'hoje':(_diasC(ult.ts)===1?'ontem':_diasC(ult.ts)+' dias atrás')):'—';
-  return `
+  return `${fazSelectHtml('faz-top')}
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
@@ -7041,7 +7042,7 @@ function exportCampoCsv(){
 }
 V.mapa=function(){
   const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
-  const tals=talhoesAll(), lims=limitesAll(), comLim=tals.filter(t=>lims[t.id]), semLim=tals.filter(t=>!lims[t.id]);
+  const tals=fazTalhoes(), lims=limitesAll(), comLim=tals.filter(t=>lims[t.id]), semLim=tals.filter(t=>!lims[t.id]);   // v250: fazenda escolhida
   const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(tNome(t))} (${num(areaDe(t))} ha)</option>`).join('');
   const imp=_limImport?`<div class="panel lim-imp"><div class="panel-head"><h2>📥 Conferir importação</h2><span class="sub">${esc(_limImport.arquivo)}</span></div>
       <div class="lim-list">${_limImport.itens.map((it,i)=>{ const t=it.tid&&findTalhao(it.tid), dif=t&&areaDe(t)?(it.ha/areaDe(t)-1)*100:null;
@@ -7059,7 +7060,7 @@ V.mapa=function(){
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
-      <div class="spacer"></div>
+      <div class="spacer"></div>${fazSelectHtml('faz-mapa')}
       <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
       <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
       <button class="btn btn-outline btn-sm mapa-seguir${geoSeguirOn()?' on':''}" data-act="mapaLoc" aria-pressed="${geoSeguirOn()}" title="Mostrar e acompanhar a posição do celular no mapa (funciona sem internet)">${geoSeguirOn()?'📍 Seguindo':'📍 Seguir'}</button>
@@ -7214,7 +7215,13 @@ const FAZENDAS={FA:'Fazenda Água Viva', FE:'Fazenda Espora'};
 function fazendaKey(t){ const e=String((t&&(empDe(t)||empSafDe(t)))||'').trim().toUpperCase(), m=/^([A-Z]{2})(?=[\s\-_])/.exec(e); return m?m[1]:''; }
 function fazendaNome(k){ return k?(FAZENDAS[k]||('Fazenda '+k)):'Sem fazenda'; }
 function fazendasLista(tals){ const ks=new Set(); (tals||talhoesAll()).forEach(t=>ks.add(fazendaKey(t))); return [...ks].sort((a,b)=>(a===''?1:b===''?-1:fazendaNome(a).localeCompare(fazendaNome(b),'pt'))); }
-let oqFaz=''; try{ oqFaz=localStorage.getItem('planejamento_oq_faz')||''; }catch(e){}   // fazenda escolhida no quadro (fica no aparelho)
+let oqFaz=''; try{ oqFaz=localStorage.getItem('planejamento_oq_faz')||''; }catch(e){}   // fazenda escolhida (quadro, Painel e Mapa — v250) — fica no aparelho
+function fazOk(t){ return !oqFaz || (t && fazendaKey(t)===oqFaz); }
+function fazTalhoes(){ return talhoesAll().filter(fazOk); }
+function fazSetar(v){ oqFaz=v||''; try{ localStorage.setItem('planejamento_oq_faz', oqFaz); }catch(e){} }
+// seletor de fazenda (só aparece quando há mais de uma); a classe faz-sel é tratada no change
+function fazSelectHtml(cls){ const all=talhoesAll(), fazs=fazendasLista(all); if(fazs.length<2) return ''; if(oqFaz && !fazs.includes(oqFaz)) oqFaz='';
+  return `<label class="faz-wrap ${cls||''}"><span>Fazenda</span><select class="sel faz-sel"><option value="">Todas as fazendas</option>${fazs.map(k=>`<option value="${esc(k)}"${k===oqFaz?' selected':''}>${esc(fazendaNome(k))} (${all.filter(t=>fazendaKey(t)===k).length})</option>`).join('')}</select></label>`; }
 // faixas do quadro que encolhem/expandem (filtros+legenda · linha do tempo) — estado fica no aparelho (v247)
 let OQ_FOLD={filtros:true, tl:true}; try{ Object.assign(OQ_FOLD, JSON.parse(localStorage.getItem('planejamento_oq_fold')||'{}')); }catch(e){}
 function oqFoldSave(){ try{ localStorage.setItem('planejamento_oq_fold', JSON.stringify(OQ_FOLD)); }catch(e){} }
@@ -7994,7 +8001,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
-  if(e.target.id==='oq-faz'){ oqFaz=e.target.value; try{ localStorage.setItem('planejamento_oq_faz', oqFaz); }catch(err){} oqTal=''; route({keepScroll:true}); return; }
+  if(e.target.id==='oq-faz'||e.target.classList.contains('faz-sel')){ fazSetar(e.target.value); oqTal=''; route({keepScroll:true}); return; }
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='agp-cls'){ if(_agPick){ _agPick.cls=e.target.value; agPickRender(); } return; }

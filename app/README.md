@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Seletor de Fazenda também no Painel do Campo e no Mapa (v250)** — a mesma escolha do quadro (`oqFaz`, guardada no
+  aparelho) vale nas três telas (`fazSelectHtml`, `fazOk`, `fazTalhoes`). No Painel filtra os indicadores (operações,
+  monitoramentos, chuva, stand, recomendações, talhões com atividade) e a atividade recente; no Mapa, a lista de
+  talhões, os limites desenhados e o enquadramento. Registros sem talhão (ex.: chuva geral) continuam aparecendo.
 - **Catálogo → Cultivares com cadastro do RNC (v249)** — a ficha da cultivar deixou de mostrar os números do SIGEF
   (campos de produção, estados, safras, área) e passou a mostrar o **cadastro**: nº de registro no RNC, mantenedor e
   tipo de registro, vindos da consulta pública do CultivarWeb (`scripts/rnc_build.py`, roda na ação mensal depois do
