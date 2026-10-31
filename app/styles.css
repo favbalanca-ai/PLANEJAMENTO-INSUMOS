@@ -2006,6 +2006,14 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .oq-fold[open]>.oq-tl{border-top-left-radius:0;border-top-right-radius:0;border-top:0;margin-bottom:0}
 @media print{ .oq-fold>summary{display:none} }
 
+/* ===== Seletor de fazenda no Painel e no Mapa (v250) ===== */
+.faz-wrap{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted)}
+.faz-wrap .sel{font-weight:600;color:var(--ink)}
+.faz-top{margin:0 0 10px;padding:8px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px;width:100%}
+.faz-top .sel{flex:1}
+.faz-mapa .sel{max-width:230px}
+@media (max-width:640px){ .faz-mapa{width:100%} .faz-mapa .sel{max-width:none;flex:1} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2372,4 +2380,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ext-sec{font-size:10.5px}
   .ext-tbl td{font-size:10px}
   .ext-tbl th{font-size:10px}
+  .faz-wrap{font-size:9.5px}
 }
