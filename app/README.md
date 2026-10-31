@@ -67,6 +67,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Estoque → extrato do produto (v245)** — tocar no **nome do produto**, no número de **Entradas** ou no de **Saídas**
+  abre o *Extrato* (`estExtratoOpen`): saídas conhecidas por **data · talhão · operação · origem (Operação / TS /
+  Recomendação) · operador · quantidade** (fonte: `usoProdutosDe`, as mesmas do relatório de uso) e entradas por
+  **data · fornecedor · nota · quantidade** (compras registradas, COMPRAS APP). O que a planilha tem além do que o
+  aparelho conhece aparece como "lançado em outro aparelho ou direto na aba MOVIMENTAÇÃO ESTOQUE" (ou "ainda não
+  enviado", quando é o contrário). Responde "de onde saiu esse 8,4?" sem abrir a planilha.
 - **Estoque → zerar "Em pedido" e abater pela entrada (v244)** — digitar **0** (ou apagar) num produto que tem EM
   PEDIDO na planilha agora é uma edição de verdade (`pedido = 0` sobe para a planilha); antes o zero era tratado como
   "sem alteração" e o valor da planilha voltava. E toda **entrada registrada** (compra manual, NF-e confirmada,

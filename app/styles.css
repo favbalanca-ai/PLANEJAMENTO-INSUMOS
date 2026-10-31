@@ -1983,6 +1983,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fin-encerra{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin:0 0 10px;color:var(--ink)}
 .fin-encerra input{width:18px;height:18px}
 
+/* ===== Extrato do produto (Estoque, v245) ===== */
+.est-prod{cursor:pointer}.est-prod:hover{text-decoration:underline;color:var(--teal)}
+.ext-sec{font-weight:800;font-size:13px;margin:10px 0 6px;color:var(--ink)}.ext-sec b{color:var(--teal);margin-left:6px}
+.ext-tbl td,.ext-tbl th{font-size:12.5px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2346,4 +2351,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .pn-form label{font-size:9.5px}
   .fin-area{font-size:9.5px}
   .fin-encerra{font-size:10px}
+  .ext-sec{font-size:10.5px}
+  .ext-tbl td{font-size:10px}
+  .ext-tbl th{font-size:10px}
 }
