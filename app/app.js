@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-243';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-244';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1399,6 +1399,12 @@ function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY
 function saveCompras(){ lsSet(COMPRAS_KEY, JSON.stringify(COMPRAS)) }
 // envia a compra para a planilha: ENTRADA na aba MOVIMENTAÇÃO ESTOQUE + o registro inteiro na aba COMPRAS APP
 // (é de lá que os OUTROS aparelhos puxam a lista "Compras registradas")
+// entrada registrada (compra manual, NF-e, recebimento) ABATE o "em pedido" do produto: 115 pedidos, chegaram 115 → 0 (chegaram 40 → 75)
+function pedidoAbater(itens){ let n=0; const tx=[];
+  (itens||[]).forEach(it=>{ const pr=it&&it.produto, q=+(it&&it.qtd)||0, ped=pr?pedidoDe(pr):0; if(!pr||!(q>0)||!(ped>0)) return;
+    const v=Math.max(0, +(ped-q).toFixed(4)); OV.pedido[pr]=v; n++; tx.push(`${pr}: ${num(ped)} → ${num(v)}`); });
+  if(n){ saveOverrides(); try{ scheduleAutoPush(); }catch(e){} setTimeout(()=>toast(`📦 Em pedido abatido pela entrada — ${tx.slice(0,2).join(' · ')}${n>2?` (+${n-2})`:''}`), 900); }
+  return n; }
 function pushEntrada(c){
   const url=syncUrl(); if(!url||!c||c.pushed) return Promise.resolve(false);
   if(!c._u) c._u=c.ts||Date.now();
@@ -1977,6 +1983,7 @@ function nfeConfirmar(modo){
   }
   nfeImport=null; route(); updateEditBadge();
   toast(imp.reclass?`Entrada da NF-e ${n.nNF} regravada: ${usados.length} produto(s) (a anterior foi substituída)`:modo==='entrada'?`Entrada da NF-e ${n.nNF} registrada: ${usados.length} produto(s)`:modo==='contrato'?`Contrato da NF-e ${n.nNF} registrado — ${usados.length} produto(s) a entregar`:`NF-e ${n.nNF} em trânsito — dá entrada ao receber na fazenda`);
+  if(rec && !imp.reclass) pedidoAbater(rec.itens);   // chegou: abate o "em pedido" (regravação não abate de novo)
   if(rec) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
   pushDeParaNfe();
 }
@@ -2269,7 +2276,7 @@ async function recConfirmar(){
   if(uso.length){ const rec={ id:ch, fornecedor:nota.fornecedor||REC.fornecedor||nfeCnpjFmt(p.doc), data:hoje, nf:`${p.nNF}/${p.serie}`,
       obs:`Recebida na fazenda${por?' por '+por:''}${semXml?' · sem XML':''}${temDiv?' · com divergência':''}`, itens:uso.map(i=>({produto:i.produto, un:i.un, qtd:+i.qtd.toFixed(4), preco:+(+i.custo||0).toFixed(4)})),
       pushed:false, ts:Date.now(), nfe:{chave:ch, recebimento:true} };
-    COMPRAS.registros.push(rec); saveCompras(); pushEntrada(rec); }
+    COMPRAS.registros.push(rec); saveCompras(); pedidoAbater(rec.itens); pushEntrada(rec); }
   const payload={chave:ch, data:hoje, por, itens:itens.map(i=>({n:i.n, produto:i.produto, un:i.un, qtdRecebida:+(+i.qtd).toFixed(4)})), pendencias:pend, canhoto};
   if(semXml) payload.semXml={fornecedor:REC.fornecedor||''};
   nfeEnviarRecebimento(payload).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
@@ -7820,7 +7827,7 @@ function applyEdit(el){
   }
   const val=el.value.trim().replace(',','.'), n=numBRn(el.value);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
-  else if(kind==='pedido'){ if(n==null||n===0) delete OV.pedido[el.dataset.prod]; else OV.pedido[el.dataset.prod]=n; }
+  else if(kind==='pedido'){ const pr=el.dataset.prod, base=PROD[pr]?(+PROD[pr].pedido||0):0; if(n==null||n===base) delete OV.pedido[pr]; else OV.pedido[pr]=n; }   // 0 com 115 na planilha = edição (zera lá também)
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
   else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
   else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
@@ -8295,7 +8302,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='cmpSave'){ const d=compraDraft; if(!d||!(d.itens||[]).some(it=>it.produto&&(+it.qtd>0))){ toast('Adicione ao menos um produto com quantidade'); return; }
       const itens=d.itens.filter(it=>it.produto&&(+it.qtd>0)).map(it=>({produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:+it.qtd||0, preco:+it.preco||0}));
       const rec={ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), fornecedor:d.fornecedor||'', data:d.data||new Date().toISOString().slice(0,10), nf:d.nf||'', obs:d.obs||'', itens, pushed:false, ts:Date.now() };
-      COMPRAS.registros.push(rec); saveCompras(); compraDraft=null; route();
+      COMPRAS.registros.push(rec); saveCompras(); compraDraft=null; pedidoAbater(rec.itens); route();
       toast(syncUrl()?'Entrada registrada — enviando à planilha…':'Entrada registrada no estoque');
       pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }

@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Estoque → zerar "Em pedido" e abater pela entrada (v244)** — digitar **0** (ou apagar) num produto que tem EM
+  PEDIDO na planilha agora é uma edição de verdade (`pedido = 0` sobe para a planilha); antes o zero era tratado como
+  "sem alteração" e o valor da planilha voltava. E toda **entrada registrada** (compra manual, NF-e confirmada,
+  recebimento na fazenda) **abate** o em pedido do produto (`pedidoAbater`: 115 pedidos, chegaram 40 → 75; chegou
+  mais que o pedido → 0), com aviso na tela; regravação de nota (reclassificar) não abate de novo.
 - **Estoque → "Em pedido" ao lado de "Inicial" + aviso de recusa (v243)** — a coluna *Em pedido* saiu do grupo
   escondido da direita e virou a 3ª coluna (cabe na tela do celular sem rolar). No envio automático, se a planilha
   recusar uma edição (ex.: `produto não encontrado: …` quando o nome não está na aba PORTIFÓLIO, ou `sem permissão…`
