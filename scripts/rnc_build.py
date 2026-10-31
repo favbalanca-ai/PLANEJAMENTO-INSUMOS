@@ -6,7 +6,7 @@ cultivar do cultivares.json (gerado pelo sigef_build.py) o campo "rnc": {"n": n�
 "t": tipo de registro}. Junção pelo nome da cultivar (normalizado). Cultivares do RNC que não têm campo de produção no
 SIGEF entram na lista com nc=0 quando a consulta por espécie funciona.
 
-Uso: python3 scripts/rnc_build.py app/agrofit [--probe | --so-detalhes]
+Uso: python3 scripts/rnc_build.py app/agrofit [--probe | --so-detalhes | --pdf CODSR...]
 Detalhes (tecnologia/evento GM, situação, datas, regiões de adaptação, descritores do PDF) vão para app/agrofit/rnc_det.json,
 só para soja, milho e sorgo, até RNC_DET_CAP (500) por rodada (precisa de pdftotext/poppler-utils).
 Sem dependências externas. Roda no GitHub Actions junto com o Agrofit/SIGEF (a consulta é lenta: ~385 páginas).
@@ -100,7 +100,18 @@ def probe_detalhe(nome, p0=280):
         print('PDFTEXT', re.sub(r'[ \t]+', ' ', out)[:7000])
     except Exception as e: print('pdftotext falhou', e, strip(b.decode('latin-1', 'ignore'))[:1500])
 
+def probe_pdf(codsr):
+    import subprocess, tempfile
+    h = get('https://sistemas.agricultura.gov.br/snpc/cultivarweb/detalhe_cultivar.php?codsr=' + str(codsr) + '&codverif=0')
+    m = re.search(r'pdf\((\d+)\)', h); print('PDF codsr', codsr, 'cod_solic', m and m.group(1))
+    if not m: return
+    rq = urllib.request.Request('https://sistemas.agricultura.gov.br/snpc/protocolo/relatorios_rnc/pdf_descritores2.php?cod_solicitacao_registro=' + m.group(1) + '&cod_cultivarweb=1', headers={'User-Agent': UA, 'Referer': BASE})
+    b = op.open(rq, timeout=300).read()
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f: f.write(b); fn = f.name
+    print(subprocess.run(['pdftotext', '-layout', fn, '-'], capture_output=True, text=True, timeout=60).stdout[:12000])
+
 def main(out_dir, probe_only=False):
+    if probe_only == 'pdf': return [probe_pdf(c) for c in sys.argv[3:]]
     if probe_only == 'sodet': d = json.load(open(os.path.join(out_dir, 'cultivares.json'), encoding='utf-8')); return detalhes(d, out_dir)
     if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X', int(sys.argv[4]) if len(sys.argv) > 4 else 280)
     if probe_only: return probe()
@@ -181,4 +192,4 @@ def detalhes(d, out_dir, cap=None):
     print('RNC detalhes: gravados', n, 'novos; total', len(det), 'em', pathD)
 
 if __name__ == '__main__':
-    main(sys.argv[1], 'sodet' if '--so-detalhes' in sys.argv else ('detalhe' if '--detalhe' in sys.argv else ('--probe' in sys.argv)))
+    main(sys.argv[1], 'pdf' if '--pdf' in sys.argv else 'sodet' if '--so-detalhes' in sys.argv else ('detalhe' if '--detalhe' in sys.argv else ('--probe' in sys.argv)))

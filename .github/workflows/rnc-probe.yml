@@ -5,17 +5,10 @@ on:
 permissions:
   contents: write
 jobs:
-  probe:
+  pdf:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y -q poppler-utils >/dev/null 2>&1 || true
-      - run: RNC_DET_CAP=600 python3 scripts/rnc_build.py app/agrofit
-      - name: Commit dos arquivos
-        run: |
-          git add app/agrofit/cultivares.json app/agrofit/rnc_det.json
-          if git diff --cached --quiet; then echo "sem mudanças"; exit 0; fi
-          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "RNC: cultivares.json (codsr) + rnc_det.json (gerado pela ação)"
-          git push
+      - run: python3 scripts/rnc_build.py app/agrofit --pdf 63288 63381
