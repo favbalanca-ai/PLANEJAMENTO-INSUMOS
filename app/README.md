@@ -67,6 +67,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Catálogo → Cultivares com cadastro do RNC (v249)** — a ficha da cultivar deixou de mostrar os números do SIGEF
+  (campos de produção, estados, safras, área) e passou a mostrar o **cadastro**: nº de registro no RNC, mantenedor e
+  tipo de registro, vindos da consulta pública do CultivarWeb (`scripts/rnc_build.py`, roda na ação mensal depois do
+  SIGEF: lê as ~384 páginas da lista, casa pelo nome da cultivar e grava `rnc:{n,m,t}` em `cultivares.json`). A lista
+  e a folha de escolha mostram "RNC nº · mantenedor". Características agronômicas (GM, ciclo, tecnologia) não existem
+  em base aberta — o botão *Buscar na web* procura "<cultivar> características". Se a consulta pública mudar, a ação
+  mantém o arquivo anterior e a ficha avisa "não encontrado na consulta pública".
 - **Unidade do produto: a planilha manda (v248)** — a unidade vem da coluna **UN** da aba **PORTIFÓLIO**; quando ela
   está preenchida, a lista de Preços é ajustada para a mesma unidade (antes era o contrário: a lista de Preços
   "mestra" sobrepunha a planilha, e mudar na planilha não aparecia no app). Só quando o PORTIFÓLIO não tem unidade é
