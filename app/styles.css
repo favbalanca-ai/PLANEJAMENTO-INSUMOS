@@ -2019,6 +2019,18 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 @media (max-width:640px){ .faz-camp{width:100%;justify-content:space-between} .faz-camp .sel{flex:1;min-width:0} }
 .faz-tl{flex:1;min-width:200px}.faz-tl .sel{flex:1;min-width:0}
 
+/* ===== Avisos (sino) (v253) ===== */
+.notif-btn{position:relative;border:1px solid var(--line);background:var(--card);border-radius:999px;width:36px;height:36px;font-size:17px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0}
+.notif-btn b{position:absolute;top:-5px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--teal);color:#fff;font-size:11px;line-height:18px;text-align:center;font-weight:800}
+.notif-btn.tem-atraso b{background:#c62828}.notif-btn.tem-conferir:not(.tem-atraso) b{background:var(--amber)}
+.nt-sheet{max-height:90vh;overflow:auto}
+.nt-sec{margin:8px 0 4px}.nt-sec h4{margin:0 0 2px;font-size:13.5px;display:flex;align-items:center;gap:6px}.nt-sec h4 b{background:#eef1f2;border-radius:10px;padding:0 8px;font-size:12px}
+.nt-atr h4 b{background:#fde8e8;color:#b71c1c}.nt-conf h4 b{background:#fff1e0;color:#b25e09}.nt-sem h4 b{background:#e3f2fd;color:#1e63d6}
+.nt-item{padding:9px 2px}.nt-item .na-tx b{font-size:14px}.nt-item .na-tx span{font-size:12px}
+.nt-vazio{font-size:12.5px;padding:4px 2px 6px;margin:0}.nt-mais{font-size:12px;padding:4px 2px}
+.nt-opt{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}.nt-opt input{width:18px;height:18px}
+@media (max-width:640px){ .notif-btn{width:34px;height:34px;font-size:16px} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2387,4 +2399,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ext-tbl th{font-size:10px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
+  .nt-sec h4{font-size:11px}
+  .nt-sec h4 b{font-size:9.5px}
+  .nt-item .na-tx b{font-size:11.5px}
+  .nt-item .na-tx span{font-size:9.5px}
+  .nt-vazio{font-size:10px}
+  .nt-mais{font-size:9.5px}
+  .nt-opt{font-size:10.5px}
+  .notif-btn{font-size:13px}
 }

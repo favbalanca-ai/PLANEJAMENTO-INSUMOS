@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-251';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-253';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5095,6 +5095,41 @@ function agrofitCultivaresView(sub){
       <select class="sel" id="ag-esp"><option value="">Todas as espécies</option>${comNome.map(opt).join('')}${semNome.length?`<optgroup label="Outras espécies">${semNome.map(opt).join('')}</optgroup>`:''}</select></div>
     <div id="ag-lista-c" class="ag-lista">${agrofitCvListaHtml()}</div>
     <p class="mut" style="font-size:11px;padding:8px 14px 12px">Fonte: ${esc(d.fonte||'MAPA — SIGEF')}. Mostra as cultivares com campos de produção de sementes inscritos no Ministério (quem tem semente no mercado). O número RNC é consultado no CultivarWeb, pelo botão da ficha.</p></div>`; }
+// detalhes do RNC (app/agrofit/rnc_det.json, gerado pela ação mensal): só baixa quando uma ficha precisa
+function agrofitRncDet(){ if(AGROFIT.det) return Promise.resolve(AGROFIT.det); if(AGROFIT._detP) return AGROFIT._detP;
+  AGROFIT._detP=fetch('agrofit/rnc_det.json',{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({})).then(j=>{ AGROFIT.det=j||{}; return AGROFIT.det; }); return AGROFIT._detP; }
+// evento de transformação genética → nome comercial da tecnologia (quando dá para reconhecer)
+function agTecnologia(gm){ const g=String(gm||'').toUpperCase().replace(/[\s-]+/g,''); if(!g) return '';
+  const tem=(...ev)=>ev.every(e=>g.includes(e));
+  // soja
+  if(tem('87751','87708')) return 'I2X — Intacta2 Xtend';
+  if(tem('87708','89788')) return 'Xtend (RR2 + dicamba)';
+  if(tem('87701','89788')) return 'IPRO — Intacta RR2 PRO';
+  if(tem('44406','81419')) return 'CE3 — Conkesta Enlist E3';
+  if(tem('44406')) return 'Enlist E3'; if(tem('81419')) return 'Conkesta';
+  if(tem('89788')) return 'RR2 (Genuity RR2Y)'; if(/4032/.test(g)) return 'RR (GTS 40-3-2)';
+  // milho (nomes comerciais conhecidos; se não reconhecer, lista os eventos)
+  if(tem('MON87427','MON89034','MIR162','MON87411')) return 'VT4PRO';
+  if(tem('MON89034','TC1507','NK603','MIR162')) return 'PowerCore Ultra (PWU)';
+  if(tem('MON89034','TC1507','NK603')) return 'PowerCore (PW)';
+  if(tem('BT11','MIR162','GA21')) return 'Agrisure Viptera 3 (VIP3)';
+  if(tem('BT11','GA21')) return 'Agrisure TL/TG';
+  if(tem('MON89034','NK603')) return 'VT PRO2'; if(tem('MON89034')) return 'VT PRO';
+  const ev=g.match(/MON\d+|MIR\d+|TC\d+|BT\d+|NK\d+|GA\d+|DAS\d+/g); if(ev) return 'GM: '+[...new Set(ev)].slice(0,5).join(' + ');
+  return ''; }
+const AG_DESC_ORD=['TIPO DE CRESCIMENTO','HÁBITO DE CRESCIMENTO','COR DA FLOR','COR DA PUBESCÊNCIA','DENSIDADE DA PUBESCÊNCIA','COR DO HILO','COR DA VAGEM','COR DO TEGUMENTO','FORMA DA SEMENTE','BRILHO DA SEMENTE','PIGM ANTOCIÂNICA HIPOCÓTILO','REAÇÃO À PEROXIDASE'];
+function agDescTitulo(k){ const t=String(k||'').toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1).replace('pigm ','pigmentação ').replace('antociânica','antociânica no'); }
+function agrofitCvDetHtml(c){ const r=c.rnc, det=AGROFIT.det; if(!r||!r.s) return '';
+  if(!det){ agrofitRncDet().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); return '<p class="mut" style="padding:6px 14px">⏳ características…</p>'; }
+  const x=det[r.s]; if(!x) return '<p class="mut" style="padding:6px 14px;font-size:12px">Características ainda não colhidas para esta cultivar (a ação mensal colhe soja, milho e sorgo, das mais novas para as mais antigas, 1.500 por vez).</p>';
+  const lin=(k,v)=>v?`<div class="ag-lin"><span>${k}</span><b>${v}</b></div>`:'';
+  const tec=agTecnologia(x.gm), ks=Object.keys(x.desc||{}).sort((a,b)=>{ const ia=AG_DESC_ORD.indexOf(a), ib=AG_DESC_ORD.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b); });
+  const recs=(x.rec||[]).reduce((m,s)=>{ const [uf,n]=s.split('-'); (m[uf]=m[uf]||[]).push(n); return m; },{});
+  return `<div class="ag-sec"><h4>Características (registro no RNC)</h4><div class="ag-lins">
+      ${x.gm?lin('Tecnologia',(tec?`<b>${esc(tec)}</b><br>`:'')+`<small class="mut">${esc(x.gm)}</small>`):lin('Tecnologia','<span class="mut">convencional (sem evento GM declarado)</span>')}
+      ${ks.map(k=>lin(esc(agDescTitulo(k)),esc(String(x.desc[k]).toLowerCase()))).join('')}
+      ${lin('Situação',esc(x.sit||''))}${lin('Registro',x.dt?fmtDataBR(x.dt)+(x.val?` <small class="mut">· válido até ${fmtDataBR(x.val)}</small>`:''):'')}</div>
+    ${Object.keys(recs).length?`<h4 style="margin-top:8px">Regiões de adaptação (REC)</h4><div class="ag-chips">${Object.keys(recs).sort().map(uf=>`<span class="chip-f ag-semalvo">${esc(uf)} <b>${esc(recs[uf].join(', '))}</b></span>`).join('')}</div>`:''}</div>`; }
 function agrofitCvFichaHtml(i){ const d=AGROFIT.cv, c=d.cultivares[+i]; if(!c) return `<div class="panel"><p class="mut" style="padding:18px">Cultivar não encontrada. <a class="link" data-go="#/catalogo/cultivares">‹ Voltar</a></p></div>`;
   const e=c._e||{}, r=c.rnc||null, lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
   // v249: a ficha mostra o CADASTRO (RNC/CultivarWeb); os números de campos de produção do SIGEF saíram (não eram úteis)
@@ -5102,8 +5137,9 @@ function agrofitCvFichaHtml(i){ const d=AGROFIT.cv, c=d.cultivares[+i]; if(!c) r
     <div class="ag-lins">${lin('Cultivar',esc(c.c))}${lin('Espécie',(e.n?esc(e.n)+' · ':'')+'<i>'+esc(e.c||'')+'</i>')}
       ${r?lin('Nº de registro (RNC)',esc(r.n)+(r.amb?` <small class="mut">(+${r.amb-1} registro(s) com o mesmo nome)</small>`:''))+lin('Mantenedor',esc(r.m))+lin('Tipo de registro',esc(r.t)):lin('Cadastro RNC','<span class="mut">não encontrado na consulta pública — veja no CultivarWeb</span>')}
       ${(c.cat||[]).length?lin('Categorias de semente produzidas',esc((c.cat||[]).join(', '))):''}</div>
+    ${agrofitCvDetHtml(c)}
     <div class="cp-btns"><a class="btn btn-outline btn-sm" href="https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php" target="_blank" rel="noopener" title="Consulta do Registro Nacional de Cultivares (abre o site do Ministério; tem código de imagem)">🏛️ RNC no CultivarWeb</a><button class="btn btn-outline btn-sm" data-act="agWeb" data-cv="${esc(c.c)}" data-q="${esc(c.c+' '+(e.n||''))}">🔎 Buscar na web</button><a class="btn btn-ghost btn-sm" data-go="#/catalogo/cultivares">‹ Voltar</a></div>
-    <p class="mut" style="font-size:11px;padding:0 14px 12px">Cadastro: consulta pública do RNC (CultivarWeb${d.rnc_em?', '+esc(fmtDataBR(d.rnc_em)):''}). Lista de cultivares: SIGEF (campos de produção de sementes). Características agronômicas (grupo de maturação, ciclo, tecnologia) são do obtentor — use "Buscar na web".</p></div>`; }
+    <p class="mut" style="font-size:11px;padding:0 14px 12px">Cadastro: consulta pública do RNC (CultivarWeb${d.rnc_em?', '+esc(fmtDataBR(d.rnc_em)):''}). Lista de cultivares: SIGEF (campos de produção de sementes). Tecnologia, descritores e regiões de adaptação: relatório de descritores do registro. Grupo de maturação e ciclo não constam no RNC — use "Buscar na web".</p></div>`; }
 function agrofitFichaHtml(reg){ const d=AGROFIT.dados, p=d._porReg[reg]; if(!p) return `<div class="panel"><p class="mut" style="padding:18px">Registro ${esc(reg)} não está no catálogo. <a class="link" data-go="#/catalogo">‹ Voltar</a></p></div>`;
   const lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
   const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&p._cu.some(c=>c===pref)?pref:(p._cu.find(c=>agrofitPragasArq(c))||'');   // cultura escolhida na ficha não mexe no filtro da lista
@@ -7688,7 +7724,44 @@ function morphChildren(op, np){
   for(let i=b.length;i<a.length;i++) a[i].remove();
 }
 function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
-function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; } }   // memória por render (ver memo)
+function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} } }   // memória por render (ver memo)
+/* ================= AVISOS (sino na barra de cima, v253) =================
+   Três grupos, calculados no aparelho a partir do que o app já sabe (sem planilha nova):
+   · conferir → recomendações com retorno do operador esperando aprovação e operações parciais;
+   · semana   → operações planejadas até 7 dias (ou em andamento);
+   · atraso   → operações com data passada e não encerradas.
+   Respeita a fazenda escolhida. "Avisar no aparelho" usa a notificação do navegador (só quando o app está aberto). */
+const NOTIF_KEY='planejamento_notif';
+function notifCfg(){ try{ return JSON.parse(localStorage.getItem(NOTIF_KEY))||{}; }catch(e){ return {}; } }
+function notifCfgSave(c){ try{ localStorage.setItem(NOTIF_KEY, JSON.stringify(c)); }catch(e){} }
+function notifItens(){ const g={conferir:[], semana:[], atraso:[]}; if(!DATA||!OV) return g;
+  const tals=talhoesAll().filter(fazOk);
+  tals.forEach(t=>{ const so=talStatusOps(t);
+    so.late.forEach(it=>g.atraso.push({tit:it.nome, sub:`${tNome(t)} · ${-it.dd} dia(s) de atraso · ${fmtDataBR(it.dp)}`, go:'#/campo/'+encodeURIComponent(t.id), dd:it.dd, tal:t.id}));
+    so.soon.forEach(it=>g.semana.push({tit:it.nome, sub:`${tNome(t)} · ${it.and?'em andamento':it.dd===0?'hoje':it.dd===1?'amanhã':'em '+it.dd+' dias'}${it.dp?' · '+fmtDataBR(it.dp):''}`, go:'#/campo/'+encodeURIComponent(t.id), dd:it.dd, tal:t.id}));
+    campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='parcial') g.conferir.push({tit:o.op.nome, sub:`${tNome(t)} · parcial: ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha — aplicar o restante ou encerrar`, go:'#/campo/'+encodeURIComponent(t.id), tal:t.id}); }); });
+  ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.status!=='retorno') return; const t=findTalhao(r0.talhao); if(!fazOk(t)) return; const r=recomNorm(r0);
+    g.conferir.push({tit:(r.nome||r.opNome||'Recomendação')+(r.tipo==='ts'?' (TS)':''), sub:`${tNome(t)} · retorno do operador${r.retorno&&r.retorno.quem?' ('+r.retorno.quem+')':''} — conferir e aprovar`, go:'#/recomendacao/'+encodeURIComponent(r.talhao), tal:r.talhao}); });
+  g.atraso.sort((a,b)=>a.dd-b.dd); g.semana.sort((a,b)=>a.dd-b.dd); return g; }
+function notifTotal(g){ return g.conferir.length+g.semana.length+g.atraso.length; }
+let _notifSig='';
+function notifAtualiza(){ const b=document.getElementById('notif-btn'), n=document.getElementById('notif-n'); if(!b||!n) return;
+  const emb=document.body.dataset.embed!=null, v=document.body.dataset.view||''; if(emb||v==='login'||v==='inicio'){ b.hidden=true; return; } b.hidden=false;
+  const g=notifItens(), tot=notifTotal(g); n.textContent=tot>99?'99+':String(tot); n.hidden=!tot; b.classList.toggle('tem-atraso', g.atraso.length>0); b.classList.toggle('tem-conferir', g.conferir.length>0);
+  const sig=`${g.conferir.length}|${g.atraso.length}|${g.semana.length}`; if(sig!==_notifSig){ _notifSig=sig; notifAvisaAparelho(g); } }
+// notificação do navegador (quando ligada): 1 por dia, só se houver algo para conferir ou atrasado
+function notifAvisaAparelho(g){ const c=notifCfg(); if(!c.aparelho||!('Notification' in window)||Notification.permission!=='granted') return;
+  const hj=_hojeISO(), n=g.conferir.length+g.atraso.length; if(!n||c.ultimoDia===hj) return; c.ultimoDia=hj; notifCfgSave(c);
+  try{ new Notification('Planejamento de Safra', {body:[g.conferir.length?`${g.conferir.length} para conferir`:'', g.atraso.length?`${g.atraso.length} em atraso`:'', g.semana.length?`${g.semana.length} nesta semana`:''].filter(Boolean).join(' · '), tag:'planejamento-avisos'}); }catch(e){} }
+function notifOpen(){ novaAcaoFechar(); const g=notifItens(), c=notifCfg(), tot=notifTotal(g);
+  const sec=(ico,tit,lista,cls)=>`<div class="nt-sec ${cls}"><h4>${ico} ${tit} <b>${lista.length}</b></h4>${lista.length?lista.slice(0,40).map(x=>`<a class="na-item nt-item" data-go="${esc(x.go)}"><span class="na-tx"><b>${esc(x.tit)}</b><span>${esc(x.sub)}</span></span><span class="na-seta">›</span></a>`).join('')+(lista.length>40?`<p class="mut nt-mais">+${lista.length-40} — veja no quadro de operações</p>`:''):'<p class="mut nt-vazio">Nada por aqui.</p>'}</div>`;
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet nt-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>🔔 Avisos${oqFaz?` <small class="mut">· ${esc(fazendaNome(oqFaz))}</small>`:''}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    ${tot?'':'<p class="na-sub">✅ Tudo em dia: nada para conferir, nada atrasado.</p>'}
+    ${sec('✔️','Aguardando conferir para finalizar',g.conferir,'nt-conf')}${sec('⚠️','Operações em atraso',g.atraso,'nt-atr')}${sec('📅','Operações da semana',g.semana,'nt-sem')}
+    <label class="nt-opt"><input type="checkbox" data-act="notifAparelho"${c.aparelho?' checked':''}> Avisar no aparelho quando abrir o app (1 vez por dia)${('Notification' in window)?'':' <small class="mut">— este navegador não permite</small>'}</label>
+    <p class="mut" style="font-size:11px;margin:6px 0 0">Calculado neste aparelho com os dados sincronizados: datas do planejamento (DAP + plantio), execução das operações e retornos dos operadores.</p></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function _route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -8279,6 +8352,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
+    else if(a.act==='notifAbrir'){ notifOpen(); return; }
+    else if(a.act==='notifAparelho'){ const c=notifCfg(), on=act.checked; if(on && 'Notification' in window && Notification.permission!=='granted'){ Notification.requestPermission().then(p=>{ c.aparelho=(p==='granted'); notifCfgSave(c); if(p!=='granted'){ act.checked=false; toast('O navegador não deu permissão para avisos'); } else { delete c.ultimoDia; notifCfgSave(c); _notifSig=''; notifAtualiza(); } }); return; }
+      c.aparelho=on; if(on){ delete c.ultimoDia; } notifCfgSave(c); _notifSig=''; notifAtualiza(); return; }
     else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
       RECOM_UI.aberto[a.id]=!ab; c.classList.toggle('rc-fech', ab); c.querySelector('.rc-head').title=ab?'Expandir':'Encolher'; return; }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }

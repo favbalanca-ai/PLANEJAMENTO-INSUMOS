@@ -67,6 +67,23 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Características agronômicas da cultivar vindas do RNC (v252)** — a ficha da cultivar (Catálogo → Cultivares) ganhou
+  o bloco **Características (registro no RNC)**: **Tecnologia** (evento de transformação genética traduzido para o nome
+  comercial quando dá: I2X, IPRO, Enlist E3, Conkesta E3, RR2, RR, milho Bt…; "convencional" quando não há evento),
+  os **descritores** do relatório de registro (cor da flor, tipo de crescimento, cor da pubescência, cor do hilo,
+  reação à peroxidase… em soja; ponta da folha, pendão, espiga… em milho; panícula, arista… em sorgo), **situação**,
+  **data e validade do registro** e as **Regiões de adaptação (REC)** por UF. Os dados vêm do arquivo
+  `agrofit/rnc_det.json`, colhido pela ação mensal (`scripts/rnc_build.py`) na consulta pública do CultivarWeb,
+  **só para soja, milho e sorgo**, das cultivares mais novas para as mais antigas, até `RNC_DET_CAP` por rodada
+  (padrão 1500; cada cultivar leva ~1 s). Cultivar ainda sem colheita mostra um aviso. **Grupo de maturação e ciclo
+  não constam no RNC** — continuam pelo botão "Buscar na web".
+- **🔔 Avisos na barra de cima (v253)** — sino com contador (vermelho quando há atraso, laranja quando só há coisa
+  para conferir) que abre a folha *Avisos* com três grupos, calculados no aparelho (`notifItens`): **Aguardando
+  conferir para finalizar** (recomendações com retorno do operador esperando aprovação + operações parciais),
+  **Operações em atraso** (data passada, não encerradas) e **Operações da semana** (até 7 dias ou em andamento).
+  Cada item leva ao Campo do talhão ou à Recomendação. Respeita a fazenda escolhida; atualiza a cada tela
+  (`notifAtualiza` no `route`). Opção **Avisar no aparelho**: notificação do navegador, 1 vez por dia ao abrir o app,
+  só quando há algo para conferir ou em atraso (precisa da permissão do navegador; sem servidor, só com o app aberto).
 - **Seletor de Fazenda também na Recomendação e na Timeline (v251)** — mesma escolha compartilhada. Recomendação:
   talhões do seletor e cartões só da fazenda; Timeline: talhões, eventos e cartões por talhão só da fazenda (eventos
   sem talhão continuam). Trocar a fazenda numa rota com talhão (`#/recomendacao/<id>`, `#/timeline/<id>`) volta

@@ -44,8 +44,10 @@ jobs:
           if [ "$ok" != "1" ]; then echo "SIGEF indisponível: mantém o cultivares.json anterior"; exit 0; fi
           head -c 300 sigef.csv | head -1 | grep -q "Safra;Especie;Categoria;Cultivar" || { echo "arquivo SIGEF inesperado — mantém o anterior"; head -c 300 sigef.csv; exit 0; }
           python3 scripts/sigef_build.py sigef.csv app/agrofit
-      - name: Cadastro do RNC (consulta pública do CultivarWeb) → cultivares.json
-        run: python3 scripts/rnc_build.py app/agrofit || echo "RNC indisponível — mantém o cadastro anterior"
+      - name: Cadastro do RNC (consulta pública do CultivarWeb) → cultivares.json + rnc_det.json
+        run: |
+          sudo apt-get install -y -q poppler-utils >/dev/null 2>&1 || true
+          RNC_DET_CAP=1500 python3 scripts/rnc_build.py app/agrofit || echo "RNC indisponível — mantém o cadastro anterior"
       - name: Commit se mudou
         id: commit
         run: |
