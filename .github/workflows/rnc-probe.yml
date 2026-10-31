@@ -1,0 +1,11 @@
+name: RNC probe (temporário)
+on:
+  push:
+    branches: [claude/empreendimentos-painel-visibilidade-anrppt]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/rnc_build.py app/agrofit --detalhe 24428I2X
+      - run: python3 scripts/rnc_build.py app/agrofit --detalhe "BRASMAX OLIMPO IPRO" || true

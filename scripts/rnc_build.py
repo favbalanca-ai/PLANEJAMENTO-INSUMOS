@@ -70,7 +70,25 @@ def probe():
     if soja:
         ts = get(BASE, urllib.parse.urlencode(campos(tok, 1, soja[0][0])).encode()); print('SOJA total', total(ts), 'linhas', len(linhas(ts))); [print('  ', l) for l in linhas(ts)[:5]]
 
+def probe_detalhe(nome):
+    """sonda: a página de DETALHE de uma cultivar tem características agronômicas?"""
+    tok, _ = csrf(); c = campos(tok, 1); c['txt_denominacao'] = nome
+    t = get(BASE, urllib.parse.urlencode(c).encode()); print('busca', nome, 'total', total(t))
+    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.S | re.I):
+        if nome.lower() in strip(tr).lower():
+            print('LINHA', re.sub(r'\s+', ' ', tr)[:900]); break
+    links = re.findall(r'(?:href|onclick)="([^"]*detalhe[^"]*)"', t, re.I) or re.findall(r'(?:href|onclick)="([^"]*cod[^"]*)"', t, re.I)
+    print('links detalhe', links[:5])
+    for u in links[:1]:
+        m = re.search(r"[\w./?=&%-]*\.php[\w?=&%.-]*", u); u2 = m.group(0) if m else u
+        if not u2.startswith('http'): u2 = 'https://sistemas.agricultura.gov.br/snpc/cultivarweb/' + u2.lstrip('/')
+        print('GET', u2); d = get(u2); print('bytes', len(d), 'captcha?', 'captcha' in d.lower())
+        txt = re.sub(r'\s+', ' ', strip(d)); print('TEXTO', txt[:3500])
+        for k in ['Caracter', 'matura', 'Ciclo', 'bito', 'Tecnolog', 'Descritor', 'Grupo']:
+            i = txt.find(k); print('  acha', k, '→', txt[max(0, i - 80):i + 200] if i >= 0 else '—')
+
 def main(out_dir, probe_only=False):
+    if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X')
     if probe_only: return probe()
     path = os.path.join(out_dir, 'cultivares.json'); d = json.load(open(path, encoding='utf-8'))
     tok, _ = csrf(); t = get(BASE, urllib.parse.urlencode(campos(tok, 1)).encode())
@@ -96,4 +114,4 @@ def main(out_dir, probe_only=False):
     print('RNC: cultivares do SIGEF com cadastro:', casados, 'de', len(d.get('cultivares', [])))
 
 if __name__ == '__main__':
-    main(sys.argv[1], '--probe' in sys.argv)
+    main(sys.argv[1], 'detalhe' if '--detalhe' in sys.argv else ('--probe' in sys.argv))
