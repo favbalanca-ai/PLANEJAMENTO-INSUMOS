@@ -6,7 +6,9 @@ cultivar do cultivares.json (gerado pelo sigef_build.py) o campo "rnc": {"n": n�
 "t": tipo de registro}. Junção pelo nome da cultivar (normalizado). Cultivares do RNC que não têm campo de produção no
 SIGEF entram na lista com nc=0 quando a consulta por espécie funciona.
 
-Uso: python3 scripts/rnc_build.py app/agrofit [--probe]
+Uso: python3 scripts/rnc_build.py app/agrofit [--probe | --so-detalhes]
+Detalhes (tecnologia/evento GM, situação, datas, regiões de adaptação, descritores do PDF) vão para app/agrofit/rnc_det.json,
+só para as culturas da fazenda, até RNC_DET_CAP (500) por rodada (precisa de pdftotext/poppler-utils).
 Sem dependências externas. Roda no GitHub Actions junto com o Agrofit/SIGEF (a consulta é lenta: ~385 páginas).
 """
 import json, os, re, sys, time, html, unicodedata, urllib.request, urllib.parse, http.cookiejar
@@ -38,12 +40,12 @@ def campos(tok, pagina=1, cod_especie=''):
             'txt_denominacao': '', 'txt_requerente': '', 'txt_num_formulario': '', 'cod_evento_ogm': '', 'ct_captcha': '', 'acao': 'Pesquisar'}
 
 def linhas(t):
-    """linhas da tabela de resultados: [denominação, tipo, mantenedor, nº registro]"""
+    """linhas da tabela de resultados: [denominação, tipo, mantenedor, nº registro, codsr (link DETALHE)]"""
     out = []
     for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.S | re.I):
         tds = [strip(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S | re.I)]
         if len(tds) >= 4 and re.fullmatch(r'\d{3,6}', tds[3].replace(' ', '')):
-            out.append(tds[:4])
+            m = re.search(r'codsr=(\d+)', tr); out.append(tds[:4] + [m.group(1) if m else ''])
     return out
 
 def total(t):
@@ -99,6 +101,7 @@ def probe_detalhe(nome, p0=280):
     except Exception as e: print('pdftotext falhou', e, strip(b.decode('latin-1', 'ignore'))[:1500])
 
 def main(out_dir, probe_only=False):
+    if probe_only == 'sodet': d = json.load(open(os.path.join(out_dir, 'cultivares.json'), encoding='utf-8')); return detalhes(d, out_dir)
     if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X', int(sys.argv[4]) if len(sys.argv) > 4 else 280)
     if probe_only: return probe()
     path = os.path.join(out_dir, 'cultivares.json'); d = json.load(open(path, encoding='utf-8'))
@@ -113,8 +116,8 @@ def main(out_dir, probe_only=False):
         if p % 25 == 0: print('  página', p, '/', np_, 'linhas', len(rows)); time.sleep(0.5)
     print('RNC: linhas', len(rows))
     porNome = {}
-    for den, tipo, mant, nreg in rows:
-        k = norm(den); porNome.setdefault(k, []).append({'n': nreg.replace(' ', ''), 'm': mant, 't': tipo})
+    for den, tipo, mant, nreg, codsr in rows:
+        k = norm(den); porNome.setdefault(k, []).append({'n': nreg.replace(' ', ''), 'm': mant, 't': tipo, 's': codsr})
     casados = 0
     for c in d.get('cultivares', []):
         r = porNome.get(norm(c.get('c')))
@@ -123,6 +126,59 @@ def main(out_dir, probe_only=False):
     d['rnc_em'] = time.strftime('%Y-%m-%d'); d['rnc_total'] = len(rows)
     json.dump(d, open(path, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
     print('RNC: cultivares do SIGEF com cadastro:', casados, 'de', len(d.get('cultivares', [])))
+    try: detalhes(d, out_dir)
+    except SystemExit: raise
+    except Exception as e: print('RNC detalhes: falhou —', e)
+
+# ---- detalhes (página da cultivar + PDF de descritores) para as culturas da fazenda ----
+ESPECIES_DET = {'Soja', 'Milho', 'Feijão', 'Sorgo', 'Trigo', 'Algodão'}
+def _br(d):
+    m = re.match(r'(\d{2})/(\d{2})/(\d{4})', d or ''); return f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else ''
+def detalhe_de(codsr):
+    """{gm, sit, dt, val, rec:[...], desc:{...}} de uma cultivar; desc vem do PDF (pdftotext)"""
+    import subprocess, tempfile
+    h = get('https://sistemas.agricultura.gov.br/snpc/cultivarweb/detalhe_cultivar.php?codsr=' + str(codsr) + '&codverif=0')
+    txt = re.sub(r'\s+', ' ', strip(h)); o = {}
+    m = re.search(r'TRANSFORMAÇÃO GENÉTICA:\s*(.*?)\s*NOME COMUM', txt);  o['gm'] = m.group(1).strip()[:300] if m else ''
+    m = re.search(r'SITUAÇÃO:\s*([A-ZÇÃÕÉÍÓÚÂÊ ]+?)\s+Nº', txt);              o['sit'] = m.group(1).strip() if m else ''
+    m = re.search(r'DATA DO REGISTRO:\s*(\d{2}/\d{2}/\d{4})', txt);            o['dt'] = _br(m.group(1)) if m else ''
+    m = re.search(r'VALIDADE DO REGISTRO:\s*(\d{2}/\d{2}/\d{4})', txt);        o['val'] = _br(m.group(1)) if m else ''
+    m = re.search(r'REGIÃO DE ADAPTAÇÃO.*?\)\s*((?:[A-Z]{2} - \d{3}\s*)+)', txt); o['rec'] = re.findall(r'[A-Z]{2} - \d{3}', m.group(1)) if m else []
+    o['rec'] = [x.replace(' - ', '-') for x in o['rec']]
+    m = re.search(r'pdf\((\d+)\)', h); o['desc'] = {}
+    if m:
+        try:
+            rq = urllib.request.Request('https://sistemas.agricultura.gov.br/snpc/protocolo/relatorios_rnc/pdf_descritores2.php?cod_solicitacao_registro=' + m.group(1) + '&cod_cultivarweb=1', headers={'User-Agent': UA, 'Referer': BASE})
+            b = op.open(rq, timeout=300).read()
+            if b[:4] == b'%PDF':
+                with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f: f.write(b); fn = f.name
+                out = subprocess.run(['pdftotext', '-layout', fn, '-'], capture_output=True, text=True, timeout=60).stdout; os.unlink(fn)
+                bloco = out.split('DESCRITOR', 1)[1] if 'DESCRITOR' in out else ''
+                bloco = bloco.split('Nº de inscrição')[0]
+                for ln in bloco.splitlines()[1:]:
+                    ln = ln.strip()
+                    if not ln or ln.startswith('DETALHAMENTO'): continue
+                    partes = re.split(r'\s{2,}', ln)
+                    if len(partes) >= 2 and len(partes[0]) < 60: o['desc'][partes[0].strip().upper()] = partes[1].strip()
+        except Exception as e: o['descErro'] = str(e)[:80]
+    return o
+
+def detalhes(d, out_dir, cap=None):
+    cap = int(cap or os.environ.get('RNC_DET_CAP') or 500)
+    pathD = os.path.join(out_dir, 'rnc_det.json')
+    try: det = json.load(open(pathD, encoding='utf-8'))
+    except Exception: det = {}
+    esp = d.get('especies', []); alvo = {i for i, e in enumerate(esp) if e.get('n') in ESPECIES_DET}
+    cands = [c for c in d.get('cultivares', []) if c.get('e') in alvo and c.get('rnc') and c['rnc'].get('s') and c['rnc']['s'] not in det]
+    cands.sort(key=lambda c: -int(re.sub(r'\D', '', c['rnc']['n']) or 0))   # nº de registro maior = mais nova primeiro
+    print('RNC detalhes: já tem', len(det), '| faltam', len(cands), '| nesta rodada até', cap)
+    n = 0; t0 = time.time()
+    for c in cands[:cap]:
+        try: det[c['rnc']['s']] = detalhe_de(c['rnc']['s']); n += 1
+        except Exception as e: print('  erro', c.get('c'), e)
+        if n % 50 == 0: print('  ', n, 'detalhes', '%.0fs' % (time.time() - t0), flush=True); json.dump(det, open(pathD, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+    json.dump(det, open(pathD, 'w', encoding='utf-8'), ensure_ascii=False, separators=(',', ':'))
+    print('RNC detalhes: gravados', n, 'novos; total', len(det), 'em', pathD)
 
 if __name__ == '__main__':
-    main(sys.argv[1], 'detalhe' if '--detalhe' in sys.argv else ('--probe' in sys.argv))
+    main(sys.argv[1], 'sodet' if '--so-detalhes' in sys.argv else ('detalhe' if '--detalhe' in sys.argv else ('--probe' in sys.argv)))

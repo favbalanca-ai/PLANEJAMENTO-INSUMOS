@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-251';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-252';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5095,6 +5095,31 @@ function agrofitCultivaresView(sub){
       <select class="sel" id="ag-esp"><option value="">Todas as espécies</option>${comNome.map(opt).join('')}${semNome.length?`<optgroup label="Outras espécies">${semNome.map(opt).join('')}</optgroup>`:''}</select></div>
     <div id="ag-lista-c" class="ag-lista">${agrofitCvListaHtml()}</div>
     <p class="mut" style="font-size:11px;padding:8px 14px 12px">Fonte: ${esc(d.fonte||'MAPA — SIGEF')}. Mostra as cultivares com campos de produção de sementes inscritos no Ministério (quem tem semente no mercado). O número RNC é consultado no CultivarWeb, pelo botão da ficha.</p></div>`; }
+// detalhes do RNC (app/agrofit/rnc_det.json, gerado pela ação mensal): só baixa quando uma ficha precisa
+function agrofitRncDet(){ if(AGROFIT.det) return Promise.resolve(AGROFIT.det); if(AGROFIT._detP) return AGROFIT._detP;
+  AGROFIT._detP=fetch('agrofit/rnc_det.json',{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({})).then(j=>{ AGROFIT.det=j||{}; return AGROFIT.det; }); return AGROFIT._detP; }
+// evento de transformação genética → nome comercial da tecnologia (quando dá para reconhecer)
+function agTecnologia(gm){ const g=String(gm||'').toUpperCase().replace(/\s+/g,''); if(!g) return '';
+  if(/87751/.test(g)&&/87708/.test(g)) return 'I2X — Intacta2 Xtend';
+  if(/87708/.test(g)&&/89788/.test(g)) return 'Xtend (RR2 + dicamba)';
+  if(/87701/.test(g)&&/89788/.test(g)) return 'IPRO — Intacta RR2 PRO';
+  if(/44406/.test(g)) return 'Enlist E3'; if(/81419/.test(g)) return 'Conkesta E3';
+  if(/89788/.test(g)) return 'RR2 (Genuity RR2Y)'; if(/40-3-2|403-2|4032/.test(g)) return 'RR (GTS 40-3-2)';
+  if(/MON810|MON89034|MIR162|TC1507|BT11|MON88017|NK603|GA21|DAS59122|MON87427/.test(g)) return 'Milho GM (' + g.match(/MON\d+|MIR\d+|TC\d+|BT\d+|NK\d+|GA\d+|DAS\d+/g).slice(0,4).join('+') + ')';
+  return ''; }
+const AG_DESC_ORD=['TIPO DE CRESCIMENTO','HÁBITO DE CRESCIMENTO','COR DA FLOR','COR DA PUBESCÊNCIA','DENSIDADE DA PUBESCÊNCIA','COR DO HILO','COR DA VAGEM','COR DO TEGUMENTO','FORMA DA SEMENTE','BRILHO DA SEMENTE','PIGM ANTOCIÂNICA HIPOCÓTILO','REAÇÃO À PEROXIDASE'];
+function agDescTitulo(k){ const t=String(k||'').toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1).replace('pigm ','pigmentação ').replace('antociânica','antociânica no'); }
+function agrofitCvDetHtml(c){ const r=c.rnc, det=AGROFIT.det; if(!r||!r.s) return '';
+  if(!det){ agrofitRncDet().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); return '<p class="mut" style="padding:6px 14px">⏳ características…</p>'; }
+  const x=det[r.s]; if(!x) return '<p class="mut" style="padding:6px 14px;font-size:12px">Características ainda não colhidas para esta cultivar (a ação mensal colhe até 500 por vez, das mais novas para as mais antigas).</p>';
+  const lin=(k,v)=>v?`<div class="ag-lin"><span>${k}</span><b>${v}</b></div>`:'';
+  const tec=agTecnologia(x.gm), ks=Object.keys(x.desc||{}).sort((a,b)=>{ const ia=AG_DESC_ORD.indexOf(a), ib=AG_DESC_ORD.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b); });
+  const recs=(x.rec||[]).reduce((m,s)=>{ const [uf,n]=s.split('-'); (m[uf]=m[uf]||[]).push(n); return m; },{});
+  return `<div class="ag-sec"><h4>Características (registro no RNC)</h4><div class="ag-lins">
+      ${x.gm?lin('Tecnologia',(tec?`<b>${esc(tec)}</b><br>`:'')+`<small class="mut">${esc(x.gm)}</small>`):lin('Tecnologia','<span class="mut">convencional (sem evento GM declarado)</span>')}
+      ${ks.map(k=>lin(esc(agDescTitulo(k)),esc(String(x.desc[k]).toLowerCase()))).join('')}
+      ${lin('Situação',esc(x.sit||''))}${lin('Registro',x.dt?fmtDataBR(x.dt)+(x.val?` <small class="mut">· válido até ${fmtDataBR(x.val)}</small>`:''):'')}</div>
+    ${Object.keys(recs).length?`<h4 style="margin-top:8px">Regiões de adaptação (REC)</h4><div class="ag-chips">${Object.keys(recs).sort().map(uf=>`<span class="chip-f ag-semalvo">${esc(uf)} <b>${esc(recs[uf].join(', '))}</b></span>`).join('')}</div>`:''}</div>`; }
 function agrofitCvFichaHtml(i){ const d=AGROFIT.cv, c=d.cultivares[+i]; if(!c) return `<div class="panel"><p class="mut" style="padding:18px">Cultivar não encontrada. <a class="link" data-go="#/catalogo/cultivares">‹ Voltar</a></p></div>`;
   const e=c._e||{}, r=c.rnc||null, lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
   // v249: a ficha mostra o CADASTRO (RNC/CultivarWeb); os números de campos de produção do SIGEF saíram (não eram úteis)
@@ -5102,8 +5127,9 @@ function agrofitCvFichaHtml(i){ const d=AGROFIT.cv, c=d.cultivares[+i]; if(!c) r
     <div class="ag-lins">${lin('Cultivar',esc(c.c))}${lin('Espécie',(e.n?esc(e.n)+' · ':'')+'<i>'+esc(e.c||'')+'</i>')}
       ${r?lin('Nº de registro (RNC)',esc(r.n)+(r.amb?` <small class="mut">(+${r.amb-1} registro(s) com o mesmo nome)</small>`:''))+lin('Mantenedor',esc(r.m))+lin('Tipo de registro',esc(r.t)):lin('Cadastro RNC','<span class="mut">não encontrado na consulta pública — veja no CultivarWeb</span>')}
       ${(c.cat||[]).length?lin('Categorias de semente produzidas',esc((c.cat||[]).join(', '))):''}</div>
+    ${agrofitCvDetHtml(c)}
     <div class="cp-btns"><a class="btn btn-outline btn-sm" href="https://sistemas.agricultura.gov.br/snpc/cultivarweb/cultivares_registradas.php" target="_blank" rel="noopener" title="Consulta do Registro Nacional de Cultivares (abre o site do Ministério; tem código de imagem)">🏛️ RNC no CultivarWeb</a><button class="btn btn-outline btn-sm" data-act="agWeb" data-cv="${esc(c.c)}" data-q="${esc(c.c+' '+(e.n||''))}">🔎 Buscar na web</button><a class="btn btn-ghost btn-sm" data-go="#/catalogo/cultivares">‹ Voltar</a></div>
-    <p class="mut" style="font-size:11px;padding:0 14px 12px">Cadastro: consulta pública do RNC (CultivarWeb${d.rnc_em?', '+esc(fmtDataBR(d.rnc_em)):''}). Lista de cultivares: SIGEF (campos de produção de sementes). Características agronômicas (grupo de maturação, ciclo, tecnologia) são do obtentor — use "Buscar na web".</p></div>`; }
+    <p class="mut" style="font-size:11px;padding:0 14px 12px">Cadastro: consulta pública do RNC (CultivarWeb${d.rnc_em?', '+esc(fmtDataBR(d.rnc_em)):''}). Lista de cultivares: SIGEF (campos de produção de sementes). Tecnologia, descritores e regiões de adaptação: relatório de descritores do registro. Grupo de maturação e ciclo não constam no RNC — use "Buscar na web".</p></div>`; }
 function agrofitFichaHtml(reg){ const d=AGROFIT.dados, p=d._porReg[reg]; if(!p) return `<div class="panel"><p class="mut" style="padding:18px">Registro ${esc(reg)} não está no catálogo. <a class="link" data-go="#/catalogo">‹ Voltar</a></p></div>`;
   const lin=(k,v)=>`<div class="ag-lin"><span>${k}</span><b>${v||'—'}</b></div>`;
   const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&p._cu.some(c=>c===pref)?pref:(p._cu.find(c=>agrofitPragasArq(c))||'');   // cultura escolhida na ficha não mexe no filtro da lista
