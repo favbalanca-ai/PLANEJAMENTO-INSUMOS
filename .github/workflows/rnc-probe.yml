@@ -1,7 +1,6 @@
 name: RNC probe (temporário)
 on:
-  push:
-    branches: [claude/empreendimentos-painel-visibilidade-anrppt]
+  workflow_dispatch:
 permissions:
   contents: write
 concurrency:
