@@ -5099,13 +5099,23 @@ function agrofitCultivaresView(sub){
 function agrofitRncDet(){ if(AGROFIT.det) return Promise.resolve(AGROFIT.det); if(AGROFIT._detP) return AGROFIT._detP;
   AGROFIT._detP=fetch('agrofit/rnc_det.json',{cache:'no-store'}).then(r=>r.ok?r.json():{}).catch(()=>({})).then(j=>{ AGROFIT.det=j||{}; return AGROFIT.det; }); return AGROFIT._detP; }
 // evento de transformação genética → nome comercial da tecnologia (quando dá para reconhecer)
-function agTecnologia(gm){ const g=String(gm||'').toUpperCase().replace(/\s+/g,''); if(!g) return '';
-  if(/87751/.test(g)&&/87708/.test(g)) return 'I2X — Intacta2 Xtend';
-  if(/87708/.test(g)&&/89788/.test(g)) return 'Xtend (RR2 + dicamba)';
-  if(/87701/.test(g)&&/89788/.test(g)) return 'IPRO — Intacta RR2 PRO';
-  if(/44406/.test(g)) return 'Enlist E3'; if(/81419/.test(g)) return 'Conkesta E3';
-  if(/89788/.test(g)) return 'RR2 (Genuity RR2Y)'; if(/40-3-2|403-2|4032/.test(g)) return 'RR (GTS 40-3-2)';
-  if(/MON810|MON89034|MIR162|TC1507|BT11|MON88017|NK603|GA21|DAS59122|MON87427/.test(g)) return 'Milho GM (' + g.match(/MON\d+|MIR\d+|TC\d+|BT\d+|NK\d+|GA\d+|DAS\d+/g).slice(0,4).join('+') + ')';
+function agTecnologia(gm){ const g=String(gm||'').toUpperCase().replace(/[\s-]+/g,''); if(!g) return '';
+  const tem=(...ev)=>ev.every(e=>g.includes(e));
+  // soja
+  if(tem('87751','87708')) return 'I2X — Intacta2 Xtend';
+  if(tem('87708','89788')) return 'Xtend (RR2 + dicamba)';
+  if(tem('87701','89788')) return 'IPRO — Intacta RR2 PRO';
+  if(tem('44406','81419')) return 'CE3 — Conkesta Enlist E3';
+  if(tem('44406')) return 'Enlist E3'; if(tem('81419')) return 'Conkesta';
+  if(tem('89788')) return 'RR2 (Genuity RR2Y)'; if(/4032/.test(g)) return 'RR (GTS 40-3-2)';
+  // milho (nomes comerciais conhecidos; se não reconhecer, lista os eventos)
+  if(tem('MON87427','MON89034','MIR162','MON87411')) return 'VT4PRO';
+  if(tem('MON89034','TC1507','NK603','MIR162')) return 'PowerCore Ultra (PWU)';
+  if(tem('MON89034','TC1507','NK603')) return 'PowerCore (PW)';
+  if(tem('BT11','MIR162','GA21')) return 'Agrisure Viptera 3 (VIP3)';
+  if(tem('BT11','GA21')) return 'Agrisure TL/TG';
+  if(tem('MON89034','NK603')) return 'VT PRO2'; if(tem('MON89034')) return 'VT PRO';
+  const ev=g.match(/MON\d+|MIR\d+|TC\d+|BT\d+|NK\d+|GA\d+|DAS\d+/g); if(ev) return 'GM: '+[...new Set(ev)].slice(0,5).join(' + ');
   return ''; }
 const AG_DESC_ORD=['TIPO DE CRESCIMENTO','HÁBITO DE CRESCIMENTO','COR DA FLOR','COR DA PUBESCÊNCIA','DENSIDADE DA PUBESCÊNCIA','COR DO HILO','COR DA VAGEM','COR DO TEGUMENTO','FORMA DA SEMENTE','BRILHO DA SEMENTE','PIGM ANTOCIÂNICA HIPOCÓTILO','REAÇÃO À PEROXIDASE'];
 function agDescTitulo(k){ const t=String(k||'').toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1).replace('pigm ','pigmentação ').replace('antociânica','antociânica no'); }
