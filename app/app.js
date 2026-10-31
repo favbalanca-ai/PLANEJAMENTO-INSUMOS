@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-247';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-248';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -579,10 +579,17 @@ function mergePrecosProdutos(){
       const p={produto:nm, classe:(it.classe||'').toUpperCase(), un:uMap[nm]||'', empresa:(it.empresa||fMap[nm]||''), preco:+precoFinal(it,'vista')||0, estoque:0, pedido:0, _precos:true};
       DATA.produtos.push(p); PROD[nm]=p;
     });
+    // guarda a unidade que veio da PLANILHA (PORTIFÓLIO, coluna UN) antes de completar com outras fontes
+    for(const nm in PROD){ const p=PROD[nm]; if(p && p._unSheet==null) p._unSheet=p._precos?'':String(p.un||'').trim(); }
     // preenche a unidade que falta em qualquer produto (inclui portfólio e sintéticos)
     for(const nm in PROD){ if(PROD[nm] && !String(PROD[nm].un||'').trim() && uMap[nm]) PROD[nm].un=uMap[nm]; }
-    // a unidade definida no módulo Preços é a MESTRA: prevalece no produto (acompanha em todos os módulos)
-    s.itens.forEach(it=>{ const nm=String(it.produto||'').trim(), u=String(it.un||'').trim(); if(nm && u && PROD[nm]) PROD[nm].un=u; });
+    // unidade (v248): a da PLANILHA (PORTIFÓLIO) manda quando preenchida — e a lista de Preços acompanha;
+    // só quando o PORTIFÓLIO não tem unidade é que a do módulo Preços vale para o produto
+    let mudouPrecos=false;
+    s.itens.forEach(it=>{ const nm=String(it.produto||'').trim(), u=String(it.un||'').trim(), p=PROD[nm]; if(!nm||!p) return;
+      if(p._unSheet){ if(u!==p._unSheet){ it.un=p._unSheet; mudouPrecos=true; } p.un=p._unSheet; }
+      else if(u) p.un=u; });
+    if(mudouPrecos){ try{ savePrecos(); }catch(e){} }
     // preenche o fornecedor que falta em qualquer produto
     for(const nm in PROD){ if(PROD[nm] && !String(PROD[nm].empresa||'').trim() && fMap[nm]) PROD[nm].empresa=fMap[nm]; }
   }catch(e){}
@@ -1542,7 +1549,7 @@ function _crEsc(c){ return c.fornecedor||'—'; }
 function comprasPorProdutoHtml(regs){
   const g={};
   regs.forEach(c=>(c.itens||[]).forEach(it=>{ if(!it.produto) return;
-    const x=g[it.produto]||(g[it.produto]={produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:0, valor:0, qPreco:0, linhas:[]});
+    const x=g[it.produto]||(g[it.produto]={produto:it.produto, un:(PROD[it.produto]&&PROD[it.produto].un)||it.un||'', qtd:0, valor:0, qPreco:0, linhas:[]});   // unidade ATUAL do produto (a da compra é só histórico)
     const q=+it.qtd||0, pr=+it.preco||0; x.qtd+=q; x.valor+=q*pr; if(pr>0) x.qPreco+=q;
     x.linhas.push({c, q, pr}); }));
   const lista=Object.values(g).sort((a,b)=>b.valor-a.valor||a.produto.localeCompare(b.produto));

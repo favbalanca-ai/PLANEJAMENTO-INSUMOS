@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Unidade do produto: a planilha manda (v248)** — a unidade vem da coluna **UN** da aba **PORTIFÓLIO**; quando ela
+  está preenchida, a lista de Preços é ajustada para a mesma unidade (antes era o contrário: a lista de Preços
+  "mestra" sobrepunha a planilha, e mudar na planilha não aparecia no app). Só quando o PORTIFÓLIO não tem unidade é
+  que a da lista de Preços vale (`mergePrecosProdutos`, `_unSheet`). *Compras registradas → por produto* mostra a
+  unidade **atual** do produto (a gravada em cada compra é histórico).
 - **Quadro de operações → faixas que encolhem (v247)** — *Filtros + legenda* e *Linha do tempo* viraram duas faixas
   recolhíveis (`details.oq-fold`); o cabeçalho de cada uma resume o conteúdo mesmo encolhida (filtros escolhidos ·
   "hoje dd/mm · N atrasada(s) · N nos próximos 7 dias"). Tocar no cabeçalho encolhe/expande e a escolha fica no
