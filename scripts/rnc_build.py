@@ -71,21 +71,33 @@ def probe():
         ts = get(BASE, urllib.parse.urlencode(campos(tok, 1, soja[0][0])).encode()); print('SOJA total', total(ts), 'linhas', len(linhas(ts))); [print('  ', l) for l in linhas(ts)[:5]]
 
 def probe_detalhe(nome):
-    """sonda: a página de DETALHE de uma cultivar tem características agronômicas?"""
-    tok, _ = csrf(); c = campos(tok, 1); c['txt_denominacao'] = nome
-    t = get(BASE, urllib.parse.urlencode(c).encode()); print('busca', nome, 'total', total(t))
-    for tr in re.findall(r'<tr[^>]*>(.*?)</tr>', t, re.S | re.I):
-        if nome.lower() in strip(tr).lower():
-            print('LINHA', re.sub(r'\s+', ' ', tr)[:900]); break
-    links = re.findall(r'(?:href|onclick)="([^"]*detalhe[^"]*)"', t, re.I) or re.findall(r'(?:href|onclick)="([^"]*cod[^"]*)"', t, re.I)
-    print('links detalhe', links[:5])
-    for u in links[:1]:
-        m = re.search(r"[\w./?=&%-]*\.php[\w?=&%.-]*", u); u2 = m.group(0) if m else u
-        if not u2.startswith('http'): u2 = 'https://sistemas.agricultura.gov.br/snpc/cultivarweb/' + u2.lstrip('/')
-        print('GET', u2); d = get(u2); print('bytes', len(d), 'captcha?', 'captcha' in d.lower())
-        txt = re.sub(r'\s+', ' ', strip(d)); print('TEXTO', txt[:3500])
-        for k in ['Caracter', 'matura', 'Ciclo', 'bito', 'Tecnolog', 'Descritor', 'Grupo']:
-            i = txt.find(k); print('  acha', k, '→', txt[max(0, i - 80):i + 200] if i >= 0 else '—')
+    """sonda: acha a cultivar pela inicial, abre o DETALHE e baixa o RELATÓRIO DE DESCRITORES (PDF)"""
+    import subprocess
+    tok, _ = csrf(); t = get(BASE, urllib.parse.urlencode(campos(tok, 1)).encode()); print('lista total', total(t))
+    ini = nome.strip()[0].upper(); achou = None
+    for pg in range(1, 40):
+        u = BASE + '?acao=pesquisar&cs=1&postado=1&first=' + urllib.parse.quote(ini) + '&cod_pagina=' + str(pg)
+        d = get(u); L = re.findall(r'<tr[^>]*>(.*?)</tr>', d, re.S | re.I)
+        if pg == 1: print('first=', ini, 'bytes', len(d), 'total', total(d), 'páginas', npaginas(d))
+        for tr in L:
+            tds = [strip(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S | re.I)]
+            if tds and norm(tds[0]) == norm(nome):
+                m = re.search(r'codsr=(\d+)', tr); achou = (tds, m.group(1) if m else None, pg); break
+        if achou or not L or pg >= npaginas(d): break
+    print('ACHOU', achou)
+    if not achou or not achou[1]: return
+    d = get('https://sistemas.agricultura.gov.br/snpc/cultivarweb/detalhe_cultivar.php?codsr=' + achou[1] + '&codverif=0')
+    txt = re.sub(r'\s+', ' ', strip(d)); print('DETALHE', txt[:1200])
+    m = re.search(r"pdf\((\d+)\)", d); print('cod_solic', m.group(1) if m else None)
+    if not m: return
+    pu = 'https://sistemas.agricultura.gov.br/snpc/protocolo/relatorios_rnc/pdf_descritores2.php?cod_solicitacao_registro=' + m.group(1) + '&cod_cultivarweb=1'
+    rq = urllib.request.Request(pu, headers={'User-Agent': UA, 'Referer': BASE}); r = op.open(rq, timeout=600); b = r.read()
+    print('PDF bytes', len(b), 'tipo', r.headers.get('Content-Type'), 'inicio', b[:8])
+    open('desc.pdf', 'wb').write(b)
+    try:
+        out = subprocess.run(['pdftotext', '-layout', 'desc.pdf', '-'], capture_output=True, text=True, timeout=120).stdout
+        print('PDFTEXT', re.sub(r'[ \t]+', ' ', out)[:6000])
+    except Exception as e: print('pdftotext falhou', e, strip(b.decode('latin-1', 'ignore'))[:1500])
 
 def main(out_dir, probe_only=False):
     if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X')
