@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Seletor de Fazenda também na Recomendação e na Timeline (v251)** — mesma escolha compartilhada. Recomendação:
+  talhões do seletor e cartões só da fazenda; Timeline: talhões, eventos e cartões por talhão só da fazenda (eventos
+  sem talhão continuam). Trocar a fazenda numa rota com talhão (`#/recomendacao/<id>`, `#/timeline/<id>`) volta
+  para a visão geral, porque o talhão pode ser de outra fazenda.
 - **Seletor de Fazenda também no Painel do Campo e no Mapa (v250)** — a mesma escolha do quadro (`oqFaz`, guardada no
   aparelho) vale nas três telas (`fazSelectHtml`, `fazOk`, `fazTalhoes`). No Painel filtra os indicadores (operações,
   monitoramentos, chuva, stand, recomendações, talhões com atividade) e a atividade recente; no Mapa, a lista de

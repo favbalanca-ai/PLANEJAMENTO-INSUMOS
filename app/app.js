@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-250';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-251';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6293,11 +6293,11 @@ function exportRecomPDF_(r){
   return h;
 }
 V.recomendacao=function(arg){
-  const all=talhoesAll();
-  if(!all.length) return `<div class="empty">Nenhum talhão.</div>`;
+  const all=fazTalhoes();   // v251: fazenda escolhida (mesma do quadro, Painel e Mapa)
+  if(!all.length) return `<div class="empty">Nenhum talhão${oqFaz?' nesta fazenda':''}.</div>`;
   // #/recomendacao → todos os talhões; #/recomendacao/<id> → só aquele talhão (links do mapa, do Campo e do seletor)
   const selId=(arg&&all.some(t=>t.id===arg))?arg:'', t=selId?all.find(x=>x.id===selId):null;
-  const base=RECOM.registros.filter(r=>!selId||r.talhao===selId).map(recomNorm);
+  const base=RECOM.registros.filter(r=>selId?r.talhao===selId:fazOk(findTalhao(r.talhao))).map(recomNorm);
   const cnt={total:base.length, pendente:0, atrasada:0, agendada:0, aprovada:0}; base.forEach(r=>{ const st=recomSit(r); if(st.pendente) cnt.pendente++; if(st.atrasada) cnt.atrasada++; if(st.agendada) cnt.agendada++; if(st.aprovada) cnt.aprovada++; });
   if(!cnt[RECOM_UI.f] && RECOM_UI.f!=='total') RECOM_UI.f='total';
   const regs=recomFiltra(base).sort((a,b)=>{ const sa=recomSit(a), sb=recomSit(b); if(sa.aprovada!==sb.aprovada) return sa.aprovada?1:-1; if(sa.atrasada!==sb.atrasada) return sa.atrasada?-1:1; return (b.ts||0)-(a.ts||0); });   // atrasadas primeiro, aprovadas por último
@@ -6308,7 +6308,7 @@ V.recomendacao=function(arg){
   const cards=ativas.map(r=>recomCard(r,findTalhao(r.talhao))).join('')
     +(fins.length?`<details class="rcv-fin"${RECOM_UI.f==='aprovada'?' open':''}><summary><span class="rcv-fin-t">✅ Finalizadas</span> <b>${fins.length}</b> <small class="mut">aplicações aprovadas, já no histórico do talhão</small></summary><div class="recom-list rcv-list">${fins.map(r=>recomCard(r,findTalhao(r.talhao))).join('')}</div></details>`:'');
   return `${prodDatalist()}<datalist id="monit-alvos">${MONIT_ALVOS.map(a=>`<option value="${esc(a)}">`).join('')}</datalist>
-  <div class="camp-top"><div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div>
+  <div class="camp-top">${fazSelectHtml('faz-camp')}<div class="camp-sel" style="flex:1"><label>Talhão</label><select class="sel" id="recom-talhao">${tOpt}</select></div>
     ${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
   ${t?`<div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>`:''}
   <div class="rcv-chips">${chip('total','Total','c-tot')}${chip('pendente','Pendentes','c-pen')}${chip('atrasada','Atrasadas','c-atr')}${chip('agendada','Agendadas','c-age')}${chip('aprovada','Aprovadas','c-apr')}</div>
@@ -6774,11 +6774,11 @@ const _MES_TL=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Ag
 const _isoEv=e=>(e.data&&/^\d{4}-\d{2}-\d{2}/.test(String(e.data)))?String(e.data).slice(0,10):(e.ts?new Date(e.ts).toISOString().slice(0,10):'');
 const _tlWrap=(e,extra)=>`<div class="tl-wrap" data-search="${esc(((e.titulo||'')+' '+(e.resumo||'')+' '+_talNomeC(e.talhao)).toLowerCase())}" data-tipo="${e.tipo}">${tlRow(extra?Object.assign({},e,{talhao:''}):e)}</div>`;
 V.timeline = function(arg){
-  const tals=talhoesAll(), ev=camposEventos();
+  const tals=fazTalhoes(), ev=camposEventos().filter(e=>!e.talhao||fazOk(findTalhao(e.talhao)));   // v251: fazenda escolhida
   const sel=(arg&&tals.some(t=>t.id===arg))?arg:'';
   const porTal={}; ev.forEach(e=>{ const k=e.talhao||'__geral'; (porTal[k]=porTal[k]||[]).push(e); });
   const tOpt=`<option value="">Todos os talhões</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(tNome(t))} — ${(porTal[t.id]||[]).length} evento(s)</option>`).join('');
-  const top=`<div class="tl-top2"><select class="sel" id="tl-talhao">${tOpt}</select>
+  const top=`<div class="tl-top2">${fazSelectHtml('faz-tl')}<select class="sel" id="tl-talhao">${tOpt}</select>
     <div class="search"><input id="q-tl" value="${esc(timelineQ)}" placeholder="Buscar na timeline…" autocomplete="off"></div></div>`;
   const chipsDe=(lista,extra)=>{ const cont={}; lista.forEach(e=>cont[e.tipo]=(cont[e.tipo]||0)+1);
     return `<div class="classe-filter" id="tl-filter" style="margin:2px 0 10px"><button class="chip-f${timelineTipo===''?' on':''}" data-tlf="">Todos <b>${lista.length}</b></button>`+
@@ -8001,7 +8001,9 @@ document.addEventListener('change',e=>{
   if(e.target.id==='oq-seq'){ oqSeq=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-ativ'){ oqAtiv=e.target.value; route({keepScroll:true}); return; }
   if(e.target.id==='oq-tal'){ oqTal=e.target.value; route({keepScroll:true}); return; }
-  if(e.target.id==='oq-faz'||e.target.classList.contains('faz-sel')){ fazSetar(e.target.value); oqTal=''; route({keepScroll:true}); return; }
+  if(e.target.id==='oq-faz'||e.target.classList.contains('faz-sel')){ fazSetar(e.target.value); oqTal='';
+    const v=(location.hash.split('/')[1]||'').split('?')[0]; if((v==='recomendacao'||v==='timeline') && location.hash.split('/')[2]){ location.hash='#/'+v; return; }   // talhão da rota pode ser de outra fazenda
+    route({keepScroll:true}); return; }
   if(e.target.id==='monit-talhao'){ _monitGPS=null; location.hash='#/monitoramento/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='stand-talhao'){ location.hash='#/stand/'+encodeURIComponent(e.target.value); return; }
   if(e.target.id==='agp-cls'){ if(_agPick){ _agPick.cls=e.target.value; agPickRender(); } return; }
