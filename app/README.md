@@ -67,6 +67,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **🔔 Avisos na barra de cima (v253)** — sino com contador (vermelho quando há atraso, laranja quando só há coisa
+  para conferir) que abre a folha *Avisos* com três grupos, calculados no aparelho (`notifItens`): **Aguardando
+  conferir para finalizar** (recomendações com retorno do operador esperando aprovação + operações parciais),
+  **Operações em atraso** (data passada, não encerradas) e **Operações da semana** (até 7 dias ou em andamento).
+  Cada item leva ao Campo do talhão ou à Recomendação. Respeita a fazenda escolhida; atualiza a cada tela
+  (`notifAtualiza` no `route`). Opção **Avisar no aparelho**: notificação do navegador, 1 vez por dia ao abrir o app,
+  só quando há algo para conferir ou em atraso (precisa da permissão do navegador; sem servidor, só com o app aberto).
 - **Seletor de Fazenda também na Recomendação e na Timeline (v251)** — mesma escolha compartilhada. Recomendação:
   talhões do seletor e cartões só da fazenda; Timeline: talhões, eventos e cartões por talhão só da fazenda (eventos
   sem talhão continuam). Trocar a fazenda numa rota com talhão (`#/recomendacao/<id>`, `#/timeline/<id>`) volta

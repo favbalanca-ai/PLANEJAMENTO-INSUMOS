@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-252';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-253';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7714,7 +7714,44 @@ function morphChildren(op, np){
   for(let i=b.length;i<a.length;i++) a[i].remove();
 }
 function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
-function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; } }   // memória por render (ver memo)
+function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} } }   // memória por render (ver memo)
+/* ================= AVISOS (sino na barra de cima, v253) =================
+   Três grupos, calculados no aparelho a partir do que o app já sabe (sem planilha nova):
+   · conferir → recomendações com retorno do operador esperando aprovação e operações parciais;
+   · semana   → operações planejadas até 7 dias (ou em andamento);
+   · atraso   → operações com data passada e não encerradas.
+   Respeita a fazenda escolhida. "Avisar no aparelho" usa a notificação do navegador (só quando o app está aberto). */
+const NOTIF_KEY='planejamento_notif';
+function notifCfg(){ try{ return JSON.parse(localStorage.getItem(NOTIF_KEY))||{}; }catch(e){ return {}; } }
+function notifCfgSave(c){ try{ localStorage.setItem(NOTIF_KEY, JSON.stringify(c)); }catch(e){} }
+function notifItens(){ const g={conferir:[], semana:[], atraso:[]}; if(!DATA||!OV) return g;
+  const tals=talhoesAll().filter(fazOk);
+  tals.forEach(t=>{ const so=talStatusOps(t);
+    so.late.forEach(it=>g.atraso.push({tit:it.nome, sub:`${tNome(t)} · ${-it.dd} dia(s) de atraso · ${fmtDataBR(it.dp)}`, go:'#/campo/'+encodeURIComponent(t.id), dd:it.dd, tal:t.id}));
+    so.soon.forEach(it=>g.semana.push({tit:it.nome, sub:`${tNome(t)} · ${it.and?'em andamento':it.dd===0?'hoje':it.dd===1?'amanhã':'em '+it.dd+' dias'}${it.dp?' · '+fmtDataBR(it.dp):''}`, go:'#/campo/'+encodeURIComponent(t.id), dd:it.dd, tal:t.id}));
+    campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='parcial') g.conferir.push({tit:o.op.nome, sub:`${tNome(t)} · parcial: ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha — aplicar o restante ou encerrar`, go:'#/campo/'+encodeURIComponent(t.id), tal:t.id}); }); });
+  ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.status!=='retorno') return; const t=findTalhao(r0.talhao); if(!fazOk(t)) return; const r=recomNorm(r0);
+    g.conferir.push({tit:(r.nome||r.opNome||'Recomendação')+(r.tipo==='ts'?' (TS)':''), sub:`${tNome(t)} · retorno do operador${r.retorno&&r.retorno.quem?' ('+r.retorno.quem+')':''} — conferir e aprovar`, go:'#/recomendacao/'+encodeURIComponent(r.talhao), tal:r.talhao}); });
+  g.atraso.sort((a,b)=>a.dd-b.dd); g.semana.sort((a,b)=>a.dd-b.dd); return g; }
+function notifTotal(g){ return g.conferir.length+g.semana.length+g.atraso.length; }
+let _notifSig='';
+function notifAtualiza(){ const b=document.getElementById('notif-btn'), n=document.getElementById('notif-n'); if(!b||!n) return;
+  const emb=document.body.dataset.embed!=null, v=document.body.dataset.view||''; if(emb||v==='login'||v==='inicio'){ b.hidden=true; return; } b.hidden=false;
+  const g=notifItens(), tot=notifTotal(g); n.textContent=tot>99?'99+':String(tot); n.hidden=!tot; b.classList.toggle('tem-atraso', g.atraso.length>0); b.classList.toggle('tem-conferir', g.conferir.length>0);
+  const sig=`${g.conferir.length}|${g.atraso.length}|${g.semana.length}`; if(sig!==_notifSig){ _notifSig=sig; notifAvisaAparelho(g); } }
+// notificação do navegador (quando ligada): 1 por dia, só se houver algo para conferir ou atrasado
+function notifAvisaAparelho(g){ const c=notifCfg(); if(!c.aparelho||!('Notification' in window)||Notification.permission!=='granted') return;
+  const hj=_hojeISO(), n=g.conferir.length+g.atraso.length; if(!n||c.ultimoDia===hj) return; c.ultimoDia=hj; notifCfgSave(c);
+  try{ new Notification('Planejamento de Safra', {body:[g.conferir.length?`${g.conferir.length} para conferir`:'', g.atraso.length?`${g.atraso.length} em atraso`:'', g.semana.length?`${g.semana.length} nesta semana`:''].filter(Boolean).join(' · '), tag:'planejamento-avisos'}); }catch(e){} }
+function notifOpen(){ novaAcaoFechar(); const g=notifItens(), c=notifCfg(), tot=notifTotal(g);
+  const sec=(ico,tit,lista,cls)=>`<div class="nt-sec ${cls}"><h4>${ico} ${tit} <b>${lista.length}</b></h4>${lista.length?lista.slice(0,40).map(x=>`<a class="na-item nt-item" data-go="${esc(x.go)}"><span class="na-tx"><b>${esc(x.tit)}</b><span>${esc(x.sub)}</span></span><span class="na-seta">›</span></a>`).join('')+(lista.length>40?`<p class="mut nt-mais">+${lista.length-40} — veja no quadro de operações</p>`:''):'<p class="mut nt-vazio">Nada por aqui.</p>'}</div>`;
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet nt-sheet" role="dialog"><div class="na-grab"></div><div class="na-h"><span></span><h3>🔔 Avisos${oqFaz?` <small class="mut">· ${esc(fazendaNome(oqFaz))}</small>`:''}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    ${tot?'':'<p class="na-sub">✅ Tudo em dia: nada para conferir, nada atrasado.</p>'}
+    ${sec('✔️','Aguardando conferir para finalizar',g.conferir,'nt-conf')}${sec('⚠️','Operações em atraso',g.atraso,'nt-atr')}${sec('📅','Operações da semana',g.semana,'nt-sem')}
+    <label class="nt-opt"><input type="checkbox" data-act="notifAparelho"${c.aparelho?' checked':''}> Avisar no aparelho quando abrir o app (1 vez por dia)${('Notification' in window)?'':' <small class="mut">— este navegador não permite</small>'}</label>
+    <p class="mut" style="font-size:11px;margin:6px 0 0">Calculado neste aparelho com os dados sincronizados: datas do planejamento (DAP + plantio), execução das operações e retornos dos operadores.</p></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function _route(opts){
   mergePrecosProdutos();   // garante que os produtos da lista de preços contem como válidos
   // por padrão MANTÉM a posição da tela (edições não pulam pro topo);
@@ -8305,6 +8342,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
+    else if(a.act==='notifAbrir'){ notifOpen(); return; }
+    else if(a.act==='notifAparelho'){ const c=notifCfg(), on=act.checked; if(on && 'Notification' in window && Notification.permission!=='granted'){ Notification.requestPermission().then(p=>{ c.aparelho=(p==='granted'); notifCfgSave(c); if(p!=='granted'){ act.checked=false; toast('O navegador não deu permissão para avisos'); } else { delete c.ultimoDia; notifCfgSave(c); _notifSig=''; notifAtualiza(); } }); return; }
+      c.aparelho=on; if(on){ delete c.ultimoDia; } notifCfgSave(c); _notifSig=''; notifAtualiza(); return; }
     else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
       RECOM_UI.aberto[a.id]=!ab; c.classList.toggle('rc-fech', ab); c.querySelector('.rc-head').title=ab?'Expandir':'Encolher'; return; }
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
