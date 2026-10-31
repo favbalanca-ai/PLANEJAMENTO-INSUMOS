@@ -70,24 +70,23 @@ def probe():
     if soja:
         ts = get(BASE, urllib.parse.urlencode(campos(tok, 1, soja[0][0])).encode()); print('SOJA total', total(ts), 'linhas', len(linhas(ts))); [print('  ', l) for l in linhas(ts)[:5]]
 
-def probe_detalhe(nome):
-    """sonda: acha a cultivar pela inicial, abre o DETALHE e baixa o RELATÓRIO DE DESCRITORES (PDF)"""
+def probe_detalhe(nome, p0=280):
+    """sonda: varre as páginas (ordem: espécie, depois nome) a partir de p0 até achar a cultivar; abre o DETALHE e baixa o PDF de descritores"""
     import subprocess
-    tok, _ = csrf(); t = get(BASE, urllib.parse.urlencode(campos(tok, 1)).encode()); print('lista total', total(t))
-    ini = nome.strip()[0].upper(); achou = None
-    for pg in range(1, 40):
-        u = BASE + '?acao=pesquisar&cs=1&postado=1&first=' + urllib.parse.quote(ini) + '&cod_pagina=' + str(pg)
-        d = get(u); L = re.findall(r'<tr[^>]*>(.*?)</tr>', d, re.S | re.I)
-        if pg == 1: print('first=', ini, 'bytes', len(d), 'total', total(d), 'páginas', npaginas(d))
-        for tr in L:
+    tok, _ = csrf(); achou = None
+    for pg in range(p0, 385):
+        d = get(BASE, urllib.parse.urlencode(campos(tok, pg)).encode()); L = linhas(d)
+        trs = re.findall(r'<tr[^>]*>(.*?)</tr>', d, re.S | re.I)
+        print('pág', pg, 'primeira:', L[0][0] if L else '-', '| última:', L[-1][0] if L else '-', flush=True)
+        for tr in trs:
             tds = [strip(c) for c in re.findall(r'<td[^>]*>(.*?)</td>', tr, re.S | re.I)]
             if tds and norm(tds[0]) == norm(nome):
-                m = re.search(r'codsr=(\d+)', tr); achou = (tds, m.group(1) if m else None, pg); break
-        if achou or not L or pg >= npaginas(d): break
+                m = re.search(r'codsr=(\d+)', tr); achou = (tds[:4], m.group(1) if m else None, pg); break
+        if achou: break
     print('ACHOU', achou)
     if not achou or not achou[1]: return
     d = get('https://sistemas.agricultura.gov.br/snpc/cultivarweb/detalhe_cultivar.php?codsr=' + achou[1] + '&codverif=0')
-    txt = re.sub(r'\s+', ' ', strip(d)); print('DETALHE', txt[:1200])
+    txt = re.sub(r'\s+', ' ', strip(d)); print('DETALHE', txt[:1500])
     m = re.search(r"pdf\((\d+)\)", d); print('cod_solic', m.group(1) if m else None)
     if not m: return
     pu = 'https://sistemas.agricultura.gov.br/snpc/protocolo/relatorios_rnc/pdf_descritores2.php?cod_solicitacao_registro=' + m.group(1) + '&cod_cultivarweb=1'
@@ -96,11 +95,11 @@ def probe_detalhe(nome):
     open('desc.pdf', 'wb').write(b)
     try:
         out = subprocess.run(['pdftotext', '-layout', 'desc.pdf', '-'], capture_output=True, text=True, timeout=120).stdout
-        print('PDFTEXT', re.sub(r'[ \t]+', ' ', out)[:6000])
+        print('PDFTEXT', re.sub(r'[ \t]+', ' ', out)[:7000])
     except Exception as e: print('pdftotext falhou', e, strip(b.decode('latin-1', 'ignore'))[:1500])
 
 def main(out_dir, probe_only=False):
-    if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X')
+    if probe_only == 'detalhe': return probe_detalhe(sys.argv[3] if len(sys.argv) > 3 else '24428I2X', int(sys.argv[4]) if len(sys.argv) > 4 else 280)
     if probe_only: return probe()
     path = os.path.join(out_dir, 'cultivares.json'); d = json.load(open(path, encoding='utf-8'))
     tok, _ = csrf(); t = get(BASE, urllib.parse.urlencode(campos(tok, 1)).encode())

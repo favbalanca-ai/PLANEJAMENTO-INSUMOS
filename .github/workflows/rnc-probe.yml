@@ -5,8 +5,8 @@ on:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get install -y -q poppler-utils >/dev/null 2>&1 || true
-      - run: python3 scripts/rnc_build.py app/agrofit --detalhe 24428I2X
-      - run: python3 scripts/rnc_build.py app/agrofit --detalhe "BRASMAX OLIMPO IPRO" || true
+      - run: python3 scripts/rnc_build.py app/agrofit --detalhe 24428I2X 280
