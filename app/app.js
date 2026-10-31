@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-246';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-247';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7207,6 +7207,10 @@ function fazendaKey(t){ const e=String((t&&(empDe(t)||empSafDe(t)))||'').trim().
 function fazendaNome(k){ return k?(FAZENDAS[k]||('Fazenda '+k)):'Sem fazenda'; }
 function fazendasLista(tals){ const ks=new Set(); (tals||talhoesAll()).forEach(t=>ks.add(fazendaKey(t))); return [...ks].sort((a,b)=>(a===''?1:b===''?-1:fazendaNome(a).localeCompare(fazendaNome(b),'pt'))); }
 let oqFaz=''; try{ oqFaz=localStorage.getItem('planejamento_oq_faz')||''; }catch(e){}   // fazenda escolhida no quadro (fica no aparelho)
+// faixas do quadro que encolhem/expandem (filtros+legenda · linha do tempo) — estado fica no aparelho (v247)
+let OQ_FOLD={filtros:true, tl:true}; try{ Object.assign(OQ_FOLD, JSON.parse(localStorage.getItem('planejamento_oq_fold')||'{}')); }catch(e){}
+function oqFoldSave(){ try{ localStorage.setItem('planejamento_oq_fold', JSON.stringify(OQ_FOLD)); }catch(e){} }
+document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.matches&&d.matches('details.oq-fold')){ OQ_FOLD[d.dataset.k]=d.open; oqFoldSave(); } },true);
 const OQ_ST={ok:'Aplicado', and:'Em andamento', breve:'3 dias para a aplicação', late:'Atrasado', prazo:'Dentro do prazo', canc:'Não será realizada a aplicação', sem:'Sem data (defina o plantio)'};
 function _dias(a,b){ return Math.round((new Date(a+'T12:00:00')-new Date(b+'T12:00:00'))/86400000); }
 // atividade da operação, pelos produtos: Plantio (semente) · Herbicida · Fungicida · …
@@ -7401,7 +7405,10 @@ function campoQuadro(){
     const hojeHd=i=>hojeCol===i?' oq-hoje-hd':(hojeCol===oqCols.length&&i===oqCols.length-1?' oq-hoje-hd-fim':'');
     corpo=`<div class="oq-row oq-colrow"><div class="oq-hd oq-hd-blank"></div><div class="oq-cards">${oqCols.map((_,i)=>`<button class="oq-colbtn${hojeHd(i)}" data-act="oqCol" data-col="${i}" title="Ver esta coluna em todos os talhões">Mais detalhes</button>`).join('')}</div></div>`+rows; }
   const leg=(c,l)=>`<span class="oq-leg"><i class="oq-sw oq-${c}"></i>${l}</span>`;
-  return `<div class="oq-top">
+  const hj=_hojeISO(), em7=(()=>{ const d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()+7); return d.toISOString().slice(0,10); })();
+  const nLate=tlItens.filter(x=>x.st==='late').length, n7=tlItens.filter(x=>x.dt>=hj&&x.dt<=em7&&x.st!=='ok'&&x.st!=='canc').length;
+  const resFiltros=[oqFaz?fazendaNome(oqFaz):(fazs.length>1?'Todas as fazendas':''), oqSeq==='ambas'?'1ª + 2ª cultura':oqSeq==='safrinha'?'2ª cultura':'1ª cultura', oqAtiv||'Todas as atividades', oqModo==='data'?'Por data':'Por operação', oqTal?tNome(oqTal):'Todos os talhões'].filter(Boolean).join(' · ');
+  return `<details class="oq-fold" data-k="filtros"${OQ_FOLD.filtros!==false?' open':''}><summary><span class="oq-fold-t">⚙️ Filtros</span><span class="oq-fold-r">${esc(resFiltros)}</span><span class="panel-chevron">▸</span></summary><div class="oq-top">
       ${fazs.length>1?`<label>Fazenda<select class="sel" id="oq-faz"><option value="">Todas as fazendas</option>${fazs.map(k=>`<option value="${esc(k)}"${k===oqFaz?' selected':''}>${esc(fazendaNome(k))} (${all0.filter(t=>fazendaKey(t)===k).length})</option>`).join('')}</select></label>`:''}
       <label>Safra<select class="sel" id="oq-seq"><option value="principal"${oqSeq==='principal'?' selected':''}>1ª cultura</option><option value="safrinha"${oqSeq==='safrinha'?' selected':''}>2ª cultura (safrinha)</option><option value="ambas"${oqSeq==='ambas'?' selected':''}>Ambas</option></select></label>
       <label>Atividade<select class="sel" id="oq-ativ"><option value="">Todas</option>${[...ativs].sort((a,b)=>a.localeCompare(b,'pt')).map(a=>`<option${a===oqAtiv?' selected':''}>${esc(a)}</option>`).join('')}</select></label>
@@ -7409,8 +7416,8 @@ function campoQuadro(){
       <label>Talhão<select class="sel" id="oq-tal"><option value="">Todos</option>${all.map(t=>`<option value="${esc(t.id)}"${t.id===oqTal?' selected':''}>${esc(tNome(t))}</option>`).join('')}</select></label>
       <button class="btn btn-outline btn-sm oq-print" data-act="oqImprimir" title="Imprimir o quadro">🖨 Imprimir</button>
     </div>
-    <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div>
-    ${oqLinhaTempo(tlItens)}
+    <div class="oq-legs">${leg('ok','Aplicado')}${leg('and','Em andamento')}${leg('breve','3 dias para a aplicação')}${leg('late','Atrasado')}${leg('prazo','Dentro do prazo')}${leg('canc','<s>Não será realizada a aplicação</s>')}</div></details>
+    <details class="oq-fold" data-k="tl"${OQ_FOLD.tl!==false?' open':''}><summary><span class="oq-fold-t">📅 Linha do tempo</span><span class="oq-fold-r">hoje ${esc(fmtDataBR(hj))}${nLate?` · <b class="oq-fold-late">${nLate} atrasada(s)</b>`:''}${n7?` · ${n7} nos próximos 7 dias`:''}</span><span class="panel-chevron">▸</span></summary>${oqLinhaTempo(tlItens)}</details>
     <div class="oq-wrap${oqModo==='data'?' oq-wrap-data':''}">${corpo||'<div class="cp-empty">Nenhuma operação para este filtro.</div>'}</div>
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no cartão para ver datas e produtos · <b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ aplicada em data diferente da estimada · 🔔 retorno do operador aguardando aprovação.</p>`;
 }

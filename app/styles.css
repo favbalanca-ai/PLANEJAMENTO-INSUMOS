@@ -1989,6 +1989,23 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ext-sec{font-weight:800;font-size:13px;margin:10px 0 6px;color:var(--ink)}.ext-sec b{color:var(--teal);margin-left:6px}
 .ext-tbl td,.ext-tbl th{font-size:12.5px}
 
+/* ===== Quadro: faixas que encolhem (filtros · linha do tempo) (v247) ===== */
+.oq-fold{margin-bottom:8px}
+.oq-fold>summary{list-style:none;display:flex;align-items:center;gap:10px;cursor:pointer;padding:7px 12px;border:1px solid var(--line);border-radius:10px;background:var(--card);font-size:12.5px;user-select:none}
+.oq-fold>summary::-webkit-details-marker{display:none}
+.oq-fold-t{font-weight:800;color:var(--ink);white-space:nowrap}
+.oq-fold-r{flex:1;min-width:0;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oq-fold-late{color:#c62828}
+.oq-fold>summary .panel-chevron{transition:transform .15s;color:var(--muted)}
+.oq-fold[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0;margin-bottom:0}
+.oq-fold[open]>summary .panel-chevron{transform:rotate(90deg)}
+.oq-fold[open]>.oq-top{border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;background:var(--card);padding:10px 12px 4px;margin-bottom:0}
+.oq-fold[open]>.oq-legs{border:1px solid var(--line);border-top:0;border-radius:0 0 10px 10px;background:var(--card);padding:6px 12px 10px;margin:0}
+.oq-fold[open]>.oq-top+.oq-legs{margin-top:-1px}
+.oq-fold[open]>.oq-top{border-radius:0}
+.oq-fold[open]>.oq-tl{border-top-left-radius:0;border-top-right-radius:0;border-top:0;margin-bottom:0}
+@media print{ .oq-fold>summary{display:none} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}

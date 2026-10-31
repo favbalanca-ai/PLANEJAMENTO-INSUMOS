@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Quadro de operações → faixas que encolhem (v247)** — *Filtros + legenda* e *Linha do tempo* viraram duas faixas
+  recolhíveis (`details.oq-fold`); o cabeçalho de cada uma resume o conteúdo mesmo encolhida (filtros escolhidos ·
+  "hoje dd/mm · N atrasada(s) · N nos próximos 7 dias"). Tocar no cabeçalho encolhe/expande e a escolha fica no
+  aparelho (`planejamento_oq_fold`, `OQ_FOLD`). Na impressão os cabeçalhos somem.
 - **Quadro de operações → seletor de Fazenda (v246)** — primeiro filtro do quadro (antes de Safra): *Todas as fazendas ·
   Fazenda Água Viva (n) · Fazenda Espora (n)*. A fazenda é deduzida do **prefixo do empreendimento** do talhão
   (`fazendaKey`: `FA-…` = Água Viva, `FE-…` = Espora; outro prefixo vira "Fazenda XX", sem prefixo = "Sem fazenda";
