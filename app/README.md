@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Estoque → "Em pedido" ao lado de "Inicial" + aviso de recusa (v243)** — a coluna *Em pedido* saiu do grupo
+  escondido da direita e virou a 3ª coluna (cabe na tela do celular sem rolar). No envio automático, se a planilha
+  recusar uma edição (ex.: `produto não encontrado: …` quando o nome não está na aba PORTIFÓLIO, ou `sem permissão…`
+  para usuário sem módulo Administrativo/Planejamento), o app agora mostra um aviso com o motivo (uma vez por motivo,
+  `_pushFalhaAviso`) em vez de ficar mudo — o detalhe continua em Sincronizar → Log.
 - **Mapa → ficha do talhão: cabeçalho (v241)** — o resumo passa a ter **Empreendimento** (nome completo, ex.: FA-SOJA
   IRRIGADO 26-27), **Cultura** (só a cultura, deduzida do empreendimento: `culturaNome` → Soja, Milho…), Variedade e
   **Stand** (última contagem da ação Stand do talhão — `standUltimo`: plantas/ha, plantas/m, % da meta e data; a linha
