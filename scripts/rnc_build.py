@@ -8,7 +8,7 @@ SIGEF entram na lista com nc=0 quando a consulta por espécie funciona.
 
 Uso: python3 scripts/rnc_build.py app/agrofit [--probe | --so-detalhes]
 Detalhes (tecnologia/evento GM, situação, datas, regiões de adaptação, descritores do PDF) vão para app/agrofit/rnc_det.json,
-só para as culturas da fazenda, até RNC_DET_CAP (500) por rodada (precisa de pdftotext/poppler-utils).
+só para soja, milho e sorgo, até RNC_DET_CAP (500) por rodada (precisa de pdftotext/poppler-utils).
 Sem dependências externas. Roda no GitHub Actions junto com o Agrofit/SIGEF (a consulta é lenta: ~385 páginas).
 """
 import json, os, re, sys, time, html, unicodedata, urllib.request, urllib.parse, http.cookiejar
@@ -131,7 +131,7 @@ def main(out_dir, probe_only=False):
     except Exception as e: print('RNC detalhes: falhou —', e)
 
 # ---- detalhes (página da cultivar + PDF de descritores) para as culturas da fazenda ----
-ESPECIES_DET = {'Soja', 'Milho', 'Feijão', 'Sorgo', 'Trigo', 'Algodão'}
+ESPECIES_DET = {'Soja', 'Milho', 'Sorgo'}   # culturas da fazenda com detalhe (pedido da dona: só estas)
 def _br(d):
     m = re.match(r'(\d{2})/(\d{2})/(\d{4})', d or ''); return f'{m.group(3)}-{m.group(2)}-{m.group(1)}' if m else ''
 def detalhe_de(codsr):
