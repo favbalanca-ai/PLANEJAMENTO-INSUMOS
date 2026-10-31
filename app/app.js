@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-244';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-245';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2518,11 +2518,11 @@ V.estoque=function(){
     const cls=r.saldo<-0.0001?'neg':(r.saldo>0?'ok':'');
     const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0;
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
-      <td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
+      <td class="c-full" data-th="Produto"><b class="est-prod" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Ver o extrato (entradas e saídas) deste produto">${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
       <td class="num" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0" title="Quantidade já pedida ao fornecedor (vai para a coluna EM PEDIDO do PORTIFÓLIO)"></td>
-      <td class="num" data-th="Entradas">${r.ent?num(r.ent):'·'}</td>
-      <td class="num" data-th="Saídas (aplic.)">${r.sai?num(r.sai):'·'}</td>
+      <td class="num" data-th="Entradas">${r.ent?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="De onde veio">${num(r.ent)}</a>`:'·'}</td>
+      <td class="num" data-th="Saídas (aplic.)">${r.sai?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Para onde foi">${num(r.sai)}</a>`:'·'}</td>
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
       <td data-th="Un">${esc(r.un||'')}</td>
       <td class="num c-more" data-th="A entregar" title="contratos de entrega futura (NF-e de faturamento)">${r.aEnt?num(r.aEnt):'·'}</td>
@@ -2599,6 +2599,34 @@ function exportEstoquePDF(){
   <div class="dm-sign"><div>Conferido por<br>_______________________</div><div>Responsável<br>_______________________</div><div>Data<br>____/____/______</div></div></div>`;
   printDoc(h); toast('Gerando relatório de estoque — escolha "Salvar como PDF"');
 }
+// EXTRATO do produto (v245): de onde vieram as entradas e as saídas que aparecem no Estoque
+// Saídas conhecidas: operações concluídas/parciais com baixa, TS feito e recomendações avulsas aprovadas (usoProdutosDe);
+// entradas: compras registradas no app (COMPRAS APP). O que estiver na planilha além disso aparece como "sem origem aqui".
+function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimentacao)||{};
+  const sai=[]; talhoesAll().forEach(t=>usoProdutosDe(t).forEach(l=>{ if(l.produto===prod) sai.push(Object.assign({tal:tNome(t)}, l)); }));
+  sai.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, nfe:!!c.nfe}); }));
+  ent.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const un=(PROD[prod]||{}).un||'', tS=sai.reduce((a,l)=>a+l.qtd,0), tE=ent.reduce((a,l)=>a+l.qtd,0), pS=+(mov.saidas&&mov.saidas[prod])||0, pE=+(mov.entradas&&mov.entradas[prod])||0;
+  const difS=mov.saidas?+(pS-tS).toFixed(4):0, difE=mov.entradas?+(pE-tE).toFixed(4):0;
+  const row=(c)=>`<tr>${c.map(x=>`<td>${x}</td>`).join('')}</tr>`;
+  const old=document.getElementById('ext-ov'); if(old) old.remove();
+  const ov=document.createElement('div'); ov.id='ext-ov'; ov.className='modal-ov';
+  ov.innerHTML=`<div class="modal-box" style="width:min(720px,100%)"><div class="modal-head"><h3>📒 Extrato — ${esc(prod)}${un?` <small class="mut">(${esc(un)})</small>`:''}</h3><button class="icon-btn" data-act="extFechar" title="Fechar">✕</button></div>
+    <div style="overflow:auto;max-height:70vh">
+      <div class="ext-sec">📤 Saídas <b>${num(tS+Math.max(0,difS))}</b>${un?' '+esc(un):''}</div>
+      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Talhão</th><th>Operação</th><th>Origem</th><th class="num">Qtd</th></tr></thead><tbody>
+        ${sai.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.tal), esc(l.op), esc(l.origem)+(l.quem?` <small class="mut">· ${esc(l.quem)}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`])).join('')}
+        ${Math.abs(difS)>=0.0005?row([`<span class="mut">—</span>`,`<span class="mut">—</span>`,`<i>${difS>0?'lançado em outro aparelho ou direto na aba MOVIMENTAÇÃO ESTOQUE':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difS>0?'':'−'}${fmtDose(Math.abs(difS))}</b>`]):''}
+        ${!sai.length&&Math.abs(difS)<0.0005?'<tr><td colspan="5" class="mut" style="padding:8px 10px">Nenhuma saída.</td></tr>':''}</tbody></table>
+      <div class="ext-sec">📥 Entradas <b>${num(tE+Math.max(0,difE))}</b>${un?' '+esc(un):''}</div>
+      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Fornecedor</th><th>Nota</th><th class="num">Qtd</th></tr></thead><tbody>
+        ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.forn), esc(l.nf)+(l.nfe?' <small class="mut">NF-e</small>':''), `<b class="num">${fmtDose(l.qtd)}</b>`])).join('')}
+        ${Math.abs(difE)>=0.0005?row([`<span class="mut">—</span>`,`<i>${difE>0?'lançado em outro aparelho ou direto na planilha':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difE>0?'':'−'}${fmtDose(Math.abs(difE))}</b>`]):''}
+        ${!ent.length&&Math.abs(difE)<0.0005?'<tr><td colspan="4" class="mut" style="padding:8px 10px">Nenhuma entrada.</td></tr>':''}</tbody></table>
+      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito e das recomendações aprovadas; entradas, das compras registradas. O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota).</p>
+    </div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov); }
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
   document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
@@ -8403,6 +8431,8 @@ document.addEventListener('click',e=>{
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
     else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
+    else if(a.act==='estExtrato'){ estExtratoOpen(a.prod); return; }
+    else if(a.act==='extFechar'){ const o=document.getElementById('ext-ov'); if(o) o.remove(); return; }
     else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
     else if(a.act==='pdfEnviar'){ if(_pdfPronto){ const P=_pdfPronto, d={files:[P.file], title:P.nome}; if(P.link) d.text=pdfLinkMsg(P);   // o link vai junto como texto (apps que aceitam legenda mostram)
       navigator.share(d).catch(e=>{ if(e&&e.name!=='AbortError') toast('Não deu para enviar daqui — use "Baixar PDF"'); }); } }
