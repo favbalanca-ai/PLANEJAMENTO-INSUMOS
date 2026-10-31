@@ -2,9 +2,21 @@ name: RNC probe (temporário)
 on:
   push:
     branches: [claude/empreendimentos-painel-visibilidade-anrppt]
+permissions:
+  contents: write
+concurrency:
+  group: rnc-probe
+  cancel-in-progress: true
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: python3 scripts/rnc_build.py app/agrofit --probe
+      - run: python3 scripts/rnc_build.py app/agrofit
+      - name: Commit do cultivares.json
+        run: |
+          git add app/agrofit/cultivares.json
+          if git diff --cached --quiet; then echo "sem mudanças"; exit 0; fi
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "RNC: cultivares.json com cadastro (gerado pela ação)"
+          git push
