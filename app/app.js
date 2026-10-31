@@ -5111,7 +5111,7 @@ const AG_DESC_ORD=['TIPO DE CRESCIMENTO','HÁBITO DE CRESCIMENTO','COR DA FLOR',
 function agDescTitulo(k){ const t=String(k||'').toLowerCase(); return t.charAt(0).toUpperCase()+t.slice(1).replace('pigm ','pigmentação ').replace('antociânica','antociânica no'); }
 function agrofitCvDetHtml(c){ const r=c.rnc, det=AGROFIT.det; if(!r||!r.s) return '';
   if(!det){ agrofitRncDet().then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); return '<p class="mut" style="padding:6px 14px">⏳ características…</p>'; }
-  const x=det[r.s]; if(!x) return '<p class="mut" style="padding:6px 14px;font-size:12px">Características ainda não colhidas para esta cultivar (a ação mensal colhe até 500 por vez, das mais novas para as mais antigas).</p>';
+  const x=det[r.s]; if(!x) return '<p class="mut" style="padding:6px 14px;font-size:12px">Características ainda não colhidas para esta cultivar (a ação mensal colhe soja, milho e sorgo, das mais novas para as mais antigas, 1.500 por vez).</p>';
   const lin=(k,v)=>v?`<div class="ag-lin"><span>${k}</span><b>${v}</b></div>`:'';
   const tec=agTecnologia(x.gm), ks=Object.keys(x.desc||{}).sort((a,b)=>{ const ia=AG_DESC_ORD.indexOf(a), ib=AG_DESC_ORD.indexOf(b); return (ia<0?99:ia)-(ib<0?99:ib)||a.localeCompare(b); });
   const recs=(x.rec||[]).reduce((m,s)=>{ const [uf,n]=s.split('-'); (m[uf]=m[uf]||[]).push(n); return m; },{});

@@ -47,7 +47,7 @@ jobs:
       - name: Cadastro do RNC (consulta pública do CultivarWeb) → cultivares.json + rnc_det.json
         run: |
           sudo apt-get install -y -q poppler-utils >/dev/null 2>&1 || true
-          python3 scripts/rnc_build.py app/agrofit || echo "RNC indisponível — mantém o cadastro anterior"
+          RNC_DET_CAP=1500 python3 scripts/rnc_build.py app/agrofit || echo "RNC indisponível — mantém o cadastro anterior"
       - name: Commit se mudou
         id: commit
         run: |

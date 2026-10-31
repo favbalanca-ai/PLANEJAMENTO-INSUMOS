@@ -8,7 +8,7 @@ SIGEF entram na lista com nc=0 quando a consulta por espécie funciona.
 
 Uso: python3 scripts/rnc_build.py app/agrofit [--probe | --so-detalhes | --pdf CODSR...]
 Detalhes (tecnologia/evento GM, situação, datas, regiões de adaptação, descritores do PDF) vão para app/agrofit/rnc_det.json,
-só para soja, milho e sorgo, até RNC_DET_CAP (500) por rodada (precisa de pdftotext/poppler-utils).
+só para soja, milho e sorgo, até RNC_DET_CAP (1500) por rodada (precisa de pdftotext/poppler-utils).
 Sem dependências externas. Roda no GitHub Actions junto com o Agrofit/SIGEF (a consulta é lenta: ~385 páginas).
 """
 import json, os, re, sys, time, html, unicodedata, urllib.request, urllib.parse, http.cookiejar
@@ -164,18 +164,50 @@ def detalhe_de(codsr):
             if b[:4] == b'%PDF':
                 with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f: f.write(b); fn = f.name
                 out = subprocess.run(['pdftotext', '-layout', fn, '-'], capture_output=True, text=True, timeout=60).stdout; os.unlink(fn)
-                bloco = out.split('DESCRITOR', 1)[1] if 'DESCRITOR' in out else ''
-                bloco = bloco.split('Nº de inscrição')[0]
-                for ln in bloco.splitlines()[1:]:
-                    ln = ln.strip()
-                    if not ln or ln.startswith('DETALHAMENTO'): continue
-                    partes = re.split(r'\s{2,}', ln)
-                    if len(partes) >= 2 and len(partes[0]) < 60: o['desc'][partes[0].strip().upper()] = partes[1].strip()
+                o['desc'] = parse_desc(out)
         except Exception as e: o['descErro'] = str(e)[:80]
     return o
 
+def parse_desc(out):
+    """Lê a tabela DESCRITOR | DETALHAMENTO do texto do PDF (pdftotext -layout).
+    O nome do descritor e o valor podem quebrar em várias linhas, centralizados verticalmente:
+    k linhas só de nome, a linha do meio (nome+valor ou só valor) e k linhas só de nome (ou o mesmo com o valor)."""
+    desc = {}
+    for pag in out.split('\f'):
+        ls = pag.splitlines(); hi = next((i for i, l in enumerate(ls) if 'DESCRITOR' in l and 'DETALHAMENTO' in l), None)
+        if hi is None: continue
+        corpo = []
+        for l in ls[hi + 1:]:
+            if 'Nº de inscrição' in l or 'Os descritores declarados' in l or 'Mantenedores:' in l: break
+            if l.strip(): corpo.append(l.rstrip())
+        # coluna do DETALHAMENTO: onde começa o texto depois de um vão de 3+ espaços (ou de uma linha só com valor, recuada)
+        cand = []
+        for l in corpo:
+            m = re.match(r'\s{8,}(\S)', l)
+            if m: cand.append(m.start(1)); continue
+            m = re.search(r'\S\s{3,}(\S)', l)
+            if m: cand.append(m.start(1))
+        col = max((min(cand) if cand else ls[hi].index('DETALHAMENTO')) - 1, 1); it = []
+        for l in corpo: it.append((l[:col].strip(), l[col:].strip()))
+        i = 0
+        while i < len(it):
+            lado = 0 if it[i][0] and not it[i][1] else (1 if it[i][1] and not it[i][0] else None)
+            k = 0
+            if lado is not None:
+                while i + k < len(it) and bool(it[i + k][0]) != bool(it[i + k][1]) and (bool(it[i + k][1]) == bool(lado)): k += 1
+            if i + k >= len(it): fim = len(it)
+            else:
+                fim = i + k + 1
+                j = 0
+                while j < k and fim + j < len(it) and bool(it[fim + j][0]) != bool(it[fim + j][1]) and (bool(it[fim + j][1]) == bool(lado)): j += 1
+                if j == k: fim += k
+            grupo = it[i:fim]; i = fim
+            nome = ' '.join(x[0] for x in grupo if x[0]).strip(); val = ' '.join(x[1] for x in grupo if x[1]).strip()
+            if nome and val and len(nome) < 160: desc[nome.upper()] = val
+    return desc
+
 def detalhes(d, out_dir, cap=None):
-    cap = int(cap or os.environ.get('RNC_DET_CAP') or 500)
+    cap = int(cap or os.environ.get('RNC_DET_CAP') or 1500)
     pathD = os.path.join(out_dir, 'rnc_det.json')
     try: det = json.load(open(pathD, encoding='utf-8'))
     except Exception: det = {}
