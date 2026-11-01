@@ -2537,7 +2537,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-255';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-256';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8243,9 +8243,9 @@ function talFichaOpen(tid){
   const evHtml=ev.length?ev.slice(0,6).map(x=>`<div class="tf-ev"><span class="tf-data">${x.data?fmtData(x.data):'—'}</span><span>${x.html}</span></div>`).join('')+(ev.length>6?`<p class="mut tf-vazio">+${ev.length-6} na Timeline</p>`:''):'<p class="mut tf-vazio">Nenhuma ocorrência ou aferição.</p>';
   const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
   ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
-    <div class="tf-h"><div><h3>${esc(tNome(t))}</h3><span class="mut">${haLim?`${nf2.format(haLim)} ha no limite`:''}${areaDe(t)?` · ${num(areaDe(t))} ha cadastro`:''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <div class="tf-h"><div><h3>${esc(tNome(t))}</h3><span class="mut">${haLim?`${nf2.format(haLim)} ha no limite`:''}${areaDe(t)?` · ${num(areaDe(t))} ha cadastro`:''}${lm&&lm.arquivo?` · <span title="arquivo de onde veio o contorno">${esc(lm.arquivo)}</span>`:''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
     <div class="tf-resumo">${resumo}</div>
-    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button></div>
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button>${lm?`<button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(tid)}" title="Tirar este contorno do mapa (dá para restaurar na lista abaixo do mapa)">🗑️ Remover limite</button>`:''}</div>
     ${secs}
     <details class="tf-sec"><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
     <div class="na-links"><a class="link" data-go="#/timeline/${id}">Timeline</a> · <a class="link" data-go="#/campo/${id}">Operações</a></div></div>`;
@@ -9103,8 +9103,8 @@ function limSalvarImport(){
 }
 // remover guarda o contorno anterior (se era importado) para poder restaurar; o do app volta sozinho
 function limRemover(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid], prev=(cur&&cur.coords)?Object.assign({},cur):null;
-  OV.limites[tid]=Object.assign({del:true,_u:tsAgora()},prev?{prev}:{}); if(_map) _map.closePopup();
-  saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} removido do mapa`); }
+  OV.limites[tid]=Object.assign({del:true,_u:tsAgora()},prev?{prev}:{}); if(_map) _map.closePopup(); novaAcaoFechar();   // fecha a ficha do talhão, se foi por ela
+  saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tNome(findTalhao(tid)||tid)} removido do mapa — para voltar, use ↩️ Restaurar na lista`); }
 function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]||{};
   OV.limites[tid]=cur.prev?Object.assign({},cur.prev,{_u:tsAgora()}):{restore:true,_u:tsAgora()};
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} restaurado`); }
