@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-258';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-259';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6834,9 +6834,26 @@ function tlRow(e){
     <div class="tl-body"><div class="tl-top"><b>${esc(e.titulo)}</b><span class="tl-date">${_dtBRc(e.data)||''}</span></div>
       <div class="tl-sub">${e.talhao?`<span class="tl-tal">${esc(_talNomeC(e.talhao))}</span>${e.resumo?' · ':''}`:''}${esc(e.resumo||'')}</div></div></div>`;
 }
+// v259: área plantada da fazenda escolhida. Talhão conta como plantado quando o PLANTIO está realizado — recomendação
+// de semente aprovada (finalizada) ou operação com semente concluída no Campo (mesma regra do plantioRealDe, que dá o
+// dia 0 do DAE). Área: a do talhão; se a operação de plantio foi parcial ou a recomendação aprovada tinha área menor,
+// vale a área feita. Plantio parcial ainda não encerrado soma só a área feita.
+function areaPlantadaResumo(tals){
+  let ha=0, total=0, n=0, parc=0;
+  tals.forEach(t=>{ const a=areaDe(t)||0; if(!a) return; total+=a;
+    const seq=talSafraAtual(t), pk=plantingOpOf(t.id,seq), r=pk?(OV.realizado&&OV.realizado[`${t.id}|${pk}`]):null;
+    if(plantioRealDe(t.id,seq)){ let f=a;
+      if(r&&opAreaFeita(r)) f=Math.min(a,opAreaFeita(r));
+      else { const rc=(RECOM&&RECOM.registros||[]).filter(x=>x.tipo!=='ts'&&x.talhao===t.id&&x.status==='aprovada'&&recomSeq(x)===seq&&(x.itens||[]).some(it=>it.produto&&_isSemente(it))&&+x.area>0);
+        if(rc.length) f=Math.min(a, rc.reduce((m,x)=>Math.max(m,+x.area),0)); }
+      ha+=f; n++; }
+    else if(r&&r.status==='parcial'&&opAreaFeita(r)){ ha+=Math.min(a,opAreaFeita(r)); parc++; } });
+  return {ha, total, n, parc, pct: total?Math.round(ha/total*100):0};
+}
 V.campopainel = function(){
   const tals=fazTalhoes(), okT=id=>!oqFaz||fazOk(findTalhao(id));   // v250: filtrado pela fazenda escolhida
   const prog=campoProgress(fazOk), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
+  const apl=areaPlantadaResumo(tals);
   const ev=camposEventos().filter(e=>!e.talhao||okT(e.talhao));
   const d30=Date.now()-30*86400000;
   const fT=r=>!r.talhao||okT(r.talhao);
@@ -6851,6 +6868,7 @@ V.campopainel = function(){
   return `${fazSelectHtml('faz-top')}
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
+    <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
     <div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>
     <div class="kpi"><div class="k-label">Talhões com atividade</div><div class="k-value">${talAtiv}</div><div class="k-sub">de ${tals.length} talhões</div></div>

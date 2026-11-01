@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Painel do Campo: card Área plantada (v259)** — % da área da fazenda escolhida cujo plantio está finalizado
+  (`areaPlantadaResumo`): talhão conta quando a **recomendação de plantio (semente) foi aprovada** ou a operação com
+  semente foi concluída no Campo — a mesma regra que define o dia 0 do DAE (`plantioRealDe`). A área é a do talhão;
+  plantio parcial ou recomendação aprovada com área menor contam a área feita. Mostra ha plantados de ha totais e o
+  nº de talhões; "n parcial" quando há plantio em andamento parcial.
 - **Mapa: ferramentas encolhidas num botão (v258)** — os botões Importar arquivos, Importar pasta, ☁️ Drive, 📍 Seguir,
   🛰️ NDVI e 🏷️ nomes saem da barra e ficam dentro de **🧰 Ferramentas ▾**: um toque abre a lista (seleção), outro
   toque, tocar fora ou escolher uma opção fecha (`mapaToolsToggle`). O seletor de Fazenda continua à vista. Os botões
