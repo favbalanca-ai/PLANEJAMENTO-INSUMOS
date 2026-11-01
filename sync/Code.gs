@@ -150,12 +150,17 @@ function _isAppTab(nm){ nm = String(nm||'').toUpperCase(); return / APP$/.test(n
 // Detecta a aba (FUNCIONARIOS / BancoDeDados / SST / EQUIPE / RH...) e as colunas
 // (nome, função, setor/unidade, status) pelo cabeçalho. Retorna só quem está ATIVO.
 // ---- CONFIG APP: aba opcional de chave | valor (coluna A = chave, B = valor), igual à do Monitor de Irrigação.
-// Hoje só o Copernicus (NDVI Sentinel-2): COPERNICUS INSTANCE ID e os nomes das camadas. O app usa o ID da planilha
+// Copernicus (NDVI Sentinel-2): COPERNICUS INSTANCE ID e os nomes das camadas; PASTA CONTORNOS (opcional): id da pasta
+// do Drive com os KML/KMZ/Shapefile dos talhões (sem ela, usa/cria a pasta "Contornos" ao lado da planilha). O app usa o ID da planilha
 // quando não tem um ID colado no aparelho — assim todos os celulares ganham o NDVI sem configurar um por um.
 var CONFIG_APP_SHEET = 'CONFIG APP';
-function readConfigApp(){
+function configAppMapa_(){   // CONFIG APP crua: { 'CHAVE': 'valor' } (chave em maiúsculas, espaços simples)
   var s = ss().getSheetByName(CONFIG_APP_SHEET); var m = {};
   if (s && s.getLastRow() >= 1){ s.getRange(1, 1, s.getLastRow(), 2).getValues().forEach(function(l){ var k = S(l[0]).toUpperCase().replace(/\s+/g,' ').trim(); if (k) m[k] = S(l[1]).trim(); }); }
+  return m;
+}
+function readConfigApp(){
+  var m = configAppMapa_();
   var lim = function(x){ return S(x).replace(/[^A-Za-z0-9_-]/g, ''); };   // tira aspas, tab, espaço (a célula pode vir com "\t…")
   return { copernicus: { instancia: lim(m['COPERNICUS INSTANCE ID']), camadas: { ndvi: lim(m['COPERNICUS CAMADA NDVI']) || 'VEGETATION_INDEX', ndmi: lim(m['COPERNICUS CAMADA NDMI']) || 'MOISTURE_INDEX',
     cir: lim(m['COPERNICUS CAMADA INFRAVERMELHO']) || 'COLOR_INFRARED', cor: lim(m['COPERNICUS CAMADA COR NATURAL']) || 'TRUE_COLOR' } } };
@@ -1899,6 +1904,35 @@ function currentJson(soCache){
   return b.slice(0, -1) + ',' + a.slice(1);   // junta os dois objetos JSON num só
 }
 
+// ---- Contornos no Drive (Mapa → ☁️ Drive): lista e entrega os arquivos da pasta "Contornos" ao lado da planilha
+// (ou da pasta indicada em CONFIG APP → PASTA CONTORNOS). O app lê KML/KMZ/GeoJSON/ZIP/Shapefile como se fossem do aparelho.
+var CONT_EXT_ = /\.(kml|kmz|geojson|json|zip|shp|dbf|prj|cpg)$/i;
+function contornosPasta_(){
+  var id = S(configAppMapa_()['PASTA CONTORNOS']).replace(/[^A-Za-z0-9_-]/g, '');
+  if (id){ try { return DriveApp.getFolderById(id); } catch (e) {} }
+  var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
+  return _pasta(base, 'Contornos');
+}
+function driveContornosLista_(){
+  var pasta = contornosPasta_(), out = [], seen = {}, tz = Session.getScriptTimeZone() || 'America/Sao_Paulo';
+  var add = function(f, sub){ var n = f.getName(); if (!CONT_EXT_.test(n) || seen[f.getId()]) return; seen[f.getId()] = 1;
+    out.push({ id:f.getId(), nome:n, pasta:sub || '', kb:Math.round(f.getSize() / 1024), mod:Utilities.formatDate(f.getLastUpdated(), tz, 'yyyy-MM-dd') }); };
+  var it = pasta.getFiles(); while (it.hasNext()) add(it.next(), '');
+  var subs = pasta.getFolders(), ns = 0;
+  while (subs.hasNext() && ns < 30){ var sf = subs.next(); ns++; var fi = sf.getFiles(), k = 0; while (fi.hasNext() && k < 300){ add(fi.next(), sf.getName()); k++; } }
+  out.sort(function(a, b){ return (a.pasta + '/' + a.nome).localeCompare(b.pasta + '/' + b.nome); });
+  return { ok:true, pasta:{ id:pasta.getId(), nome:pasta.getName(), url:pasta.getUrl() }, arquivos:out.slice(0, 500) };
+}
+function driveContornosArquivo_(id){
+  id = S(id).replace(/[^A-Za-z0-9_-]/g, ''); if (!id) return { ok:false, erro:'arquivo não informado' };
+  var pasta = contornosPasta_(), f; try { f = DriveApp.getFileById(id); } catch (e) { return { ok:false, erro:'arquivo não encontrado no Drive' }; }
+  var dentro = false, ps = f.getParents();   // só arquivos de dentro da pasta Contornos (ou de uma subpasta dela)
+  while (ps.hasNext() && !dentro){ var pp = ps.next(); if (pp.getId() === pasta.getId()) dentro = true; else { var avos = pp.getParents(); while (avos.hasNext() && !dentro) if (avos.next().getId() === pasta.getId()) dentro = true; } }
+  if (!dentro) return { ok:false, erro:'o arquivo não está na pasta ' + pasta.getName() };
+  if (f.getSize() > 20 * 1024 * 1024) return { ok:false, erro:'arquivo grande demais (máx. 20 MB)' };
+  return { ok:true, nome:f.getName(), b64:Utilities.base64Encode(f.getBlob().getBytes()) };
+}
+
 function doGet(e){
   try { return doGet_(e); }
   catch (err){ var m = ''; try { m = (err && (err.message || String(err))) || ''; } catch (x) {}
@@ -1917,6 +1951,11 @@ function doGet_(e){
   // NF-e: ?acao=nfe_lista&status=…&token=…  |  ?acao=nfe&chave=…&token=…  (exigem o token da CONFIG NFE OU login com Administrativo)
   if (e && e.parameter && e.parameter.acao){
     var p = e.parameter;
+    if (p.acao === 'drive_lista' || p.acao === 'drive_arquivo'){   // contornos no Drive: login do Campo/Adm, token da NF-e ou login não exigido
+      var dOk = nfeTokenOk_(p.token) || (acc && acc.u && _temMod_(acc, ['campo', 'admin'])) || (!(acc && acc.erro) && !loginCfg_().exigido);
+      if (!dOk) return json({ ok:false, erro:(acc && acc.erro) || 'entre com seu login para ler o Drive' });
+      return json(p.acao === 'drive_lista' ? driveContornosLista_() : driveContornosArquivo_(p.id));
+    }
     var sessOk = acc && acc.u && (acc.admin || acc.mods.admin);
     if (!nfeTokenOk_(p.token) && !sessOk) return json({ ok:false, erro:(acc && acc.erro) || 'token da NF-e inválido ou NF-e não configurada' });
     if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));

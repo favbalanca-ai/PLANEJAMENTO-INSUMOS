@@ -2048,6 +2048,13 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nt-opt{display:flex;align-items:center;gap:8px;font-size:13px;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}.nt-opt input{width:18px;height:18px}
 @media (max-width:640px){ .notif-btn{width:34px;height:34px;font-size:16px} }
 
+/* v254: contornos do Drive (folha) */
+.ld-dica{font-size:12px;margin:2px 0 6px}.ld-erro{color:#9a3412}
+.ld-list{max-height:52vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:2px 8px}
+.ld-sub{margin:8px 0 2px;font-size:12.5px;color:var(--mut)}
+.ld-item{padding:8px 2px;align-items:center;gap:10px;cursor:pointer}.ld-item input{width:20px;height:20px;flex:none}.ld-item .na-tx b{font-size:13.5px;word-break:break-all}.ld-item .na-tx span{font-size:11.5px}
+.ld-btns{margin-top:10px;flex-wrap:wrap}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2424,6 +2431,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .nt-mais{font-size:9.5px}
   .nt-opt{font-size:10.5px}
   .notif-btn{font-size:13px}
+  .ld-dica{font-size:9.5px}
+  .ld-sub{font-size:10px}
+  .ld-item .na-tx b{font-size:11px}
+  .ld-item .na-tx span{font-size:9.5px}
 }
 
 </style>
@@ -2526,7 +2537,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-253';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-254';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9023,6 +9034,56 @@ async function limImportFiles(fileList){
     route({keepScroll:true}); toast(`${polys.length} polígono(s) lido(s) — confira o talhão de cada um e salve`);
   }catch(e){ toast('Não consegui ler os arquivos: '+e.message); }
 }
+// ---- v254: importar contornos da pasta "Contornos" do Google Drive, pela planilha (doGet acao=drive_lista / drive_arquivo)
+let _limDrive=null;   // {st:'lendo'|'ok'|'erro', pasta, arquivos, sel:Set, erro, baixando}
+function limDriveGet(params){ const url=syncUrl(); const q=new URLSearchParams(Object.assign({}, params, nfeToken()?{token:nfeToken()}:{}, {t:Date.now()})).toString();
+  const t0=Date.now(), tipo=params.acao==='drive_lista'?'Drive: pasta Contornos':'Drive: '+(params.nome||'arquivo');
+  return syncFetch(url+(url.indexOf('?')<0?'?':'&')+q, {method:'GET', cache:'no-store', redirect:'follow'}, 120000).then(r=>r.json())
+    .then(j=>{ syncLogAdd('down', tipo, t0, !!(j&&j.ok), j&&j.ok?('ok'+(Array.isArray(j.arquivos)?' · '+j.arquivos.length+' arquivo(s)':'')):(j&&(j.erro||'resposta inesperada'))); return j; },
+      e=>{ syncLogAdd('down', tipo, t0, false, syncLogErr(e)); throw e; }); }
+function limDriveOpen(){
+  if(!syncUrl()){ toast('Configure a sincronização com a planilha primeiro (tela Sincronizar)'); return; }
+  _limDrive={st:'lendo', sel:new Set(), arquivos:[], pasta:null, erro:''}; limDriveSheet();
+  limDriveGet({acao:'drive_lista'}).then(j=>{ if(!_limDrive) return;
+    if(j&&j.ok){ _limDrive.st='ok'; _limDrive.pasta=j.pasta||null; _limDrive.arquivos=j.arquivos||[]; }
+    else { _limDrive.st='erro'; _limDrive.erro=(j&&(j.erro||(j.login?'entre com seu login':'')))||'a planilha não respondeu'; if(j&&j.login&&!sessToken()) _limDrive.erro+=' — o Code.gs da planilha precisa estar atualizado (v254) e a sessão ativa'; }
+    limDriveSheet(); }).catch(e=>{ if(!_limDrive) return; _limDrive.st='erro'; _limDrive.erro=syncLogErr(e)+' — confira se o Code.gs da planilha está na versão v254 ou mais nova'; limDriveSheet(); });
+}
+function limDriveSheetHtml(){ const d=_limDrive; if(!d) return '';
+  const ext=n=>((String(n).match(/\.([^.]+)$/)||[])[1]||'').toLowerCase(), ico={kml:'🗺️',kmz:'🗺️',geojson:'🧩',json:'🧩',zip:'🗜️',shp:'📐',dbf:'📄',prj:'📄',cpg:'📄'};
+  let corpo='';
+  if(d.st==='lendo') corpo='<p class="na-sub">⏳ Lendo a pasta do Drive pela planilha…</p>';
+  else if(d.st==='erro') corpo=`<p class="na-sub ld-erro">⚠️ ${esc(d.erro)}</p>`;
+  else if(!d.arquivos.length) corpo=`<p class="na-sub">A pasta <b>${esc((d.pasta&&d.pasta.nome)||'Contornos')}</b> está vazia. Coloque lá os arquivos dos talhões (KML, KMZ, GeoJSON, ZIP ou Shapefile .shp + .dbf + .prj) e toque em Atualizar.</p>`;
+  else { const grupos={}; d.arquivos.forEach(a=>{ (grupos[a.pasta||'']=grupos[a.pasta||'']||[]).push(a); });
+    corpo=Object.keys(grupos).sort().map(g=>`${g?`<h4 class="ld-sub">📁 ${esc(g)}</h4>`:''}${grupos[g].map(a=>`<label class="na-item ld-item"><input type="checkbox" data-act="limDriveSel" data-id="${esc(a.id)}"${d.sel.has(a.id)?' checked':''}><span class="na-tx"><b>${ico[ext(a.nome)]||'📄'} ${esc(a.nome)}</b><span>${a.kb>=1024?(a.kb/1024).toFixed(1).replace('.',',')+' MB':a.kb+' KB'}${a.mod?' · '+fmtDataBR(a.mod):''}</span></span></label>`).join('')}`).join(''); }
+  const n=d.sel.size, pode=d.st==='ok'&&n>0&&!d.baixando;
+  return `<div class="na-grab"></div><div class="na-h"><span></span><h3>☁️ Contornos no Drive</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="mut ld-dica">Pasta <b>${esc((d.pasta&&d.pasta.nome)||'Contornos')}</b> ao lado da planilha${d.pasta&&d.pasta.url?` · <a class="link" href="${esc(d.pasta.url)}" target="_blank" rel="noopener">abrir no Drive</a>`:''}. Marque os arquivos e importe; .shp traz o .dbf e o .prj junto.</p>
+    <div class="ld-list">${corpo}</div>
+    <div class="cp-btns ld-btns"><button class="btn btn-primary" data-act="limDriveImportar"${pode?'':' disabled'}>${d.baixando?'⏳ Baixando…':`📥 Importar${n?' ('+n+')':''}`}</button>
+      ${d.st==='ok'&&d.arquivos.length?`<button class="btn btn-outline" data-act="limDriveTodos">${d.sel.size===d.arquivos.length?'Desmarcar todos':'Marcar todos'}</button>`:''}
+      <button class="btn btn-ghost" data-act="limDriveOpen">🔄 Atualizar</button></div>`; }
+function limDriveSheet(){ let ov=document.getElementById('na-ov'), sh=ov&&ov.querySelector('.ld-sheet');
+  if(!sh){ novaAcaoFechar(); ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov'; ov.innerHTML='<div class="na-sheet nt-sheet ld-sheet" role="dialog"></div>';
+    ov.addEventListener('click', e=>{ if(e.target===ov){ novaAcaoFechar(); _limDrive=null; } }); document.body.appendChild(ov); sh=ov.firstChild; }
+  sh.innerHTML=limDriveSheetHtml(); }
+function limDriveSel(id, on){ if(!_limDrive) return; if(on) _limDrive.sel.add(id); else _limDrive.sel.delete(id); const b=document.querySelector('.ld-sheet [data-act="limDriveImportar"]'); if(b){ b.disabled=!_limDrive.sel.size; b.textContent=`📥 Importar${_limDrive.sel.size?' ('+_limDrive.sel.size+')':''}`; } }
+async function limDriveImportar(){ const d=_limDrive; if(!d||d.st!=='ok'||!d.sel.size||d.baixando) return;
+  const base=n=>String(n).replace(/\.[^.]+$/,'').toLowerCase(), ext=n=>((String(n).match(/\.([^.]+)$/)||[])[1]||'').toLowerCase();
+  const ids=new Set(d.sel);
+  d.arquivos.forEach(a=>{ if(ids.has(a.id)&&ext(a.nome)==='shp') d.arquivos.forEach(b=>{ if(b.pasta===a.pasta&&base(b.nome)===base(a.nome)&&['dbf','prj','cpg'].includes(ext(b.nome))) ids.add(b.id); }); });   // shapefile: companheiros
+  const lista=d.arquivos.filter(a=>ids.has(a.id)); d.baixando=true; limDriveSheet();
+  const files=[], erros=[];
+  for(const a of lista){ try{ const j=await limDriveGet({acao:'drive_arquivo', id:a.id, nome:a.nome});
+      if(!(j&&j.ok&&j.b64)) throw new Error((j&&j.erro)||'sem conteúdo');
+      const bin=atob(j.b64), u8=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u8[i]=bin.charCodeAt(i);
+      files.push(new File([u8], j.nome||a.nome)); }catch(e){ erros.push(a.nome+': '+(e.message||e)); } }
+  if(!_limDrive) return; d.baixando=false;
+  if(!files.length){ d.st='erro'; d.erro='Não consegui baixar: '+erros.join('; '); limDriveSheet(); return; }
+  novaAcaoFechar(); _limDrive=null; if(erros.length) toast('Alguns não baixaram: '+erros[0]);
+  await limImportFiles(files);
+}
 // célula da planilha aceita ~50 mil caracteres: reduz pontos se o contorno for muito detalhado
 function limCompact(rings){ let r=rings; while(JSON.stringify(r).length>40000 && r.some(x=>x.length>20)) r=r.map(x=>x.length>20?x.filter((p,i)=>i%2===0||i===x.length-1):x); return r; }
 function limSalvarImport(){
@@ -9623,6 +9684,7 @@ V.mapa=function(){
       <div class="spacer"></div>${fazSelectHtml('faz-mapa')}
       <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
       <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
+      <button class="btn btn-outline btn-sm" data-act="limDriveOpen" title="Importar contornos da pasta Contornos do Google Drive (ao lado da planilha)">☁️ Drive</button>
       <button class="btn btn-outline btn-sm mapa-seguir${geoSeguirOn()?' on':''}" data-act="mapaLoc" aria-pressed="${geoSeguirOn()}" title="Mostrar e acompanhar a posição do celular no mapa (funciona sem internet)">${geoSeguirOn()?'📍 Seguindo':'📍 Seguir'}</button>
       <button class="btn btn-outline btn-sm mapa-ndvi${(ndviCfg().on&&ndviCfg().inst)?' on':''}" data-act="mapaNdvi" aria-pressed="${!!(ndviCfg().on&&ndviCfg().inst)}" title="Camada NDVI do Sentinel-2 (Copernicus)">🛰️ NDVI</button>
       <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div>
@@ -10853,6 +10915,9 @@ document.addEventListener('click',e=>{
       else { const d=editDesc(cur); if(confirm(`Descartar esta edição?\n${d.lbl}: ${d.txt}\n\nVolta a valer o que está na planilha.`)){ if(discardEdit(cur)){ toast('Edição descartada'); updateEditBadge(); route({keepScroll:true}); } } } }
     else if(a.act==='estPDF'){ exportEstoquePDF(); }
     else if(a.act==='limSalvar'){ limSalvarImport(); }
+    else if(a.act==='limDriveOpen'){ limDriveOpen(); }
+    else if(a.act==='limDriveImportar'){ limDriveImportar(); }
+    else if(a.act==='limDriveTodos'){ if(_limDrive){ const todos=_limDrive.sel.size===_limDrive.arquivos.length; _limDrive.sel=new Set(todos?[]:_limDrive.arquivos.map(x=>x.id)); limDriveSheet(); } }
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
     else if(a.act==='tfZoom'){ novaAcaoFechar(); limZoom(a.id); }
@@ -10877,6 +10942,7 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
+    else if(a.act==='limDriveSel'){ limDriveSel(a.id, act.checked); return; }
     else if(a.act==='notifAparelho'){ const c=notifCfg(), on=act.checked; if(on && 'Notification' in window && Notification.permission!=='granted'){ Notification.requestPermission().then(p=>{ c.aparelho=(p==='granted'); notifCfgSave(c); if(p!=='granted'){ act.checked=false; toast('O navegador não deu permissão para avisos'); } else { delete c.ultimoDia; notifCfgSave(c); _notifSig=''; notifAtualiza(); } }); return; }
       c.aparelho=on; if(on){ delete c.ultimoDia; } notifCfgSave(c); _notifSig=''; notifAtualiza(); return; }
     else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
