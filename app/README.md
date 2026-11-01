@@ -67,6 +67,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **☁️ Drive também na importação do XML da NF-e (v255)** — ao lado de "📄 Importar XML da NF-e" (Adm → Entradas), o
+  botão **☁️ Drive** lista os `.xml` da pasta **NFe** do Drive (a da `CONFIG NFE → PASTA NFE`, com Entrada · XML ·
+  Rejeitados), mais novos primeiro; escolhe-se um e a conferência abre igual à do arquivo do aparelho
+  (`nfeImportarArquivo`). Exige o token da NF-e no aparelho ou login de administrador (mesma regra das ações da NF-e).
+  A folha do Drive virou genérica (`driveOpen(tipo)`, `DRIVE_TIPOS`): contornos (vários, Shapefile puxa companheiros)
+  e nfe (um por vez).
 - **☁️ Drive: importar contornos da pasta do Google Drive (v254)** — no Mapa, o botão **☁️ Drive** abre uma folha
   com os arquivos da pasta **Contornos** (criada ao lado da planilha, no Drive da dona; ou a pasta indicada em
   `CONFIG APP → PASTA CONTORNOS`), incluindo subpastas. Marque os arquivos (KML, KMZ, GeoJSON, ZIP, Shapefile; marcar

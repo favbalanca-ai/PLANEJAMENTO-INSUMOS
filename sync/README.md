@@ -113,6 +113,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Arquivos do Drive para o app (v254/v255)
+- `doGet?acao=drive_lista&tipo=…` e `doGet?acao=drive_arquivo&tipo=…&id=…` (`driveLista_` / `driveArquivo_`).
+  `tipo=contornos` (padrão): pasta **Contornos** ao lado da planilha (`contornosPasta_`; ou `CONFIG APP → PASTA CONTORNOS`),
+  KML/KMZ/GeoJSON/ZIP/Shapefile, até 20 MB. `tipo=nfe`: a pasta NFe da `CONFIG NFE → PASTA NFE` (ou `NFe` na raiz),
+  só `.xml`, até 5 MB, mais novos primeiro.
+- Os dois listam as subpastas diretas e só entregam arquivo que esteja dentro da pasta (ou de uma subpasta).
+- Permissão: contornos = sessão com módulo Campo/Adm, token da NF-e ou login não exigido; nfe = token da NF-e ou
+  sessão de administrador (igual às outras ações da NF-e).
+
 ## Contornos dos talhões pelo Drive (v254)
 - `doGet?acao=drive_lista` lista os arquivos (KML, KMZ, GeoJSON, JSON, ZIP, SHP, DBF, PRJ, CPG) da pasta **Contornos**,
   criada ao lado da planilha na primeira chamada (`contornosPasta_`), e das subpastas diretas. Para usar outra pasta,
