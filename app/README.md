@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Contorno sem talhão (v257)** — contorno importado para um talhão que foi apagado ou mudou de código na planilha
+  continua desenhado (rótulo "· sem talhão"); antes tocar nele dava "Talhão não encontrado". Agora abre uma folha
+  curta (código, nome, área, arquivo) com **🗑️ Remover limite**, e a lista abaixo do mapa ganha a linha
+  "⚪ Contorno sem talhão" com Ver/Remover. Esses contornos não entram na contagem nem no filtro de fazenda.
 - **Remover limite pela ficha do talhão (v256)** — tocar num contorno no Mapa abre a ficha do talhão; ela ganhou o botão
   **🗑️ Remover limite** (com confirmação) e mostra o arquivo de onde o contorno veio. Serve para tirar um polígono que
   está no lugar errado sem precisar achar o talhão na lista. A remoção é a mesma da lista (`limRemover`: marca `del`

@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-256';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-257';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5676,8 +5676,16 @@ function talFichaTipo(items){ if(items.some(_isSemente)) return 'sem';
   if(c.every(x=>/CORRETIV|CALC/.test(x))) return 'corr';
   if(c.every(x=>/FERTILIZ|ADUBO|CORRETIV|CALC/.test(x))) return 'adub';
   return 'pulv'; }
+// contorno cujo talhão não existe mais na planilha (apagado/renomeado): folha curta só para ver e remover
+function limOrfaoOpen(tid){ const lm=limitesAll()[tid]; if(!lm) return false; novaAcaoFechar();
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>⚪ Contorno sem talhão</h3><span class="mut">código <b>${esc(tid)}</b>${lm.nome?` · ${esc(lm.nome)}`:''} · ${nf2.format(lm.ha||limAreaHa(lm.coords))} ha${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="na-sub">Este contorno foi importado para um talhão que não está mais na planilha (foi apagado ou mudou de código). Ele não tem operações nem ficha. Se não serve, remova; se o talhão existe com outro código, remova e importe o arquivo de novo escolhendo o talhão certo.</p>
+    <div class="tf-btns"><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(tid)}">🗑️ Remover limite</button></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); return true; }
 function talFichaOpen(tid){
-  const t=findTalhao(tid); if(!t){ toast('Talhão não encontrado'); return; }
+  const t=findTalhao(tid); if(!t){ if(!limOrfaoOpen(tid)) toast('Talhão não encontrado'); return; }
   novaAcaoFechar(); const id=encodeURIComponent(tid), hj=_hojeISO(), lm=limitesAll()[tid], haLim=lm?(lm.ha||limAreaHa(lm.coords)):0;
   const seq=talSafraAtual(t), emp=(seq==='safrinha'?empSafDe(t):empDe(t))||'', pl=plantioRealDe(tid,seq), plPrev=plantioPrevDe(tid,seq);
   const st=estadioEm(estadiosDe(t,seq),hj), sem=tsSemDe(tid,seq), so=talStatusOps(t), sc=OPST[so.nivel];
@@ -6624,7 +6632,7 @@ async function mapaInit(){
     const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
     const so=t?talStatusOps(t):{nivel:'none',late:[],soon:[],prox:null}, sc=OPST[so.nivel];
     const pg=L.polygon(lm.coords,{color:sc.cor,weight:3,fillColor:sc.cor,fillOpacity:.38}).addTo(_map); MAPA_NDVI.formas.push(pg);
-    pg.bindTooltip(`${esc(tNome(t||tid))}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
+    pg.bindTooltip(`${esc(tNome(t||tid))}${t?'':' · sem talhão'}${so.late.length?` · ${so.late.length} atras.`:''}`,{permanent:true,direction:'center',className:'mapa-lbl mapa-lbl-'+so.nivel});
     const li=(arr,fn)=>arr.slice(0,4).map(fn).join('')+(arr.length>4?`<li class="mut">+${arr.length-4}…</li>`:'');
     pg.on('click', ()=>talFichaOpen(tid));   // tocar no talhão: ficha do talhão (resumo, operações por tipo, ocorrências); Nova Ação fica no botão
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
@@ -7153,6 +7161,9 @@ V.mapa=function(){
     const so=talStatusOps(t);
     return `<div class="lim-row"><div><b>${OPST[so.nivel].ico} ${esc(tNome(t))}</b>${so.late.length?` <span class="cp-tag late">${so.late.length} atrasada(s)</span>`:''}<div class="mut" style="font-size:12px">${nf2.format(ha)} ha no limite · ${num(areaDe(t))} ha cadastro${dif!=null&&Math.abs(dif)>=0.5?` (${dif>=0?'+':''}${nf1.format(dif)}%)`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</div></div>
       <div class="lim-acts"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(t.id)}">➕ Ação</button><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
+  // contornos cujo talhão sumiu da planilha: aparecem para poder remover (não entram na contagem nem no filtro de fazenda)
+  const orfaos=Object.keys(lims).filter(id=>!findTalhao(id)).map(id=>{ const lm=lims[id]; return `<div class="lim-row lim-off"><div><b>⚪ Contorno sem talhão <small class="mut">${esc(id)}</small></b><div class="mut" style="font-size:12px">${nf2.format(lm.ha||limAreaHa(lm.coords))} ha${lm.nome?` · ${esc(lm.nome)}`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''} · o talhão não está mais na planilha</div></div>
+      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(id)}" title="Remover este contorno">🗑️ Remover</button></div></div>`; }).join('');
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
@@ -7185,6 +7196,7 @@ V.mapa=function(){
       !limitesServerOk()?`<p class="lt-aviso">⚠️ Os limites importados ainda <b>não sincronizam</b> entre celulares: atualize o <b>Code.gs</b> da planilha (versão com a aba “LIMITES APP”) e reimplante o Web App. Depois disso eles sobem sozinhos.</p>`:
       `<p class="lim-ok">🔄 Limites sincronizados entre os aparelhos pela planilha (aba “LIMITES APP”).</p>`}
     <div class="lim-list">${lista||'<p class="mut" style="padding:14px">Nenhum limite ainda. Toque em <b>📥 Importar limites</b> e escolha o arquivo KML, KMZ ou GeoJSON do talhão (Aqila, SICAR/CAR, Google Earth…).</p>'}</div>
+    ${orfaos?`<div class="lim-sub">Contornos sem talhão</div><div class="lim-list">${orfaos}</div>`:''}
     ${remov?`<div class="lim-sub">Removidos</div><div class="lim-list">${remov}</div>`:''}
     ${semLim.length?`<p class="mut" style="font-size:12px;padding:8px 14px 12px">Sem limite: ${semLim.map(t=>esc(tNome(t))).join(' · ')}</p>`:''}
     <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Aceita <b>KML, KMZ, GeoJSON, ZIP</b> e <b>Shapefile</b> (escolha juntos o .shp, o .dbf e o .prj de cada área). Pode selecionar vários arquivos de uma vez — ou a pasta inteira no computador. O talhão é reconhecido pelo nome do polígono/arquivo (ex.: “AREA 1” → ÁREA 1); confira antes de salvar.</p></div>`;
@@ -8396,7 +8408,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='limCancelar'){ _limImport=null; route({keepScroll:true}); }
     else if(a.act==='limZoom'){ limZoom(a.id); }
     else if(a.act==='tfZoom'){ novaAcaoFechar(); limZoom(a.id); }
-    else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(`Remover o limite de ${tNome(t||a.id)} do mapa?\n(dá para restaurar depois)`)) limRemover(a.id); }
+    else if(a.act==='limRemover'){ const t=findTalhao(a.id); if(confirm(t?`Remover o limite de ${tNome(t)} do mapa?\n(dá para restaurar depois)`:`Remover o contorno sem talhão (${a.id}) do mapa?`)) limRemover(a.id); }
     else if(a.act==='limRestaurar'){ limRestaurar(a.id); }
     else if(a.act==='chuvaSave'){ chuvaSave(); }
     else if(a.act==='chuvaDel'){ if(ask('Remover este registro de chuva?')){ CHUVA.registros=CHUVA.registros.filter(r=>r.id!==a.id); saveChuva(); route(); toast('Registro removido'); } }
