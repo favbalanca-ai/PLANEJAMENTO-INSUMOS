@@ -2056,12 +2056,14 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ld-btns{margin-top:10px;flex-wrap:wrap}
 
 /* v258: ferramentas do mapa encolhidas num botão com lista */
-.mapa-tools{position:relative}
+.mapa-tools{position:relative;flex:none}
+.mapa-tools-btn{white-space:nowrap}
 .mapa-tools .mt-seta{display:inline-block;transition:transform .15s;margin-left:2px}.mapa-tools.open .mt-seta{transform:rotate(180deg)}
 .mapa-tools.open .mapa-tools-btn{background:var(--brand);color:#fff;border-color:var(--brand)}
-.mapa-menu{position:absolute;right:0;top:calc(100% + 6px);z-index:40;display:flex;flex-direction:column;gap:6px;min-width:230px;padding:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);animation:naUp .14s ease-out}
+.mapa-menu{position:absolute;left:0;top:calc(100% + 6px);z-index:40;display:flex;flex-direction:column;gap:6px;min-width:230px;max-width:calc(100vw - 40px);padding:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);animation:naUp .14s ease-out}
 .mapa-menu .btn{justify-content:flex-start;text-align:left;width:100%;padding:10px 12px;font-size:14px}
 .mapa-menu .btn.on{background:#e6f1f3;border-color:var(--brand);color:var(--brand)}
+@media (min-width:900px){ .mapa-menu{left:auto;right:0} }
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
