@@ -113,6 +113,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Contornos dos talhões pelo Drive (v254)
+- `doGet?acao=drive_lista` lista os arquivos (KML, KMZ, GeoJSON, JSON, ZIP, SHP, DBF, PRJ, CPG) da pasta **Contornos**,
+  criada ao lado da planilha na primeira chamada (`contornosPasta_`), e das subpastas diretas. Para usar outra pasta,
+  coloque o id dela em `CONFIG APP` → `PASTA CONTORNOS`.
+- `doGet?acao=drive_arquivo&id=…` devolve `{nome, b64}` (até 20 MB); só aceita arquivo que esteja dentro da pasta
+  Contornos (ou de uma subpasta), para a planilha não virar porta de saída do Drive inteiro.
+- Permissão: sessão com módulo Campo ou Adm, token da NF-e, ou login não exigido. O app (Mapa → ☁️ Drive) baixa e lê
+  os arquivos como se tivessem sido escolhidos no aparelho.
+
 ## CONFIG APP (opcional): Copernicus/NDVI para todos os aparelhos (v227)
 - Aba **CONFIG APP** no formato chave | valor (coluna A | B), igual à do Monitor de Irrigação. Chaves lidas hoje:
   **COPERNICUS INSTANCE ID** (ID da configuração do Sentinel Hub no dataspace.copernicus.eu — pode ser o mesmo do

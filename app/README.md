@@ -67,6 +67,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **☁️ Drive: importar contornos da pasta do Google Drive (v254)** — no Mapa, o botão **☁️ Drive** abre uma folha
+  com os arquivos da pasta **Contornos** (criada ao lado da planilha, no Drive da dona; ou a pasta indicada em
+  `CONFIG APP → PASTA CONTORNOS`), incluindo subpastas. Marque os arquivos (KML, KMZ, GeoJSON, ZIP, Shapefile; marcar
+  o `.shp` traz o `.dbf`/`.prj` junto) e toque em **Importar**: a planilha entrega o conteúdo (`doGet`
+  `acao=drive_lista` / `acao=drive_arquivo`, base64) e a leitura segue igual à do botão "Importar arquivos"
+  (`limImportFiles`), com a conferência talhão a talhão antes de salvar. Resolve o celular (iPhone/Android), onde o
+  seletor de arquivos não mostra o Drive. Precisa do `Code.gs` v254 publicado; funciona com login do Campo/Adm, com o
+  token da NF-e ou quando o login não é exigido.
 - **Características agronômicas da cultivar vindas do RNC (v252)** — a ficha da cultivar (Catálogo → Cultivares) ganhou
   o bloco **Características (registro no RNC)**: **Tecnologia** (evento de transformação genética traduzido para o nome
   comercial quando dá: I2X, IPRO, Enlist E3, Conkesta E3, RR2, RR, milho Bt…; "convencional" quando não há evento),
