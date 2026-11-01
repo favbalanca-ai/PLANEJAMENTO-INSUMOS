@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Mapa: ferramentas encolhidas num botão (v258)** — os botões Importar arquivos, Importar pasta, ☁️ Drive, 📍 Seguir,
+  🛰️ NDVI e 🏷️ nomes saem da barra e ficam dentro de **🧰 Ferramentas ▾**: um toque abre a lista (seleção), outro
+  toque, tocar fora ou escolher uma opção fecha (`mapaToolsToggle`). O seletor de Fazenda continua à vista. Os botões
+  são os mesmos de antes (mesmos `data-act`), só mudaram de lugar.
 - **Contorno sem talhão (v257)** — contorno importado para um talhão que foi apagado ou mudou de código na planilha
   continua desenhado (rótulo "· sem talhão"); antes tocar nele dava "Talhão não encontrado". Agora abre uma folha
   curta (código, nome, área, arquivo) com **🗑️ Remover limite**, e a lista abaixo do mapa ganha a linha

@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-257';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-258';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7168,12 +7168,14 @@ V.mapa=function(){
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
       <div class="spacer"></div>${fazSelectHtml('faz-mapa')}
+      <div class="mapa-tools"><button class="btn btn-outline btn-sm mapa-tools-btn" data-act="mapaTools" aria-expanded="false" aria-haspopup="true" title="Importar, Drive, Seguir, NDVI, nomes">🧰 Ferramentas <span class="mt-seta">▾</span></button>
+      <div class="mapa-menu" role="menu" hidden>
       <label class="btn btn-outline btn-sm" style="cursor:pointer" title="KML, KMZ, GeoJSON, ZIP ou Shapefile (.shp + .dbf + .prj) — pode escolher vários">📥 Importar arquivos<input type="file" id="lim-file" multiple hidden></label>
       <label class="btn btn-outline btn-sm lim-pasta" style="cursor:pointer" title="Escolher a pasta inteira de contornos (computador)">📁 Importar pasta<input type="file" id="lim-dir" webkitdirectory directory multiple hidden></label>
       <button class="btn btn-outline btn-sm" data-act="driveOpen" data-tipo="contornos" title="Importar contornos da pasta Contornos do Google Drive (ao lado da planilha)">☁️ Drive</button>
       <button class="btn btn-outline btn-sm mapa-seguir${geoSeguirOn()?' on':''}" data-act="mapaLoc" aria-pressed="${geoSeguirOn()}" title="Mostrar e acompanhar a posição do celular no mapa (funciona sem internet)">${geoSeguirOn()?'📍 Seguindo':'📍 Seguir'}</button>
       <button class="btn btn-outline btn-sm mapa-ndvi${(ndviCfg().on&&ndviCfg().inst)?' on':''}" data-act="mapaNdvi" aria-pressed="${!!(ndviCfg().on&&ndviCfg().inst)}" title="Camada NDVI do Sentinel-2 (Copernicus)">🛰️ NDVI</button>
-      <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div>
+      <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div></div></div>
     <div class="mapa-wrap"><div id="mapa-canvas" class="mapa-canvas${mapaNomesOn()?'':' mapa-sem-nome'}"></div>
       <span id="mapa-geo-st" class="mapa-geo-st" hidden></span>
       <button class="mapa-fab" data-act="mapaFab" title="Nova Ação no talhão onde você está">＋</button>
@@ -7204,6 +7206,13 @@ V.mapa=function(){
 // nomes dos talhões no mapa: liga/desliga (lembrado neste aparelho)
 const MAPA_NOMES_KEY='planejamento_mapa_nomes';
 function mapaNomesOn(){ try{ return localStorage.getItem(MAPA_NOMES_KEY)!=='0'; }catch(e){ return true; } }
+// v258: as ferramentas do mapa ficam encolhidas num botão único (🧰 Ferramentas ▾) que abre a lista
+function mapaToolsToggle(forcar){ const w=document.querySelector('.mapa-tools'); if(!w) return; const m=w.querySelector('.mapa-menu'), b=w.querySelector('.mapa-tools-btn');
+  const abrir=typeof forcar==='boolean'?forcar:m.hidden; m.hidden=!abrir; w.classList.toggle('open',abrir); if(b) b.setAttribute('aria-expanded',String(abrir));
+  if(abrir && !mapaToolsToggle._doc){ mapaToolsToggle._doc=true; document.addEventListener('click', e=>{ const ww=document.querySelector('.mapa-tools'); if(!ww||ww.querySelector('.mapa-menu').hidden) return;
+    if(!ww.contains(e.target)) mapaToolsToggle(false);                                   // tocou fora: fecha
+    else if(e.target.closest('.mapa-menu .btn')) setTimeout(()=>mapaToolsToggle(false),0); // escolheu uma opção: fecha depois de agir
+  }, true); } }
 function mapaNomesAlternar(btn){ const on=!mapaNomesOn(); lsSet(MAPA_NOMES_KEY, on?'1':'0');
   const c=document.getElementById('mapa-canvas'); if(c) c.classList.toggle('mapa-sem-nome', !on);   // sem redesenhar o mapa (não perde o zoom)
   if(btn){ btn.classList.toggle('on', on); btn.setAttribute('aria-pressed', String(on)); btn.textContent=on?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'; } }
@@ -8390,6 +8399,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='monitGPS'){ monitCaptureGPS(); }
     else if(a.act==='monitSave'){ monitSave(a.t); }
     else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
+    else if(a.act==='mapaTools'){ mapaToolsToggle(); }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
     else if(a.act==='mapaFab'){ mapaFab(); return; }
     else if(a.act==='mapaNdvi'){ ndviToggle(); }
