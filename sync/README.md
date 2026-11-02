@@ -113,6 +113,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Chuva da estação: planilha do Monitor de Irrigação (v262)
+- `CONFIG APP` → `PLANILHA IRRIGACAO` = link (ou id) da planilha do app Monitor de Irrigação. Com ela, o puxar inclui a
+  chave `chuva_est` (`readChuvaEstacao`, cache 1 h): aba **CLIMA** (Data, Chuva (mm), Estimado, Fazenda, Tmax, Tmin,
+  Leituras) e aba **CLIMA INMET** (Data, Chuva (mm), Fazenda, Horas medidas, Estação). Só leitura.
+- Sem a linha na CONFIG APP, `chuva_est` vem vazio e o app mostra como configurar.
+
 ## Arquivos do Drive para o app (v254/v255)
 - `doGet?acao=drive_lista&tipo=…` e `doGet?acao=drive_arquivo&tipo=…&id=…` (`driveLista_` / `driveArquivo_`).
   `tipo=contornos` (padrão): pasta **Contornos** ao lado da planilha (`contornosPasta_`; ou `CONFIG APP → PASTA CONTORNOS`),

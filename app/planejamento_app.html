@@ -2070,6 +2070,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .oq-man{display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding:4px 0;border-bottom:1px dashed #eef1f3}
 .oq-man span{color:var(--muted);flex:0 0 112px}.oq-man b{flex:1;font-weight:600;min-width:0}
 
+/* v262: chuva da estação (Monitor de Irrigação) */
+.ce-mes summary{cursor:pointer;list-style:none}.ce-mes summary::-webkit-details-marker{display:none}.ce-mes summary::before{content:'▸ ';color:var(--muted)}.ce-mes[open] summary::before{content:'▾ '}
+.kpi-link{display:block;text-decoration:none;color:inherit;cursor:pointer}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2553,7 +2557,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-261';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-262';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6982,6 +6986,40 @@ function chuvaSave(){
     data:g('chuva-data')||new Date().toISOString().slice(0,10), local:g('chuva-local'), mm:g('chuva-mm'), obs:g('chuva-obs'), ts:Date.now() });
   saveChuva(); route(); toast('Chuva registrada');
 }
+// ---- v262: chuva da ESTAÇÃO (planilha do app Monitor de Irrigação, via planilha: DATA.chuva_est) ----
+function chuvaEst(){ const c=DATA&&DATA.chuva_est; return (c&&typeof c==='object')?c:null; }
+// fazenda da irrigação ("Água Viva", "Espora"…) → chave do app (FA/FE) pelo nome; sem casar, a 1ª vira a 1ª fazenda do app
+function chuvaEstFazKey(nome){ const n=_normNome(nome); if(!n) return ''; for(const k in FAZENDAS){ const fn=_normNome(FAZENDAS[k]).replace(/^FAZENDA/,''); if(fn && (n.indexOf(fn)>=0 || fn.indexOf(n)>=0)) return k; } return ''; }
+// dias da estação da fazenda escolhida (ou da 1ª com dados): estação manda; INMET entra nos dias sem leitura
+function chuvaEstDias(fazKey){ const c=chuvaEst(); if(!c||!Array.isArray(c.dias)) return [];
+  const fazs=c.fazendas||[]; const mapa={}; fazs.forEach((f,i)=>{ mapa[f]=chuvaEstFazKey(f)||(i===0?Object.keys(FAZENDAS)[0]:''); });
+  const alvo=fazKey||''; const fNome=fazs.find(f=>!alvo||mapa[f]===alvo); if(!fNome&&alvo) return []; const nomeOk=f=>(!f&&fazs.length<=1)||f===fNome||(!alvo&&!f);
+  const porDia={}; c.dias.forEach(x=>{ if(!nomeOk(x.f)) return; porDia[x.d]={d:x.d, mm:+x.mm||0, est:!!x.est, n:x.n, tx:x.tx, tn:x.tn, fonte:x.est?'modelo':'estação'}; });
+  (c.inmet||[]).forEach(x=>{ if(!nomeOk(x.f)) return; const d=porDia[x.d]; if(!d){ porDia[x.d]={d:x.d, mm:+x.mm||0, est:false, fonte:'INMET'}; } else if(d.est||(d.n!=null&&d.n<6)){ d.mm=+x.mm||0; d.est=false; d.fonte='INMET'; } });   // estação falhou no dia: INMET preenche
+  return Object.values(porDia).sort((a,b)=>a.d.localeCompare(b.d)); }
+function chuvaEstSoma(dias, de, ate){ return dias.filter(x=>(!de||x.d>=de)&&(!ate||x.d<=ate)).reduce((s,x)=>s+(x.mm||0),0); }
+function chuvaEstHtml(){ const c=chuvaEst(), hoje=_hojeISO();
+  if(!c) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2><span class="sub">app Monitor de Irrigação</span></div>
+    <p class="mut" style="padding:12px 16px;font-size:12.5px">Para trazer a chuva medida pela estação: na planilha do planejamento, aba <b>CONFIG APP</b>, crie a linha <b>PLANILHA IRRIGACAO</b> com o link da planilha do Monitor de Irrigação (coluna B). Depois toque em Sincronizar → Puxar. O app passa a mostrar a chuva por dia e por mês de cada fazenda, e o Painel usa a estação no lugar do registro manual.</p></div>`;
+  if(c.erro) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2></div><p class="mut" style="padding:12px 16px">⚠️ ${esc(c.erro)}</p></div>`;
+  const dias=chuvaEstDias(oqFaz); const fazs=c.fazendas||[];
+  if(!dias.length) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2><span class="sub">${esc(c.nome||'')}</span></div><p class="mut" style="padding:12px 16px">${esc(c.aviso||'Sem dias de chuva para esta fazenda na planilha da irrigação.')}${fazs.length?` Fazendas na planilha: ${esc(fazs.join(', '))}.`:''}</p></div>`;
+  const iso=n=>{ const d=new Date(hoje+'T00:00:00'); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
+  const s7=chuvaEstSoma(dias,iso(6),hoje), s30=chuvaEstSoma(dias,iso(29),hoje), mes=hoje.slice(0,7), sMes=chuvaEstSoma(dias,mes+'-01',hoje), tot=chuvaEstSoma(dias), ult=dias[dias.length-1], ultChuva=dias.slice().reverse().find(x=>x.mm>0);
+  const meses={}; dias.forEach(x=>{ const k=x.d.slice(0,7); meses[k]=meses[k]||{mm:0,n:0,est:0}; meses[k].mm+=x.mm; if(x.mm>0) meses[k].n++; if(x.est) meses[k].est++; });
+  const mesesHtml=Object.keys(meses).sort().reverse().map(k=>{ const y=k.slice(0,4), m=+k.slice(5,7); const dd=dias.filter(x=>x.d.slice(0,7)===k&&x.mm>0).sort((a,b)=>b.d.localeCompare(a.d));
+    return `<details class="chuva-group ce-mes"><summary class="chuva-ghead">${_MESN[m-1]}/${y} <span class="mut">— ${nfmm(meses[k].mm)} mm · ${meses[k].n} dia(s) com chuva${meses[k].est?` · ${meses[k].est} estimado(s)`:''}</span></summary>
+      ${dd.map(x=>`<div class="chuva-row"><span class="chuva-mm">${nfmm(x.mm)}<small> mm</small></span><span class="chuva-dt">${esc(fmtData(x.d))}</span><span class="chuva-loc mut">${x.fonte==='estação'?'🌦️ estação':x.fonte==='INMET'?'🏛️ INMET':'☁️ modelo (estimado)'}${x.tx!=null&&x.tn!=null?` · ${nfmm(x.tn)}–${nfmm(x.tx)} °C`:''}</span></div>`).join('')||'<div class="mut" style="padding:6px 4px">Sem chuva no mês.</div>'}</details>`; }).join('');
+  const fazSel=fazs.length>1?`<div class="mut" style="font-size:12px;padding:0 16px 8px">Fazenda da estação: <b>${esc(fazs.find(f=>!oqFaz||chuvaEstFazKey(f)===oqFaz)||fazs[0])}</b> — troque no seletor de Fazenda acima.</div>`:'';
+  return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2><span class="sub">${esc(c.nome||'Monitor de Irrigação')} · ${dias.length} dia(s) · lido ${c.em?esc(fmtDataBR(c.em.slice(0,10))):''}</span></div>
+    <div class="kpi-grid" style="padding:12px 16px 4px;margin-bottom:0">
+      <div class="kpi accent"><div class="k-label">Últimos 7 dias</div><div class="k-value">${nfmm(s7)} mm</div><div class="k-sub">${ultChuva?'última chuva '+fmtData(ultChuva.d)+' · '+nfmm(ultChuva.mm)+' mm':'sem chuva'}</div></div>
+      <div class="kpi"><div class="k-label">Últimos 30 dias</div><div class="k-value">${nfmm(s30)} mm</div><div class="k-sub">${dias.filter(x=>x.d>=iso(29)&&x.mm>0).length} dia(s) com chuva</div></div>
+      <div class="kpi"><div class="k-label">No mês</div><div class="k-value">${nfmm(sMes)} mm</div><div class="k-sub">${_MESN[+mes.slice(5,7)-1]}/${mes.slice(0,4)}</div></div>
+      <div class="kpi"><div class="k-label">Acumulado na planilha</div><div class="k-value">${nfmm(tot)} mm</div><div class="k-sub">desde ${fmtData(dias[0].d)} até ${fmtData(ult.d)}</div></div>
+    </div>${fazSel}
+    <div class="chuva-list" style="padding:0 16px 10px">${mesesHtml}</div>
+    <p class="mut" style="font-size:11px;padding:0 16px 12px;margin:0">Chuva por dia da estação Ecowitt da fazenda (dia fechado às 18 h, como no Monitor de Irrigação). Dias em que a estação falhou usam a estação do INMET mais próxima; fazenda sem estação mostra a chuva estimada pelo modelo.</p></div>`; }
 V.chuva=function(){
   const regs=CHUVA.registros.slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0));
   const hoje=new Date().toISOString().slice(0,10), mesAtual=hoje.slice(0,7);
@@ -7002,11 +7040,13 @@ V.chuva=function(){
     return `<div class="chuva-group"><div class="chuva-ghead">${tit} <span class="mut">— ${nfmm(somaMM(groups[k]))} mm</span></div>${rows}</div>`;
   }).join('')||'<div class="mut" style="padding:14px">Nenhuma chuva registrada ainda.</div>';
   return `<datalist id="chuva-locais">${locais.map(l=>`<option value="${esc(l)}">`).join('')}</datalist>
+  ${chuvaEst()?fazSelectHtml('faz-top'):''}
+  ${chuvaEstHtml()}
   <div class="kpi-grid" style="margin-bottom:16px">
-    <div class="kpi accent"><div class="k-label">Chuva no mês</div><div class="k-value">${nfmm(totalMes)} mm</div><div class="k-sub">${_MESN[+mesAtual.slice(5,7)-1]}/${mesAtual.slice(0,4)}</div></div>
-    <div class="kpi"><div class="k-label">Acumulado registrado</div><div class="k-value">${nfmm(totalGeral)} mm</div><div class="k-sub">${regs.length} registro(s)</div></div>
+    <div class="kpi${chuvaEst()?'':' accent'}"><div class="k-label">Pluviômetro manual · no mês</div><div class="k-value">${nfmm(totalMes)} mm</div><div class="k-sub">${_MESN[+mesAtual.slice(5,7)-1]}/${mesAtual.slice(0,4)}</div></div>
+    <div class="kpi"><div class="k-label">Pluviômetro manual · acumulado</div><div class="k-value">${nfmm(totalGeral)} mm</div><div class="k-sub">${regs.length} registro(s)</div></div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Registrar chuva</h2><span class="sub">mm por local e data</span></div>
+  <div class="panel"><div class="panel-head"><h2>Registrar chuva</h2><span class="sub">pluviômetro manual: mm por local e data</span></div>
     <div class="app-grid" style="padding:14px 16px">
       <label>Data<input type="date" id="chuva-data" value="${hoje}"></label>
       <label>Chuva (mm)<input class="cell" inputmode="decimal" id="chuva-mm" placeholder="ex.: 24"></label>
@@ -9423,7 +9463,9 @@ V.campopainel = function(){
     <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
     <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
-    <div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>
+    ${(()=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return `<div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>`;
+      const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), ult=ed.slice().reverse().find(x=>x.mm>0);
+      return `<a class="kpi kpi-link" data-go="#/chuva" title="Chuva medida pela estação (app Monitor de Irrigação)"><div class="k-label">Chuva · 30 dias 🌦️</div><div class="k-value">${nf0.format(s30)} mm</div><div class="k-sub">estação${ult?' · última '+_dtBRc(ult.d)+' · '+nfmm(ult.mm)+' mm':' · sem chuva'}</div></a>`; })()}
     <div class="kpi"><div class="k-label">Talhões com atividade</div><div class="k-value">${talAtiv}</div><div class="k-sub">de ${tals.length} talhões</div></div>
   </div>
   <div class="kpi-grid">
