@@ -2048,6 +2048,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .mapa-menu .btn.on{background:var(--teal-soft);border-color:var(--ink2);color:var(--ink2)}
 @media (min-width:900px){ .mapa-menu{left:auto;right:0} }
 
+/* v260: janelinha do quadro — operação finalizada: produtos baixados e manejo aplicado */
+.oq-pop-sec{margin-top:4px}.oq-pop-sec h5{margin:4px 0 2px;font-size:12.5px;font-weight:800;color:var(--ink)}
+.oq-man{display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding:4px 0;border-bottom:1px dashed #eef1f3}
+.oq-man span{color:var(--muted);flex:0 0 112px}.oq-man b{flex:1;font-weight:600;min-width:0}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}

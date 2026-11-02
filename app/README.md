@@ -67,6 +67,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Quadro de operações: finalizadas mostram o que foi baixado e o manejo aplicado (v260)** — na janelinha do cartão
+  (`oqPopOpen`), operação concluída ou parcial troca a tabela de doses previstas por **📦 Produtos baixados** (produto,
+  dose real = volume ÷ área aplicada, volume baixado; TS marcado; se a baixa já foi para a planilha) e **🧑‍🌾 Manejo
+  aplicado** (área aplicada com parcial/transpasse, etapas, data, operador, máquina e, quando houve recomendação
+  aprovada ligada à operação: nome, aprovação, tipo de aplicação, alvo, estádio, calda, condições, retorno do
+  operador; eficácia avaliada na mistura). `oqAplicadoHtml`. Operações abertas continuam com o previsto.
 - **Painel do Campo: card Área plantada (v259)** — % da área da fazenda escolhida cujo plantio está finalizado
   (`areaPlantadaResumo`): talhão conta quando a **recomendação de plantio (semente) foi aprovada** ou a operação com
   semente foi concluída no Campo — a mesma regra que define o dia 0 do DAE (`plantioRealDe`). A área é a do talhão;
