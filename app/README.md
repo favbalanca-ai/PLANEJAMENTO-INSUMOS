@@ -67,6 +67,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Inserir operação mesmo com operações finalizadas (v261)** — no Talhão (Planejamento), o ＋ de "Inserir operação"
+  passa a funcionar quando a safra já tem operação em execução ou concluída: a nova operação entra **no fim da
+  lista** (não no meio), para os slots das executadas não mudarem de lugar na planilha — a chave da baixa no estoque,
+  das recomendações e do realizado é o slot. Reordenar e excluir continuam travados nessa situação. Depois de
+  inserir: renomear, definir o DAE e adicionar os insumos; ao sincronizar, a aba do talhão ganha o bloco novo.
 - **Quadro de operações: finalizadas mostram o que foi baixado e o manejo aplicado (v260)** — na janelinha do cartão
   (`oqPopOpen`), operação concluída ou parcial troca a tabela de doses previstas por **📦 Produtos baixados** (produto,
   dose real = volume ÷ área aplicada, volume baixado; TS marcado; se a baixa já foi para a planilha) e **🧑‍🌾 Manejo
