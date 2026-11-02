@@ -2053,6 +2053,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .oq-man{display:flex;gap:8px;align-items:baseline;font-size:12.5px;padding:4px 0;border-bottom:1px dashed #eef1f3}
 .oq-man span{color:var(--muted);flex:0 0 112px}.oq-man b{flex:1;font-weight:600;min-width:0}
 
+/* v262: chuva da estação (Monitor de Irrigação) */
+.ce-mes summary{cursor:pointer;list-style:none}.ce-mes summary::-webkit-details-marker{display:none}.ce-mes summary::before{content:'▸ ';color:var(--muted)}.ce-mes[open] summary::before{content:'▾ '}
+.kpi-link{display:block;text-decoration:none;color:inherit;cursor:pointer}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
