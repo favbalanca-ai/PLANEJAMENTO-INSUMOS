@@ -172,8 +172,31 @@ function readConfigApp(){
 // ou estimada pelo Open-Meteo quando a fazenda não tem estação — coluna "Estimado" diz) e a CLIMA INMET (estação do INMET,
 // usada para os dias em que a estação da fazenda falhou). Só leitura; a planilha da irrigação não é alterada.
 function _idPlanilha_(v){ v = S(v); if (!v) return ''; var m = v.match(/\/d\/([a-zA-Z0-9_-]{20,})/); if (m) return m[1]; if (/^https?:/i.test(v)) return ''; return v.replace(/[^a-zA-Z0-9_-]/g, ''); }
+// grava (ou atualiza) uma linha chave | valor | obs na CONFIG APP
+function configAppGravar_(chave, valor, obs){
+  var t = sheetCols_(CFGAPP_SHEET, ['CHAVE','VALOR','OBS']), s = t.s, L = 0;
+  if (s.getLastRow() >= 2) s.getRange(2, 1, s.getLastRow() - 1, 1).getValues().forEach(function(r, i){ if (!L && _hkey(r[0]) === _hkey(chave)) L = 2 + i; });
+  if (!L) L = _novaLinha_(s);
+  s.getRange(L, 1, 1, 3).setValues([[chave, valor, obs || '']]);
+  try { CacheService.getScriptCache().remove('pa_config_app_'); } catch (e) {}
+}
+// sem link na CONFIG APP: procura sozinho, entre as planilhas mexidas nos últimos 15 dias, a do Monitor de Irrigação
+// (tem as abas CLIMA, FAZENDAS e LEITURAS) e grava o link na CONFIG APP. Tenta no máximo 1 vez a cada 6 h.
+function localizarPlanilhaIrrigacao_(){
+  var c = CacheService.getScriptCache(); if (c.get('irrig_busca')) return ''; c.put('irrig_busca', '1', 21600);
+  var desde = Utilities.formatDate(new Date(Date.now() - 15 * 86400000), 'UTC', 'yyyy-MM-dd'), meu = ss().getId(), n = 0;
+  var it = DriveApp.searchFiles("mimeType = 'application/vnd.google-apps.spreadsheet' and modifiedDate > '" + desde + "' and trashed = false");
+  while (it.hasNext() && n < 60){ var f = it.next(); n++; if (f.getId() === meu) continue;
+    try { var b = SpreadsheetApp.openById(f.getId());
+      if (b.getSheetByName('CLIMA') && b.getSheetByName('FAZENDAS') && b.getSheetByName('LEITURAS')){
+        configAppGravar_('PLANILHA IRRIGACAO', f.getUrl(), 'Planilha do Monitor de Irrigação (achada automaticamente): chuva da estação para o app. Troque o link se for outra.');
+        return f.getId(); } } catch (e) {}
+  }
+  return '';
+}
 function readChuvaEstacao(){
   var cfg = configAppMapa_(), id = _idPlanilha_(cfg['PLANILHA IRRIGACAO'] || cfg['PLANILHA IRRIGAÇÃO'] || cfg['PLANILHA IRRIGACAO (LINK)']);
+  if (!id) id = localizarPlanilhaIrrigacao_();
   if (!id) return null;
   var b; try { b = SpreadsheetApp.openById(id); } catch (e) { return { erro:'não consegui abrir a planilha da irrigação — confira o link em CONFIG APP → PLANILHA IRRIGACAO' }; }
   var tz = Session.getScriptTimeZone() || 'America/Sao_Paulo', out = { em:Utilities.formatDate(new Date(), tz, "yyyy-MM-dd'T'HH:mm:ss"), nome:b.getName(), dias:[], inmet:[] };
