@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-260';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-261';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -937,18 +937,20 @@ function opMove(tid,tag,tagoi,dir){ const seq=_seqOfTag(tag);
   const i=order.indexOf(tagoi); if(i<0) return; const j=i+dir; if(j<0||j>=order.length) return;
   const tmp=order[i]; order[i]=order[j]; order[j]=tmp;
   const pl=opPlanEnsure(tid,seq); pl.order=order; opPlanStamp(tid,seq); route({keepScroll:true}); }
+// v261: com operação já em execução/concluída na safra, a nova operação entra no FIM da lista — assim os slots das
+// operações executadas (chave da baixa no estoque, das recomendações e do realizado) não mudam de lugar na planilha.
 function opInsertAfter(tid,tag,tagoi){ const seq=_seqOfTag(tag);
-  if(hasExecInSafra(tid,tag)){ toast('Não dá para inserir: há operação em execução/concluída nesta safra'); return; }
+  const noFim=hasExecInSafra(tid,tag);
   const total=opsOf(tid,seq).length, cnt=opsShownCount(tid,tag);
   if(cnt>=total){ OV.opExtra=OV.opExtra||{}; OV.opExtra[`${tid}|${tag}`]=(OV.opExtra[`${tid}|${tag}`]||0)+1; }   // sem slot livre: cria uma operação NOVA (vira bloco na planilha)
   const newTag=`${tag}${cnt}`;                       // próximo slot físico livre
   revealOps[`${tid}|${tag}`]=cnt+1;                  // revela o slot
   const order=opDisplayOrder(tid,tag,cnt+1).map(oi=>`${tag}${oi}`);
   const ni=order.indexOf(newTag); if(ni>=0) order.splice(ni,1);
-  let at= tagoi ? order.indexOf(tagoi) : order.length-1; if(at<0) at=order.length-1;
+  let at= (tagoi&&!noFim) ? order.indexOf(tagoi) : order.length-1; if(at<0) at=order.length-1;
   order.splice(at+1,0,newTag);
   const pl=opPlanEnsure(tid,seq); pl.order=order; if(!pl.names[newTag]) pl.names[newTag]='Nova operação';
-  opPlanStamp(tid,seq); route(); toast('Operação inserida — renomeie e adicione os insumos'); }
+  opPlanStamp(tid,seq); route(); toast(noFim?'Operação inserida no fim da lista (há operações executadas nesta safra: a ordem delas não muda) — renomeie, defina o DAE e adicione os insumos':'Operação inserida — renomeie e adicione os insumos'); }
 // excluir uma operação: some do app na hora; ao sincronizar, a safra é reescrita sem ela (planilha = espelho)
 function opDelete(tid,tag,tagoi){
   if(hasExecInSafra(tid,tag)){ toast('Não dá para excluir: há operação em execução/concluída nesta safra'); return; }
@@ -1313,7 +1315,7 @@ V.talhao = function(id){
         <span class="op-reorder">
           <button class="icon-btn op-mv" data-act="opup" data-id="${t.id}" data-op="${tagoi}" title="Subir"${pos===0?' disabled':''}>▲</button>
           <button class="icon-btn op-mv" data-act="opdown" data-id="${t.id}" data-op="${tagoi}" title="Descer"${pos===order.length-1?' disabled':''}>▼</button>
-          <button class="icon-btn op-mv" data-act="opins" data-id="${t.id}" data-op="${tagoi}" title="Inserir operação abaixo">＋</button>
+          <button class="icon-btn op-mv" data-act="opins" data-id="${t.id}" data-op="${tagoi}" title="Inserir operação abaixo (se a safra já tem operação executada, entra no fim)">＋</button>
           <button class="icon-btn op-mv del" data-act="opdel" data-id="${t.id}" data-op="${tagoi}" title="Excluir operação">🗑</button>
         </span>
         <span class="op-sum">${items.length} insumo${items.length===1?'':'s'} · ${brl(totOp)}/ha</span>
