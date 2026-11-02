@@ -117,7 +117,9 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - `CONFIG APP` → `PLANILHA IRRIGACAO` = link (ou id) da planilha do app Monitor de Irrigação. Com ela, o puxar inclui a
   chave `chuva_est` (`readChuvaEstacao`, cache 1 h): aba **CLIMA** (Data, Chuva (mm), Estimado, Fazenda, Tmax, Tmin,
   Leituras) e aba **CLIMA INMET** (Data, Chuva (mm), Fazenda, Horas medidas, Estação). Só leitura.
-- Sem a linha na CONFIG APP, `chuva_est` vem vazio e o app mostra como configurar.
+- Sem a linha na CONFIG APP, `localizarPlanilhaIrrigacao_` procura (até 1 vez a cada 6 h, entre as planilhas mexidas nos
+  últimos 15 dias, no máximo 60) uma planilha com as abas CLIMA, FAZENDAS e LEITURAS e grava o link na CONFIG APP
+  (`configAppGravar_`). Não achando, `chuva_est` vem vazio e o app mostra como configurar.
 
 ## Arquivos do Drive para o app (v254/v255)
 - `doGet?acao=drive_lista&tipo=…` e `doGet?acao=drive_arquivo&tipo=…&id=…` (`driveLista_` / `driveArquivo_`).

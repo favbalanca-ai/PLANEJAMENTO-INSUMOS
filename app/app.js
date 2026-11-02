@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-262';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-263';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4445,7 +4445,7 @@ function chuvaEstDias(fazKey){ const c=chuvaEst(); if(!c||!Array.isArray(c.dias)
 function chuvaEstSoma(dias, de, ate){ return dias.filter(x=>(!de||x.d>=de)&&(!ate||x.d<=ate)).reduce((s,x)=>s+(x.mm||0),0); }
 function chuvaEstHtml(){ const c=chuvaEst(), hoje=_hojeISO();
   if(!c) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2><span class="sub">app Monitor de Irrigação</span></div>
-    <p class="mut" style="padding:12px 16px;font-size:12.5px">Para trazer a chuva medida pela estação: na planilha do planejamento, aba <b>CONFIG APP</b>, crie a linha <b>PLANILHA IRRIGACAO</b> com o link da planilha do Monitor de Irrigação (coluna B). Depois toque em Sincronizar → Puxar. O app passa a mostrar a chuva por dia e por mês de cada fazenda, e o Painel usa a estação no lugar do registro manual.</p></div>`;
+    <p class="mut" style="padding:12px 16px;font-size:12.5px">Para trazer a chuva medida pela estação, a planilha do planejamento precisa do Code.gs atualizado (v262 ou mais novo). Na primeira sincronização ela <b>procura sozinha</b> a planilha do Monitor de Irrigação no seu Drive e grava o link na aba <b>CONFIG APP</b> (linha PLANILHA IRRIGACAO). Se não achar, cole lá o link da planilha que tem o menu 💧 Manejo. Depois toque em Sincronizar → Puxar.</p></div>`;
   if(c.erro) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2></div><p class="mut" style="padding:12px 16px">⚠️ ${esc(c.erro)}</p></div>`;
   const dias=chuvaEstDias(oqFaz); const fazs=c.fazendas||[];
   if(!dias.length) return `<div class="panel"><div class="panel-head"><h2>🌦️ Estação meteorológica</h2><span class="sub">${esc(c.nome||'')}</span></div><p class="mut" style="padding:12px 16px">${esc(c.aviso||'Sem dias de chuva para esta fazenda na planilha da irrigação.')}${fazs.length?` Fazendas na planilha: ${esc(fazs.join(', '))}.`:''}</p></div>`;

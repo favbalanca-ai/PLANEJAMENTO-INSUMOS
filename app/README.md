@@ -67,8 +67,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
-- **Chuva da estação meteorológica, pela planilha do Monitor de Irrigação (v262)** — com a linha **PLANILHA IRRIGACAO**
-  (link da planilha do app de irrigação) na aba CONFIG APP, o puxar traz `chuva_est`: a chuva diária da aba CLIMA
+- **Chuva da estação meteorológica, pela planilha do Monitor de Irrigação (v262/v263)** — com a linha **PLANILHA IRRIGACAO**
+  (link da planilha do app de irrigação) na aba CONFIG APP — o Code.gs procura e grava o link sozinho na primeira
+  sincronização (v263) —, o puxar traz `chuva_est`: a chuva diária da aba CLIMA
   (estação Ecowitt da fazenda; dias sem leitura preenchidos pela estação do INMET da aba CLIMA INMET; fazenda sem
   estação = chuva estimada pelo modelo, marcada). A tela **Chuva** ganha o painel 🌦️ Estação meteorológica (7 dias,
   30 dias, mês, acumulado; meses recolhíveis com os dias de chuva e a fonte), por fazenda (seletor); o pluviômetro
