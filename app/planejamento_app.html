@@ -2074,6 +2074,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ce-mes summary{cursor:pointer;list-style:none}.ce-mes summary::-webkit-details-marker{display:none}.ce-mes summary::before{content:'▸ ';color:var(--muted)}.ce-mes[open] summary::before{content:'▾ '}
 .kpi-link{display:block;text-decoration:none;color:inherit;cursor:pointer}
 
+/* v266: materiais do plantio (vários híbridos no talhão) */
+.pl-sems{margin:6px 0 2px}.pl-sem{display:flex;align-items:center;gap:8px;margin:4px 0}.pl-sem .sel{flex:1;min-width:0}
+.pl-sem-ha{display:inline-flex;align-items:center;gap:4px}.pl-sem-ha .cell{width:74px}
+.rc-ha{margin-top:3px;font-size:11.5px}.rc-ha .cell{width:64px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2455,6 +2460,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ld-item .na-tx b{font-size:11px}
   .ld-item .na-tx span{font-size:9.5px}
   .mapa-menu .btn{font-size:11.5px}
+  .rc-ha{font-size:9.5px}
 }
 
 </style>
@@ -2557,7 +2563,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-265';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-266';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6509,7 +6515,7 @@ function realEnsure(key){ return OV.realizado[key] || (OV.realizado[key]={status
 function appEmpty(app){ return !app || !Object.keys(app).some(k=>app[k]!=null && app[k]!==''); }
 function realClean(key){ const r=OV.realizado[key]; if(r && r.status==='pendente' && !r.data && !r.obs
   && !Object.keys(r.doses||{}).length && !((r.extras||[]).some(x=>x.produto||x.dose!=null)) && appEmpty(r.app)
-  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!=='')) && r.ord==null && !(r.excl&&Object.keys(r.excl).length)) delete OV.realizado[key]; }
+  && !(r.ts && Object.keys(r.ts).some(k=>r.ts[k]!=null&&r.ts[k]!=='')) && r.ord==null && !(r.excl&&Object.keys(r.excl).length) && !(r.sems&&r.sems.length)) delete OV.realizado[key]; }
 // localiza operação a partir da chave "TL|tagOp"
 function opFromKey(key){ const i=key.indexOf('|'); const talId=key.slice(0,i), tagoi=key.slice(i+1);
   const tag=tagoi[0], oi=+tagoi.slice(1), seq=tag==='S'?'safrinha':'principal';
@@ -6688,9 +6694,27 @@ function plantioCalc(key, rl){
   const esp=ESP_PADRAO, semM=pop?pop*esp/10000:0;
   const kgHa=bl==='kg'?semDose:0;                                         // semente em kg (braquiária…): kg/ha
   const outros=its.filter(x=>x.produto!==sem.produto && !_isTS(x));      // fertilizantes e líquidos
+  // v266: vários MATERIAIS (híbridos/cultivares) compondo a área do talhão — rl.sems=[{produto, ha}]. Sem lista: a semente
+  // do plano na área toda. Mesma população (sementes/ha) para todos; bags de cada um pela sua embalagem (unidade do PORTIFÓLIO).
+  const lista=Array.isArray(rl.sems)?rl.sems.filter(m=>m&&m.produto):[];
+  const sems=(lista.length?lista:[{produto:sem.produto, ha:area}]).map((m,ix)=>{ const un=(PROD[m.produto]&&PROD[m.produto].un)||(m.produto===sem.produto?semUn:''), ha=lista.length?(+m.ha||0):area;
+    const pb=(m.produto===sem.produto)?porBag:(semPorUn(un)||porBag), b=tsBagLbl(un);
+    return {produto:m.produto, un, ha, bl:b, porBag:pb, bags:b==='kg'?semDose*ha:((pop&&pb)?pop*ha/pb:semDose*ha)}; });
+  const haSoma=+sems.reduce((s,m)=>s+m.ha,0).toFixed(2), multi=sems.length>1||(lista.length===1&&lista[0].produto!==sem.produto);
   return {key, t, area, sem:{produto:sem.produto, un:semUn, dose:semDose}, bl, porBag, esp, pop, popPlan, popInf:+cfg.pop>0, semM, kgHa,
-    bags:(pop&&porBag)?pop*area/porBag:semDose*area, temTS, tsSt, tsProds:all.filter(_isTS).map(x=>x.produto), outros};
+    bags:lista.length?+sems.reduce((s,m)=>s+m.bags,0).toFixed(4):((pop&&porBag)?pop*area/porBag:semDose*area), temTS, tsSt, tsProds:all.filter(_isTS).map(x=>x.produto), outros,
+    sems, multi, haSoma, haDif:+(area-haSoma).toFixed(2)};
 }
+// sementes do portfólio (para a lista de materiais do plantio)
+function sementesLista(){ return Object.keys(PROD).filter(p=>/semente/i.test((PROD[p]&&PROD[p].classe)||'')).sort((a,b)=>a.localeCompare(b)); }
+// editor dos materiais do plantio (cartão da operação, aba Campo)
+function plSemsHtml(key, c){ const r=realOf(key)||{}, rows=(r.sems&&r.sems.length)?r.sems:c.sems.map(m=>({produto:m.produto, ha:m.ha})), K=esc(key), lst=sementesLista();
+  return `<div class="app-secttl">🌽 Materiais no talhão <span class="mut" style="font-weight:400">— híbridos/cultivares que compõem os ${num(c.area)} ha</span></div>
+    ${rows.map((m,i)=>`<div class="pl-sem"><select class="sel" data-edit="plSem" data-field="produto" data-i="${i}" data-key="${K}"><option value="">— material —</option>${lst.map(p=>`<option value="${esc(p)}"${p===m.produto?' selected':''}>${esc(p)}</option>`).join('')}${(m.produto&&!lst.includes(m.produto))?`<option value="${esc(m.produto)}" selected>${esc(m.produto)}</option>`:''}</select>
+      <span class="pl-sem-ha"><input class="cell" inputmode="decimal" data-edit="plSem" data-field="ha" data-i="${i}" data-key="${K}" value="${m.ha?num(m.ha):''}" placeholder="ha"><small>ha</small></span>
+      ${rows.length>1?`<button class="icon-btn del op-mv" data-act="plSemDel" data-key="${K}" data-i="${i}" title="Tirar este material">🗑</button>`:''}</div>`).join('')}
+    <div class="cp-btns" style="padding:4px 0 2px;align-items:center"><button class="btn btn-outline btn-sm" data-act="plSemAdd" data-key="${K}">＋ Outro material</button>${(r.sems&&r.sems.length&&Math.abs(c.haDif)>=0.005)?`<span style="color:var(--amber);font-size:12px">⚠ soma ${num(c.haSoma)} ha ≠ talhão ${num(c.area)} ha</span>`:(r.sems&&r.sems.length>1?`<span class="mut" style="font-size:12px">✓ ${num(c.haSoma)} ha</span>`:'')}</div>`; }
+function plSemRefresh(key){ const c=plantioCalc(key); if(!c) return; const e=document.querySelector('[data-plsems="'+key+'"]'); if(e) e.innerHTML=plSemsHtml(key,c); const pbox=document.querySelector('[data-plout="'+key+'"]'); if(pbox) pbox.innerHTML=plantioOut(c); }
 function plantioTsTxt(c){ if(!c.temTS) return ''; if(c.tsSt==='feito') return 'semente tratada ✓ (TS feito)';
   return c.tsSt==='enviada'?'TS enviado — aguardando a baixa do tratamento':'⚠️ TS ainda não enviado'; }
 // quadro da recomendação de plantio (aba Campo)
@@ -6703,7 +6727,8 @@ function plantioOut(c){
       ${c.bl==='kg'?'':stat('Sementes por metro', c.semM?fmtSemM(c.semM):'—')}
       ${stat('Semente no talhão', B(c.bags))}
     </div>
-    <p class="app-note">🌱 <b>${esc(c.sem.produto)}</b> · linhas a 50 cm${c.temTS?` · ${plantioTsTxt(c)}`:''}${c.popInf&&c.popPlan&&c.popPlan!==c.pop?` · <span class="mut">planejado ${nf0.format(c.popPlan)}/ha</span>`:''}</p>`;
+    <p class="app-note">🌱 <b>${esc(c.multi?c.sems.map(m=>m.produto).join(' + '):c.sem.produto)}</b> · linhas a 50 cm${c.temTS?` · ${plantioTsTxt(c)}`:''}${c.popInf&&c.popPlan&&c.popPlan!==c.pop?` · <span class="mut">planejado ${nf0.format(c.popPlan)}/ha</span>`:''}</p>`;
+  if(c.multi) h+=`<table class="app-ins"><thead><tr><th>Material</th><th class="num">Área</th><th class="num">Semente</th></tr></thead><tbody>${c.sems.map(m=>`<tr><td>🌽 ${esc(m.produto)}</td><td class="num">${num(m.ha)}<small> ha</small></td><td class="num"><b>${fmtDose(m.bags)}</b><small> ${esc(m.bl)}${m.bl==='bag'&&m.bags>=2?'s':''}</small></td></tr>`).join('')}</tbody></table>${Math.abs(c.haDif)>=0.005?`<p class="app-note" style="color:var(--amber)">⚠️ Os materiais somam ${num(c.haSoma)} ha e o talhão tem ${num(c.area)} ha.</p>`:''}`;
   if(!c.pop && c.bl!=='kg') h+=`<p class="app-note" style="color:var(--amber)">⚠️ Informe a <b>população (sementes/ha)</b>${c.sem.un?'':' — a semente está sem unidade no PORTIFÓLIO (preencha na planilha, ex.: 5MM)'}.</p>`;
   if(c.outros.length) h+=`<div class="app-secttl">🧪 Fertilizantes e líquidos — por ha</div>
     <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Total no talhão</th></tr></thead><tbody>${c.outros.map(x=>{ const d=doseHaUn(x.dose,x.un);
@@ -6725,6 +6750,7 @@ function plantioSec(t,o,r,pc){
             <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${K}" value="${esc(va('hIni'))}"></label>
             <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${K}" value="${esc(va('hFim'))}"></label>
           </div>
+          <div class="pl-sems" data-plsems="${K}">${plSemsHtml(o.key,pc)}</div>
           <div class="camp-appout" data-plout="${K}">${plantioOut(pc)}</div>
           <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${K}">📲 Enviar recomendação de plantio por WhatsApp</button>
           <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${K}">🖨 PDF do plantio (com link de baixa)</button></div>
@@ -6739,7 +6765,9 @@ function plantioWhats(r){
   x+=`Talhão: ${tNome(t)}${area?` (${num(area)} ha)`:''}\n`;
   if(r.cultura) x+=`Cultura: ${r.cultura}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}\n`;
-  x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
+  if(c.multi){ x+=`\n🌽 *Materiais (${num(c.area)} ha):*\n`+c.sems.map(m=>`• *${m.produto}* — ${num(m.ha)} ha → ${fmtDose(m.bags)} ${m.bl}${m.bl==='bag'&&m.bags>=2?'s':''}`).join('\n')+'\n';
+    if(Math.abs(c.haDif)>=0.005) x+=`⚠️ os materiais somam ${num(c.haSoma)} ha (talhão: ${num(c.area)} ha)\n`; if(c.temTS) x+=`${plantioTsTxt(c)}\n`; }
+  else x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
   if(c.bl==='kg') x+=`• *${fmtDose(c.kgHa)} kg/ha*\n`;
   else if(c.pop) x+=`• *${nf0.format(c.pop)} sementes/ha*\n• *${fmtSemM(c.semM)} sementes por metro* (linhas a 50 cm)\n`;
   if(c.temTS && c.tsSt!=='feito') x+=`🧪 TS planejado: ${c.tsProds.join(', ')}\n`;
@@ -8424,10 +8452,15 @@ function recomCalda(r){
 function recomItensFromOp(t, opKey){
   const o=opsDoTalhao(t).find(x=>x.key===opKey); if(!o) return [];
   const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
-  return effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
+  const out=effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
     .map(it=>{ const iid=it.kind==='base'?String(it.ii):'a'+it.ai, aj=(rl&&rl.doses&&(iid in rl.doses))?+rl.doses[iid]:null;   // dose ajustada no Campo (por tanque / realizado) manda
       return {produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null}; })
     .concat(((rl&&rl.extras)||[]).filter(e=>e.produto).map(e=>({produto:e.produto, un:(PROD[e.produto]&&PROD[e.produto].un)||'', dose:+e.dose||0, real:null, extra:true})));   // extras do Campo entram
+  const pc=plantioCalc(opKey, rl||{});   // v266: plantio com vários materiais → uma linha de semente por material, com a área de cada um
+  if(pc&&pc.multi){ const si=out.findIndex(it=>_isSemente(it)), base=si>=0?out[si]:null;
+    const novos=pc.sems.map(m=>({produto:m.produto, un:m.un, dose:base?base.dose:(+pc.sem.dose||0), real:null, ha:m.ha, sem:1}));
+    if(si>=0) out.splice(si,1,...novos); else out.push(...novos); }
+  return out;
 }
 function recomCreate(talId, opKey){
   const t=findTalhao(talId); if(!t) return null;
@@ -8493,6 +8526,7 @@ function recomSetField(el){
   else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true;
     if(!r.maquina){ const sg=sugereMaquina((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); if(sg) r.maquina=sg; } }   // v265: sugere o conjunto pela classe dos insumos (recomendação direta)
   else if(f==='maquina'){ if(v==='__outra'){ const nv=prompt('Máquina / conjunto (ex.: drone, avião, terceiro):', r.maquina||''); if(nv!=null) r.maquina=nv.trim(); rerender=true; } else r.maquina=v; }
+  else if(f==='itHa'){ const h=_mmC(v); if(h>0) r.itens[+i].ha=h; else delete r.itens[+i].ha; rerender=true; }
   else if(f==='itAtivo'){ r.itens[+i].ativo=v; }
   else if(f==='itCar'){ r.itens[+i].car=v; }
   else if(f==='retQuem'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.quem=v; }
@@ -8515,10 +8549,14 @@ function recomPayload(r){
   const payload={ u:syncUrl(), id:r.id, t:r.talhao, tn:t?tNome(t):'', c:(t?empDe(t):'')||'',
     a:+r.area||0, v:_mmC(r.calda), tk:tanque, al:r.alvo||'', dt:r.data||'', jn:r.janela||'', aj:r.adjuvante||'', cd:r.tipo==='ts'?'':recomCondTxt(r), op:r.opNome||'', es:r.estadio||'',
     it:(r.itens||[]).filter(it=>it.produto).map(it=>({p:it.produto, u:it.un||'', d:+it.dose||0, l:vaiNoTanque(it)?1:0, ...(embDe(it.produto)?{e:embDe(it.produto).tam, eu:embDe(it.produto).un}:{}),
-      ...((it.sem||(r.tipo!=='ts'&&_isSemente(it)))?{s:1}:{}), ...((r.tipo!=='ts'&&_isTS(it))?{t:1}:{})})) };
+      ...((it.sem||(r.tipo!=='ts'&&_isSemente(it)))?{s:1}:{}), ...((r.tipo!=='ts'&&_isTS(it))?{t:1}:{}), ...(+it.ha>0?{h:+(+it.ha).toFixed(2)}:{})})) };
   const pc=(r.tipo!=='ts'&&r.opKey)?plantioCalc(r.opKey):null;
   if(pc){ payload.cd=''; payload.v=0; payload.tk=0;
-    payload.pl={sm:+pc.semM.toFixed(2), sh:Math.round(pc.pop), kh:+(+pc.kgHa||0).toFixed(2), esp:pc.esp, bl:pc.bl, bags:+pc.bags.toFixed(3), ts:pc.temTS?(pc.tsSt||'pend'):''}; }
+    payload.pl={sm:+pc.semM.toFixed(2), sh:Math.round(pc.pop), kh:+(+pc.kgHa||0).toFixed(2), esp:pc.esp, bl:pc.bl, bags:+pc.bags.toFixed(3), ts:pc.temTS?(pc.tsSt||'pend'):''};
+    if(pc.multi){ payload.pl.ms=pc.sems.map(m=>({p:m.produto, h:+m.ha.toFixed(2), b:+m.bags.toFixed(3), bl:m.bl, u:m.un}));   // v266: materiais → o operador dá baixa por material
+      if(!payload.it.some(x=>x.s&&x.h)){   // recomendação antiga (1 linha de semente): abre em uma por material
+        const semIdx=payload.it.findIndex(x=>x.s); const novos=pc.sems.map(m=>({p:m.produto, u:m.un, d:+pc.sem.dose||0, l:0, s:1, h:+m.ha.toFixed(2)}));
+        if(semIdx>=0) payload.it.splice(semIdx,1,...novos); else payload.it.push(...novos); } } }
   if(r.tipo==='ts'){ const c=r.tsCfg||{}; payload.ts={b:+c.bat||1, bl:c.bl||'bag', n:c.nBat||0, ul:c.ult||0, sh:Math.round(c.semHa||0), kh:+(+c.kgHa||0).toFixed(2),
     ...(c.semInfo?{sn:c.semInfo.produto, sd:+c.semInfo.dose||0, so:c.semInfo.deOp||''}:{})}; }   // operação só de TS: semente vem do plantio (não entra na baixa)
   return payload;
@@ -8574,7 +8612,7 @@ function recomWhats(id){
   if(r.alvo) x+=`Alvo: ${r.alvo}${r.nivel?` (${r.nivel})`:''}\n`;
   const its=(r.itens||[]).filter(it=>it.produto);
   if(its.length){ x+=`\n*Produtos — na ordem de mistura:*\n`+its.map((it,i)=>{
-    const tot=(area&&it.dose)?` = ${fmtDose(it.dose*area)} ${it.un||''} no talhão`:'';
+    const aIt=(+it.ha>0)?+it.ha:area, tot=(aIt&&it.dose)?` = ${fmtDose(it.dose*aIt)} ${it.un||''}${(+it.ha>0)?` em ${num(it.ha)} ha`:' no talhão'}`:'';
     const tk=(cd.haTk&&it.dose)?` · ${fmtDose(it.dose*cd.haTk)} ${it.un||''}/tanque`:'';
     return `${i+1}. ${it.produto}${it.ativo?` (${it.ativo})`:''} — ${fmtDose(it.dose)} ${it.un||''}/ha${tot}${tk}${it.car?` · carência ${it.car} d`:''}`;
   }).join('\n')+'\n'; }
@@ -8624,14 +8662,16 @@ function recomCard(r,t){
   const editable=(r.status==='rascunho'), retEdit=(r.status==='retorno');
   const F=(f)=>`data-id="${esc(r.id)}" data-recf="${f}"`;
   const rows=its.map((it,i)=>{
-    const planTot=(it.dose&&area)?it.dose*area:0, porTk=(it.dose&&cd.haTk)?it.dose*cd.haTk:0;
+    const haIt=(+it.ha>0)?+it.ha:0, areaIt=haIt||area, ehSem=!!(it.sem||_isSemente(it));   // v266: semente pode ocupar só parte do talhão
+    const planTot=(it.dose&&areaIt)?it.dose*areaIt:0, porTk=(it.dose&&cd.haTk&&!haIt)?it.dose*cd.haTk:0;
     const prodCell=editable
       ? `<span class="agp-row"><input list="prodlist" class="txt prod-in" ${F('itProd')} data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo"><button type="button" class="btn btn-outline btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}" data-i="${i}" title="Buscar insumo (portfólio + catálogo MAPA)">🔍</button></span><br><input class="txt" ${F('itAtivo')} data-reci="${i}" value="${esc(it.ativo||'')}" placeholder="ingrediente ativo" style="font-size:11px;margin-top:3px;max-width:240px">`
       : `<b>${esc(it.produto||'—')}</b>${it.ativo?`<br><small class="mut">${esc(it.ativo)}</small>`:''}`;
     const dAv=bulaDoseAviso(it), dAvHtml=dAv?`<div class="bula-warn" title="Faixa de dose cadastrada na bula do produto (módulo Preços)">⚠ ${esc(dAv)}</div>`:'';
     const doseCell=(editable
       ? `<input class="cell" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
-      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`)+dAvHtml;
+      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`)+dAvHtml
+      +(ehSem?(editable?`<div class="rc-ha"><input class="cell" inputmode="decimal" ${F('itHa')} data-reci="${i}" value="${haIt?num(haIt):''}" placeholder="${num(area)}" title="Área deste material (ha) — vazio = talhão inteiro"><small> ha</small></div>`:(haIt?`<div class="rc-ha mut">× ${num(haIt)} ha</div>`:'')):'');
     const carCell=editable
       ? `<input class="cell" inputmode="numeric" ${F('itCar')} data-reci="${i}" value="${esc(it.car||'')}" placeholder="dias" style="width:56px">`
       : (it.car?`${esc(it.car)}<small> d</small>`:'<span class="mut">—</span>');
@@ -8652,6 +8692,8 @@ function recomCard(r,t){
       <td class="num">${realCell}${difTag}</td>
       <td class="rc-del">${acts}</td></tr>`;
   }).join('');
+  const semHa=its.filter(it=>(it.sem||_isSemente(it))&&+it.ha>0); const semSoma=+semHa.reduce((s,it)=>s+(+it.ha||0),0).toFixed(2);
+  const semAviso=(semHa.length>1||(semHa.length===1&&semSoma<area-0.005))?`<div class="rc-obs${Math.abs(semSoma-area)>=0.005?'':' mut'}" style="${Math.abs(semSoma-area)>=0.005?'color:var(--amber)':''}">🌽 Materiais: ${semHa.map(it=>`${esc(it.produto)} ${num(it.ha)} ha`).join(' + ')} = <b>${num(semSoma)} ha</b>${Math.abs(semSoma-area)>=0.005?` ≠ ${num(area)} ha do talhão`:' ✓'}</div>`:'';
   const caldaTxt=cd.calda?`${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L = <b>${num(cd.haTk)} ha/tanque</b>`:''}${cd.nTk?` · <b>${cd.nTk} tanque(s)</b>${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último com ${num(cd.ultimo)} ha)`:''}`:''}${cd.total?` · total ${num(cd.total)} L de calda`:''}`:'';
   const sec=(titulo,inner)=>`<div class="rc-sec"><div class="rc-sec-t">${titulo}</div>${inner}</div>`;
   const head = editable ? `
@@ -8744,7 +8786,7 @@ function recomCard(r,t){
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
       <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table></div>
+      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
     ${tail}
     ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
@@ -8795,7 +8837,10 @@ function exportPlantioPDF(r){
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
     ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}
     ${rxKv('Plantadeira',esc(r.maquina||''),'w2')}${rxKv('Operação',esc(r.opNome||''))}${rxKv('Tratamento (TS)',c.temTS?esc(plantioTsTxt(c).replace('⚠️ ','')):'sem TS')}</div></div>
-  <div class="rx-sec"><h2>2. Semente — ${esc(c.sem.produto)}</h2>
+  <div class="rx-sec"><h2>2. Semente — ${esc(c.multi?c.sems.map(m=>m.produto).join(' + '):c.sem.produto)}</h2>
+    ${c.multi?`<table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:50%"><col style="width:20%"><col style="width:25%"></colgroup><thead><tr><th>#</th><th>Material</th><th class="num">Área</th><th class="num">Semente</th></tr></thead><tbody>
+      ${c.sems.map((m,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(m.produto)}</b></td><td class="num">${num(m.ha)} ha</td><td class="num"><b>${fmtDose(m.bags)} ${esc(m.bl)}${m.bl==='bag'&&m.bags>=2?'s':''}</b></td></tr>`).join('')}
+      <tr><td></td><td><b>Total</b></td><td class="num"><b>${num(c.haSoma)} ha</b>${Math.abs(c.haDif)>=0.005?` <span style="color:#b7791f">(talhão ${num(c.area)} ha)</span>`:''}</td><td class="num"></td></tr></tbody></table>`:''}
     <div class="rx-big">${c.bl==='kg'
       ?`<div><b>${fmtDose(c.kgHa)}</b><span>kg de semente por ha</span></div>`
       :`<div><b>${c.pop?nf0.format(c.pop):'—'}</b><span>sementes por ha</span></div><div><b>${c.semM?fmtSemM(c.semM):'—'}</b><span>sementes por metro<br>(linhas a 50 cm)</span></div>`}
@@ -10646,6 +10691,14 @@ function applyEdit(el){
     { const c2=tsCalc(el.dataset.key); document.querySelectorAll('[data-edit="realTs"][data-field="nBat"]').forEach(x=>{ if(x.dataset.key===el.dataset.key) x.value=(c2&&c2.nBat)||''; }); }   // nº de bateladas acompanha a batelada
     return;
   }
+  if(kind==='plSem'){   // v266: materiais do plantio (produto / ha por material)
+    const key=el.dataset.key, r=realEnsure(key), c=plantioCalc(key); if(!c) return;
+    r.sems=(r.sems&&r.sems.length)?r.sems:c.sems.map(m=>({produto:m.produto, ha:m.ha}));
+    const i=+el.dataset.i; if(!r.sems[i]) return;
+    if(el.dataset.field==='ha') r.sems[i].ha=numBR(el.value)||0; else r.sems[i].produto=el.value;
+    if(r.sems.length===1 && r.sems[0].produto===c.sem.produto && Math.abs((+r.sems[0].ha||0)-c.area)<0.005) delete r.sems;   // igual ao plano: sem lista
+    realClean(key); stampReal(key); plSemRefresh(key); return;
+  }
   if(kind==='realApp'){   // modo Campo: recomendação de aplicação (máquina/horas/vazão/tanque) — local
     const r=realEnsure(el.dataset.key); r.app=r.app||{}; const f=el.dataset.field;
     if(f==='vazao'||f==='tanque'||f==='area'){ r.app[f]=numBRn(el.value); if(f==='area'&&!(+r.app.area>0)) delete r.app.area; }
@@ -11084,6 +11137,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
     else if(a.act==='driveSel'){ driveSel(a.id, act.checked); return; }
+    else if(a.act==='plSemAdd'){ const r=realEnsure(a.key), c=plantioCalc(a.key); if(!c) return; r.sems=(r.sems&&r.sems.length)?r.sems:c.sems.map(m=>({produto:m.produto, ha:m.ha}));
+      const rest=Math.max(0,+(c.area-r.sems.reduce((s,m)=>s+(+m.ha||0),0)).toFixed(2)); r.sems.push({produto:'', ha:rest}); realClean(a.key); stampReal(a.key); plSemRefresh(a.key); return; }
+    else if(a.act==='plSemDel'){ const r=realEnsure(a.key); if(r.sems){ r.sems.splice(+a.i,1); if(!r.sems.length) delete r.sems; } realClean(a.key); stampReal(a.key); plSemRefresh(a.key); return; }
     else if(a.act==='notifAparelho'){ const c=notifCfg(), on=act.checked; if(on && 'Notification' in window && Notification.permission!=='granted'){ Notification.requestPermission().then(p=>{ c.aparelho=(p==='granted'); notifCfgSave(c); if(p!=='granted'){ act.checked=false; toast('O navegador não deu permissão para avisos'); } else { delete c.ultimoDia; notifCfgSave(c); _notifSig=''; notifAtualiza(); } }); return; }
       c.aparelho=on; if(on){ delete c.ultimoDia; } notifCfgSave(c); _notifSig=''; notifAtualiza(); return; }
     else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
@@ -11099,7 +11155,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomBuscar'){ toast('Buscando retornos…'); syncPull({force:true}).then(()=>route()); }
     else if(a.act==='recomRetorno'){ const r=recomById(a.id); if(r){ r.status='retorno';
       r.retorno={quem:(r.retorno&&r.retorno.quem)||'', obs:(r.retorno&&r.retorno.obs)||'', ts:Date.now()};
-      (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*(+r.area||0)).toFixed(2); });
+      (r.itens||[]).forEach(it=>{ if(it.real==null && it.dose) it.real=+(it.dose*((+it.ha>0)?+it.ha:(+r.area||0))).toFixed(2); });
       saveRecom(); route(); toast('Registre o volume utilizado e aprove'); } }
     else if(a.act==='recomAprovar'){ const r=recomById(a.id); if(r){ r.status='aprovada'; r.aprov={por:(r.resp||''), ts:Date.now()}; r.saidaPushed=false; saveRecom(); try{ misturaDeRecom(r); }catch(e){} route();   // aplicação aprovada → banco de misturas
       if(r.opKey){   // recomendação de uma operação de campo: a baixa é da operação (id op:), sem contar em dobro
