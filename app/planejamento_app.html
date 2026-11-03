@@ -2557,7 +2557,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-264';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-265';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8490,7 +8490,9 @@ function recomSetField(el){
     if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(r.area>0 && t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } }   // e leva para o Campo
   else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
-  else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true; }
+  else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true;
+    if(!r.maquina){ const sg=sugereMaquina((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); if(sg) r.maquina=sg; } }   // v265: sugere o conjunto pela classe dos insumos (recomendação direta)
+  else if(f==='maquina'){ if(v==='__outra'){ const nv=prompt('Máquina / conjunto (ex.: drone, avião, terceiro):', r.maquina||''); if(nv!=null) r.maquina=nv.trim(); rerender=true; } else r.maquina=v; }
   else if(f==='itAtivo'){ r.itens[+i].ativo=v; }
   else if(f==='itCar'){ r.itens[+i].car=v; }
   else if(f==='retQuem'){ r.retorno=r.retorno||{ts:Date.now()}; r.retorno.quem=v; }
@@ -8678,7 +8680,7 @@ function recomCard(r,t){
       <label>Adjuvante / pH<input class="txt" ${F('adjuvante')} value="${esc(r.adjuvante||'')}" placeholder="ex.: óleo mineral 0,5% · pH 5,5"></label></div>
       ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}${bulaPhTxt(its)?`<div class="rc-obs">📘 pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}`)}
     ${sec('Aplicação',`<div class="app-grid" style="padding:6px 12px 10px">
-      <label>Máquina / conjunto<input class="txt" ${F('maquina')} value="${esc(r.maquina||'')}"></label>
+      <label>Máquina / conjunto<select class="sel" ${F('maquina')}><option value="">— escolher —</option>${maquinasAll().map(m=>`<option value="${esc(m.conjunto)}"${r.maquina===m.conjunto?' selected':''}>${esc(m.conjunto)}</option>`).join('')}${(r.maquina&&!maquinasAll().some(m=>m.conjunto===r.maquina))?`<option value="${esc(r.maquina)}" selected>${esc(r.maquina)}</option>`:''}<option value="__outra">✏️ Outra (digitar)…</option></select></label>
       <label>Ponta / bico<input class="txt" ${F('ponta')} value="${esc(r.ponta||'')}" placeholder="ex.: leque 110-02 · cone vazio"></label>
       <label>Pressão (bar)<input class="cell" inputmode="decimal" ${F('pressao')} value="${esc(r.pressao||'')}"></label>
       <label>Velocidade (km/h)<input class="cell" inputmode="decimal" ${F('velocidade')} value="${esc(r.velocidade||'')}"></label>
