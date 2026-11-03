@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Conserto: NDVI do talhão em foco não aparecia no mapa (v268)** — os tiles do mapa são pedidos em EPSG:3857 (metros)
+  e o Sentinel Hub lê a `GEOMETRY` no CRS do pedido; o recorte ia em lat/lng, caía perto de (0,0) e os tiles vinham
+  transparentes (sem erro, só vazio), embora a legenda e os percentis (pedido em CRS:84) funcionassem. Agora o polígono
+  do recorte vai projetado em 3857 (`limWkt3857`).
 - **Plantio com vários materiais: PDF/WhatsApp/quadro em sacos e sementes por ha (v267)** — a unidade **Sc60M** (saco
   com 60 mil sementes) e variações ("SC 60 MIL", "60M", "5MM") passam a ser lidas (`semPorUn`, rótulo `sc`/`bag`); a
   tabela de materiais mostra área, sc/ha, sacos, sementes/ha e sementes por metro de cada um. Semente de cada
