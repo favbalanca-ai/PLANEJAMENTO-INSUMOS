@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-269';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-270';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5323,6 +5323,9 @@ function bulaBuscar(tipo){ const p=bulaEditProd; if(!p) return;
   const q=`"${p}" ${tipo==='fispq'?'FISPQ':'bula'} pdf`; window.open('https://www.google.com/search?q='+encodeURIComponent(q), '_blank', 'noopener'); }
 // baixar pelo link: a planilha (Code.gs) baixa o PDF e devolve o link do Drive — o navegador do app não consegue baixar de outros sites
 let bulaBaixando=false;
+// erro de permissão do Apps Script ("Você não tem permissão para chamar UrlFetchApp.fetch…") → instrução clara (v270)
+function permAviso(msg){ const m=String(msg||''); if(!/não tem permissão|not have permission|Permissões necessárias|Required permissions|script\.external_request|auth\/(drive|gmail|spreadsheets)/i.test(m)) return m;
+  return 'a planilha precisa de uma autorização nova. No Apps Script da planilha, escolha a função autorizarPermissoes no menu de cima, clique em ▶ Executar e aceite as permissões. Depois tente de novo. (Erro: '+m.replace(/\s+/g,' ').slice(0,90)+'…)'; }
 async function bulaBaixar(tipo){ const p=bulaEditProd, ov=document.getElementById('bula-ov'); if(!p||!ov||bulaBaixando) return;
   const inp=ov.querySelector(`input[data-bula="${tipo==='fispq'?'fispqUrl':'bulaUrl'}"]`), url=((inp&&inp.value)||'').trim();
   if(!/^https?:\/\//i.test(url)){ toast('Cole no campo o link do PDF (começa com http)'); return; }
@@ -5332,7 +5335,7 @@ async function bulaBaixar(tipo){ const p=bulaEditProd, ov=document.getElementByI
   bulaBaixando=true; toast('Baixando o PDF pela planilha…');
   let r=null; try{ r=await syncPost(syncUrl(), JSON.stringify({__bulaBaixar:{url, tipo}})); }catch(e){ r=null; }
   bulaBaixando=false;
-  if(!(r&&r.arquivo&&r.arquivo.url)){ toast('Não baixou: '+((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha')); return; }
+  if(!(r&&r.arquivo&&r.arquivo.url)){ toast('Não baixou: '+permAviso((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha')); return; }
   const k=bulaKey(p), rec=Object.assign({}, BULAS.reg[k]||{}, {produto:p}); delete rec.del;
   rec[tipo==='fispq'?'fispqUrl':'bulaUrl']=r.arquivo.url; rec[tipo+'Arq']=r.arquivo.nome||'arquivo.pdf'; rec[tipo+'Origem']=url; rec._u=tsAgora();
   BULAS.reg[k]=rec; lsSet(BULAS_KEY, JSON.stringify(BULAS));
