@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-268';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-269';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6792,11 +6792,17 @@ const FOCO_CORES=['#d73027','#fc8d59','#fee08b','#d9ef8b','#91bfdb','#4575b4']; 
 const FOCO_FORMULA='(s.B08 - s.B04) / (s.B08 + s.B04)';
 function limWkt(lm){ const an=(lm&&lm.coords&&lm.coords[0]||[]).slice(); if(!an.length) return ''; if(an[0][0]!==an[an.length-1][0]||an[0][1]!==an[an.length-1][1]) an.push(an[0]);
   return 'POLYGON(('+an.map(q=>(+q[1]).toFixed(6)+' '+(+q[0]).toFixed(6)).join(',')+'))'; }
-// mesmo polígono em metros (EPSG:3857): os tiles do mapa são pedidos nesse CRS e o Sentinel Hub lê a GEOMETRY no CRS do pedido
-// (em lat/lng, como antes, o recorte caía perto de (0,0) e os tiles vinham vazios: o NDVI do talhão não aparecia — v268)
-function limWkt3857(lm){ const an=(lm&&lm.coords&&lm.coords[0]||[]).slice(); if(!an.length) return ''; if(an[0][0]!==an[an.length-1][0]||an[0][1]!==an[an.length-1][1]) an.push(an[0]);
-  const R=6378137, rad=Math.PI/180, px=q=>{ const lat=Math.max(-85.05,Math.min(85.05,+q[0])), lng=+q[1]; return (R*lng*rad).toFixed(2)+' '+(R*Math.log(Math.tan(Math.PI/4+lat*rad/2))).toFixed(2); };
-  return 'POLYGON(('+an.map(px).join(',')+'))'; }
+// v269: imagem do talhão em foco — UM GetMap em CRS:84 (o mesmo pedido que calcula as estatísticas, que funciona),
+// recortado no limite (GEOMETRY em lon/lat) e com as cores das 6 faixas; vira um L.imageOverlay nos limites da caixa do
+// talhão. Antes eram tiles WMS em EPSG:3857 com a GEOMETRY: em lat/lng vinham vazios, em metros davam erro.
+async function ndviFocoImagem(c, lm, cena){ const bb=limBbox(lm), R=6371008.8, rad=Math.PI/180;
+  const wM=(bb.maxLng-bb.minLng)*rad*R*Math.cos((bb.minLat+bb.maxLat)/2*rad), hM=(bb.maxLat-bb.minLat)*rad*R;
+  const W=Math.max(64,Math.min(2048,Math.ceil(wM/5))), H=Math.max(64,Math.min(2048,Math.ceil(hM/5)));   // 5 m por pixel (Sentinel-2 = 10 m, NEAREST: fica nítido)
+  const q=new URLSearchParams({SERVICE:'WMS', REQUEST:'GetMap', LAYERS:c.layer||'VEGETATION_INDEX', FORMAT:'image/png', TRANSPARENT:'true', VERSION:'1.3.0', CRS:'CRS:84', BBOX:[bb.minLng,bb.minLat,bb.maxLng,bb.maxLat].map(x=>x.toFixed(6)).join(','), WIDTH:String(W), HEIGHT:String(H),
+    TIME:cena.data+'/'+cena.data, MAXCC:'100', GEOMETRY:limWkt(lm), EVALSCRIPT:b64utf(ndviEvalFaixas(cena.p5,cena.p95)), UPSAMPLING:'NEAREST', DOWNSAMPLING:'BICUBIC', SHOWLOGO:'false'});
+  const r=await fetch('https://sh.dataspace.copernicus.eu/ogc/wms/'+encodeURIComponent(c.inst.trim())+'?'+q.toString());
+  if(!r.ok){ let tx=''; try{ tx=(await r.text()).replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,160); }catch(e){} throw new Error('Copernicus respondeu '+r.status+(tx?': '+tx:'')); }
+  return {url:URL.createObjectURL(await r.blob()), bounds:[[bb.minLat,bb.minLng],[bb.maxLat,bb.maxLng]]}; }
 function b64utf(t){ return btoa(unescape(encodeURIComponent(t))); }
 function ndviEvalIndice(){ return '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:1,sampleType:"FLOAT32"}}}\nfunction evaluatePixel(s){if(!s.dataMask)return[NaN];return['+FOCO_FORMULA+'];}'; }
 function ndviEvalFaixas(lo,hi){ const C=FOCO_CORES.map(h=>[1,3,5].map(i=>(parseInt(h.slice(i,i+2),16)/255).toFixed(3)));
@@ -6848,9 +6854,12 @@ async function ndviFocoAplicar(c){ const L=window.L, t=findTalhao(c.foco), lm=li
   if(sel){ sel.disabled=false; sel.innerHTML=cenas.map((x,i)=>`<option value="${esc(x.data)}"${x===cena?' selected':''}>${esc(fmtData(x.data))}${x.nuvem!=null?' · nuvem '+Math.round(x.nuvem)+'%':''}${x.media!=null?' · média '+(+x.media).toFixed(2).replace('.',','):''}</option>`).join(''); }
   if(cena.vazia){ if(st) st.textContent='A passagem de '+fmtData(cena.data)+' não tem pixel válido dentro de '+tNome(t)+' (nuvem/fora da cena) — escolha outra passagem.'; if(leg){ leg.innerHTML=''; leg.hidden=true; } return true; }
   if(MAPA_NDVI.layer){ try{ _map.removeLayer(MAPA_NDVI.layer); }catch(e){} MAPA_NDVI.layer=null; }
-  MAPA_NDVI.layer=L.tileLayer.wms('https://sh.dataspace.copernicus.eu/ogc/wms/'+encodeURIComponent(c.inst.trim()), {layers:c.layer||'VEGETATION_INDEX', format:'image/png', transparent:true, version:'1.3.0', TIME:cena.data+'/'+cena.data, MAXCC:100, SHOWLOGO:false,
-    UPSAMPLING:'NEAREST', DOWNSAMPLING:'BICUBIC', className:'ndvi-nitida', GEOMETRY:limWkt3857(lm), EVALSCRIPT:b64utf(ndviEvalFaixas(cena.p5,cena.p95)), opacity:1, maxZoom:20, attribution:'NDVI: Copernicus Sentinel-2'});
-  MAPA_NDVI.avisou=false; MAPA_NDVI.layer.on('tileerror', ()=>{ if(!MAPA_NDVI.avisou){ MAPA_NDVI.avisou=true; toast('NDVI do talhão não carregou — confira o ID/camada do Copernicus'); } });
+  if(!cena.img){ if(st) st.textContent='⏳ montando o mapa NDVI de '+fmtData(cena.data)+' em '+tNome(t)+'…'; const chave3=chave+'|img|'+cena.data; MAPA_NDVI.buscando=chave3;
+    try{ cena.img=await ndviFocoImagem(c, lm, cena); if(MAPA_NDVI.buscando!==chave3) return true; }
+    catch(e){ const msg='NDVI do talhão não carregou: '+(e&&e.message||e); toast(msg); if(st) st.textContent=msg+' Mostrando a região inteira.'; return false; } }
+  if(MAPA_NDVI.imgUrl && MAPA_NDVI.imgUrl!==cena.img.url){ try{ URL.revokeObjectURL(MAPA_NDVI.imgUrl); }catch(e){} }
+  MAPA_NDVI.imgUrl=cena.img.url;
+  MAPA_NDVI.layer=L.imageOverlay(cena.img.url, cena.img.bounds, {opacity:1, interactive:false, className:'ndvi-nitida', attribution:'NDVI: Copernicus Sentinel-2'});
   MAPA_NDVI.layer.addTo(_map); ndviFormas(true);
   if(leg){ leg.innerHTML=legendaFoco(cena,t); leg.hidden=false; leg.classList.add('foco'); }
   if(st) st.textContent=`Sentinel-2, 10 m, recortado em ${tNome(t)} · ${cenas.length} passagem(ns) com até 60% de nuvem nos 90 dias até ${fmtData(_isISO(c.fim)?c.fim:_hojeISO())} · ${cena.n} pixels lidos.`;
