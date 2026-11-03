@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Conserto: recomendação direta não guardava os insumos (v264)** — desde a v234 (tela Receber nota), o tratador de
+  mudanças da tela Receber pegava qualquer campo `data-recf`/`data-reci` da página e parava ali; a Recomendação usa os
+  mesmos atributos, então produto, dose, nome, área etc. digitados no cartão não eram salvos e "Enviar por WhatsApp"
+  respondia "Adicione ao menos um produto". Agora esses tratadores só valem na tela Receber (`emReceber`).
 - **Chuva da estação meteorológica, pela planilha do Monitor de Irrigação (v262/v263)** — com a linha **PLANILHA IRRIGACAO**
   (link da planilha do app de irrigação) na aba CONFIG APP — o Code.gs procura e grava o link sozinho na primeira
   sincronização (v263) —, o puxar traz `chuva_est`: a chuva diária da aba CLIMA

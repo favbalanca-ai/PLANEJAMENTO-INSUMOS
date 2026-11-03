@@ -2557,7 +2557,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-263';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-264';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -10804,10 +10804,13 @@ document.addEventListener('change',e=>{
   if(e.target.id==='recom-talhao'){ location.hash=e.target.value?'#/recomendacao/'+encodeURIComponent(e.target.value):'#/recomendacao'; return; }
   if(e.target.id==='lim-file'||e.target.id==='lim-dir'){ const fs=[...(e.target.files||[])]; e.target.value=''; if(fs.length) limImportFiles(fs); return; }
   if(e.target.dataset && e.target.dataset.limsel!=null){ if(_limImport){ const it=_limImport.itens[+e.target.dataset.limsel]; if(it) it.tid=e.target.value; } return; }
-  if(e.target.dataset && e.target.dataset.reci!=null){ const it=REC.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.reci;
+  // Receber nota (data-reci / data-recf / data-recd): SÓ na tela Receber — a Recomendação usa os mesmos nomes de atributo
+  // (data-recf + data-reci) e, sem esta trava, os produtos e doses digitados na recomendação eram engolidos aqui (v264)
+  const emReceber=document.body.dataset.view==='receber';
+  if(emReceber && e.target.dataset && e.target.dataset.reci!=null){ const it=REC.itens[+e.target.dataset.i]; if(it){ const f=e.target.dataset.reci;
     if(f==='qtd') it.qtd=_mmC(e.target.value); else { const v=e.target.value.trim(); if(v&&!PROD[v]) toast('Produto não encontrado — escolha da lista'); it.produto=PROD[v]?v:''; } recRerender(); } return; }
-  if(e.target.dataset && e.target.dataset.recf!=null){ REC[e.target.dataset.recf]=e.target.value; return; }
-  if(e.target.dataset && e.target.dataset.recd!=null){ const it=REC.itens[+e.target.dataset.i]; if(!it||!it.div) return; const f=e.target.dataset.recd;
+  if(emReceber && e.target.dataset && e.target.dataset.recf!=null){ REC[e.target.dataset.recf]=e.target.value; return; }
+  if(emReceber && e.target.dataset && e.target.dataset.recd!=null){ const it=REC.itens[+e.target.dataset.i]; if(!it||!it.div) return; const f=e.target.dataset.recd;
     if(f==='foto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ it.div.foto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
     if(f==='ficou') it.div.ficou=e.target.checked; else if(f==='qtdNota') it.div.qtdNota=_mmC(e.target.value); else it.div[f]=e.target.value;
     if(f!=='obs') recRerender(); return; }
