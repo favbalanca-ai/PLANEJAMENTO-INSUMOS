@@ -67,6 +67,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Plantio com vários materiais: PDF/WhatsApp/quadro em sacos e sementes por ha (v267)** — a unidade **Sc60M** (saco
+  com 60 mil sementes) e variações ("SC 60 MIL", "60M", "5MM") passam a ser lidas (`semPorUn`, rótulo `sc`/`bag`); a
+  tabela de materiais mostra área, sc/ha, sacos, sementes/ha e sementes por metro de cada um. Semente de cada
+  material: população informada × ha ÷ sementes por saco; sem população e com uma linha do material no plano, vale o
+  total da linha (dose × área do talhão, a convenção da dose "equivalente"). Sementes não aparecem mais entre os
+  "Fertilizantes e líquidos". `plBl` dá o plural certo (bags / sc / sacos).
 - **Plantio com vários materiais no mesmo talhão (v266)** — no cartão da operação de plantio (Campo → 🌱 Recomendação
   de plantio) entra o bloco **🌽 Materiais no talhão**: cada linha é um híbrido/cultivar (sementes do portfólio) com os
   hectares que ocupa; "＋ Outro material" adiciona, e o app avisa quando a soma não bate com a área do talhão. A

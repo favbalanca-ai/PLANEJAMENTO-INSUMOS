@@ -246,7 +246,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
           '</div>')+
       (PL.ms && PL.ms.length ?
         '<div class="recipe" style="border-top:none"><div class="recipe-h"><span>Material</span><span class="r2">Área</span><span class="r3">Semente</span></div>'+
-        PL.ms.map(function(m){ return '<div class="rrow"><div><div class="r-prod">🌽 '+esc(m.p)+'</div></div><div class="r-tank"><div class="big">'+nf.format(m.h)+'</div><div class="un">ha</div></div><div class="r-tot">'+nf.format(m.b)+' '+esc(m.bl==='bag'?(m.b>=2?'bags':'bag'):m.bl)+'</div></div>'; }).join('')+'</div>'
+        PL.ms.map(function(m){ return '<div class="rrow"><div><div class="r-prod">🌽 '+esc(m.p)+'</div>'+(m.sh?'<div class="r-cls">'+nf0.format(m.sh)+' sementes/ha'+(m.sm?' · '+nf1.format(m.sm)+' por metro':'')+'</div>':'')+'</div><div class="r-tank"><div class="big">'+nf.format(m.h)+'</div><div class="un">ha</div></div><div class="r-tot">'+nf.format(m.b)+' '+esc(m.bl==='bag'?(m.b>=2?'bags':'bag'):m.bl)+'</div></div>'; }).join('')+'</div>'
       : '<div class="cfg" style="grid-template-columns:1fr 1fr">'+
         '<div class="c ro"><div class="c-lbl">Semente</div><div class="val" style="font-size:15px">'+esc(PSEM?PSEM.produto:'—')+'</div></div>'+
         '<div class="c ro"><div class="c-lbl">No talhão</div><div class="val">'+(PL.bags?PLB(PL.bags):(PSEM?PLB(PSEM.dose*AREA):'—'))+'</div></div>'+
@@ -370,7 +370,7 @@ p.st{font-size:14.5px;color:var(--ink-soft);max-width:320px;margin:2px 0 0}
   // ---- baixa (volume usado por produto) ----
   document.getElementById('baixaList').innerHTML=ITENS.map(function(it,i){
     var total=it.dose*(it.h||AREA), m=(it.sem&&PL&&PL.ms)?PL.ms.filter(function(x){return x.p===it.produto;})[0]:null;
-    if(m){ it={produto:it.produto, un:m.bl==='bag'?'bags':it.un, dose:m.h?m.b/m.h:0, sem:true, h:m.h}; total=m.b; }   // material com área própria (vários híbridos no talhão)
+    if(m){ it={produto:it.produto, un:m.bl==='bag'?'bags':(m.bl==='sc'?'sc':it.un), dose:m.h?m.b/m.h:0, sem:true, h:m.h}; total=m.b; }   // material com área própria (vários híbridos no talhão)
     else if(it.sem && PL && PL.bags && AREA){ it={produto:it.produto, un:PL.bl==='bag'?'bags':it.un, dose:PL.bags/AREA, sem:true}; total=PL.bags; }   // população informada manda
     else if(it.sem && ((TS && BL==='bag')||(PL && PL.bl==='bag'))) it={produto:it.produto, un:'bags', dose:it.dose, sem:true};
     else if(PL){ var cv=CONV(it.un); if(cv.f!==1){ it={produto:it.produto, un:cv.u, dose:it.dose*cv.f, ts:it.ts}; total=it.dose*AREA; } }   // só a exibição: "8 bags" em vez de "8 5MM"

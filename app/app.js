@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-266';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-267';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4011,13 +4011,13 @@ function tankArredondar(key){ const fk=opFromKey(key), r=realEnsure(key), ha=tan
 // de TS vêm do PLANEJAMENTO (por ha) e viram "por bag": dose/ha ÷ bags/ha. Não precisa de PMS.
 function _isTS(it){ const c=String((it&&it.classe)||((it&&PROD[it.produto])||{}).classe||'').trim().toUpperCase();
   return c==='TS'||/^TS\b/.test(c)||/TRATAMENTO DE SEMENTE/.test(c); }
-// sementes por unidade, pela unidade do PORTIFÓLIO: "5MM" = 5 milhões · "60M"/"60MIL" = 60 mil
-function semPorUn(un){ const u=String(un||'').trim().toUpperCase().replace(/\s+/g,'');
+// sementes por unidade, pela unidade do PORTIFÓLIO: "5MM" = 5 milhões · "60M"/"60MIL" = 60 mil · "SC60M"/"Sc 60 mil" = saco de 60 mil (v267)
+function semPorUn(un){ const u=String(un||'').trim().toUpperCase().replace(/\s+/g,'').replace(/^(SC|SACO|SACOS|BAG)/,'').replace(/(SC|SACO|SACOS|BAG)$/,'');
   let m=u.match(/^(\d+(?:[.,]\d+)?)MM$/); if(m) return parseFloat(m[1].replace(',','.'))*1e6;
-  m=u.match(/^(\d+(?:[.,]\d+)?)(M|MIL)$/); if(m) return parseFloat(m[1].replace(',','.'))*1e3;
+  m=u.match(/^(\d+(?:[.,]\d+)?)(M|MIL|K)$/); if(m) return parseFloat(m[1].replace(',','.'))*1e3;
   return 0; }
-// nome da unidade da batelada: bag (5MM…), saco (SC), kg (KG)
-function tsBagLbl(un){ const u=String(un||'').trim().toUpperCase(); if(semPorUn(u)) return 'bag'; if(u==='SC') return 'saco'; if(u==='KG') return 'kg'; return u?u.toLowerCase():'un'; }
+// nome da unidade da batelada: bag (5MM…), sc (saco com nº de sementes: Sc60M), saco (SC), kg (KG)
+function tsBagLbl(un){ const u=String(un||'').trim().toUpperCase().replace(/\s+/g,''); if(semPorUn(u)) return /^(SC|SACO)|(SC|SACO)$/.test(u)?'sc':'bag'; if(u==='SC') return 'saco'; if(u==='KG') return 'kg'; return u?u.toLowerCase():'un'; }
 // tudo o que a recomendação de TS precisa, a partir da operação de plantio (semente + produtos de TS)
 // operação SÓ de tratamento de sementes: não tem semente, mas tem produto de TS → a semente vem da operação de PLANTIO
 // da mesma safra e TODOS os produtos dela (TS, fungicida, nutrição…) são dosados por batelada
@@ -4132,18 +4132,26 @@ function plantioCalc(key, rl){
   const pop=(+cfg.pop>0)?+cfg.pop:popPlan;                               // população INFORMADA (sementes/ha) manda
   const esp=ESP_PADRAO, semM=pop?pop*esp/10000:0;
   const kgHa=bl==='kg'?semDose:0;                                         // semente em kg (braquiária…): kg/ha
-  const outros=its.filter(x=>x.produto!==sem.produto && !_isTS(x));      // fertilizantes e líquidos
-  // v266: vários MATERIAIS (híbridos/cultivares) compondo a área do talhão — rl.sems=[{produto, ha}]. Sem lista: a semente
-  // do plano na área toda. Mesma população (sementes/ha) para todos; bags de cada um pela sua embalagem (unidade do PORTIFÓLIO).
+  const outros=its.filter(x=>!_isSemente(x) && !_isTS(x));               // fertilizantes e líquidos (nenhuma semente aqui)
+  // v266/v267: vários MATERIAIS (híbridos/cultivares) compondo a área do talhão — rl.sems=[{produto, ha}]. Sem lista: a semente
+  // do plano na área toda. Semente de cada material: população informada × ha ÷ sementes por saco/bag; sem população informada e
+  // com uma linha do material no PLANO, vale o total da linha (dose × área do talhão — a dose do plano é "equivalente" ao talhão todo).
   const lista=Array.isArray(rl.sems)?rl.sems.filter(m=>m&&m.produto):[];
-  const sems=(lista.length?lista:[{produto:sem.produto, ha:area}]).map((m,ix)=>{ const un=(PROD[m.produto]&&PROD[m.produto].un)||(m.produto===sem.produto?semUn:''), ha=lista.length?(+m.ha||0):area;
+  const sems=(lista.length?lista:[{produto:sem.produto, ha:area}]).map(m=>{ const un=(PROD[m.produto]&&PROD[m.produto].un)||(m.produto===sem.produto?semUn:''), ha=lista.length?(+m.ha||0):area;
     const pb=(m.produto===sem.produto)?porBag:(semPorUn(un)||porBag), b=tsBagLbl(un);
-    return {produto:m.produto, un, ha, bl:b, porBag:pb, bags:b==='kg'?semDose*ha:((pop&&pb)?pop*ha/pb:semDose*ha)}; });
+    const linha=all.find(x=>x.produto===m.produto && _isSemente(x)), dL=linha?(+((its.find(x=>x.produto===m.produto)||linha).dose)||0):0;
+    let bags, popM;
+    if(b==='kg'){ bags=(dL||semDose)*ha; popM=0; }
+    else if(lista.length>1 && linha && dL && !(+cfg.pop>0)){ bags=dL*area; popM=(ha&&pb)?Math.round(bags*pb/ha):0; }
+    else { bags=(pop&&pb)?pop*ha/pb:(dL||semDose)*ha; popM=pop||((pb&&ha)?Math.round(bags*pb/ha):0); }
+    return {produto:m.produto, un, ha, bl:b, porBag:pb, bags, pop:popM, scHa:ha?bags/ha:0, semM:popM?popM*esp/10000:0}; });
   const haSoma=+sems.reduce((s,m)=>s+m.ha,0).toFixed(2), multi=sems.length>1||(lista.length===1&&lista[0].produto!==sem.produto);
   return {key, t, area, sem:{produto:sem.produto, un:semUn, dose:semDose}, bl, porBag, esp, pop, popPlan, popInf:+cfg.pop>0, semM, kgHa,
     bags:lista.length?+sems.reduce((s,m)=>s+m.bags,0).toFixed(4):((pop&&porBag)?pop*area/porBag:semDose*area), temTS, tsSt, tsProds:all.filter(_isTS).map(x=>x.produto), outros,
     sems, multi, haSoma, haDif:+(area-haSoma).toFixed(2)};
 }
+// rótulo da embalagem do material no plural certo (bags / sc / saco / kg)
+function plBl(m){ const b=m.bl||'un'; return b==='bag'&&m.bags>=2?'bags':(b==='saco'&&m.bags>=2?'sacos':b); }
 // sementes do portfólio (para a lista de materiais do plantio)
 function sementesLista(){ return Object.keys(PROD).filter(p=>/semente/i.test((PROD[p]&&PROD[p].classe)||'')).sort((a,b)=>a.localeCompare(b)); }
 // editor dos materiais do plantio (cartão da operação, aba Campo)
@@ -4162,12 +4170,12 @@ function plantioOut(c){
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
   const B=n=>`${fmtDose(n)} ${c.bl}${c.bl==='bag'&&n>=2?'s':''}`;
   let h=`<div class="app-stats">
-      ${c.bl==='kg'?stat('Semente/ha',fmtDose(c.kgHa)+' kg'):stat('População (sementes/ha)', c.pop?nf0.format(c.pop):'—')}
-      ${c.bl==='kg'?'':stat('Sementes por metro', c.semM?fmtSemM(c.semM):'—')}
-      ${stat('Semente no talhão', B(c.bags))}
+      ${c.multi?stat('Materiais', c.sems.length):(c.bl==='kg'?stat('Semente/ha',fmtDose(c.kgHa)+' kg'):stat('População (sementes/ha)', c.pop?nf0.format(c.pop):'—'))}
+      ${c.multi?stat('Área', num(c.haSoma)+' ha'):(c.bl==='kg'?'':stat('Sementes por metro', c.semM?fmtSemM(c.semM):'—'))}
+      ${c.multi?stat('Semente no talhão', c.sems.map(m=>fmtDose(m.bags)+' '+plBl(m)).join(' + ')):stat('Semente no talhão', B(c.bags))}
     </div>
     <p class="app-note">🌱 <b>${esc(c.multi?c.sems.map(m=>m.produto).join(' + '):c.sem.produto)}</b> · linhas a 50 cm${c.temTS?` · ${plantioTsTxt(c)}`:''}${c.popInf&&c.popPlan&&c.popPlan!==c.pop?` · <span class="mut">planejado ${nf0.format(c.popPlan)}/ha</span>`:''}</p>`;
-  if(c.multi) h+=`<table class="app-ins"><thead><tr><th>Material</th><th class="num">Área</th><th class="num">Semente</th></tr></thead><tbody>${c.sems.map(m=>`<tr><td>🌽 ${esc(m.produto)}</td><td class="num">${num(m.ha)}<small> ha</small></td><td class="num"><b>${fmtDose(m.bags)}</b><small> ${esc(m.bl)}${m.bl==='bag'&&m.bags>=2?'s':''}</small></td></tr>`).join('')}</tbody></table>${Math.abs(c.haDif)>=0.005?`<p class="app-note" style="color:var(--amber)">⚠️ Os materiais somam ${num(c.haSoma)} ha e o talhão tem ${num(c.area)} ha.</p>`:''}`;
+  if(c.multi) h+=`<table class="app-ins"><thead><tr><th>Material</th><th class="num">Área</th><th class="num">Por ha</th><th class="num">Semente</th><th class="num">Sementes/ha</th><th class="num">Sem./m</th></tr></thead><tbody>${c.sems.map(m=>`<tr><td>🌽 ${esc(m.produto)}</td><td class="num">${num(m.ha)}<small> ha</small></td><td class="num">${m.scHa?fmtDose(m.scHa)+'<small> '+esc(m.bl)+'/ha</small>':'—'}</td><td class="num"><b>${fmtDose(m.bags)}</b><small> ${esc(plBl(m))}</small></td><td class="num">${m.pop?nf0.format(m.pop):'—'}</td><td class="num">${m.semM?fmtSemM(m.semM):'—'}</td></tr>`).join('')}</tbody></table>${Math.abs(c.haDif)>=0.005?`<p class="app-note" style="color:var(--amber)">⚠️ Os materiais somam ${num(c.haSoma)} ha e o talhão tem ${num(c.area)} ha.</p>`:''}`;
   if(!c.pop && c.bl!=='kg') h+=`<p class="app-note" style="color:var(--amber)">⚠️ Informe a <b>população (sementes/ha)</b>${c.sem.un?'':' — a semente está sem unidade no PORTIFÓLIO (preencha na planilha, ex.: 5MM)'}.</p>`;
   if(c.outros.length) h+=`<div class="app-secttl">🧪 Fertilizantes e líquidos — por ha</div>
     <table class="app-ins"><thead><tr><th>Insumo</th><th class="num">Dose/ha</th><th class="num">Total no talhão</th></tr></thead><tbody>${c.outros.map(x=>{ const d=doseHaUn(x.dose,x.un);
@@ -4204,11 +4212,11 @@ function plantioWhats(r){
   x+=`Talhão: ${tNome(t)}${area?` (${num(area)} ha)`:''}\n`;
   if(r.cultura) x+=`Cultura: ${r.cultura}\n`;
   if(r.data) x+=`Data: ${fmtData(r.data)}\n`;
-  if(c.multi){ x+=`\n🌽 *Materiais (${num(c.area)} ha):*\n`+c.sems.map(m=>`• *${m.produto}* — ${num(m.ha)} ha → ${fmtDose(m.bags)} ${m.bl}${m.bl==='bag'&&m.bags>=2?'s':''}`).join('\n')+'\n';
+  if(c.multi){ x+=`\n🌽 *Materiais (${num(c.area)} ha):*\n`+c.sems.map(m=>`• *${m.produto}* — ${num(m.ha)} ha → *${fmtDose(m.bags)} ${plBl(m)}*${m.scHa?` (${fmtDose(m.scHa)} ${m.bl}/ha`+(m.pop?` · ${nf0.format(m.pop)} sem/ha · ${fmtSemM(m.semM)} sem/m`:'')+')':''}`).join('\n')+'\n';
     if(Math.abs(c.haDif)>=0.005) x+=`⚠️ os materiais somam ${num(c.haSoma)} ha (talhão: ${num(c.area)} ha)\n`; if(c.temTS) x+=`${plantioTsTxt(c)}\n`; }
-  else x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
-  if(c.bl==='kg') x+=`• *${fmtDose(c.kgHa)} kg/ha*\n`;
-  else if(c.pop) x+=`• *${nf0.format(c.pop)} sementes/ha*\n• *${fmtSemM(c.semM)} sementes por metro* (linhas a 50 cm)\n`;
+  else { x+=`\n🌱 *Semente: ${c.sem.produto}*${c.temTS?` — ${plantioTsTxt(c)}`:''}\n`;
+    if(c.bl==='kg') x+=`• *${fmtDose(c.kgHa)} kg/ha*\n`;
+    else if(c.pop) x+=`• *${nf0.format(c.pop)} sementes/ha*\n• *${fmtSemM(c.semM)} sementes por metro* (linhas a 50 cm)\n`; }
   if(c.temTS && c.tsSt!=='feito') x+=`🧪 TS planejado: ${c.tsProds.join(', ')}\n`;
   if(c.outros.length) x+=`\n*Fertilizantes e líquidos (por ha):*\n`+c.outros.map(z=>{ const d=doseHaUn(z.dose,z.un); return `• ${z.produto} — *${fmtDose(d.v)}${d.u?' '+d.u:''}/ha*`; }).join('\n')+'\n';
   if(r.maquina) x+=`\n🚜 ${r.maquina}\n`;
@@ -5992,7 +6000,7 @@ function recomPayload(r){
   const pc=(r.tipo!=='ts'&&r.opKey)?plantioCalc(r.opKey):null;
   if(pc){ payload.cd=''; payload.v=0; payload.tk=0;
     payload.pl={sm:+pc.semM.toFixed(2), sh:Math.round(pc.pop), kh:+(+pc.kgHa||0).toFixed(2), esp:pc.esp, bl:pc.bl, bags:+pc.bags.toFixed(3), ts:pc.temTS?(pc.tsSt||'pend'):''};
-    if(pc.multi){ payload.pl.ms=pc.sems.map(m=>({p:m.produto, h:+m.ha.toFixed(2), b:+m.bags.toFixed(3), bl:m.bl, u:m.un}));   // v266: materiais → o operador dá baixa por material
+    if(pc.multi){ payload.pl.ms=pc.sems.map(m=>({p:m.produto, h:+m.ha.toFixed(2), b:+m.bags.toFixed(3), bl:m.bl, u:m.un, sh:m.pop||0, sm:m.semM?+m.semM.toFixed(2):0}));   // v266: materiais → o operador dá baixa por material
       if(!payload.it.some(x=>x.s&&x.h)){   // recomendação antiga (1 linha de semente): abre em uma por material
         const semIdx=payload.it.findIndex(x=>x.s); const novos=pc.sems.map(m=>({p:m.produto, u:m.un, d:+pc.sem.dose||0, l:0, s:1, h:+m.ha.toFixed(2)}));
         if(semIdx>=0) payload.it.splice(semIdx,1,...novos); else payload.it.push(...novos); } } }
@@ -6277,13 +6285,14 @@ function exportPlantioPDF(r){
     ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}
     ${rxKv('Plantadeira',esc(r.maquina||''),'w2')}${rxKv('Operação',esc(r.opNome||''))}${rxKv('Tratamento (TS)',c.temTS?esc(plantioTsTxt(c).replace('⚠️ ','')):'sem TS')}</div></div>
   <div class="rx-sec"><h2>2. Semente — ${esc(c.multi?c.sems.map(m=>m.produto).join(' + '):c.sem.produto)}</h2>
-    ${c.multi?`<table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:50%"><col style="width:20%"><col style="width:25%"></colgroup><thead><tr><th>#</th><th>Material</th><th class="num">Área</th><th class="num">Semente</th></tr></thead><tbody>
-      ${c.sems.map((m,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(m.produto)}</b></td><td class="num">${num(m.ha)} ha</td><td class="num"><b>${fmtDose(m.bags)} ${esc(m.bl)}${m.bl==='bag'&&m.bags>=2?'s':''}</b></td></tr>`).join('')}
-      <tr><td></td><td><b>Total</b></td><td class="num"><b>${num(c.haSoma)} ha</b>${Math.abs(c.haDif)>=0.005?` <span style="color:#b7791f">(talhão ${num(c.area)} ha)</span>`:''}</td><td class="num"></td></tr></tbody></table>`:''}
-    <div class="rx-big">${c.bl==='kg'
+    ${c.multi?`<table class="rx pdf-ops"><colgroup><col style="width:4%"><col style="width:32%"><col style="width:12%"><col style="width:14%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Material</th><th class="num">Área</th><th class="num">Por ha</th><th class="num">Semente</th><th class="num">Sementes/ha</th><th class="num">Sem./m</th></tr></thead><tbody>
+      ${c.sems.map((m,i)=>`<tr><td class="num">${i+1}</td><td><b>${esc(m.produto)}</b></td><td class="num">${num(m.ha)} ha</td><td class="num">${m.scHa?fmtDose(m.scHa)+' '+esc(m.bl)+'/ha':'—'}</td><td class="num"><b>${fmtDose(m.bags)} ${esc(plBl(m))}</b></td><td class="num">${m.pop?nf0.format(m.pop):'—'}</td><td class="num">${m.semM?fmtSemM(m.semM):'—'}</td></tr>`).join('')}
+      <tr><td></td><td><b>Total</b></td><td class="num"><b>${num(c.haSoma)} ha</b>${Math.abs(c.haDif)>=0.005?` <span style="color:#b7791f">(talhão ${num(c.area)} ha)</span>`:''}</td><td></td><td class="num"><b>${c.sems.map(m=>fmtDose(m.bags)+' '+plBl(m)).join(' + ')}</b></td><td></td><td></td></tr></tbody></table>
+      <p class="rx-note" style="margin:4px 0 0">Linhas a 50 cm. Sementes/ha e por metro calculadas pela embalagem de cada material (unidade do PORTIFÓLIO: ex. Sc60M = saco com 60 mil sementes).</p>`
+    :`<div class="rx-big">${c.bl==='kg'
       ?`<div><b>${fmtDose(c.kgHa)}</b><span>kg de semente por ha</span></div>`
       :`<div><b>${c.pop?nf0.format(c.pop):'—'}</b><span>sementes por ha</span></div><div><b>${c.semM?fmtSemM(c.semM):'—'}</b><span>sementes por metro<br>(linhas a 50 cm)</span></div>`}
-      <div><b>${B(c.bags)}</b><span>semente no talhão</span></div></div></div>
+      <div><b>${B(c.bags)}</b><span>semente no talhão</span></div></div>`}</div>
   ${c.outros.length?`<div class="rx-sec"><h2>3. Fertilizantes e líquidos — por ha</h2>
     <table class="rx pdf-ops"><colgroup><col style="width:5%"><col style="width:45%"><col style="width:18%"><col style="width:17%"><col style="width:15%"></colgroup>
     <thead><tr><th>#</th><th>Produto</th><th class="num">Dose/ha</th><th class="num">Total no talhão</th><th class="num">Utilizado</th></tr></thead><tbody>
