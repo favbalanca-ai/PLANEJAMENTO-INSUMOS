@@ -67,6 +67,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Aviso claro quando a planilha está sem permissão (v270)** — "Baixar e anexar pelo link" (bula/FISPQ) e outros
+  pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
+  rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
+  permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
 - **Conserto: NDVI do talhão em foco não aparecia no mapa (v268/v269)** — os tiles WMS em EPSG:3857 com a `GEOMETRY`
   do talhão vinham vazios (recorte em lat/lng) ou com erro (recorte em metros, v268), embora a legenda e os percentis
   (GetMap em CRS:84) funcionassem. Na v269 a camada em foco deixou de ser tiles: é **uma imagem** pedida do mesmo jeito

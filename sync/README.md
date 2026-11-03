@@ -113,6 +113,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Permissões do Apps Script (v270)
+- O Web App roda como a dona. Quando o Code.gs passa a usar um serviço novo (internet para baixar a bula/FISPQ pelo
+  link e ler a NF-e, Gmail, Drive, gatilhos), o app pode responder **"Você não tem permissão para chamar
+  UrlFetchApp.fetch. Permissões necessárias: …script.external_request"**. Não é erro do código: o Google só pede a
+  permissão nova quando alguém roda uma função no editor.
+- Solução: Extensões → Apps Script → escolha **`autorizarPermissoes`** no menu de funções → ▶ Executar → aceite tudo.
+  A função só toca em cada serviço (planilha, Drive, internet, Gmail, gatilhos) para o Google pedir as permissões de
+  uma vez. Depois o app funciona sem precisar de Nova versão.
+
 ## Chuva da estação: planilha do Monitor de Irrigação (v262)
 - `CONFIG APP` → `PLANILHA IRRIGACAO` = link (ou id) da planilha do app Monitor de Irrigação. Com ela, o puxar inclui a
   chave `chuva_est` (`readChuvaEstacao`, cache 1 h): aba **CLIMA** (Data, Chuva (mm), Estimado, Fazenda, Tmax, Tmin,

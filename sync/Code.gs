@@ -2000,6 +2000,21 @@ function driveArquivo_(tipo, id){
   return { ok:true, nome:f.getName(), b64:Utilities.base64Encode(f.getBlob().getBytes()) };
 }
 
+// ---- Autorizar permissões (rode UMA vez pelo editor quando o app avisar "Você não tem permissão para chamar …") ----
+// O Web App roda como a dona; quando o Code.gs ganha um serviço novo (ex.: baixar a bula pelo link = UrlFetchApp), o Google
+// só pede a permissão nova quando alguém roda uma função no editor. Esta função toca em cada serviço que o Code.gs usa,
+// então o Google pede todas as permissões de uma vez: Planilhas, Drive, Gmail (NF-e), internet (bula/NF-e) e gatilhos.
+function autorizarPermissoes(){
+  var ok = [];
+  ok.push('planilha: ' + ss().getName());
+  ok.push('drive: ' + DriveApp.getRootFolder().getName());
+  try { UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions:true }); ok.push('internet: ok'); } catch (e) { ok.push('internet: ' + e); }
+  try { GmailApp.getUserLabelByName('NFE-OK'); ok.push('gmail: ok'); } catch (e) { ok.push('gmail: ' + e); }
+  ok.push('gatilhos: ' + ScriptApp.getProjectTriggers().length);
+  Logger.log(ok.join('\n'));
+  return 'Permissões concedidas — ' + ok.join(' · ');
+}
+
 function doGet(e){
   try { return doGet_(e); }
   catch (err){ var m = ''; try { m = (err && (err.message || String(err))) || ''; } catch (x) {}
