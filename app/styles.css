@@ -2057,6 +2057,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ce-mes summary{cursor:pointer;list-style:none}.ce-mes summary::-webkit-details-marker{display:none}.ce-mes summary::before{content:'▸ ';color:var(--muted)}.ce-mes[open] summary::before{content:'▾ '}
 .kpi-link{display:block;text-decoration:none;color:inherit;cursor:pointer}
 
+/* v266: materiais do plantio (vários híbridos no talhão) */
+.pl-sems{margin:6px 0 2px}.pl-sem{display:flex;align-items:center;gap:8px;margin:4px 0}.pl-sem .sel{flex:1;min-width:0}
+.pl-sem-ha{display:inline-flex;align-items:center;gap:4px}.pl-sem-ha .cell{width:74px}
+.rc-ha{margin-top:3px;font-size:11.5px}.rc-ha .cell{width:64px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2438,4 +2443,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ld-item .na-tx b{font-size:11px}
   .ld-item .na-tx span{font-size:9.5px}
   .mapa-menu .btn{font-size:11.5px}
+  .rc-ha{font-size:9.5px}
 }

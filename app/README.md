@@ -67,6 +67,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   sai do **nº de sementes da embalagem** lido na descrição da nota ("BIG BAG 5.000.000 SEM", "SC 200.000
   SEMENTES", "5MM", "200 MIL"): ex. 8 bags de 5 milhões + 5 sacos de 200 mil = **8,2** (antes contava 13).
   Memória do de-para com fator 1 numa semente de outro tamanho é recalculada. O fator continua editável.
+- **Plantio com vários materiais no mesmo talhão (v266)** — no cartão da operação de plantio (Campo → 🌱 Recomendação
+  de plantio) entra o bloco **🌽 Materiais no talhão**: cada linha é um híbrido/cultivar (sementes do portfólio) com os
+  hectares que ocupa; "＋ Outro material" adiciona, e o app avisa quando a soma não bate com a área do talhão. A
+  população é a mesma para todos; a semente de cada material é calculada pela sua embalagem. Fica em `rl.sems`
+  (REALIZADO APP, sincroniza). Entra no quadro, no WhatsApp, no PDF do plantio e na página do operador (um card de
+  baixa por material, `pl.ms`); a recomendação criada da operação ganha uma linha de semente por material com a área.
+  Na Recomendação (direta ou do plano), toda linha de semente tem o campo **ha** (vazio = talhão inteiro): total,
+  retorno e baixa usam a área da linha; o cartão mostra a soma dos materiais. O planejamento (demanda) continua com a
+  semente do plano — ajuste lá se quiser comprar os dois materiais.
 - **Recomendação: máquina escolhida da lista (v265)** — o campo "Máquina / conjunto" do cartão virou uma lista com os
   conjuntos da aba Máquinas (mais "✏️ Outra (digitar)…" para drone, avião, terceiro). Na recomendação direta, ao
   escolher o primeiro insumo o app sugere o conjunto pela classe (pulverizador para defensivos, adubadora para
