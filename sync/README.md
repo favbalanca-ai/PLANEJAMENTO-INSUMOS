@@ -113,6 +113,19 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Valor no razão e custo inicial (v272 — fase 1 do Financeiro)
+
+- **MOVIMENTAÇÃO ESTOQUE** ganha as colunas **VALOR UNIT** e **VALOR TOTAL** (criadas no fim da aba se
+  faltarem, localizadas pelo cabeçalho — `movSheet_`/`movLayout_`). Na **ENTRADA** vai o preço pago do item
+  (custo real da NF-e ou o preço digitado na compra); na **SAÍDA**, o custo médio que o app calculou para o dia
+  da aplicação (campo `custo` de cada item do `__saida`). Linhas antigas ficam sem valor; o app não depende delas
+  (calcula tudo a partir de COMPRAS APP, REALIZADO APP e recomendações).
+- **PORTIFÓLIO** ganha a coluna **CUSTO INICIAL** (R$ por unidade do estoque inicial da safra), criada pelo
+  cabeçalho da linha 3 como a EM PEDIDO (`custoIniColOf`). O app lê (`custoIni` em cada produto) e grava pela
+  edição `custoIni` (perfis Administrativo e Planejamento). A publicação da planilha pelo módulo Preços preserva a
+  coluna.
+- Nada muda nos payloads existentes: `__entrada`/`__entradas` já levavam `preco` por item.
+
 ## Permissões do Apps Script (v270)
 - O Web App roda como a dona. Quando o Code.gs passa a usar um serviço novo (internet para baixar a bula/FISPQ pelo
   link e ler a NF-e, Gmail, Drive, gatilhos), o app pode responder **"Você não tem permissão para chamar

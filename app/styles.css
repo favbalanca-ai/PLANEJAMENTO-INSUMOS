@@ -2009,6 +2009,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .est-prod{cursor:pointer}.est-prod:hover{text-decoration:underline;color:var(--teal)}
 .ext-sec{font-weight:800;font-size:13px;margin:10px 0 6px;color:var(--ink)}.ext-sec b{color:var(--teal);margin-left:6px}
 .ext-tbl td,.ext-tbl th{font-size:12.5px}
+/* custo médio (v272): selo "ref." (preço de referência, sem nota) e cabeçalho do extrato */
+.pill.cm-ref{background:var(--amber-soft);color:var(--amber);font-size:10px;padding:2px 6px;margin-left:4px;vertical-align:middle}
+.ext-cm{display:flex;flex-wrap:wrap;gap:6px 18px;margin:2px 0 8px;font-size:13px}
+.ext-cm span{display:flex;flex-direction:column}
+.ext-cm small{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.ext-cm b{color:var(--teal)}
 
 /* ===== Quadro: faixas que encolhem (filtros · linha do tempo) (v247) ===== */
 .oq-fold{margin-bottom:8px}
@@ -2454,6 +2460,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ext-sec{font-size:10.5px}
   .ext-tbl td{font-size:10px}
   .ext-tbl th{font-size:10px}
+  .ext-cm{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
