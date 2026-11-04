@@ -113,6 +113,24 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Financeiro: cadastros e títulos (v273 — fase 2)
+
+Abas por cabeçalho, criadas quando faltam (`sheetCols_`): **PRODUTORES** (CPF · NOME · E-MAIL CONTADOR · IMÓVEL
+PADRÃO · ATIVO), **IMÓVEIS RURAIS** (CÓDIGO · NOME · CAD ITR · MUNICÍPIO · UF · EXPLORAÇÃO · PRODUTOR ·
+PARTICIPAÇÃO % · FAZENDA APP · ATIVO), **CONTAS BANCÁRIAS** (CÓDIGO · PRODUTOR · BANCO · AGÊNCIA · CONTA · TIPO ·
+ATIVA) e **TÍTULOS** (ID · TIPO · PRODUTOR · PARTICIPANTE · PARTICIPANTE NOME · DOC TIPO · DOC Nº · CHAVE · PARCELA ·
+EMISSÃO · VENCIMENTO · VALOR · FORMA PGTO · CATEGORIA · IMÓVEL · STATUS · DATA PGTO · ORIGEM · OBS · ATUALIZADO · QUEM).
+
+- O app recebe tudo na chave `financeiro` do pacote (só módulo Administrativo; `readFinanceiro`).
+- `__titulo {titulos:[{id, …, del}]}` cria, edita, marca pago ou exclui títulos (`tituloGrava_`, idempotente pelo
+  ID; manuais têm ID `m:…`). `__cadFin {tipo:'produtor'|'imovel'|'conta', itens:[…]}` grava cadastros
+  (`cadFinGrava_`, só ADMIN quando há login).
+- `finTitulosDaNota_(chave, dups, pag)` roda dentro de `nfeClassifica_` (RECEBIDA, EM TRÂNSITO ou A ENTREGAR):
+  relê o XML do Drive (`finDupsGs_`: `cobr/dup` e `pag/detPag`), usa as parcelas do app como reserva, regrava os
+  títulos ABERTOS da nota e preserva os PAGOS/CANCELADOS. Sem parcelas: 1 título com vencimento = emissão e OBS
+  "confirmar". `finCancelaTitulos_` roda no cancelamento (evento 110111) e na nota IGNORADA.
+- `nfeConfigLer_` soma os CPFs ativos da aba PRODUTORES à lista PRODUTOR da CONFIG NFE.
+
 ## Valor no razão e custo inicial (v272 — fase 1 do Financeiro)
 
 - **MOVIMENTAÇÃO ESTOQUE** ganha as colunas **VALOR UNIT** e **VALOR TOTAL** (criadas no fim da aba se

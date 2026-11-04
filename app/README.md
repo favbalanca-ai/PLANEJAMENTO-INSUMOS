@@ -71,6 +71,24 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Financeiro: cadastros e títulos a pagar (v273, fase 2 do Financeiro)** — no módulo Administrativo, a tela
+  **Financeiro** substitui o Fluxo de Caixa local (o caderno no aparelho foi aposentado; `#/fluxocaixa` abre o
+  Financeiro). Os dados vivem na planilha (chave `financeiro` do pacote: abas PRODUTORES, IMÓVEIS RURAIS, CONTAS
+  BANCÁRIAS e TÍTULOS), só para quem tem o módulo Administrativo.
+  - **Títulos de nota fiscal nascem sozinhos**: ao confirmar a nota em Compras, a planilha relê o XML e grava um
+    título por parcela do bloco de cobrança (vencimento, valor, forma de pagamento, fornecedor, produtor
+    destinatário). Nota sem parcelas vira 1 título com vencimento igual à emissão e a observação "confirmar".
+    Nota cancelada cancela os títulos em aberto; remessa de entrega futura não gera título (o dinheiro é da nota
+    de faturamento). O app lê as parcelas no XML (`nfeLerXml`: `dups`, `pag`), mostra na conferência
+    ("Pagamento: 3 parcelas · boleto") e manda junto no `__nfeClassifica` como reserva.
+  - **Tela Financeiro** (`V.financeiro`): cards A pagar em aberto, Vencidos, 7 dias e 30 dias; chips de situação;
+    busca; filtros por produtor e mês; lista por vencimento com dias de atraso; **Novo título** manual (recibo,
+    folha, energia, arrendamento, venda…); editar; **✔ Pago** (só a data; conta bancária, juros e desconto entram na
+    fase 3); reabrir; cancelar título de nota; excluir manual. Gravação `__titulo` (`finPost`), idempotente pelo ID.
+  - **Tela Cadastros** (`V.cadastros`, só ADMIN): produtores (CPF, nome, e-mail do contador, imóvel padrão),
+    imóveis rurais (código, CAD ITR, município, exploração, produtor, participação %, fazenda do app) e contas
+    bancárias. Gravação `__cadFin`. Os CPFs da aba PRODUTORES também valem para a captura de NF-e.
+  - O card do Administrativo no Início avisa títulos vencidos e os que vencem em 7 dias.
 - **Custo real no estoque e R$/ha realizado (v272, fase 1 do Financeiro)** — o custo de cada produto passa a vir
   do que foi pago nas notas, não só do preço de referência da planilha. `custoMedioCalc` monta, por produto, a
   linha do tempo: **estoque inicial** da safra (valor = custo inicial digitado na tela Estoque → senão o preço da
