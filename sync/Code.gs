@@ -660,7 +660,7 @@ var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRI
   'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
 var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP','LOGIN','PIN NOVO','PIN',
-  'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA'];   // financeiro (v273)   // colunas guardadas como texto
+  'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA','TÍTULO'];   // financeiro (v273/v274)   // colunas guardadas como texto
 
 // aba com colunas achadas PELO CABEÇALHO (cria a aba/colunas que faltarem; colunas de texto não perdem zero à esquerda)
 function sheetCols_(name, cols){
@@ -1151,8 +1151,11 @@ var FIN_PROD_COLS = ['CPF','NOME','E-MAIL CONTADOR','IMÓVEL PADRÃO','ATIVO','A
 var FIN_PROD_KEYS = ['cpf','nome','emailContador','imovelPadrao','ativo','atualizado'];
 var FIN_IMOV_COLS = ['CÓDIGO','NOME','CAD ITR','MUNICÍPIO','UF','EXPLORAÇÃO','PRODUTOR','PARTICIPAÇÃO %','FAZENDA APP','ATIVO','ATUALIZADO'];
 var FIN_IMOV_KEYS = ['codigo','nome','cadItr','municipio','uf','exploracao','produtor','participacao','fazendaApp','ativo','atualizado'];
-var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO'];
-var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado'];
+var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO','SALDO INICIAL','DATA SALDO'];   // v274: saldo inicial p/ o extrato
+var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado','saldoInicial','dataSaldo'];
+var FIN_BAIXA_SHEET = 'BAIXAS';   // v274: cada pagamento/recebimento (o fato do caixa)
+var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO'];
+var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado'];
 var FIN_TIT_COLS = ['ID','TIPO','PRODUTOR','PARTICIPANTE','PARTICIPANTE NOME','DOC TIPO','DOC Nº','CHAVE','PARCELA','EMISSÃO','VENCIMENTO','VALOR','FORMA PGTO','CATEGORIA','IMÓVEL','STATUS','DATA PGTO','ORIGEM','OBS','ATUALIZADO','QUEM'];
 var FIN_TIT_KEYS = ['id','tipo','produtor','participante','participanteNome','docTipo','docNum','chave','parcela','emissao','vencimento','valor','formaPgto','categoria','imovel','status','dataPgto','origem','obs','atualizado','quem'];
 var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS] };
@@ -1162,7 +1165,45 @@ function _finVal_(v){ return (v instanceof Date) ? _fmtD(v) : (typeof v === 'num
 function _finLer_(name, cols, keys){ return _ler_(name, cols).map(function(o){ var x = {}; keys.forEach(function(k, i){ x[k] = _finVal_(o[cols[i]]); }); return x; }); }
 function readFinanceiro(){
   return { produtores:_finLer_(FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS), imoveis:_finLer_(FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS),
-    contas:_finLer_(FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS), titulos:_finLer_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS) };
+    contas:_finLer_(FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS), titulos:_finLer_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS),
+    baixas:_finLer_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS) };
+}
+// ---- v274: BAIXAS (pagamento/recebimento na conta do produtor) ----
+// abatido do título = valor pago − juros + desconto; saldo = valor − Σ abatidos; status ABERTO / PARCIAL / PAGO
+function baixaGrava_(p, acc){
+  var itens = Array.isArray(p) ? p : (p && p.baixas) ? p.baixas : [p];
+  var quem = (acc && acc.u && (acc.u.nome || acc.u.login)) || 'app', afetados = {};
+  itens = itens.map(function(it){ var x = {}; for (var k in it) x[k] = it[k];
+    if (!x.id) x.id = 'b:' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    if (x.produtor !== undefined) x.produtor = _doc_(x.produtor);
+    ['valorPago','juros','desconto'].forEach(function(k){ if (x[k] !== undefined) x[k] = N(x[k]); });
+    if (!x.del) x.quem = quem;
+    return x; });
+  // título de cada baixa (p/ exclusão, busca na aba)
+  var antes = _ler_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS), tituloDe = {}; antes.forEach(function(b){ tituloDe[S(b['ID'])] = S(b['TÍTULO']); });
+  itens.forEach(function(x){ var t = S(x.titulo) || tituloDe[S(x.id)]; if (t) afetados[t] = 1; });
+  var n = _finUpsert_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS, itens);
+  finRecalcTitulos_(Object.keys(afetados));
+  return { rows:n };
+}
+function finRecalcTitulos_(ids){
+  if (!ids.length) return;
+  var _m = _LER_MEMO_; _LER_MEMO_ = null;   // relê as abas (acabaram de mudar)
+  var bx = _ler_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS), t = sheetCols_(FIN_TIT_SHEET, FIN_TIT_COLS), tit = _ler_(FIN_TIT_SHEET, FIN_TIT_COLS), agora = new Date();
+  ids.forEach(function(id){ var r = tit.filter(function(x){ return S(x['ID']) === id; })[0]; if (!r) return;
+    var st = S(r['STATUS']).toUpperCase(); if (st === 'CANCELADO') return;
+    var ab = 0, ult = ''; bx.forEach(function(b){ if (S(b['TÍTULO']) !== id) return; ab += N(b['VALOR PAGO']) - N(b['JUROS']) + N(b['DESCONTO']); var d = _fmtD(b['DATA']); if (d > ult) ult = d; });
+    var saldo = N(r['VALOR']) - ab, novo = ab <= 0.004 ? 'ABERTO' : (saldo <= 0.004 ? 'PAGO' : 'PARCIAL');   // sem baixa nenhuma volta a ABERTO
+    _setCells_(t, r.__r, { 'STATUS':novo, 'DATA PGTO':ult, 'ATUALIZADO':agora }); });
+  _LER_MEMO_ = _m;
+}
+// comprovante da baixa (foto ou PDF) → pasta Financeiro/Comprovantes ao lado da planilha
+function finArquivo_(f){
+  if (!f || !f.b64) return { url:'' };
+  var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
+  var pasta = _pasta(_pasta(base, 'Financeiro'), 'Comprovantes');
+  var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || 'image/jpeg', S(f.nome) || ('comprovante-' + Date.now() + '.jpg'));
+  var file = pasta.createFile(blob); return { url:file.getUrl(), id:file.getId() };
 }
 // CPFs/CNPJs dos produtores ativos da aba PRODUTORES (entra na lista da captura de NF-e)
 function finProdutoresAtivos_(){ if (!sh(FIN_PROD_SHEET)) return [];
@@ -1875,7 +1916,7 @@ var MOD_DADOS = {
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
-var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'],
+var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
   __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
@@ -2033,13 +2074,13 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro'];   // financeiro: classificar/cancelar nota mexe nos títulos
-var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
+var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
 var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
-  __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro'] };
+  __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro'], __baixa:['financeiro'], __finArquivo:[] };
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
 function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
 function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
@@ -2271,6 +2312,10 @@ function gravaUm_(payload, acc, cfg, out){
       var rzt = writeMapApp('RESULTADO APP', payload.__result); out.ok = rzt.rows;
     } else if (payload && payload.__titulo){        // financeiro (v273): título a pagar/receber — cria, edita, marca pago, exclui
       var tg = tituloGrava_(payload.__titulo, acc); out.ok = tg.rows; if (tg.erro){ out.fail = 1; out.msgs.push(tg.erro); }
+    } else if (payload && payload.__baixa){         // financeiro (v274): baixa na conta do produtor (cria/edita/exclui; recalcula o título)
+      var bg = baixaGrava_(payload.__baixa, acc); out.ok = bg.rows; if (bg.erro){ out.fail = 1; out.msgs.push(bg.erro); }
+    } else if (payload && payload.__finArquivo){    // comprovante da baixa → Drive
+      out.arquivo = finArquivo_(payload.__finArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0;
     } else if (payload && payload.__cadFin){        // cadastros do financeiro (produtores, imóveis, contas) — só ADMIN quando há login
       if (acc && acc.u && !acc.admin){ out.fail = 1; out.msgs.push('só administrador'); }
       else { var cg = cadFinGrava_(payload.__cadFin); out.ok = cg.rows; if (cg.erro){ out.fail = 1; out.msgs.push(cg.erro); } }

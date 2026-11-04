@@ -2026,6 +2026,20 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .cad-row.off{opacity:.6}.cad-row b{display:block}.cad-row small{color:var(--muted);font-size:11.5px}
 .cad-form{padding:4px 14px 12px;border-bottom:1px solid var(--line);background:var(--bg)}.cad-form .app-grid{margin:8px 0}.cad-form .bulk-add{display:flex;gap:8px;align-items:center}
 .cad-chk{display:flex;align-items:center;gap:6px;margin-top:22px;font-weight:600}
+/* baixas e extrato (v274) */
+.fin-seg{margin:0 0 10px}
+.fin-bx-form{border-color:var(--teal)}
+.fin-bx-calc{padding:0 14px 10px;font-size:12.5px}
+.fin-arq{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:34px}
+.fin-bx-tg{display:inline-block;margin-top:3px;font-size:12px}
+.fin-bxs td{background:var(--bg);padding:8px 14px 12px}
+.fin-bx-list{font-size:12.5px}.fin-bx-list b{display:block;margin-bottom:4px}
+.fin-bx-list table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.fin-bx-list th,.fin-bx-list td{padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px;text-align:left}.fin-bx-list tr:last-child td{border-bottom:0}.fin-bx-list .num{text-align:right}
+.fin-neg{color:var(--red)}
+.fin-antes td{opacity:.6}
+.fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
+@media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
 
 /* ===== Quadro: faixas que encolhem (filtros · linha do tempo) (v247) ===== */
@@ -2475,6 +2489,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ext-cm{font-size:10.5px}
   .fin-obs{font-size:9.5px}
   .cad-row small{font-size:9.5px}
+  .fin-bx-calc{font-size:10px}
+  .fin-bx-tg{font-size:9.5px}
+  .fin-bx-list{font-size:10px}
+  .fin-bx-list th{font-size:9.5px}
+  .fin-bx-list td{font-size:9.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
