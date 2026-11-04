@@ -225,6 +225,8 @@ Seguir o padrão existente (`__nome` no `doPost`). Nomes propostos:
 | `doPost {__recebSemXml:{chave, itens[]}}` | Recebimento antes do XML chegar |
 | `doPost {__titulo:{titulos:[{id, vencimento, valor, status, …, del}]}}` | Títulos a pagar/receber (v273): cria, edita, marca pago, exclui — aba `TÍTULOS` |
 | `doPost {__cadFin:{tipo, itens[]}}` | Cadastros do financeiro (v273): produtores, imóveis rurais, contas bancárias (só ADMIN) |
+| `doPost {__baixa:{baixas:[{id, titulo, conta, data, valorPago, juros, desconto, comprovante, del}]}}` | Baixa de título na conta do produtor (v274); recalcula o status do título — aba `BAIXAS` |
+| `doPost {__finArquivo:{nome, mime, b64}}` | Comprovante da baixa (JPEG/PDF) para a pasta Financeiro/Comprovantes no Drive (v274) |
 
 Na classificação (`__nfeClassifica`), a planilha também gera os títulos da nota a partir das parcelas do XML
 (`cobr/dup`); o app manda `dups` e `pag` como reserva.

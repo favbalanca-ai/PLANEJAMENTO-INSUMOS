@@ -113,6 +113,17 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Financeiro: baixas na conta do produtor (v274 — fase 3)
+
+- Aba **BAIXAS** (ID · TÍTULO · PRODUTOR · CONTA · DATA · VALOR PAGO · JUROS · DESCONTO · COMPROVANTE · OBS · QUEM ·
+  ATUALIZADO): cada pagamento ou recebimento. Vai ao app dentro da chave `financeiro` (`baixas`).
+- `__baixa {baixas:[{id, titulo, conta, data, valorPago, juros, desconto, comprovante, obs, del}]}` →
+  `baixaGrava_`: grava/edita/exclui (idempotente pelo ID, `b:…`) e **recalcula o título** (`finRecalcTitulos_`):
+  abatido = valor pago − juros + desconto; STATUS = ABERTO (sem baixa) / PARCIAL / PAGO; DATA PGTO = última baixa.
+- `__finArquivo {nome, mime, b64}` → `finArquivo_`: comprovante (JPEG ou PDF) na pasta **Financeiro/Comprovantes**
+  ao lado da planilha; devolve `arquivo.url`. Fora da trava de gravação (só Drive), como as fotos.
+- **CONTAS BANCÁRIAS** ganha SALDO INICIAL e DATA SALDO (o extrato do app parte daí).
+
 ## Financeiro: cadastros e títulos (v273 — fase 2)
 
 Abas por cabeçalho, criadas quando faltam (`sheetCols_`): **PRODUTORES** (CPF · NOME · E-MAIL CONTADOR · IMÓVEL

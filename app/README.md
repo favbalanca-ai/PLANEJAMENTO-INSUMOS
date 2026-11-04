@@ -71,6 +71,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Baixa na conta do produtor e extrato (v274, fase 3 do Financeiro)** — o botão "Pago" virou **💳 Baixar**:
+  registra data, **conta do produtor** (só as dele; com uma só, já vem escolhida), valor pago (vem com o saldo),
+  juros/multa (já dentro do valor pago, informado à parte), desconto, observação e **comprovante** (foto reduzida
+  ou PDF, para a pasta Financeiro/Comprovantes ao lado da planilha). Abatido do título = valor pago − juros +
+  desconto; saldo = valor − Σ abatidos; o título fica ABERTO / **PARCIAL** / PAGO (pagamento em várias baixas é
+  permitido). Cada título mostra "▸ N baixa(s)" com a lista (conta, valores, link do comprovante, excluir; excluir
+  recalcula o status). Títulos marcados "pago" na v273 sem conta aparecem como **Pago · sem conta** com o botão
+  **Completar baixa**. Os cards do Financeiro passam a somar o **saldo** dos títulos. Segmento **🏦 Extrato por
+  conta**: movimentos (baixas) por conta, produtor e período, com entrada/saída e **saldo corrente** a partir do
+  saldo inicial da conta (campos novos Saldo inicial e Data do saldo em Cadastros → Contas); **⬇ CSV do período**
+  com uma linha por baixa (data, conta, produtor, fornecedor, documento, chave da NF-e, valores, comprovante).
+  Funções: `finBaixarAbrir`, `finBaixaFormHtml`, `finBaixaSalvar` (`__finArquivo` + `__baixa`), `finBxDel`,
+  `finSaldo`, `finAplicaStatus`, `finMovimentos`, `finExtratoHtml`, `exportFinExtratoCsv`.
 - **Financeiro: cadastros e títulos a pagar (v273, fase 2 do Financeiro)** — no módulo Administrativo, a tela
   **Financeiro** substitui o Fluxo de Caixa local (o caderno no aparelho foi aposentado; `#/fluxocaixa` abre o
   Financeiro). Os dados vivem na planilha (chave `financeiro` do pacote: abas PRODUTORES, IMÓVEIS RURAIS, CONTAS
