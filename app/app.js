@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-272';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-273';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -422,7 +422,7 @@ const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' 
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
-  entradas:'admin', fluxocaixa:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
+  entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
@@ -1678,8 +1678,15 @@ function nfeLerXml(txt){
       vipi:_nn(_nx(im,'IPI'),'vIPI'), vst:_nn(_nx(im,'ICMS'),'vICMSST') }; });
   return { chave:(prot&&_nt(prot,'chNFe'))||String(inf.getAttribute('Id')||'').replace(/^NFe/,''), temProt:!!prot, cstat:prot?_nt(prot,'cStat'):'',
     nNF:_nt(ide,'nNF'), serie:_nt(ide,'serie'), emissao:(_nt(ide,'dhEmi')||_nt(ide,'dEmi')).slice(0,10),
-    cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), ref:_nt(ide,'refNFe'), itens };
+    cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), ref:_nt(ide,'refNFe'), itens,
+    dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''),   // produtor destinatário
+    dups:[...inf.getElementsByTagNameNS('*','dup')].map(d=>({n:_nt(d,'nDup'), venc:_nt(d,'dVenc').slice(0,10), valor:_nn(d,'vDup')})).filter(d=>d.valor>0),   // parcelas (v273)
+    pag:[...inf.getElementsByTagNameNS('*','detPag')].map(d=>({t:_nt(d,'tPag'), v:_nn(d,'vPag')})) };
 }
+const NFE_TPAG={'01':'Dinheiro','02':'Cheque','03':'Cartão de crédito','04':'Cartão de débito','05':'Crédito loja','14':'Duplicata mercantil','15':'Boleto','16':'Depósito','17':'PIX','18':'Transferência','19':'Carteira digital','90':'Sem pagamento','99':'Outros'};
+function nfePagTxt(n){ const f=[...new Set((n.pag||[]).map(x=>NFE_TPAG[x.t]||(x.t?'código '+x.t:'')).filter(x=>x&&x!=='Sem pagamento'))].join(' + ');
+  const d=n.dups||[]; if(!d.length) return {parc:'sem parcelas no XML', forma:f||'—'};
+  return {parc:d.length===1?`1 parcela · ${fmtDataBR(d[0].venc)}`:`${d.length} parcelas · ${d.map(x=>fmtDataBR(x.venc).slice(0,5)).join(', ')}`, forma:f||'—'}; }
 // chave de acesso: 44 dígitos, modelo 55, DV por módulo 11 (pesos 2..9 da direita p/ a esquerda)
 function nfeChaveOk(ch){ if(!/^\d{44}$/.test(ch||'')||ch.slice(20,22)!=='55') return false; let s=0,w=2;
   for(let i=42;i>=0;i--){ s+=(+ch[i])*w; w=(w===9)?2:w+1; } const r=s%11; return (r<2?0:11-r)===+ch[43]; }
@@ -1990,7 +1997,7 @@ function nfeConfirmar(modo){
   nfeSalvarDePara(imp);
   if(srv){
     const cl={chave:n.chave, status:modo==='entrada'?'RECEBIDA':(modo==='contrato'?'A ENTREGAR':'EM TRÂNSITO'), data:imp.data||_hojeISO(), por:'app',
-      xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP};
+      xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP, dups:n.dups||[], pag:n.pag||[]};   // dups/pag: reserva p/ os títulos quando a planilha não tem o XML (v273)
     if(n.tipo==='REMESSA') cl.ref=imp.ref||'';
     (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
     if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
@@ -2062,6 +2069,7 @@ function nfeConferirHtml(){
       <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
       <div><small>Valor da nota</small><b>${brl(n.vNF)}</b><span>${n.itens.length} item(ns)</span></div>
       <div><small>Tipo (CFOP)</small><b class="nfe-tipo t-${n.tipo}">${esc(NFE_TIPO[n.tipo])}</b><span>CFOP ${esc(cfops)}</span></div>
+      ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
     ${reclass}${aviso}${semSrv}
@@ -2656,69 +2664,154 @@ function filterEstoque(){
     tr.style.display=show?'':'none'; });
 }
 
-/* ================= FLUXO DE CAIXA (módulo Administrativo) ================= */
-const FLUXO_KEY='planejamento_fluxo';
-let FLUXO=null, fluxoDraft=null, fluxoMes='';
-const FLUXO_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Venda de grãos','Adiantamento','Outros'];
-function loadFluxo(){ try{ const d=JSON.parse(localStorage.getItem(FLUXO_KEY)); if(d&&Array.isArray(d.lancamentos)) return d; }catch(e){} return {lancamentos:[]}; }
-function saveFluxo(){ lsSet(FLUXO_KEY, JSON.stringify(FLUXO)) }
-function fluxoNovoDraft(){ return {data:new Date().toISOString().slice(0,10), tipo:'saida', categoria:'', descricao:'', valor:0}; }
-function fluxoMesLabel(ym){ if(!ym) return ''; const [a,m]=ym.split('-'); return `${_MESN[(+m||1)-1]||m}/${a}`; }
-V.fluxocaixa=function(){
-  if(!fluxoDraft) fluxoDraft=fluxoNovoDraft();
-  const d=fluxoDraft;
-  const all=(FLUXO.lancamentos||[]).slice().sort((a,b)=>String(a.data).localeCompare(String(b.data))||(a.ts||0)-(b.ts||0));
-  // saldo acumulado (sobre todos, em ordem cronológica)
-  let run=0; const withRun=all.map(l=>{ run+=(l.tipo==='entrada'?1:-1)*(+l.valor||0); return {...l, saldoAcum:run}; });
-  // meses disponíveis (para o filtro)
-  const meses=[...new Set(all.map(l=>String(l.data||'').slice(0,7)).filter(Boolean))].sort().reverse();
-  const view=withRun.filter(l=>!fluxoMes||String(l.data||'').slice(0,7)===fluxoMes);
-  // totais (geral e do filtro)
-  const totEnt=all.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+(+l.valor||0),0);
-  const totSai=all.filter(l=>l.tipo==='saida').reduce((s,l)=>s+(+l.valor||0),0);
-  const saldoGeral=totEnt-totSai;
-  const fEnt=view.filter(l=>l.tipo==='entrada').reduce((s,l)=>s+(+l.valor||0),0);
-  const fSai=view.filter(l=>l.tipo==='saida').reduce((s,l)=>s+(+l.valor||0),0);
-  const chips=`<button class="chip-f${fluxoMes===''?' on':''}" data-flxmes="">Todos</button>`+
-    meses.map(ym=>`<button class="chip-f${fluxoMes===ym?' on':''}" data-flxmes="${esc(ym)}">${esc(fluxoMesLabel(ym))}</button>`).join('');
-  const rowsHtml=view.slice().reverse().map(l=>`<tr data-search="${esc(((l.categoria||'')+' '+(l.descricao||'')).toLowerCase())}">
-      <td data-th="Data">${esc(fmtDataBR(l.data))}</td>
-      <td data-th="Tipo">${l.tipo==='entrada'?'<span class="pill pill-buy">entrada</span>':'<span class="pill pill-noprice">saída</span>'}</td>
-      <td data-th="Categoria">${esc(l.categoria||'—')}</td>
-      <td class="c-more" data-th="Descrição">${esc(l.descricao||'')}</td>
-      <td class="num" data-th="Entrada">${l.tipo==='entrada'?brl(+l.valor||0):'·'}</td>
-      <td class="num" data-th="Saída">${l.tipo==='saida'?brl(+l.valor||0):'·'}</td>
-      <td class="num" data-th="Saldo"><b class="est-saldo ${l.saldoAcum<-0.0001?'neg':'ok'}">${brl(l.saldoAcum)}</b></td>
-      <td><button class="icon-btn del" data-act="fluxoDel" data-id="${esc(l.id)}" title="Excluir">🗑</button></td></tr>`).join('');
+/* ================= FINANCEIRO (módulo Administrativo) — fase 2 (v273): cadastros e títulos a pagar =================
+   Dados vêm da planilha (chave "financeiro": abas PRODUTORES, IMÓVEIS RURAIS, CONTAS BANCÁRIAS e TÍTULOS). Títulos de NF-e
+   nascem na planilha quando a nota é classificada em Compras (parcelas do XML); manuais nascem aqui (__titulo).
+   Cadastros: só ADMIN (__cadFin). O antigo Fluxo de Caixa (caderno local) foi aposentado: #/fluxocaixa abre o Financeiro. */
+const FIN_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Venda de grãos','Adiantamento','Outros'];
+const FIN_DOC_TIPOS=['1 - Nota fiscal','2 - Fatura','3 - Recibo','4 - Contrato','5 - Folha de pagamento','6 - Outros'];
+const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Parceria','Comodato','Outros'];
+const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
+const FIN_SIT={vencido:['Vencido','neg'], d7:['Vence em 7 dias','warn'], d30:['Vence em 30 dias',''], aberto:['Aberto',''], pago:['Pago','ok'], cancelado:['Cancelado','off']};
+let FIN_UI={st:'aberto', prod:'', q:'', mes:''}, finDraft=null, CAD_EDIT=null;
+function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[]}; }
+function finOk(){ return !!(syncUrl() && DATA && DATA.financeiro); }
+const _finAtivo=v=>!/^(N|NÃO|NAO|0|FALSE)$/i.test(String(v==null?'':v).trim());
+function finProdutores(){ return FIN().produtores.filter(p=>_finAtivo(p.ativo)); }
+function finProdNome(cpf){ const p=FIN().produtores.find(x=>x.cpf===cpf); return p?p.nome:(cpf?nfeCnpjFmt(cpf):'—'); }
+function finDias(t){ const v=String(t.vencimento||'').slice(0,10); if(!_isISO(v)) return null; return Math.round((new Date(v+'T12:00:00')-new Date(_hojeISO()+'T12:00:00'))/86400000); }
+// situação do título: vencido · d7 · d30 · aberto · pago · cancelado
+function finSit(t){ const st=String(t.status||'ABERTO').toUpperCase(); if(st==='PAGO') return 'pago'; if(st==='CANCELADO') return 'cancelado';
+  const d=finDias(t); if(d==null) return 'aberto'; return d<0?'vencido':(d<=7?'d7':(d<=30?'d30':'aberto')); }
+const _finAberto=sit=>sit==='vencido'||sit==='d7'||sit==='d30'||sit==='aberto';
+function finLista(){ const f=FIN_UI, q=String(f.q||'').toLowerCase().trim();
+  return FIN().titulos.filter(t=>{ const sit=finSit(t);
+    if(f.st==='aberto'&&!_finAberto(sit)) return false; if(f.st==='vencido'&&sit!=='vencido') return false; if(f.st==='7d'&&sit!=='vencido'&&sit!=='d7') return false;
+    if(f.st==='pago'&&sit!=='pago') return false; if(f.st==='cancelado'&&sit!=='cancelado') return false;
+    if(f.prod&&t.produtor!==f.prod) return false; if(f.mes&&String(t.vencimento||'').slice(0,7)!==f.mes) return false;
+    if(q&&![t.participanteNome,t.participante,t.docNum,t.categoria,t.obs,t.imovel].join(' ').toLowerCase().includes(q)) return false; return true; })
+    .sort((a,b)=>String(a.vencimento||'9').localeCompare(String(b.vencimento||'9'))||String(a.participanteNome||'').localeCompare(String(b.participanteNome||''),'pt')); }
+function finResumo(prod){ const r={aberto:0,nA:0,vencido:0,nV:0,d7:0,n7:0,d30:0,n30:0,receber:0};
+  FIN().titulos.forEach(t=>{ if(prod&&t.produtor!==prod) return; const sit=finSit(t), v=+t.valor||0; if(!_finAberto(sit)) return;
+    if(String(t.tipo||'PAGAR').toUpperCase()!=='PAGAR'){ r.receber+=v; return; }
+    r.aberto+=v; r.nA++; if(sit==='vencido'){ r.vencido+=v; r.nV++; } if(sit==='vencido'||sit==='d7'){ r.d7+=v; r.n7++; } if(sit!=='aberto'){ r.d30+=v; r.n30++; } });
+  return r; }
+function finNovoDraft(){ const pr=finProdutores(); return {id:'', tipo:'PAGAR', produtor:pr.length===1?pr[0].cpf:'', participante:'', participanteNome:'', docTipo:'3 - Recibo', docNum:'', emissao:_hojeISO(), vencimento:_hojeISO(), valor:'', formaPgto:'', categoria:'', imovel:'', obs:''}; }
+function finFormHtml(){ const d=finDraft; if(!d) return '';
+  const prods=finProdutores(), imov=FIN().imoveis.filter(x=>_finAtivo(x.ativo)), F=(k,extra)=>`data-finf="${k}" ${extra||''}`;
+  return `<div class="panel" id="fin-form"><div class="panel-head"><h2>${d.id?'✎ Editar título':'➕ Novo título'}</h2><span class="sub">${d.id&&!/^m:/.test(d.id)?'título vindo da nota fiscal — dá para ajustar vencimento, categoria, imóvel e observação':'despesa ou receita sem XML (recibo, folha, energia, arrendamento, venda…)'}</span></div>
+    <div class="app-grid" style="padding:12px 14px">
+      <label>Tipo<select class="sel" ${F('tipo')}><option value="PAGAR"${d.tipo!=='RECEBER'?' selected':''}>A pagar (despesa)</option><option value="RECEBER"${d.tipo==='RECEBER'?' selected':''}>A receber (receita)</option></select></label>
+      <label>Produtor<select class="sel" ${F('produtor')}><option value="">—</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===d.produtor?' selected':''}>${esc(p.nome)}</option>`).join('')}</select></label>
+      <label>${d.tipo==='RECEBER'?'Comprador':'Fornecedor'} (nome)<input class="txt" ${F('participanteNome')} value="${esc(d.participanteNome)}" placeholder="nome"></label>
+      <label>CPF/CNPJ<input class="txt" inputmode="numeric" ${F('participante')} value="${esc(d.participante)}" placeholder="só números"></label>
+      <label>Documento<select class="sel" ${F('docTipo')}>${FIN_DOC_TIPOS.map(x=>`<option${x===d.docTipo?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+      <label>Nº do documento<input class="txt" ${F('docNum')} value="${esc(d.docNum)}" placeholder="nº"></label>
+      <label>Emissão<input type="date" class="cell" ${F('emissao')} value="${esc(d.emissao)}"></label>
+      <label>Vencimento<input type="date" class="cell" ${F('vencimento')} value="${esc(d.vencimento)}"></label>
+      <label>Valor (R$)<input class="cell" inputmode="decimal" ${F('valor')} value="${d.valor===''?'':fmtDose(+d.valor||0)}" placeholder="0,00"></label>
+      <label>Forma de pagamento<input class="txt" list="fin-formas" ${F('formaPgto')} value="${esc(d.formaPgto)}" placeholder="boleto, PIX…"></label>
+      <label>Categoria<input class="txt" list="fin-cats" ${F('categoria')} value="${esc(d.categoria)}" placeholder="categoria"></label>
+      <label>Imóvel rural<select class="sel" ${F('imovel')}><option value="">—</option>${imov.map(x=>`<option value="${esc(x.codigo)}"${x.codigo===d.imovel?' selected':''}>${esc(x.nome||x.codigo)}</option>`).join('')}</select></label>
+      <label style="grid-column:1/-1">Observação<input class="txt" ${F('obs')} value="${esc(d.obs)}" placeholder="opcional"></label>
+    </div>
+    <datalist id="fin-cats">${FIN_CATS.map(c=>`<option value="${esc(c)}">`).join('')}</datalist><datalist id="fin-formas">${['Boleto','PIX','Transferência','Dinheiro','Cheque','Cartão de crédito','Duplicata mercantil'].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+    <div class="bulk-add" style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="finSalvar">💾 Salvar</button><button class="btn btn-outline btn-sm" data-act="finCancelarForm">Cancelar</button></div></div>`; }
+V.financeiro=function(){
+  if(!syncUrl()) return `<div class="empty">💵 O Financeiro vive na planilha. Configure a sincronização em <a class="link" data-go="#/sync">Sincronizar</a>.</div>`;
+  if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
+  const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod), L=finLista(), hj=_hojeISO();
+  if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
+  const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
+  const rows=L.map(t=>{ const sit=finSit(t), [lbl,cls]=FIN_SIT[sit], pagar=String(t.tipo||'PAGAR').toUpperCase()==='PAGAR', d=finDias(t), manual=/^m:/.test(String(t.id));
+    return `<tr class="fin-r" data-id="${esc(t.id)}">
+      <td class="num" data-th="Vencimento"><b class="fin-venc ${cls}">${t.vencimento?_dtBRc(t.vencimento):'—'}</b>${_finAberto(sit)&&d!=null&&d<=30?`<small>${d<0?`${-d} d de atraso`:(d===0?'vence hoje':`em ${d} d`)}</small>`:''}</td>
+      <td class="c-full"><b>${esc(t.participanteNome||t.participante||'—')}</b> <span class="mut">${esc(String(t.docTipo||'').replace(/^\d\s*-\s*/,''))} ${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''}${!pagar?' · <b>a receber</b>':''}</span>${t.obs?`<div class="mut fin-obs">${esc(t.obs)}</div>`:''}</td>
+      <td data-th="Produtor">${esc(finProdNome(t.produtor))}</td>
+      <td data-th="Categoria" class="c-more">${esc(t.categoria||'—')}${t.formaPgto?` <span class="mut">· ${esc(t.formaPgto)}</span>`:''}${t.imovel?` <span class="mut">· ${esc(t.imovel)}</span>`:''}</td>
+      <td class="num" data-th="Valor"><b>${pagar?'':'+ '}${brl(+t.valor||0)}</b></td>
+      <td data-th="Situação"><span class="pill fin-st ${cls}">${sit==='pago'&&t.dataPgto?'Pago '+_dtBRc(t.dataPgto):lbl}</span></td>
+      <td class="fin-acts">${_finAberto(sit)?`<button class="btn btn-primary btn-sm" data-act="finPagar" data-id="${esc(t.id)}" title="Marcar como pago (a conta bancária, juros e desconto entram na fase 3)">✔ ${pagar?'Pago':'Recebido'}</button>`:(sit==='pago'?`<button class="btn btn-outline btn-sm" data-act="finReabrir" data-id="${esc(t.id)}">Reabrir</button>`:'')}<button class="icon-btn" data-act="finEditar" data-id="${esc(t.id)}" title="Editar">✎</button>${manual?`<button class="icon-btn del" data-act="finDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>`:(_finAberto(sit)?`<button class="icon-btn" data-act="finCancelar" data-id="${esc(t.id)}" title="Cancelar este título (a nota continua)">✕</button>`:'')}</td></tr>`; }).join('');
+  const total=L.reduce((s,t)=>s+(String(t.tipo||'PAGAR').toUpperCase()==='PAGAR'?1:-1)*(+t.valor||0),0);
   return `
   <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Entradas${fluxoMes?' (mês)':''}</div><div class="k-value" style="color:var(--green)">${brl0(fluxoMes?fEnt:totEnt)}</div></div>
-    <div class="kpi"><div class="k-label">Saídas${fluxoMes?' (mês)':''}</div><div class="k-value" style="color:var(--red)">${brl0(fluxoMes?fSai:totSai)}</div></div>
-    <div class="kpi accent"><div class="k-label">Saldo${fluxoMes?' do mês':' acumulado'}</div><div class="k-value">${brl0(fluxoMes?(fEnt-fSai):saldoGeral)}</div><div class="k-sub">${fluxoMes?`geral ${brl0(saldoGeral)}`:`${all.length} lançamento(s)`}</div></div>
+    <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
+    <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
+    <div class="kpi"><div class="k-label">Vencem em 7 dias</div><div class="k-value" style="color:var(--amber)">${brl0(R.d7)}</div><div class="k-sub">${R.n7} título(s), com os vencidos</div></div>
+    <div class="kpi"><div class="k-label">Vencem em 30 dias</div><div class="k-value">${brl0(R.d30)}</div><div class="k-sub">${R.n30} título(s), com os vencidos</div></div>
   </div>
-  <div class="panel"><div class="panel-head"><h2>Novo lançamento</h2><span class="sub">registre uma entrada ou saída de caixa</span></div>
-    <div class="app-grid" style="padding:12px 14px">
-      <label>Data<input type="date" data-flxf="data" value="${esc(d.data)}"></label>
-      <label>Tipo<select class="txt" data-flxf="tipo"><option value="saida"${d.tipo==='saida'?' selected':''}>Saída (despesa)</option><option value="entrada"${d.tipo==='entrada'?' selected':''}>Entrada (receita)</option></select></label>
-      <label>Categoria<input class="txt" list="flx-cats" data-flxf="categoria" value="${esc(d.categoria)}" placeholder="categoria"></label>
-      <label>Descrição<input class="txt" data-flxf="descricao" value="${esc(d.descricao)}" placeholder="descrição (opcional)"></label>
-      <label>Valor (R$)<input class="cell" inputmode="decimal" data-flxf="valor" value="${d.valor||''}" placeholder="0,00"></label>
-    </div>
-    <datalist id="flx-cats">${FLUXO_CATS.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
-    <div style="padding:8px 14px 14px"><button class="btn btn-primary btn-sm" data-act="fluxoAdd">➕ Adicionar lançamento</button></div></div>
-  ${meses.length?`<div class="classe-filter" id="flx-mesf" style="margin:2px 0 10px">${chips}</div>`:''}
-  <div class="toolbar"><div class="search"><input id="q-flx" placeholder="Buscar categoria ou descrição…" autocomplete="off"></div>
-    <div class="spacer"></div><span class="badge badge-muted">${view.length} lançamento(s)${fluxoMes?` em ${esc(fluxoMesLabel(fluxoMes))}`:''}</span></div>
-  <div class="panel"><div class="panel-head"><h2>Lançamentos</h2><span class="sub">mais recentes primeiro · saldo acumulado na ordem das datas</span></div>
-    <div class="table-wrap"><table id="flx-tbl"><thead><tr><th>Data</th><th>Tipo</th><th>Categoria</th><th class="c-more">Descrição</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Saldo</th><th></th></tr></thead>
-      <tbody>${rowsHtml||'<tr><td colspan="8" class="mut" style="padding:14px">Nenhum lançamento. Adicione o primeiro acima.</td></tr>'}</tbody></table></div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Fluxo de caixa manual (salvo neste aparelho). Em breve: vínculo automático com Compras e recebíveis, e sincronização na planilha.</p>`;
+  ${finFormHtml()}
+  <div class="toolbar"><div class="search"><input id="q-fin" value="${esc(FIN_UI.q)}" placeholder="Buscar fornecedor, nº, categoria…" autocomplete="off"></div>
+    ${prods.length>1?`<select class="sel" id="fin-prod"><option value="">Todos os produtores</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===FIN_UI.prod?' selected':''}>${esc(p.nome)}</option>`).join('')}</select>`:''}
+    ${meses.length?`<select class="sel" id="fin-mes"><option value="">Todos os meses</option>${meses.map(m=>`<option value="${esc(m)}"${m===FIN_UI.mes?' selected':''}>${esc(_MESN[(+m.slice(5))-1]||m)}/${m.slice(0,4)}</option>`).join('')}</select>`:''}
+    <div class="spacer"></div>${finDraft?'':`<button class="btn btn-primary btn-sm" data-act="finNovo">➕ Novo título</button>`}</div>
+  <div class="classe-filter" id="fin-stf" style="margin:2px 0 10px">${chips}</div>
+  <div class="panel"><div class="panel-head"><h2>Títulos</h2><span class="sub">${L.length} título(s) · ${brl0(Math.abs(total))}${total<0?' a receber':''} · por vencimento</span></div>
+    <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th class="num">Vencimento</th><th>Fornecedor · documento</th><th>Produtor</th><th class="c-more">Categoria</th><th class="num">Valor</th><th>Situação</th><th></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="7" class="mut" style="padding:14px">${FIN_UI.st==='aberto'&&!FIN_UI.q&&!FIN_UI.prod&&!FIN_UI.mes?'Nenhum título em aberto. Os títulos das notas aparecem quando a nota é confirmada em <b>Compras</b> (parcelas do XML); despesas sem nota entram pelo botão <b>Novo título</b>.':'Nenhum título neste filtro.'}</td></tr>`}</tbody></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Títulos ficam na aba <b>TÍTULOS</b> da planilha (todos os aparelhos). Notas confirmadas em Compras viram um título por parcela; nota sem parcelas no XML vira 1 título com vencimento igual à emissão, para confirmar. "Pago" aqui registra só a data; a conta bancária, juros e desconto chegam na fase 3 (baixa).</p>`;
 };
-function filterFluxo(){
-  const q=(($('#q-flx')&&$('#q-flx').value)||'').toLowerCase().trim();
-  document.querySelectorAll('#flx-tbl tbody tr').forEach(tr=>{ const s=tr.getAttribute('data-search')||''; tr.style.display=(!q||s.includes(q))?'':'none'; });
-}
-
+V.fluxocaixa=function(){ location.replace('#/financeiro'); return ''; };   // tela antiga (caderno local) aposentada na v273
+async function finPost(titulos, msgOk){ const url=syncUrl(); if(!url){ toast('Configure a sincronização primeiro'); return false; }
+  try{ const r=await syncPost(url, JSON.stringify({__titulo:{titulos}}));
+    if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
+    const F=FIN(); titulos.forEach(t=>{ const i=F.titulos.findIndex(x=>x.id===t.id); if(t.del){ if(i>=0) F.titulos.splice(i,1); } else if(i>=0) Object.assign(F.titulos[i], t); else F.titulos.push(Object.assign({status:'ABERTO', tipo:'PAGAR', origem:'manual'}, t)); });
+    DATA.financeiro.titulos=F.titulos;   // vale até o próximo puxar (a planilha confirma)
+    if(msgOk) toast(msgOk); route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
+function finSalvar(){ const d=finDraft; if(!d) return;
+  if(!(+d.valor>0)){ toast('Informe um valor maior que zero'); return; } if(!_isISO(d.vencimento)){ toast('Informe o vencimento'); return; }
+  if(!d.participanteNome.trim()&&!d.participante.trim()){ toast('Informe o fornecedor (nome ou CPF/CNPJ)'); return; }
+  const t=Object.assign({}, d, {id:d.id||('m:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)), valor:+(+d.valor).toFixed(2), participante:String(d.participante||'').replace(/\D/g,'')});
+  if(!d.id){ t.status='ABERTO'; t.origem='manual'; }
+  const bak=finDraft; finDraft=null;   // fecha o formulário já; volta se a planilha recusar
+  finPost([t], d.id?'Título atualizado':'Título registrado').then(ok=>{ if(!ok){ finDraft=bak; route({keepScroll:true}); } }); }
+function finPagar(id){ const t=FIN().titulos.find(x=>x.id===id); if(!t) return;
+  const resp=window.prompt(`Data do ${String(t.tipo||'PAGAR').toUpperCase()==='PAGAR'?'pagamento':'recebimento'} (dd/mm/aaaa):`, fmtDataBR(_hojeISO())); if(resp==null) return;
+  const m=String(resp).trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/); const iso=m?`${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`:(_isISO(resp)?resp.slice(0,10):'');
+  if(!iso){ toast('Data inválida — use dd/mm/aaaa'); return; }
+  finPost([{id, status:'PAGO', dataPgto:iso}], `Marcado como pago em ${fmtDataBR(iso)}`); }
+V.cadastros=function(){
+  if(sessUsuario()&&!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
+  if(!(DATA&&DATA.financeiro)) return `<div class="empty">🗃️ Cadastros ainda não disponíveis: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo).</div>`;
+  const F=FIN(), E=CAD_EDIT, prods=F.produtores, imov=F.imoveis, contas=F.contas;
+  const pSel=(k,v)=>`<select class="sel" data-cadf="${k}"><option value="">—</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===v?' selected':''}>${esc(p.nome)}</option>`).join('')}</select>`;
+  const inp=(k,v,ph,extra)=>`<input class="txt" data-cadf="${k}" value="${esc(v==null?'':v)}" placeholder="${esc(ph||'')}" ${extra||''}>`;
+  const ativo=(k,v)=>`<label class="cad-chk"><input type="checkbox" data-cadf="${k}"${_finAtivo(v)?' checked':''}> ativo</label>`;
+  const form=(tipo,html)=>E&&E.tipo===tipo?`<div class="cad-form"><div class="app-grid">${html}</div><div class="bulk-add"><button class="btn btn-primary btn-sm" data-act="cadSalvar">💾 Salvar</button><button class="btn btn-outline btn-sm" data-act="cadCancelar">Cancelar</button>${E.novo?'':`<button class="btn btn-outline btn-sm" data-act="cadExcluir" style="margin-left:auto">🗑 Excluir</button>`}</div></div>`:'';
+  const btnNovo=tipo=>E&&E.tipo===tipo?'':`<button class="btn btn-primary btn-sm" data-act="cadNovo" data-tipo="${tipo}">➕ Novo</button>`;
+  const it=E?E.item:{};
+  return `
+  <div class="panel"><div class="panel-head"><h2>👤 Produtores</h2><span class="sub">cada produtor tem o seu Livro Caixa; a captura de NF-e aceita notas emitidas para estes CPFs</span></div>
+    ${form('produtor', `<label>CPF/CNPJ${inp('cpf',it.cpf,'só números',E&&!E.novo?'readonly':'')}</label><label>Nome${inp('nome',it.nome,'nome do produtor')}</label><label>E-mail do contador${inp('emailContador',it.emailContador,'opcional')}</label><label>Imóvel padrão<select class="sel" data-cadf="imovelPadrao"><option value="">—</option>${imov.map(x=>`<option value="${esc(x.codigo)}"${x.codigo===it.imovelPadrao?' selected':''}>${esc(x.nome||x.codigo)}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>`)}
+    <div class="cad-list">${prods.map(p=>`<div class="cad-row${_finAtivo(p.ativo)?'':' off'}"><div><b>${esc(p.nome||'—')}</b><small>${esc(nfeCnpjFmt(p.cpf))}</small></div><div class="mut">${esc(p.emailContador||'')}${p.imovelPadrao?` · imóvel ${esc(p.imovelPadrao)}`:''}${_finAtivo(p.ativo)?'':' · <b>inativo</b>'}</div><button class="icon-btn" data-act="cadEditar" data-tipo="produtor" data-id="${esc(p.cpf)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhum produtor cadastrado.</p>'}</div>
+    <div class="bulk-add" style="padding:10px 14px">${btnNovo('produtor')}</div></div>
+  <div class="panel"><div class="panel-head"><h2>🏡 Imóveis rurais</h2><span class="sub">como no Livro Caixa: código, CAD ITR, forma de exploração e participação do produtor</span></div>
+    ${form('imovel', `<label>Código${inp('codigo',it.codigo,'ex.: 001',E&&!E.novo?'readonly':'')}</label><label>Nome${inp('nome',it.nome,'nome do imóvel')}</label><label>CAD ITR${inp('cadItr',it.cadItr,'número no ITR')}</label><label>Município${inp('municipio',it.municipio,'')}</label><label>UF${inp('uf',it.uf,'GO','maxlength="2"')}</label><label>Exploração<select class="sel" data-cadf="exploracao">${FIN_EXPL.map(x=>`<option${x===(it.exploracao||FIN_EXPL[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Participação %${inp('participacao',it.participacao==null?100:it.participacao,'100','inputmode="decimal"')}</label><label>Fazenda no app<select class="sel" data-cadf="fazendaApp"><option value="">—</option>${Object.keys(FAZENDAS).map(k=>`<option value="${k}"${k===it.fazendaApp?' selected':''}>${esc(FAZENDAS[k])}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>`)}
+    <div class="cad-list">${imov.map(x=>`<div class="cad-row${_finAtivo(x.ativo)?'':' off'}"><div><b>${esc(x.nome||x.codigo)}</b><small>cód. ${esc(x.codigo)}${x.cadItr?' · ITR '+esc(x.cadItr):''}</small></div><div class="mut">${esc(x.exploracao||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))} ${esc(String(x.participacao||''))}%`:''}${x.fazendaApp?` · ${esc(FAZENDAS[x.fazendaApp]||x.fazendaApp)}`:''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="imovel" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhum imóvel cadastrado.</p>'}</div>
+    <div class="bulk-add" style="padding:10px 14px">${btnNovo('imovel')}</div></div>
+  <div class="panel"><div class="panel-head"><h2>🏦 Contas bancárias</h2><span class="sub">a baixa dos títulos (fase 3) aponta para uma conta do produtor; dinheiro em espécie é uma conta "Caixa"</span></div>
+    ${form('conta', `<label>Código${inp('codigo',it.codigo,'ex.: 001',E&&!E.novo?'readonly':'')}</label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Banco${inp('banco',it.banco,'nº e nome, ex.: 001 Banco do Brasil')}</label><label>Agência${inp('agencia',it.agencia,'')}</label><label>Conta${inp('conta',it.conta,'com dígito')}</label><label>Tipo<select class="sel" data-cadf="tipo">${FIN_CONTA_TIPOS.map(x=>`<option${x===(it.tipo||FIN_CONTA_TIPOS[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>${ativo('ativa',it.ativa==null?'S':it.ativa)}</label>`)}
+    <div class="cad-list">${contas.map(x=>`<div class="cad-row${_finAtivo(x.ativa)?'':' off'}"><div><b>${esc(x.banco||x.codigo)}</b><small>cód. ${esc(x.codigo)} · ag. ${esc(x.agencia||'—')} · conta ${esc(x.conta||'—')}</small></div><div class="mut">${esc(x.tipo||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))}`:''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="conta" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhuma conta cadastrada.</p>'}</div>
+    <div class="bulk-add" style="padding:10px 14px">${btnNovo('conta')}</div></div>`;
+};
+const CAD_KEY={produtor:'cpf', imovel:'codigo', conta:'codigo'};
+function cadLista(tipo){ const F=FIN(); return tipo==='produtor'?F.produtores:(tipo==='imovel'?F.imoveis:F.contas); }
+async function cadPost(tipo, item, msgOk){ const url=syncUrl(); if(!url) return false;
+  try{ const r=await syncPost(url, JSON.stringify({__cadFin:{tipo, itens:[item]}}));
+    if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
+    const k=CAD_KEY[tipo], L=cadLista(tipo), i=L.findIndex(x=>x[k]===item[k]); if(item.del){ if(i>=0) L.splice(i,1); } else if(i>=0) Object.assign(L[i], item); else L.push(item);
+    if(msgOk) toast(msgOk); CAD_EDIT=null; route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
+function cadSalvar(){ const E=CAD_EDIT; if(!E) return; const it=Object.assign({}, E.item), k=CAD_KEY[E.tipo];
+  if(E.tipo==='produtor'){ it.cpf=String(it.cpf||'').replace(/\D/g,''); if(!(it.cpf.length===11||it.cpf.length===14)){ toast('CPF (11) ou CNPJ (14) só com números'); return; } if(!String(it.nome||'').trim()){ toast('Informe o nome'); return; } }
+  else { it.codigo=String(it.codigo||'').trim(); if(!it.codigo){ toast('Informe o código'); return; } if(it.produtor) it.produtor=String(it.produtor).replace(/\D/g,''); }
+  if(E.tipo==='imovel'){ if(!String(it.nome||'').trim()){ toast('Informe o nome do imóvel'); return; } it.participacao=+(_mmC(it.participacao)||100); if(!it.exploracao) it.exploracao=FIN_EXPL[0]; }
+  if(E.tipo==='conta'&&!it.tipo) it.tipo=FIN_CONTA_TIPOS[0];
+  if(E.novo && cadLista(E.tipo).some(x=>x[k]===it[k])){ toast('Já existe um cadastro com esse '+(k==='cpf'?'CPF':'código')); return; }
+  ['ativo','ativa'].forEach(f=>{ if(f in it) it[f]=it[f]&&it[f]!=='N'?'S':'N'; });
+  cadPost(E.tipo, it, 'Cadastro salvo'); }
 /* ================= TAREFAS / EQUIPE (módulo Tarefas: Quadro + Gantt) ================= */
 const EQUIPE_KEY='planejamento_equipe';     // {funcionarios:[{id,nome,funcao}]}
 const TAREFAS_KEY='planejamento_tarefas';   // {tarefas:[{id,titulo,talhaoId,funcionarioId,inicio,dias,status,obs,ts}]}
@@ -3793,8 +3886,8 @@ V.inicio = function(){
         ['Operação de Campo','Monitoramento (GPS)','Recomendação de aplicação','Realizado por insumo'],'ec-campo')}
       ${card('precos','💲','Preços','Componha e mantenha os preços dos insumos.',
         ['Portfólio do ano','Preços de referência','Composição à vista e a prazo','Histórico por safra'],'ec-precos')}
-      ${card('admin','🗂️','Administrativo','Controle financeiro e de compras.',
-        ['Compras (entradas de estoque)','Fluxo de Caixa'],'ec-admin')}
+      ${card('admin','🗂️','Administrativo',(()=>{ try{ const R=finOk()?finResumo(''):null; return R&&(R.nV||R.n7)?`Controle financeiro e de compras. <b style="color:var(--red)">${R.nV?R.nV+' título(s) vencido(s)':''}${R.nV&&R.n7-R.nV?' · ':''}${R.n7-R.nV>0?(R.n7-R.nV)+' vence(m) em 7 dias':''}</b>`:'Controle financeiro e de compras.'; }catch(e){ return 'Controle financeiro e de compras.'; } })(),
+        ['Compras (entradas de estoque)','Financeiro (títulos a pagar)','Cadastros (produtores, imóveis, contas)'],'ec-admin')}
       ${card('tarefas','👷','Tarefas','Organize a equipe e as tarefas da safra.',
         ['Quadro (estilo Trello)','Cronograma (Gantt)','Equipe / operadores'],'ec-tarefas')}
     </div>
@@ -8111,7 +8204,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -8494,6 +8587,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
+  if(e.target.id==='fin-prod'||e.target.id==='fin-mes'){ FIN_UI[e.target.id==='fin-prod'?'prod':'mes']=e.target.value||''; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='rel-ap-de'||e.target.id==='rel-ap-ate'||e.target.id==='rel-ap-faz'||e.target.id==='rel-ap-tal'){   // relatório Agro1 (v271)
     const k={'rel-ap-de':'de','rel-ap-ate':'ate','rel-ap-faz':'faz','rel-ap-tal':'tal'}[e.target.id]; AGRO1[k]=e.target.value||'';
     if(k==='faz') AGRO1.tal=''; if((k==='de'||k==='ate') && AGRO1.de && AGRO1.ate && AGRO1.de>AGRO1.ate){ toast('A data "de" ficou depois do "até" — ajustei'); if(k==='de') AGRO1.ate=AGRO1.de; else AGRO1.de=AGRO1.ate; }
@@ -8568,8 +8662,8 @@ document.addEventListener('click',e=>{
   if(cff){ const v=cff.dataset.fornf; if(v===''){ cotaFornSel.clear(); } else if(cotaFornSel.has(v)){ cotaFornSel.delete(v); } else { cotaFornSel.add(v); } route(); return; }
   const ccf=e.target.closest('#cot-clsf .chip-f');    // Cotação: filtro por classe
   if(ccf){ const v=ccf.dataset.cotclsf; if(v===''){ cotaClasseSel.clear(); } else if(cotaClasseSel.has(v)){ cotaClasseSel.delete(v); } else { cotaClasseSel.add(v); } route(); return; }
-  const fmf=e.target.closest('#flx-mesf .chip-f');    // Fluxo de Caixa: filtro por mês
-  if(fmf){ fluxoMes=fmf.dataset.flxmes||''; route(); return; }
+  const fsf=e.target.closest('#fin-stf .chip-f');     // Financeiro: situação dos títulos (v273)
+  if(fsf){ FIN_UI.st=fsf.dataset.finst||'aberto'; route({keepScroll:true}); return; }
   const tlf=e.target.closest('#tl-filter .chip-f');
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
@@ -8918,10 +9012,19 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
     else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
-    else if(a.act==='fluxoAdd'){ const d=fluxoDraft; if(!d||!(+d.valor>0)){ toast('Informe um valor maior que zero'); return; }
-      FLUXO.lancamentos.push({ id:'f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), data:d.data||new Date().toISOString().slice(0,10), tipo:(d.tipo==='entrada'?'entrada':'saida'), categoria:(d.categoria||'').trim(), descricao:(d.descricao||'').trim(), valor:+d.valor||0, ts:Date.now() });
-      saveFluxo(); fluxoDraft=fluxoNovoDraft(); route(); toast('Lançamento adicionado'); }
-    else if(a.act==='fluxoDel'){ if(ask('Excluir este lançamento?')){ FLUXO.lancamentos=FLUXO.lancamentos.filter(l=>l.id!==a.id); saveFluxo(); route(); toast('Lançamento excluído'); } }
+    else if(a.act==='finNovo'){ finDraft=finNovoDraft(); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); }
+    else if(a.act==='finCancelarForm'){ finDraft=null; route({keepScroll:true}); }
+    else if(a.act==='finSalvar'){ finSalvar(); }
+    else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
+    else if(a.act==='finPagar'){ finPagar(a.id); }
+    else if(a.act==='finReabrir'){ finPost([{id:a.id, status:'ABERTO', dataPgto:''}], 'Título reaberto'); }
+    else if(a.act==='finCancelar'){ if(ask('Cancelar este título? A nota continua como está; só o valor deixa de ser cobrado aqui.')) finPost([{id:a.id, status:'CANCELADO'}], 'Título cancelado'); }
+    else if(a.act==='finDel'){ if(ask('Excluir este título?')) finPost([{id:a.id, del:true}], 'Título excluído'); }
+    else if(a.act==='cadNovo'){ const tipo=a.tipo; CAD_EDIT={tipo, novo:true, item:tipo==='produtor'?{cpf:'',nome:'',emailContador:'',imovelPadrao:'',ativo:'S'}:tipo==='imovel'?{codigo:'',nome:'',cadItr:'',municipio:'',uf:'',exploracao:FIN_EXPL[0],produtor:'',participacao:100,fazendaApp:'',ativo:'S'}:{codigo:'',produtor:'',banco:'',agencia:'',conta:'',tipo:FIN_CONTA_TIPOS[0],ativa:'S'}}; route({keepScroll:true}); }
+    else if(a.act==='cadEditar'){ const it=cadLista(a.tipo).find(x=>x[CAD_KEY[a.tipo]]===a.id); if(it){ CAD_EDIT={tipo:a.tipo, novo:false, item:Object.assign({}, it)}; route({keepScroll:true}); } }
+    else if(a.act==='cadCancelar'){ CAD_EDIT=null; route({keepScroll:true}); }
+    else if(a.act==='cadSalvar'){ cadSalvar(); }
+    else if(a.act==='cadExcluir'){ const E=CAD_EDIT; if(E&&!E.novo&&ask('Excluir este cadastro?')){ const it={del:true}; it[CAD_KEY[E.tipo]]=E.item[CAD_KEY[E.tipo]]; cadPost(E.tipo, it, 'Cadastro excluído'); } }
     else if(a.act==='tarSalvar'){ const d=tarefaDraft; if(!d||!(d.titulo||'').trim()){ toast('Informe a tarefa/operação'); return; }
       const rec={ titulo:(d.titulo||'').trim(), talhaoId:d.talhaoId||'', funcionarioId:d.funcionarioId||'', inicio:d.inicio||new Date().toISOString().slice(0,10), dias:Math.max(1,+d.dias||1), status:(TAR_ORDER.indexOf(d.status)>=0?d.status:'afazer'), obs:(d.obs||'').trim() };
       rec._u=tsAgora();
@@ -9036,8 +9139,9 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
-  if(e.target.id==='q-flx'){ filterFluxo(); return; }
-  if(e.target.matches('[data-flxf]')){ if(fluxoDraft){ const f=e.target.dataset.flxf; fluxoDraft[f]= (f==='valor')?_mmC(e.target.value):e.target.value; } return; }
+  if(e.target.id==='q-fin'){ FIN_UI.q=e.target.value; clearTimeout(window._finQT); window._finQT=setTimeout(()=>route({keepScroll:true}),250); return; }
+  if(e.target.matches('[data-finf]')){ if(finDraft){ const f=e.target.dataset.finf; finDraft[f]=(f==='valor')?_mmC(e.target.value):e.target.value; if(f==='tipo') route({keepScroll:true}); } return; }
+  if(e.target.matches('[data-cadf]')){ if(CAD_EDIT){ const f=e.target.dataset.cadf; CAD_EDIT.item[f]=e.target.type==='checkbox'?(e.target.checked?'S':'N'):e.target.value; } return; }
   if(e.target.id==='q-tar'){ filterTarefas(); return; }
   if(e.target.id==='q-res'){ filterResultados(); return; }
   if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
@@ -10355,7 +10459,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); FLUXO=loadFluxo(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
