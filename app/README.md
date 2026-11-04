@@ -71,6 +71,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Relatórios → Aplicações no período (v271)** — relatório para lançar as aplicações no sistema externo (Agro1):
+  escolha **De / Até** (e, se quiser, fazenda e talhão) e o app lista, **por talhão, uma ficha por operação
+  realizada** com os dados da tela "Aplicação de Insumos" (data da aplicação, operação, tipo, cultura, área aplicada,
+  operador, máquina, vazão, tanque, nº de tanques, calda total, horário, estádio, alvo, observação) e, embaixo,
+  os insumos daquela operação (tipo do item, item, unidade, área, dose/ha, total). Entram operações concluídas ou
+  parciais do Campo (cada etapa vira uma ficha com a própria data), TS feito e recomendações avulsas aprovadas;
+  aplicações sem data são avisadas e não entram em período nenhum. Botões **CSV** (uma linha por insumo, com os
+  dados da operação repetidos) e **PDF**. Depois de lançar, **"Marcar como lançado até dd/mm"**: o próximo período
+  já começa no dia seguinte e as fichas antigas ficam com o selo "✓ lançado". A marca e o período ficam só no
+  aparelho (`localStorage`, chave `planejamento_agro1_rel`). Funções: `agro1Todas`, `agro1Filtradas`,
+  `aplicacoesPeriodoHtml`, `exportAplicacoesCsv`, `exportAplicacoesPDF`.
 - **Conserto: NDVI do talhão em foco não aparecia no mapa (v268/v269)** — os tiles WMS em EPSG:3857 com a `GEOMETRY`
   do talhão vinham vazios (recorte em lat/lng) ou com erro (recorte em metros, v268), embora a legenda e os percentis
   (GetMap em CRS:84) funcionassem. Na v269 a camada em foco deixou de ser tiles: é **uma imagem** pedida do mesmo jeito
