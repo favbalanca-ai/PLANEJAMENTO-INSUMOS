@@ -71,6 +71,21 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Custo real no estoque e R$/ha realizado (v272, fase 1 do Financeiro)** — o custo de cada produto passa a vir
+  do que foi pago nas notas, não só do preço de referência da planilha. `custoMedioCalc` monta, por produto, a
+  linha do tempo: **estoque inicial** da safra (valor = custo inicial digitado na tela Estoque → senão o preço da
+  **última nota** do produto → senão o preço de referência, marcado `ref.`), **entradas** (compras e NF-e com o
+  preço pago: custo real com frete e impostos) e **saídas** (operações concluídas, TS feito e recomendações
+  avulsas aprovadas), em ordem de data. Cada entrada recalcula o **custo médio ponderado**; cada saída sai pelo
+  custo médio **do dia da aplicação** (`custoSaidaOp`), e o número não muda quando chega nota nova depois.
+  Onde aparece: **Estoque** (colunas Custo inicial, Custo médio e Valor saldo a custo real; KPI com a referência
+  embaixo; relatório PDF), **extrato do produto** (R$/un de cada entrada, custo de cada saída), **Relatórios →
+  Uso de produtos** (Custo real ao lado da Referência, na tela, no CSV e no PDF), **ficha do talhão** (Realizado ·
+  custo real R$/ha) e **Painel do Campo** (card Insumos aplicados · custo real). A tela **Resultados** passa a
+  valorar o realizado pelo custo médio (`custoInsumoRealSeq`). O custo inicial digitado vai para a coluna
+  **CUSTO INICIAL** do PORTIFÓLIO (edição `custoIni`, mesmo caminho do EM PEDIDO). As saídas enviadas à planilha
+  (`__saida`) levam o `custo` de cada item, e o razão MOVIMENTAÇÃO ESTOQUE ganha as colunas VALOR UNIT e VALOR TOTAL.
+  Tudo é calculado no app a partir do que já está sincronizado; a DRE continua a preço de referência.
 - **Relatórios → Aplicações no período (v271)** — relatório para lançar as aplicações no sistema externo (Agro1):
   escolha **De / Até** (e, se quiser, fazenda e talhão) e o app lista, **por talhão, uma ficha por operação
   realizada** com os dados da tela "Aplicação de Insumos" (data da aplicação, operação, tipo, cultura, área aplicada,

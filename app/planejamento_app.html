@@ -2026,6 +2026,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .est-prod{cursor:pointer}.est-prod:hover{text-decoration:underline;color:var(--teal)}
 .ext-sec{font-weight:800;font-size:13px;margin:10px 0 6px;color:var(--ink)}.ext-sec b{color:var(--teal);margin-left:6px}
 .ext-tbl td,.ext-tbl th{font-size:12.5px}
+/* custo médio (v272): selo "ref." (preço de referência, sem nota) e cabeçalho do extrato */
+.pill.cm-ref{background:var(--amber-soft);color:var(--amber);font-size:10px;padding:2px 6px;margin-left:4px;vertical-align:middle}
+.ext-cm{display:flex;flex-wrap:wrap;gap:6px 18px;margin:2px 0 8px;font-size:13px}
+.ext-cm span{display:flex;flex-direction:column}
+.ext-cm small{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.ext-cm b{color:var(--teal)}
 
 /* ===== Quadro: faixas que encolhem (filtros · linha do tempo) (v247) ===== */
 .oq-fold{margin-bottom:8px}
@@ -2471,6 +2477,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ext-sec{font-size:10.5px}
   .ext-tbl td{font-size:10px}
   .ext-tbl th{font-size:10px}
+  .ext-cm{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
@@ -2589,7 +2596,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-271';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-272';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3072,6 +3079,7 @@ function loadOverrides(){
   try{ OV = JSON.parse(localStorage.getItem(LS_KEY)) || {}; }catch(e){ OV = {}; }
   OV.estoque = OV.estoque || {};
   OV.pedido  = OV.pedido  || {};   // produto -> qtd já em pedido (abate da demanda; sincroniza com a coluna EM PEDIDO)
+  OV.custoIni= OV.custoIni|| {};   // produto -> R$/un do estoque inicial (v272; sincroniza com a coluna CUSTO INICIAL)
   OV.talhao  = OV.talhao  || {};   // id -> {area, produtividade}
   OV.dose    = OV.dose    || {};   // "TL|op|item" -> valor
   OV.preco   = {};   // preço não é mais editável no app — segue sempre a planilha (descarta ajustes locais antigos)
@@ -3100,6 +3108,7 @@ function loadOverrides(){
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
+  _cmCache=null;   // custo médio (v272) depende do realizado/estoque inicial
   try{ localStorage.setItem(LS_KEY, JSON.stringify(OV)); }
   catch(e){ toast('⚠️ A memória do app no aparelho está cheia — sincronize e limpe dados antigos'); }
   if(DATA) buildMaqIndex();
@@ -3107,7 +3116,7 @@ function saveOverrides(){
   if(typeof scheduleAutoPush==='function') scheduleAutoPush(); // envia edições à planilha (auto, com debounce)
 }
 function countEdits(){
-  return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.dose).length +
+  return Object.keys(OV.estoque).length + Object.keys(OV.pedido).length + Object.keys(OV.custoIni||{}).length + Object.keys(OV.dose).length +
          Object.keys(OV.cultura).length +
          Object.keys(OV.maquina).length + Object.keys(OV.dreOp).length +
          Object.keys(OV.opMaq).length + Object.keys(OV.opDae||{}).length + Object.keys(OV.arrend).length + Object.keys(OV.dreCfg||{}).length + Object.keys(OV.dreUnit||{}).length + Object.keys(OV.dreProdHa||{}).length + (OV.diesel!==6.00?1:0) +
@@ -3124,6 +3133,7 @@ function countEdits(){
 /* ---------------- acessores (base + override) ---------------- */
 const estoqueDe = p => (p in OV.estoque) ? +OV.estoque[p] : (PROD[p] ? PROD[p].estoque : 0);
 const pedidoDe  = p => (p in OV.pedido)  ? +OV.pedido[p]  : (PROD[p] ? (+PROD[p].pedido||0) : 0);
+const custoIniDe= p => (OV.custoIni && p in OV.custoIni) ? +OV.custoIni[p] : (PROD[p] ? (+PROD[p].custoIni||0) : 0);   // R$/un digitado p/ o estoque inicial (v272)
 const precoDe   = p => (PROD[p] ? PROD[p].preco : 0);   // preço SEMPRE da planilha (lista importada)
 // Torna os produtos do módulo Preços "válidos" no planejamento: os que ainda não
 // existem no cadastro do planejamento entram como produto sintético (com o preço da
@@ -3606,13 +3616,13 @@ function custoOpSeqHa(t,seq){
 // custo de insumos REALIZADO (R$) de uma safra do talhão: operações concluídas usam a baixa
 // (volume real × preço); as não concluídas ainda contam pelo planejado (para o número fazer sentido no meio da safra)
 function custoInsumoRealSeq(t,seq){
+  // v272: o que já saiu do estoque vale pelo CUSTO MÉDIO do dia da aplicação; o que ainda não saiu, pelo plano a preço de referência
   const tag=seq==='safrinha'?'S':'P', area=areaDe(t); let real=0;
+  usoProdutosDe(t).forEach(l=>{ if(l.seq===seq) real+=l.valorReal; });   // operações concluídas + TS feito desta safra
   opsOf(t.id,seq).forEach((op,oi)=>{ const tagoi=`${tag}${oi}`, key=t.id+'|'+tagoi, r=OV.realizado&&OV.realizado[key];
-    const planOp=effItems(t.id,tagoi,op.itens).reduce((s,it)=>s+(+it.dose||0)*area*precoDe(it.produto),0);
-    if(opBaixou(r)){ let ro=0; const b=opBaixaEff(r); for(const pr in b) ro+=(+b[pr]||0)*precoDe(pr);
-      if(tsFeito(r)) for(const pr in (r.ts.baixa||{})) ro+=(+r.ts.baixa[pr]||0)*precoDe(pr);   // semente + TS baixados pelo TS
-      real+=ro; }
-    else real+=planOp;
+    if(opBaixou(r)) return;
+    const ts=tsFeito(r);   // TS já feito (e valorado acima): semente e TS saem do plano desta operação
+    real+=effItems(t.id,tagoi,op.itens).reduce((s,it)=>(ts&&(_isTS(it)||_isSemente(it)))?s:s+(+it.dose||0)*area*precoDe(it.produto),0);
   });
   return real;
 }
@@ -3934,6 +3944,7 @@ V.talhao = function(id){
     <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}</div></div>
     <div class="di"><div class="l">Custo total/ha</div><div class="v" style="color:var(--ink2)">${brl(totHa)}</div></div>
     <div class="di"><div class="l">Custo total</div><div class="v">${brl0(totHa*area)}</div></div>
+    ${(()=>{ const cr=custoRealTalhao(t); return cr.n?`<div class="di" title="insumos que já saíram do estoque para este talhão, valorados pelo custo médio pago nas notas (a preço de referência: ${brl(cr.refHa)}/ha)"><div class="l">Realizado · custo real</div><div class="v" style="color:var(--green)">${brl(cr.ha)}/ha <small class="mut">· ${brl0(cr.total)}</small></div></div>`:''; })()}
   </div>
   <div class="panel"><div class="panel-head"><h2>Culturas do talhão</h2><span class="sub">planeje a 1ª e a 2ª safra (safrinha) no mesmo talhão</span></div>
     <div class="bulk-add">
@@ -3992,7 +4003,7 @@ function custoClasseHaSeqs(t, seqs){
 const COMPRAS_KEY='planejamento_compras';
 let COMPRAS=null, compraDraft=null;
 function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveCompras(){ lsSet(COMPRAS_KEY, JSON.stringify(COMPRAS)) }
+function saveCompras(){ lsSet(COMPRAS_KEY, JSON.stringify(COMPRAS)); _cmCache=null; }
 // envia a compra para a planilha: ENTRADA na aba MOVIMENTAÇÃO ESTOQUE + o registro inteiro na aba COMPRAS APP
 // (é de lá que os OUTROS aparelhos puxam a lista "Compras registradas")
 // entrada registrada (compra manual, NF-e, recebimento) ABATE o "em pedido" do produto: 115 pedidos, chegaram 115 → 0 (chegaram 40 → 75)
@@ -4085,7 +4096,9 @@ function pushEntradasPendentes(){
 function pushSaida(r){
   const url=syncUrl(); if(!url||!r) return Promise.resolve(false);
   const rn=recomNorm(r);
-  const itens=(rn.itens||[]).filter(it=>it.produto&&it.real!=null&&+it.real>0).map(it=>({produto:it.produto, un:it.un||'', real:+it.real||0}));
+  const dataS=_isISO(r.data)?String(r.data).slice(0,10):(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):''), S=custoMedioCalc().saida;   // v272: custo médio no dia
+  const itens=(rn.itens||[]).filter(it=>it.produto&&it.real!=null&&+it.real>0).map(it=>{ const cm=(r.tipo==='ts'&&r.tsOp)?custoSaidaOp(r.tsOp,it.produto,'TS'):S[_cmKeySaida({data:dataS, seq:'', op:r.opNome||'Recomendação', origem:'Recomendação', produto:it.produto}, r.talhao)];
+    return {produto:it.produto, un:it.un||'', real:+it.real||0, custo:+((cm!=null?cm:custoMedioDe(it.produto))||0).toFixed(4)}; });
   const payload={id:r.id, talhao:r.talhao||'', data:r.data||'', operador:(r.aprov&&r.aprov.por)||r.resp||'', itens};
   return syncPost(url, JSON.stringify({__saida:payload}))
     .then(j=>{ if(!postOk(j)) return false; r.saidaPushed=true; saveRecom(); return true; }).catch(()=>false);
@@ -5098,11 +5111,12 @@ V.estoque=function(){
   Object.keys(saidas).forEach(n=>nomes.add(n)); Object.keys(entradas).forEach(n=>nomes.add(n));
   const rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
     const ini=estoqueDe(n), ent=entradas[n]||0, sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n);
-    const ne=nfeEstadosDe(n);
-    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, ped, preco, aEnt:ne.aEntregar, trans:ne.emTransito, avar:ne.avariado}; })
+    const ne=nfeEstadosDe(n), ci=custoMedioInfo(n), cm=ci?ci.cm:preco;   // v272: custo médio real
+    return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, ped, preco, cm, ci, aEnt:ne.aEntregar, trans:ne.emTransito, avar:ne.avariado}; })
     .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
   const comMov=rows.filter(r=>r.ini||r.ent||r.sai||r.ped);
   const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
+  const valReal=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*(r.cm>0?r.cm:r.preco),0), nRef=rows.filter(r=>r.saldo>0.0001&&(!r.ci||r.ci.ref||!(r.cm>0))).length;
   const totEntradas=rows.reduce((a,r)=>a+r.ent,0), totSaidas=rows.reduce((a,r)=>a+r.sai,0);
   const negativos=rows.filter(r=>r.saldo<-0.0001).length;
   // chips de classe (contagem por classe)
@@ -5116,6 +5130,8 @@ V.estoque=function(){
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
       <td class="c-full" data-th="Produto"><b class="est-prod" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Ver o extrato (entradas e saídas) deste produto">${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
       <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
+      <td class="num c-more" data-th="Custo inicial R$/un">${(()=>{ const ci=custoIniDe(r.produto), auto=r.ci&&r.ci.fonte!=='digitado'?r.ci.puIni:0, fonte=r.ci?r.ci.fonte:'';
+        return `<input class="cell ${(OV.custoIni&&r.produto in OV.custoIni)?'edited':''}" inputmode="decimal" data-edit="custoIni" data-prod="${esc(r.produto)}" value="${ci>0?fmtDose(ci):''}" placeholder="${auto>0?fmtDose(auto):'—'}" title="R$ por ${esc(r.un||'un')} do estoque inicial da safra. Vazio = ${fonte==='nota'?'preço da última nota':'preço de referência da planilha'} (vai para a coluna CUSTO INICIAL do PORTIFÓLIO)">`; })()}</td>
       <td class="num" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0" title="Quantidade já pedida ao fornecedor (vai para a coluna EM PEDIDO do PORTIFÓLIO)"></td>
       <td class="num" data-th="Entradas">${r.ent?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="De onde veio">${num(r.ent)}</a>`:'·'}</td>
       <td class="num" data-th="Saídas (aplic.)">${r.sai?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Para onde foi">${num(r.sai)}</a>`:'·'}</td>
@@ -5124,11 +5140,12 @@ V.estoque=function(){
       <td class="num c-more" data-th="A entregar" title="contratos de entrega futura (NF-e de faturamento)">${r.aEnt?num(r.aEnt):'·'}</td>
       <td class="num c-more" data-th="Em trânsito" title="NF-e de mercadoria ainda não recebida na fazenda">${r.trans?num(r.trans):'·'}</td>
       <td class="num c-more" data-th="Avariado" title="recebido com avaria, fora do saldo disponível (a resolver)">${r.avar?`<span style="color:var(--red)">${num(r.avar)}</span>`:'·'}</td>
-      <td class="num c-more" data-th="Valor saldo">${r.preco>0?brl0(Math.max(0,r.saldo)*r.preco):'—'}</td></tr>`;
+      <td class="num c-more" data-th="Custo médio" title="${r.ci&&r.ci.nEnt?`média ponderada de ${r.ci.nEnt} entrada(s) com o estoque inicial`:'sem nota: preço de referência da planilha'}">${r.cm>0?`${brl(r.cm)}${(!r.ci||r.ci.ref||!r.ci.nEnt)?' <span class="pill cm-ref" title="preço de referência (sem nota com valor)">ref.</span>':''}`:'—'}</td>
+      <td class="num c-more" data-th="Valor saldo" title="saldo × custo médio${r.preco>0?` · a preço de referência: ${brl0(Math.max(0,r.saldo)*r.preco)}`:''}">${r.cm>0?brl0(Math.max(0,r.saldo)*r.cm):(r.preco>0?brl0(Math.max(0,r.saldo)*r.preco):'—')}</td></tr>`;
   }).join('');
   return `
   <div class="kpi-grid">
-    <div class="kpi accent"><div class="k-label">Valor em estoque (saldo)</div><div class="k-value">${brl0(valSaldo)}</div><div class="k-sub">${comMov.length} produto(s) com movimento</div></div>
+    <div class="kpi accent" title="saldo de cada produto × custo médio (o que foi pago nas notas)"><div class="k-label">Valor em estoque (custo real)</div><div class="k-value">${brl0(valReal)}</div><div class="k-sub">${nRef?`${nRef} produto(s) ainda a preço de referência · `:''}referência: ${brl0(valSaldo)}</div></div>
     <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub"><a class="link" data-go="#/entradas">registrar compra →</a></div></div>
     <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
@@ -5138,9 +5155,9 @@ V.estoque=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
-    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more">Valor saldo</th></tr></thead>
-      <tbody>${body||'<tr><td colspan="11" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.</p>`;
+    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
+      <tbody>${body||'<tr><td colspan="13" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.<br><b>Custo médio</b> = o que foi pago nas notas (custo real com frete e impostos) ponderado com o estoque inicial; o estoque inicial vale pelo <b>custo inicial</b> digitado, senão pela última nota, senão pelo preço de referência (<span class="pill cm-ref">ref.</span>).</p>`;
 };
 // RELATÓRIO DE ESTOQUE (PDF): indicadores, resumo por classe e posição por produto (inicial, entradas, saídas,
 // saldo, pedido, demanda restante, valor e situação) + coluna em branco p/ contagem física. Respeita os filtros da tela.
@@ -5152,13 +5169,13 @@ function exportEstoquePDF(){
   let rows=[...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''};
     const ini=estoqueDe(n), ent=entradas[n]||0, sai=saidas[n]||0, ped=pedidoDe(n), preco=precoDe(n), c=comp[n];
     const rest=c?Math.max(0,(c.demanda||0)-(c.saida||0)):0, saldo=ini+ent-sai;
-    return {produto:n, classe:(p.classe||'').trim()||'—', ativos:p.ativos||'', un:p.un||'', ini, ent, sai, saldo, ped, preco, rest, comprar:c?c.comprar:0}; })
+    return {produto:n, classe:(p.classe||'').trim()||'—', ativos:p.ativos||'', un:p.un||'', ini, ent, sai, saldo, ped, preco, cm:custoMedioDe(n), rest, comprar:c?c.comprar:0}; })
     .filter(r=>!/^MÁQUINA/i.test(r.classe));
   rows=rows.filter(r=>(!q||(r.produto+' '+r.classe).toLowerCase().includes(q)) && (!estoqueClasse||r.classe===estoqueClasse) && (!estoqueSoMov||r.ini||r.ent||r.sai||r.ped) && estSaldoPassa(_estSaldoTipo(r.saldo)));
   rows=rows.filter(r=>r.ini||r.ent||r.sai||r.ped||r.rest>0);   // no PDF: sem produto parado sem uso
   if(!rows.length){ toast('Nada para o filtro atual'); return; }
   const labels=classeLabels(rows), lbl=r=>labels[classeKey(r.classe)]||r.classe;
-  const val=r=>Math.max(0,r.saldo)*r.preco;
+  const val=r=>Math.max(0,r.saldo)*(r.cm>0?r.cm:r.preco);   // v272: saldo a custo médio (real)
   const sit=r=>r.saldo<-0.0001?['neg','Negativo']:r.comprar>0.0001?['buy','Comprar '+num(r.comprar)]:(r.rest>0?['ok','Atende']:(r.saldo>0?['idle','Sem uso previsto']:['idle','—']));
   const vSaldo=rows.reduce((a,r)=>a+val(r),0), vEnt=rows.reduce((a,r)=>a+r.ent*r.preco,0), vSai=rows.reduce((a,r)=>a+r.sai*r.preco,0);
   const nNeg=rows.filter(r=>r.saldo<-0.0001).length, nBuy=rows.filter(r=>r.comprar>0.0001).length, nSaldo=rows.filter(r=>r.saldo>0.0001).length;
@@ -5170,7 +5187,7 @@ function exportEstoquePDF(){
   <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027</div><h1>Posição de estoque</h1><div class="dm-sub">posição em ${hoje}</div></div>
     <div class="dm-filt">${filtros.map(f=>`<span>${esc(f)}</span>`).join('')}</div></div>
   <div class="dm-kpis">
-    <div class="dm-kpi k1"><small>Valor em estoque</small><b>${brl0(vSaldo)}</b><i>${nSaldo} produto(s) com saldo</i></div>
+    <div class="dm-kpi k1"><small>Valor em estoque (custo real)</small><b>${brl0(vSaldo)}</b><i>${nSaldo} produto(s) com saldo · custo médio das notas</i></div>
     <div class="dm-kpi k2"><small>Entradas (compras)</small><b>${brl0(vEnt)}</b><i>pelo preço de referência</i></div>
     <div class="dm-kpi k3"><small>Saídas (aplicado)</small><b>${brl0(vSai)}</b><i>recomendações/operações</i></div>
     <div class="dm-kpi ${nNeg?'k4':'k3'}"><small>Atenção</small><b>${nNeg} negativo(s)</b><i>${nBuy} item(ns) a comprar</i></div>
@@ -5201,8 +5218,9 @@ function exportEstoquePDF(){
 function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimentacao)||{};
   const sai=[]; talhoesAll().forEach(t=>usoProdutosDe(t).forEach(l=>{ if(l.produto===prod) sai.push(Object.assign({tal:tNome(t)}, l)); }));
   sai.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
-  const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, nfe:!!c.nfe}); }));
+  const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, pu:+it.preco||0, nfe:!!c.nfe}); }));
   ent.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const ci=custoMedioInfo(prod), vS=sai.reduce((a,l)=>a+(+l.valorReal||0),0);   // v272: custo real
   const un=(PROD[prod]||{}).un||'', tS=sai.reduce((a,l)=>a+l.qtd,0), tE=ent.reduce((a,l)=>a+l.qtd,0), pS=+(mov.saidas&&mov.saidas[prod])||0, pE=+(mov.entradas&&mov.entradas[prod])||0;
   const difS=mov.saidas?+(pS-tS).toFixed(4):0, difE=mov.entradas?+(pE-tE).toFixed(4):0;
   const row=(c)=>`<tr>${c.map(x=>`<td>${x}</td>`).join('')}</tr>`;
@@ -5210,17 +5228,18 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
   const ov=document.createElement('div'); ov.id='ext-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(720px,100%)"><div class="modal-head"><h3>📒 Extrato — ${esc(prod)}${un?` <small class="mut">(${esc(un)})</small>`:''}</h3><button class="icon-btn" data-act="extFechar" title="Fechar">✕</button></div>
     <div style="overflow:auto;max-height:70vh">
-      <div class="ext-sec">📤 Saídas <b>${num(tS+Math.max(0,difS))}</b>${un?' '+esc(un):''}</div>
-      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Talhão</th><th>Operação</th><th>Origem</th><th class="num">Qtd</th></tr></thead><tbody>
-        ${sai.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.tal), esc(l.op), esc(l.origem)+(l.quem?` <small class="mut">· ${esc(l.quem)}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`])).join('')}
-        ${Math.abs(difS)>=0.0005?row([`<span class="mut">—</span>`,`<span class="mut">—</span>`,`<i>${difS>0?'lançado em outro aparelho ou direto na aba MOVIMENTAÇÃO ESTOQUE':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difS>0?'':'−'}${fmtDose(Math.abs(difS))}</b>`]):''}
-        ${!sai.length&&Math.abs(difS)<0.0005?'<tr><td colspan="5" class="mut" style="padding:8px 10px">Nenhuma saída.</td></tr>':''}</tbody></table>
-      <div class="ext-sec">📥 Entradas <b>${num(tE+Math.max(0,difE))}</b>${un?' '+esc(un):''}</div>
-      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Fornecedor</th><th>Nota</th><th class="num">Qtd</th></tr></thead><tbody>
-        ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.forn), esc(l.nf)+(l.nfe?' <small class="mut">NF-e</small>':''), `<b class="num">${fmtDose(l.qtd)}</b>`])).join('')}
-        ${Math.abs(difE)>=0.0005?row([`<span class="mut">—</span>`,`<i>${difE>0?'lançado em outro aparelho ou direto na planilha':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difE>0?'':'−'}${fmtDose(Math.abs(difE))}</b>`]):''}
-        ${!ent.length&&Math.abs(difE)<0.0005?'<tr><td colspan="4" class="mut" style="padding:8px 10px">Nenhuma entrada.</td></tr>':''}</tbody></table>
-      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito e das recomendações aprovadas; entradas, das compras registradas. O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota).</p>
+      ${ci?`<div class="ext-cm"><span><small>Custo médio</small><b>${brl(ci.cm)}</b>${un?'/'+esc(un):''}${(ci.ref||!ci.nEnt)?' <span class="pill cm-ref">ref.</span>':''}</span><span><small>Estoque inicial</small><b>${num(ci.ini)}</b> × ${brl(ci.puIni)} <small class="mut">(${ci.fonte==='digitado'?'custo digitado':ci.fonte==='nota'?'última nota':'preço de referência'})</small></span><span><small>Saldo a custo real</small><b>${brl0(ci.saldoV)}</b></span></div>`:''}
+      <div class="ext-sec">📤 Saídas <b>${num(tS+Math.max(0,difS))}</b>${un?' '+esc(un):''}${vS?` <small class="mut">· ${brl0(vS)} a custo médio</small>`:''}</div>
+      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Talhão</th><th>Operação</th><th>Origem</th><th class="num">Qtd</th><th class="num">Custo</th></tr></thead><tbody>
+        ${sai.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.tal), esc(l.op), esc(l.origem)+(l.quem?` <small class="mut">· ${esc(l.quem)}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`, `<span class="num" title="${brl(l.custo)}/${esc(un||'un')} no dia da aplicação">${brl0(l.valorReal)}</span>`])).join('')}
+        ${Math.abs(difS)>=0.0005?row([`<span class="mut">—</span>`,`<span class="mut">—</span>`,`<i>${difS>0?'lançado em outro aparelho ou direto na aba MOVIMENTAÇÃO ESTOQUE':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difS>0?'':'−'}${fmtDose(Math.abs(difS))}</b>`,'']):''}
+        ${!sai.length&&Math.abs(difS)<0.0005?'<tr><td colspan="6" class="mut" style="padding:8px 10px">Nenhuma saída.</td></tr>':''}</tbody></table>
+      <div class="ext-sec">📥 Entradas <b>${num(tE+Math.max(0,difE))}</b>${un?' '+esc(un):''}${ci&&ci.vEnt?` <small class="mut">· ${brl0(ci.vEnt)} pagos</small>`:''}</div>
+      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Fornecedor</th><th>Nota</th><th class="num">Qtd</th><th class="num">R$/${esc(un||'un')}</th></tr></thead><tbody>
+        ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.forn), esc(l.nf)+(l.nfe?' <small class="mut">NF-e</small>':''), `<b class="num">${fmtDose(l.qtd)}</b>`, l.pu>0?`<span class="num">${brl(l.pu)}</span>`:`<span class="pill cm-ref" title="compra sem preço: vale o preço de referência">ref.</span>`])).join('')}
+        ${Math.abs(difE)>=0.0005?row([`<span class="mut">—</span>`,`<i>${difE>0?'lançado em outro aparelho ou direto na planilha':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difE>0?'':'−'}${fmtDose(Math.abs(difE))}</b>`,'']):''}
+        ${!ent.length&&Math.abs(difE)<0.0005?'<tr><td colspan="5" class="mut" style="padding:8px 10px">Nenhuma entrada.</td></tr>':''}</tbody></table>
+      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito e das recomendações aprovadas; entradas, das compras registradas. Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota; VALOR UNIT e VALOR TOTAL, o custo).</p>
     </div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov); }
 function filterEstoque(){
@@ -8398,7 +8417,7 @@ window.addEventListener('hashchange', ()=>{ prTecFechar(); standTrenaFechar(); }
 const RECOM_KEY='planejamento_recomendacao';
 let RECOM=null;
 function loadRecom(){ try{ const d=JSON.parse(localStorage.getItem(RECOM_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveRecom(){ lsSet(RECOM_KEY, JSON.stringify(RECOM)) }
+function saveRecom(){ lsSet(RECOM_KEY, JSON.stringify(RECOM)); _cmCache=null; }
 const RECOM_ST={
   rascunho:{lbl:'Rascunho',cls:'rc-rasc',ico:'✏️'},
   enviada:{lbl:'Enviada ao operador',cls:'rc-env',ico:'📲'},
@@ -9561,6 +9580,8 @@ V.campopainel = function(){
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
     <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
+    ${(()=>{ let tot=0, ref=0, ar=0; tals.forEach(t=>{ const c=custoRealTalhao(t); if(c.n){ tot+=c.total; ref+=c.ref; ar+=c.area; } });   // v272: custo real dos insumos já aplicados
+      return tot||ref?`<a class="kpi kpi-link" data-go="#/relatorios" title="insumos já aplicados (baixas aprovadas) valorados pelo custo médio pago nas notas · a preço de referência: ${brl0(ref)}"><div class="k-label">Insumos aplicados · custo real</div><div class="k-value">${brl0(tot)}</div><div class="k-sub">${ar?brl(tot/ar)+'/ha nos talhões com aplicação':'—'}</div></a>`:''; })()}
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
     ${(()=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return `<div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>`;
       const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), ult=ed.slice().reverse().find(x=>x.mm>0);
@@ -9743,7 +9764,8 @@ function filterTimeline(){
 // Fontes: operação concluída com baixa (opBaixaEff — sem contar em dobro o que o TS já baixou), TS feito
 // (r.ts.baixa: semente + produtos) e recomendação avulsa aprovada (sem operação ligada).
 let relUsoTal='';   // '' = todos os talhões
-function usoProdutosDe(t){
+// lançamentos de saída de um talhão (quantidades e preço de REFERÊNCIA); usoProdutosDe() acrescenta o custo real
+function _usoProdutosRaw(t){
   const out=[], add=(o)=>{ if(o.produto && +o.qtd>0){ const p=PROD[o.produto]||{}; out.push(Object.assign({classe:p.classe||'', un:p.un||'', valor:(+o.qtd||0)*precoDe(o.produto)}, o)); } };
   eachOp(t,(seq,tag,oi,op,tagoi)=>{ const key=`${t.id}|${tagoi}`, r=OV.realizado&&OV.realizado[key]; if(!r) return;
     const nome=op.nome||('Operação '+(oi+1));
@@ -9754,9 +9776,54 @@ function usoProdutosDe(t){
     (r.itens||[]).forEach(it=>add({data, seq:'', op:r.opNome||'Recomendação', origem:'Recomendação', produto:it.produto, qtd:+it.real||0, quem:(r.retorno&&r.retorno.quem)||''})); });
   return out.sort((a,b)=>(a.data||'9').localeCompare(b.data||'9')||a.op.localeCompare(b.op)||a.produto.localeCompare(b.produto));
 }
-// totais por produto de uma lista de lançamentos
-function usoTotais(lin){ const m={}; lin.forEach(l=>{ const x=m[l.produto]||(m[l.produto]={produto:l.produto, classe:l.classe, un:l.un, qtd:0, valor:0, n:0}); x.qtd+=l.qtd; x.valor+=l.valor; x.n++; });
-  return Object.values(m).sort((a,b)=>b.valor-a.valor||a.produto.localeCompare(b.produto)); }
+// ===== CUSTO MÉDIO (v272): custo REAL por produto, a partir do que foi pago nas notas =====
+// Linha do tempo por produto: estoque inicial da safra (custo inicial digitado > preço da última nota > preço de
+// referência da planilha), entradas (compras/NF-e com o preço pago) e saídas (operações concluídas, TS feito,
+// recomendações avulsas aprovadas), em ordem de data. Cada entrada recalcula o custo médio ponderado; cada saída
+// sai pelo custo médio DO DIA da aplicação (o número não muda quando chega uma nota nova depois).
+// Tudo é calculado aqui a partir do que já está sincronizado (COMPRAS APP, REALIZADO APP, recomendações, PORTIFÓLIO).
+let _cmCache=null;   // zera a cada tela e a cada gravação (route, saveOverrides, saveCompras, saveRecom)
+function _cmKeySaida(l,tid){ return [tid, l.data||'', l.seq||'', l.op, l.origem, l.produto].join('|'); }
+function custoMedioCalc(){ if(!_cmCache) _cmCache=_custoMedioCalc(); return _cmCache; }
+function _custoMedioCalc(){
+  const ev={}, push=(p,e)=>{ (ev[p]||(ev[p]=[])).push(e); };
+  ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ const p=it.produto, q=+it.qtd||0; if(!p||!(q>0)) return;
+    const pu=+it.preco||0; push(p,{t:'E', data:_isISO(c.data)?String(c.data).slice(0,10):'', qtd:q, pu:pu>0?pu:precoDe(p), ref:!(pu>0), forn:c.fornecedor||'', nf:c.nf||'', nfe:!!c.nfe, ord:1}); }));
+  talhoesAll().forEach(t=>_usoProdutosRaw(t).forEach(l=>push(l.produto,{t:'S', data:l.data||'', qtd:+l.qtd||0, k:_cmKeySaida(l,t.id), tal:t.id, op:l.op, origem:l.origem, ord:2})));
+  const prods=new Set(Object.keys(ev)); (DATA.produtos||[]).forEach(p=>{ if(p.produto && estoqueDe(p.produto)) prods.add(p.produto); });
+  const out={}, saida={}, cmpD=(a,b)=>(a.data||'9999-99-99').localeCompare(b.data||'9999-99-99')||a.ord-b.ord;
+  prods.forEach(p=>{
+    const L=(ev[p]||[]).slice().sort(cmpD);
+    const notas=L.filter(e=>e.t==='E'&&!e.ref), ultima=notas.length?notas.reduce((a,b)=>((b.data||'')>=(a.data||'')?b:a)):null;
+    const ini=estoqueDe(p)||0, ci=custoIniDe(p); let puIni, fonte;
+    if(ci>0){ puIni=ci; fonte='digitado'; } else if(ultima){ puIni=ultima.pu; fonte='nota'; } else { puIni=precoDe(p); fonte='ref'; }
+    let sq=ini, sv=ini*puIni, cm=puIni, ref=(ini>0 && fonte==='ref'), nEnt=0, nSai=0, vSai=0, vEnt=0; const hist=[];
+    if(ini) hist.push({t:'I', qtd:ini, pu:puIni, fonte, valor:ini*puIni, sq, sv, cm});
+    L.forEach(e=>{
+      if(e.t==='E'){ nEnt++; if(e.ref) ref=true; const v=e.qtd*e.pu; vEnt+=v; sv+=v; sq+=e.qtd; cm=sq>0?sv/sq:e.pu; hist.push(Object.assign({}, e, {valor:v, sq, sv, cm})); }
+      else { const v=e.qtd*cm; nSai++; vSai+=v; sq-=e.qtd; sv-=v; if(sq<=1e-9) sv=0; saida[e.k]=cm; hist.push(Object.assign({}, e, {pu:cm, valor:v, sq, sv, cm})); }
+    });
+    out[p]={cm, ini, puIni, fonte, ultima:ultima?ultima.pu:0, saldoQ:sq, saldoV:Math.max(0,sv), ref, nEnt, nSai, vEnt, vSai, hist};
+  });
+  return {prod:out, saida};
+}
+function custoMedioInfo(p){ return custoMedioCalc().prod[p]||null; }
+function custoMedioDe(p){ const x=custoMedioCalc().prod[p]; return x?x.cm:precoDe(p); }
+// custo médio que valeu numa saída de operação/TS (mesma chave usada no cálculo); sem registro → custo médio atual
+function custoSaidaOp(key, produto, origem){
+  const fk=opFromKey(key); if(!fk||!fk.op) return custoMedioDe(produto);
+  const r=realOf(key)||{}, nome=fk.op.nome||('Operação '+(+fk.tagoi.slice(1)+1)), seq=fk.tagoi[0]==='S'?'safrinha':'principal';
+  const data=origem==='TS'?(r.ts&&r.ts.em?_dISO(r.ts.em):(_isISO(r.data)?r.data:'')):(_isISO(r.data)?r.data:'');
+  const cm=custoMedioCalc().saida[_cmKeySaida({data, seq, op:nome, origem, produto}, fk.talId)]; return cm!=null?cm:custoMedioDe(produto); }
+// lançamentos do talhão com o custo real: custo (R$/un no dia) e valorReal, além do valor a preço de referência
+function usoProdutosDe(t){ const S=custoMedioCalc().saida;
+  return _usoProdutosRaw(t).map(l=>{ const cm=S[_cmKeySaida(l,t.id)], c=cm!=null?cm:custoMedioDe(l.produto); return Object.assign(l,{custo:c, valorReal:l.qtd*c}); }); }
+// custo realizado de insumos do talhão (saídas valoradas a custo médio): total, por ha e nº de lançamentos
+function custoRealTalhao(t){ const lin=usoProdutosDe(t), total=lin.reduce((s,l)=>s+l.valorReal,0), ref=lin.reduce((s,l)=>s+l.valor,0), area=areaDe(t)||0;
+  return {total, ref, ha:area?total/area:0, refHa:area?ref/area:0, n:lin.length, area}; }
+// totais por produto de uma lista de lançamentos (valor = preço de referência · valorReal = custo médio)
+function usoTotais(lin){ const m={}; lin.forEach(l=>{ const x=m[l.produto]||(m[l.produto]={produto:l.produto, classe:l.classe, un:l.un, qtd:0, valor:0, valorReal:0, n:0}); x.qtd+=l.qtd; x.valor+=l.valor; x.valorReal+=(+l.valorReal||0); x.n++; });
+  return Object.values(m).sort((a,b)=>b.valorReal-a.valorReal||b.valor-a.valor||a.produto.localeCompare(b.produto)); }
 function usoProdutosHtml(){
   const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
   const t=relUsoTal?tals.find(x=>x.id===relUsoTal):null; if(relUsoTal && !t) relUsoTal='';
@@ -9764,53 +9831,53 @@ function usoProdutosHtml(){
   const vazio=msg=>`<p class="mut" style="padding:14px">${msg}</p>`;
   let corpo='';
   if(t){
-    const lin=usoProdutosDe(t), tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0);
-    corpo=`<div class="rel-uso-kpis"><span><small>Área</small>${num(area)} ha</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${lin.length}</span><span><small>Valor utilizado</small>${brl0(vTot)}</span>${area?`<span><small>Por ha</small>${brl0(vTot/area)}</span>`:''}</div>
+    const lin=usoProdutosDe(t), tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0), vReal=lin.reduce((s,l)=>s+l.valorReal,0);
+    corpo=`<div class="rel-uso-kpis"><span><small>Área</small>${num(area)} ha</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${lin.length}</span><span title="saídas × custo médio pago nas notas"><small>Custo real</small>${brl0(vReal)}</span>${area?`<span><small>Por ha (real)</small>${brl0(vReal/area)}</span>`:''}<span class="mut" title="quantidade × preço de referência da planilha"><small>Referência</small>${brl0(vTot)}${area?` · ${brl0(vTot/area)}/ha`:''}</span></div>
       <h3 class="rel-uso-h">Totais por produto</h3>
-      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
-        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td></tr>`).join('')||`<tr><td colspan="4">${vazio('Nenhuma baixa aprovada neste talhão ainda. As baixas aparecem quando uma operação é concluída (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
-        ${tot.length?`<tfoot><tr><td colspan="3">Total</td><td class="num">${brl0(vTot)}</td></tr></tfoot>`:''}</table></div>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Custo real</th><th class="num c-more">Referência</th></tr></thead>
+        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Custo real"><b>${brl0(x.valorReal)}</b></td><td class="num c-more" data-th="Referência">${brl0(x.valor)}</td></tr>`).join('')||`<tr><td colspan="5">${vazio('Nenhuma baixa aprovada neste talhão ainda. As baixas aparecem quando uma operação é concluída (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
+        ${tot.length?`<tfoot><tr><td colspan="3">Total</td><td class="num">${brl0(vReal)}</td><td class="num c-more">${brl0(vTot)}</td></tr></tfoot>`:''}</table></div>
       ${lin.length?`<h3 class="rel-uso-h">Lançamentos (o que saiu, quando e em qual operação)</h3>
-      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th>Quem</th></tr></thead>
-        <tbody>${lin.map(l=>`<tr><td class="num" data-th="Data">${l.data?_dtBRc(l.data):'—'}</td><td class="c-full"><b>${esc(l.op)}</b>${l.origem!=='Operação'?` <span class="pill">${esc(l.origem)}</span>`:''}${l.seq==='safrinha'?' <span class="mut">· 2ª</span>':''}</td><td data-th="Produto">${esc(l.produto)}</td><td class="num" data-th="Qtd"><b>${fmtDose(l.qtd)}</b> ${esc(l.un)}</td><td data-th="Quem">${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th class="num">Custo</th><th>Quem</th></tr></thead>
+        <tbody>${lin.map(l=>`<tr><td class="num" data-th="Data">${l.data?_dtBRc(l.data):'—'}</td><td class="c-full"><b>${esc(l.op)}</b>${l.origem!=='Operação'?` <span class="pill">${esc(l.origem)}</span>`:''}${l.seq==='safrinha'?' <span class="mut">· 2ª</span>':''}</td><td data-th="Produto">${esc(l.produto)}</td><td class="num" data-th="Qtd"><b>${fmtDose(l.qtd)}</b> ${esc(l.un)}</td><td class="num" data-th="Custo" title="${brl(l.custo)}/${esc(l.un||'un')} · custo médio no dia">${brl0(l.valorReal)}</td><td data-th="Quem">${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table></div>`:''}`;
   } else {
-    const porTal=tals.map(x=>{ const lin=usoProdutosDe(x); return {t:x, lin, area:areaDe(x)||0, valor:lin.reduce((s,l)=>s+l.valor,0), nProd:usoTotais(lin).length}; }).filter(x=>x.lin.length);
-    const todas=porTal.reduce((a,x)=>a.concat(x.lin),[]), tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0), aTot=porTal.reduce((s,x)=>s+x.area,0);
-    corpo=`<div class="rel-uso-kpis"><span><small>Talhões com baixa</small>${porTal.length}</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${todas.length}</span><span><small>Valor utilizado</small>${brl0(vTot)}</span>${aTot?`<span><small>Por ha</small>${brl0(vTot/aTot)}</span>`:''}</div>
+    const porTal=tals.map(x=>{ const lin=usoProdutosDe(x); return {t:x, lin, area:areaDe(x)||0, valor:lin.reduce((s,l)=>s+l.valor,0), real:lin.reduce((s,l)=>s+l.valorReal,0), nProd:usoTotais(lin).length}; }).filter(x=>x.lin.length);
+    const todas=porTal.reduce((a,x)=>a.concat(x.lin),[]), tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0), vReal=todas.reduce((s,l)=>s+l.valorReal,0), aTot=porTal.reduce((s,x)=>s+x.area,0);
+    corpo=`<div class="rel-uso-kpis"><span><small>Talhões com baixa</small>${porTal.length}</span><span><small>Produtos</small>${tot.length}</span><span><small>Lançamentos</small>${todas.length}</span><span title="saídas × custo médio pago nas notas"><small>Custo real</small>${brl0(vReal)}</span>${aTot?`<span><small>Por ha (real)</small>${brl0(vReal/aTot)}</span>`:''}<span class="mut" title="quantidade × preço de referência da planilha"><small>Referência</small>${brl0(vTot)}${aTot?` · ${brl0(vTot/aTot)}/ha`:''}</span></div>
       <h3 class="rel-uso-h">Por talhão</h3>
-      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Produtos</th><th class="num">Lançamentos</th><th class="num">Valor</th><th class="num">R$/ha</th></tr></thead>
-        <tbody>${porTal.map(x=>`<tr><td class="c-full"><a class="link" data-act="relUsoTal" data-id="${esc(x.t.id)}"><b>${esc(tNome(x.t))}</b></a></td><td class="num" data-th="Área">${num(x.area)}</td><td class="num" data-th="Produtos">${x.nProd}</td><td class="num" data-th="Lançamentos">${x.lin.length}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td><td class="num" data-th="R$/ha">${x.area?brl0(x.valor/x.area):'—'}</td></tr>`).join('')||`<tr><td colspan="6">${vazio('Nenhuma baixa aprovada ainda. As baixas aparecem quando uma operação é concluída no Campo (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
-        ${porTal.length?`<tfoot><tr><td colspan="4">Total · ${num(aTot)} ha · ${todas.length} lançamentos</td><td class="num">${brl0(vTot)}</td><td class="num">${aTot?brl0(vTot/aTot)+'/ha':'—'}</td></tr></tfoot>`:''}</table></div>
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Produtos</th><th class="num">Lançamentos</th><th class="num">Custo real</th><th class="num">R$/ha</th><th class="num c-more">Referência</th></tr></thead>
+        <tbody>${porTal.map(x=>`<tr><td class="c-full"><a class="link" data-act="relUsoTal" data-id="${esc(x.t.id)}"><b>${esc(tNome(x.t))}</b></a></td><td class="num" data-th="Área">${num(x.area)}</td><td class="num" data-th="Produtos">${x.nProd}</td><td class="num" data-th="Lançamentos">${x.lin.length}</td><td class="num" data-th="Custo real"><b>${brl0(x.real)}</b></td><td class="num" data-th="R$/ha">${x.area?brl0(x.real/x.area):'—'}</td><td class="num c-more" data-th="Referência">${brl0(x.valor)}${x.area?` <small class="mut">· ${brl0(x.valor/x.area)}/ha</small>`:''}</td></tr>`).join('')||`<tr><td colspan="7">${vazio('Nenhuma baixa aprovada ainda. As baixas aparecem quando uma operação é concluída no Campo (ou o retorno do operador é aprovado).')}</td></tr>`}</tbody>
+        ${porTal.length?`<tfoot><tr><td colspan="4">Total · ${num(aTot)} ha · ${todas.length} lançamentos</td><td class="num">${brl0(vReal)}</td><td class="num">${aTot?brl0(vReal/aTot)+'/ha':'—'}</td><td class="num c-more">${brl0(vTot)}</td></tr></tfoot>`:''}</table></div>
       ${tot.length?`<h3 class="rel-uso-h">Totais por produto (fazenda)</h3>
-      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
-        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Valor">${brl0(x.valor)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+      <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Custo real</th><th class="num c-more">Referência</th></tr></thead>
+        <tbody>${tot.map(x=>`<tr><td class="c-full"><b>${esc(x.produto)}</b></td><td data-th="Classe">${esc(x.classe||'—')}</td><td class="num" data-th="Utilizado"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num" data-th="Custo real"><b>${brl0(x.valorReal)}</b></td><td class="num c-more" data-th="Referência">${brl0(x.valor)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
   }
-  return `<div class="panel" id="rel-uso"><div class="panel-head"><h2>Uso de produtos por talhão</h2><span class="sub">só o que já saiu do estoque (baixas aprovadas) · preços da planilha</span></div>
+  return `<div class="panel" id="rel-uso"><div class="panel-head"><h2>Uso de produtos por talhão</h2><span class="sub">só o que já saiu do estoque (baixas aprovadas) · custo real = custo médio pago nas notas · referência = preço da planilha</span></div>
     <div class="rel-uso-top">${sel}<button class="btn btn-outline btn-sm" data-act="relUsoCsv">⬇ CSV</button><button class="btn btn-outline btn-sm" data-act="relUsoPdf">🖨 PDF</button></div>
     ${corpo}</div>`;
 }
 function _usoCsvEsc(s){ return `"${String(s==null?'':s).replace(/"/g,'""')}"`; }
 function exportUsoProdutosCsv(){
   const tals=relUsoTal?[findTalhao(relUsoTal)].filter(Boolean):talhoesAll();
-  const linhas=[['Talhão','Data','Operação','Origem','Produto','Classe','Qtd','Un','Valor (R$)','Quem'].map(_usoCsvEsc).join(';')]; let n=0;
-  tals.forEach(t=>usoProdutosDe(t).forEach(l=>{ n++; linhas.push([tNome(t), l.data?_dtBRc(l.data):'', l.op+(l.seq==='safrinha'?' (2ª)':''), l.origem, l.produto, l.classe, nf2.format(l.qtd), l.un, nf2.format(l.valor), l.quem].map(_usoCsvEsc).join(';')); }));
+  const linhas=[['Talhão','Data','Operação','Origem','Produto','Classe','Qtd','Un','Custo médio (R$/un)','Custo real (R$)','Valor referência (R$)','Quem'].map(_usoCsvEsc).join(';')]; let n=0;
+  tals.forEach(t=>usoProdutosDe(t).forEach(l=>{ n++; linhas.push([tNome(t), l.data?_dtBRc(l.data):'', l.op+(l.seq==='safrinha'?' (2ª)':''), l.origem, l.produto, l.classe, nf2.format(l.qtd), l.un, nf2.format(l.custo), nf2.format(l.valorReal), nf2.format(l.valor), l.quem].map(_usoCsvEsc).join(';')); }));
   if(!n){ toast('Nenhuma baixa aprovada para exportar'); return; }
   download(`uso_produtos${relUsoTal?'_'+relUsoTal:''}.csv`, '﻿'+linhas.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado');
 }
 function usoProdutosPdfBloco(t){
   const lin=usoProdutosDe(t); if(!lin.length) return '';
-  const tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0);
+  const tot=usoTotais(lin), area=areaDe(t)||0, vTot=lin.reduce((s,l)=>s+l.valor,0), vReal=lin.reduce((s,l)=>s+l.valorReal,0);
   return `<h2>${esc(tNome(t))} <span class="mut2">— ${num(area)} ha · ${esc(empDe(t)||'—')}${temSafrinha(t)?` → ${esc(empSafDe(t))}`:''}</span></h2>
-    <div class="meta">${tot.length} produtos · ${lin.length} lançamentos · utilizado <b>${brl0(vTot)}</b>${area?` (${brl0(vTot/area)}/ha)`:''}</div>
+    <div class="meta">${tot.length} produtos · ${lin.length} lançamentos · custo real <b>${brl0(vReal)}</b>${area?` (${brl0(vReal/area)}/ha)`:''} · a preço de referência ${brl0(vTot)}${area?` (${brl0(vTot/area)}/ha)`:''}</div>
     <h3>Totais por produto</h3>
-    <table class="pdf-ops"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:20%"><col style="width:18%"></colgroup>
-      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
-      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>
+    <table class="pdf-ops"><colgroup><col style="width:38%"><col style="width:16%"><col style="width:16%"><col style="width:15%"><col style="width:15%"></colgroup>
+      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Custo real</th><th class="num">Referência</th></tr></thead>
+      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num"><b>${brl0(x.valorReal)}</b></td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vReal)}</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>
     <h3>Lançamentos</h3>
-    <table class="pdf-ops"><colgroup><col style="width:11%"><col style="width:31%"><col style="width:30%"><col style="width:14%"><col style="width:14%"></colgroup>
-      <thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th>Quem</th></tr></thead>
-      <tbody>${lin.map(l=>`<tr><td class="num">${l.data?_dtBRc(l.data):'—'}</td><td>${esc(l.op)}${l.origem!=='Operação'?` (${esc(l.origem)})`:''}${l.seq==='safrinha'?' · 2ª':''}</td><td>${esc(l.produto)}</td><td class="num">${fmtDose(l.qtd)} ${esc(l.un)}</td><td>${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table>`;
+    <table class="pdf-ops"><colgroup><col style="width:10%"><col style="width:28%"><col style="width:26%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>
+      <thead><tr><th>Data</th><th>Operação</th><th>Produto</th><th class="num">Qtd</th><th class="num">Custo real</th><th>Quem</th></tr></thead>
+      <tbody>${lin.map(l=>`<tr><td class="num">${l.data?_dtBRc(l.data):'—'}</td><td>${esc(l.op)}${l.origem!=='Operação'?` (${esc(l.origem)})`:''}${l.seq==='safrinha'?' · 2ª':''}</td><td>${esc(l.produto)}</td><td class="num">${fmtDose(l.qtd)} ${esc(l.un)}</td><td class="num">${brl0(l.valorReal)}</td><td>${esc(l.quem||'—')}</td></tr>`).join('')}</tbody></table>`;
 }
 function exportUsoProdutosPDF(){
   const hoje=fmtDataBR(_hojeISO()), t=relUsoTal?findTalhao(relUsoTal):null;
@@ -9818,14 +9885,14 @@ function exportUsoProdutosPDF(){
   let n=0;
   if(t){ const b=usoProdutosPdfBloco(t); if(b){ html+=b; n++; } }
   else { const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
-    const todas=[]; tals.forEach(x=>todas.push(...usoProdutosDe(x))); const tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0);
-    if(tot.length){ html+=`<h2>Totais da fazenda</h2><table class="pdf-ops"><colgroup><col style="width:44%"><col style="width:18%"><col style="width:20%"><col style="width:18%"></colgroup>
-      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Valor</th></tr></thead>
-      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
-      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>`; }
+    const todas=[]; tals.forEach(x=>todas.push(...usoProdutosDe(x))); const tot=usoTotais(todas), vTot=todas.reduce((s,l)=>s+l.valor,0), vReal=todas.reduce((s,l)=>s+l.valorReal,0);
+    if(tot.length){ html+=`<h2>Totais da fazenda</h2><table class="pdf-ops"><colgroup><col style="width:38%"><col style="width:16%"><col style="width:16%"><col style="width:15%"><col style="width:15%"></colgroup>
+      <thead><tr><th>Produto</th><th>Classe</th><th class="num">Utilizado</th><th class="num">Custo real</th><th class="num">Referência</th></tr></thead>
+      <tbody>${tot.map(x=>`<tr><td>${esc(x.produto)}</td><td>${esc(x.classe||'—')}</td><td class="num"><b>${fmtDose(x.qtd)}</b> ${esc(x.un)}</td><td class="num"><b>${brl0(x.valorReal)}</b></td><td class="num">${brl0(x.valor)}</td></tr>`).join('')}</tbody>
+      <tfoot><tr><th colspan="3">Total</th><th class="num">${brl0(vReal)}</th><th class="num">${brl0(vTot)}</th></tr></tfoot></table>`; }
     tals.forEach(x=>{ const b=usoProdutosPdfBloco(x); if(!b) return; html+=`<section class="${n>0||tot.length?'pb':''}">${b}</section>`; n++; }); }
   if(!n){ toast('Nenhuma baixa aprovada para imprimir'); return; }
-  html+=`<div class="pdf-foot">Quantidades = baixas aprovadas (operação concluída, TS feito ou retorno do operador aprovado). Valor = quantidade × preço da planilha.</div>`;
+  html+=`<div class="pdf-foot">Quantidades = baixas aprovadas (operação concluída, TS feito ou retorno do operador aprovado). Custo real = quantidade × custo médio do produto no dia da aplicação (estoque inicial + notas pagas, com frete e impostos). Referência = quantidade × preço da planilha.</div>`;
   printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
 }
 // ===== APLICAÇÕES NO PERÍODO (v271) — relatório para lançar no sistema externo (Agro1) =====
@@ -9869,7 +9936,7 @@ function agro1Todas(){
   tals.forEach(t=>{
     eachOp(t,(seq,tag,oi,op,tagoi)=>{ const key=`${t.id}|${tagoi}`, r=OV.realizado&&OV.realizado[key]; if(!r) return;
       const nome=op.nome||('Operação '+(oi+1)), cultura=seq==='safrinha'?empSafDe(t):empDe(t), ehPlantio=opTemSemente(t.id,tagoi);
-      const rc=((RECOM&&RECOM.registros)||[]).filter(x=>x.opKey===key&&x.tipo!=='ts'&&x.status==='aprovada').sort((a,b)=>((b.aprov&&b.aprov.ts)||0)-((a.aprov&&a.aprov.ts)||0))[0]||null;
+      const rc=((RECOM&&RECOM.registros)||[]).filter(x=>x.opKey===key&&x.tipo!=='ts'&&x.status==='aprovada').sort((a,b)=>((b.aprov&&b.aprov.ts)||0)-((a.aprov&&a.aprov.ts)||0))[0]||null;   // (custo real: ver custoSaidaOp)
       if(opBaixou(r)){
         const et=(r.etapas||[]).concat(r.etapaAtual?[r.etapaAtual]:[]);
         if(et.length>1){ et.forEach((e,i)=>{ const f=_agro1Ficha({id:key+'#'+(i+1), t, seq, data:e.data||r.data, area:+e.area||0, baixa:opBaixaEff(r,e.baixa||{}), app:r.app, rc, op:nome, cultura, ehPlantio, obs:r.obs, etapa:`${i+1}ª etapa de ${et.length}`}); if(f) out.push(f); }); }
@@ -10072,7 +10139,7 @@ function fillDosesFromBaixa(key){
 }
 function opSaidaPayload(key){
   const r=(OV.realizado&&OV.realizado[key])||{}, b=opBaixaEff(r), talId=key.split('|')[0];
-  const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0}));
+  const itens=Object.keys(b).filter(p=>+b[p]>0).map(p=>({produto:p, un:(PROD[p]&&PROD[p].un)||'', real:+b[p]||0, custo:+(custoSaidaOp(key,p,'Operação')||0).toFixed(4)}));   // custo: custo médio no dia (v272)
   return { id:opBaixaId(key), talhao:talId, data:r.data||'', operador:(r.app&&r.app.operador)||'', itens };
 }
 // espera a sincronização ficar livre (puxar/lote em andamento) antes de mandar a baixa — em paralelo dava "planilha ocupada"
@@ -10670,7 +10737,7 @@ function morphChildren(op, np){
   for(let i=b.length;i<a.length;i++) a[i].remove();
 }
 function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
-function route(opts){ _M=new Map(); try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} } }   // memória por render (ver memo)
+function route(opts){ _M=new Map(); _cmCache=null; try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} } }   // memória por render (ver memo); custo médio recalcula a cada tela
 /* ================= AVISOS (sino na barra de cima, v253) =================
    Três grupos, calculados no aparelho a partir do que o app já sabe (sem planilha nova):
    · conferir → recomendações com retorno do operador esperando aprovação e operações parciais;
@@ -10915,6 +10982,7 @@ function applyEdit(el){
   const val=el.value.trim().replace(',','.'), n=numBRn(el.value);
   if(kind==='estoque'){ if(n==null||n===PROD[el.dataset.prod].estoque) delete OV.estoque[el.dataset.prod]; else OV.estoque[el.dataset.prod]=n; }
   else if(kind==='pedido'){ const pr=el.dataset.prod, base=PROD[pr]?(+PROD[pr].pedido||0):0; if(n==null||n===base) delete OV.pedido[pr]; else OV.pedido[pr]=n; }   // 0 com 115 na planilha = edição (zera lá também)
+  else if(kind==='custoIni'){ const pr=el.dataset.prod, base=PROD[pr]?(+PROD[pr].custoIni||0):0; OV.custoIni=OV.custoIni||{}; if(n==null||n===base) delete OV.custoIni[pr]; else OV.custoIni[pr]=n; _cmCache=null; }   // v272
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
   else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
   else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
@@ -12170,6 +12238,7 @@ function buildFieldEdits(){
     eds.push({type:'dae',talhao:p[0],tag:p[1][0],op:+p[1].slice(1),value:+OV.opDae[k]||0}); }
   for(const pr in OV.estoque) eds.push({type:'estoque',produto:pr,value:+OV.estoque[pr]});
   for(const pr in OV.pedido)  eds.push({type:'pedido', produto:pr,value:+OV.pedido[pr]});
+  for(const pr in (OV.custoIni||{})) eds.push({type:'custoIni', produto:pr,value:+OV.custoIni[pr]});
   // preço de referência: ajuste LOCAL do app (a coluna de preço da planilha é fórmula/importada) — não envia
   for(const id in OV.talhao){ if(!isBase(id)||gone(id)) continue; const o=OV.talhao[id];
     if(o.area!=null) eds.push({type:'area',talhao:id,value:+o.area});
@@ -12260,6 +12329,7 @@ function reconcileOverrides(){
   // estoque / em pedido (base vem da planilha)
   for(const pr in OV.estoque){ if(PROD[pr] && near(OV.estoque[pr],PROD[pr].estoque)) delete OV.estoque[pr]; }
   for(const pr in OV.pedido){ if(PROD[pr] && near(OV.pedido[pr],PROD[pr].pedido||0)) delete OV.pedido[pr]; }
+  for(const pr in (OV.custoIni||{})){ if(PROD[pr] && near(OV.custoIni[pr],PROD[pr].custoIni||0)) delete OV.custoIni[pr]; }
   // OV.preco NÃO entra: é ajuste local (a coluna de preço da planilha é fórmula/importada)
   // dose e troca de produto (comparam com o insumo base da planilha)
   for(const k in OV.dose){ const p=k.split('|'); if(String(p[2]).indexOf('a')===0) continue;
@@ -12683,6 +12753,7 @@ function discardEdit(e){
     case 'dae': if(OV.opDae) delete OV.opDae[k]; break;
     case 'estoque': delete OV.estoque[e.produto]; break;
     case 'pedido': delete OV.pedido[e.produto]; break;
+    case 'custoIni': if(OV.custoIni) delete OV.custoIni[e.produto]; break;
     case 'itemprod': delete OV.itemProd[e.rk]; break;
     case 'delitem': delete OV.itemRemoved[e.rk]; break;
     case 'additem': { const arr=OV.itemAdd[k]; if(arr){ const i=arr.findIndex(a=>a.produto===e.produto); if(i>=0) arr.splice(i,1); if(!arr.length) delete OV.itemAdd[k]; } break; }

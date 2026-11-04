@@ -45,14 +45,15 @@ function readBase_(){
   var produtos = [], P = sh('PORTIFÓLIO');
   if (P){
     var pcol = pedidoColOf(P);                       // coluna "EM PEDIDO" (acha pelo cabeçalho; cria se não existir)
+    var ccol = custoIniColOf(P);                     // coluna "CUSTO INICIAL" (R$/un do estoque inicial — v272)
     var nP = Math.max(1, Math.min(430, P.getMaxRows() - 3));   // linhas 4..433 — a MESMA faixa que a gravação usa
     var pv = P.getRange(4, 1, nP, 20).getValues();  // (antes só até a 415: produto novo nas linhas 416–433 não voltava ao app)
-    var ped = P.getRange(4, pcol, nP, 1).getValues();
+    var ped = P.getRange(4, pcol, nP, 1).getValues(), cini = P.getRange(4, ccol, nP, 1).getValues();
     for (var i = 0; i < pv.length; i++){
       var r = pv[i], prod = S(r[2]);            // C = produto
       if (!prod) continue;
       produtos.push({ empresa:S(r[0]), classe:S(r[1]), produto:prod, ativos:S(r[3]),
-        un:S(r[5]), preco:N(r[18]), estoque:N(r[19]), pedido:N(ped[i][0]) }); // S=preço(19), T=estoque(20), EM PEDIDO
+        un:S(r[5]), preco:N(r[18]), estoque:N(r[19]), pedido:N(ped[i][0]), custoIni:N(cini[i][0]) }); // S=preço(19), T=estoque(20), EM PEDIDO, CUSTO INICIAL
     }
   }
 
@@ -493,23 +494,41 @@ function writeTarefasApp(obj){
 var RETORNOS_SHEET = 'RETORNOS APP';
 var MOV_SHEET = 'MOVIMENTAÇÃO ESTOQUE';   // razão de estoque: entradas (módulo futuro) e saídas (recomendações)
 // registra 1 linha no razão de estoque (cria a aba se faltar). "when" opcional (data do movimento)
+// v272: o razão também guarda o VALOR (custo real da nota na entrada; custo médio na saída). Planilha antiga
+// (7 colunas) ganha as duas colunas no fim, achadas PELO CABEÇALHO — pode reordenar sem quebrar.
+var MOV_COLS = ['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS','VALOR UNIT','VALOR TOTAL'];
 function movSheet_(){
   var s = ss().getSheetByName(MOV_SHEET);
-  if (!s){ s = ss().insertSheet(MOV_SHEET);
-    s.appendRow(['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS']); s.setFrozenRows(1); }
+  if (!s){ s = ss().insertSheet(MOV_SHEET); s.appendRow(MOV_COLS); s.setFrozenRows(1); return s; }
+  var lc = Math.max(7, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], falta = [];
+  for (var i = 7; i < MOV_COLS.length; i++){ var tem = false;
+    for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === MOV_COLS[i]) tem = true;
+    if (!tem) falta.push(MOV_COLS[i]); }
+  if (falta.length){ if (s.getMaxColumns() < lc + falta.length) s.insertColumnsAfter(s.getMaxColumns(), lc + falta.length - s.getMaxColumns());
+    s.getRange(1, lc + 1, 1, falta.length).setValues([falta]); }
   return s;
 }
+// posição (0-based) das colunas de valor no razão
+function movLayout_(){ var s = movSheet_(), lc = Math.max(7, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ix = {};
+  for (var c = 0; c < hd.length; c++){ var h = S(hd[c]).toUpperCase(); if (h && !(h in ix)) ix[h] = c; }
+  return { s:s, n:lc, unit:ix['VALOR UNIT'], total:ix['VALOR TOTAL'] }; }
 function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
-  movSheet_().appendRow([when || new Date(), S(tipo), T_(produto), T_(un), N(qtd), T_(origem), T_(obs)]);
+  movAppendRows_([[when || new Date(), S(tipo), T_(produto), T_(un), N(qtd), T_(origem), T_(obs)]]);
 }
-// grava VÁRIAS linhas no razão de uma vez (1 escrita em vez de 1 por linha — bem mais rápido)
+// grava VÁRIAS linhas no razão de uma vez (1 escrita em vez de 1 por linha — bem mais rápido).
+// Cada linha: 7 colunas fixas + opcional [7] = valor unitário e [8] = valor total (vão para as colunas de valor).
 function movAppendRows_(rows){
   if (!rows.length) return 0;
-  var s = movSheet_(), last = s.getLastRow(), falta = last + rows.length - s.getMaxRows();
+  var L = movLayout_(), s = L.s, n = L.n, last = s.getLastRow(), falta = last + rows.length - s.getMaxRows();
   if (falta > 0) s.insertRowsAfter(s.getMaxRows(), falta);
-  s.getRange(last + 1, 1, rows.length, 7).setValues(rows);
+  var out = rows.map(function(r){ var o = []; for (var i = 0; i < n; i++) o.push(i < 7 && r[i] !== undefined ? r[i] : '');
+    if (L.unit != null && r[7] != null && r[7] !== '') o[L.unit] = r[7];
+    if (L.total != null && r[8] != null && r[8] !== '') o[L.total] = r[8];
+    return o; });
+  s.getRange(last + 1, 1, rows.length, n).setValues(out);
   return rows.length;
 }
+function _vt_(pu, q){ pu = N(pu); q = N(q); return pu > 0 ? [Math.round(pu * 1e4) / 1e4, Math.round(pu * q * 100) / 100] : ['', '']; }
 // apaga do razão as linhas de VÁRIOS ids [#id] numa passada (linhas seguidas saem juntas)
 function movDeleteBySources_(ids){
   var s = ss().getSheetByName(MOV_SHEET); if (!s || !ids.length) return;
@@ -556,7 +575,8 @@ function entradaRows_(ent){
   var ehNfe = /^\d{44}$/.test(S(ent && ent.id));
   var origem = (ehNfe ? 'NF-e' : 'Compra') + (ent.nf ? (ehNfe ? ' ' : ' NF ') + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
-    rows.push([when, 'ENTRADA', T_(it.produto), T_(it.un), N(it.qtd), T_(origem), T_(ent.obs)]); }
+    var vt = _vt_(it.preco, it.qtd);   // v272: custo real da nota (R$/un e total) no razão
+    rows.push([when, 'ENTRADA', T_(it.produto), T_(it.un), N(it.qtd), T_(origem), T_(ent.obs), vt[0], vt[1]]); }
   return rows;
 }
 // Lista "Compras registradas" do app, compartilhada entre aparelhos: aba COMPRAS APP (KEY|JSON|ATUALIZADO,
@@ -1184,7 +1204,8 @@ function writeSaida(sd){
   var origem = 'Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : '') + ' [#' + S(sd.id) + ']', rows = [];
   for (var i = 0; i < itens.length; i++){ var it = itens[i];
     if (!S(it.produto) || !(N(it.real) > 0)) continue;
-    rows.push([when, 'SAÍDA', T_(it.produto), T_(it.un), N(it.real), T_(origem), T_(sd.operador)]); }
+    var vt = _vt_(it.custo, it.real);   // v272: custo médio na data da aplicação (calculado pelo app)
+    rows.push([when, 'SAÍDA', T_(it.produto), T_(it.un), N(it.real), T_(origem), T_(sd.operador), vt[0], vt[1]]); }
   return { rows:movAppendRows_(rows) };   // 1 escrita (antes: 1 por produto)
 }
 function retornosSheet(){
@@ -1448,7 +1469,7 @@ function applyEditsBatch(edits, out){
     var t = ed.type;
     if (t === 'addtalhao') novos.push(ed);
     else if (t === 'deltalhao') remove.push(ed);
-    else if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'addprod') port.push(ed);
+    else if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'custoIni' || t === 'addprod') port.push(ed);
     else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
     else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
     else { out.fail++; if (out.msgs.length < 10) out.msgs.push('tipo/sem talhão: ' + t); }
@@ -1507,6 +1528,7 @@ function applyPortifolio(edits, out){
   var ei = 0;
   var est = P.getRange(r0, 20, nn, 1).getValues(), estDirty = false;
   var ped = P.getRange(r0, pcol, nn, 1).getValues(), pedDirty = false;
+  var ccol = custoIniColOf(P), cini = P.getRange(r0, ccol, nn, 1).getValues(), ciniDirty = false;   // v272
   edits.forEach(function(ed){
     try {
       if (ed.type === 'addprod'){                              // novo produto do portfólio -> 1ª linha vazia
@@ -1524,12 +1546,14 @@ function applyPortifolio(edits, out){
       var idx = L - r0;
       if (ed.type === 'estoque'){ est[idx][0] = ed.value; estDirty = true; }
       else if (ed.type === 'pedido'){ ped[idx][0] = ed.value; pedDirty = true; }
+      else if (ed.type === 'custoIni'){ cini[idx][0] = N(ed.value) > 0 ? N(ed.value) : ''; ciniDirty = true; }
       else if (ed.type === 'preco'){ P.getRange(L, 19).setValue(ed.value); }
       out.ok++;
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
   });
   if (estDirty) P.getRange(r0, 20, nn, 1).setValues(est);
   if (pedDirty) P.getRange(r0, pcol, nn, 1).setValues(ped);
+  if (ciniDirty) P.getRange(r0, ccol, nn, 1).setValues(cini);
 }
 
 // ÁREA PLANTIO: poucas edições (por talhão) — grava individual, mas lê o índice de IDs 1 vez
@@ -1715,6 +1739,14 @@ function pedidoColOf(P){
   var nc = P.getLastColumn() + 1; P.getRange(3, nc).setValue('EM PEDIDO');
   return nc;
 }
+// coluna "CUSTO INICIAL" (R$/un do estoque inicial da safra — v272): acha pelo cabeçalho (linha 3); se não existir, cria no fim
+function custoIniColOf(P){
+  var last = Math.max(23, P.getLastColumn());
+  var hdr = P.getRange(3, 1, 1, last).getValues()[0];
+  for (var c = 0; c < hdr.length; c++){ var h = S(hdr[c]).toUpperCase(); if (h.indexOf('CUSTO INICIAL') === 0 || h === 'CUSTO INI') return c + 1; }
+  var nc = P.getLastColumn() + 1; P.getRange(3, nc).setValue('CUSTO INICIAL');
+  return nc;
+}
 
 /* ============================ LOGIN / ACESSO ============================
    Aba USUÁRIOS APP (uma linha por pessoa) + aba CONFIG APP (EXIGIR LOGIN = SIM/NÃO).
@@ -1742,7 +1774,7 @@ var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['adm
   __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
-var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
+var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
   plantio:['campo','planejamento'], plantio_safrinha:['campo','planejamento'], dae:['campo','planejamento'], ciclo:['campo','planejamento'], ciclo_safrinha:['campo','planejamento'] };
 function _prop_(k){ var pr = PropertiesService.getScriptProperties(), v = pr.getProperty(k); if (!v){ v = Utilities.getUuid() + '-' + Date.now() + '-' + Math.random(); pr.setProperty(k, v); } return v; }
 function _b64_(bytes){ return Utilities.base64EncodeWebSafe(bytes); }
@@ -2345,6 +2377,8 @@ function gerarPlanilhaLimpa(){
     prows.push(row);
   });
   if (prows.length) P.getRange(4, 1, prows.length, 23).setValues(prows);
+  if (prods.some(function(p){ return N(p.custoIni) > 0; })){   // v272: CUSTO INICIAL (R$/un) numa coluna própria, pelo cabeçalho
+    var cc = custoIniColOf(P); P.getRange(4, cc, prods.length, 1).setValues(prods.map(function(p){ return [N(p.custoIni) > 0 ? N(p.custoIni) : '']; })); }
   P.setFrozenRows(3);
 
   // ---- ÁREA PLANTIO (cabeçalho na linha 1; dados a partir da 2) ----
@@ -2421,6 +2455,8 @@ function preencherPortifolio(){
     prows.push(row);
   });
   if (prows.length) P.getRange(4, 1, prows.length, 23).setValues(prows);
+  if (prods.some(function(p){ return N(p.custoIni) > 0; })){   // v272: CUSTO INICIAL (R$/un) numa coluna própria, pelo cabeçalho
+    var cc = custoIniColOf(P); P.getRange(4, cc, prods.length, 1).setValues(prods.map(function(p){ return [N(p.custoIni) > 0 ? N(p.custoIni) : '']; })); }
   P.setFrozenRows(3);
   var msg = 'PORTIFÓLIO preenchida com ' + prods.length + ' produto(s).';
   Logger.log(msg); try { ss().toast(msg, 'Pronto', 10); } catch (e) {}
@@ -2482,7 +2518,7 @@ function produtosMerged(D){
   var map = {}, ordem = [];
   function add(p){ var nome = S(p.produto); if (!nome || map[nome]) return;
     map[nome] = { empresa:S(p.empresa), classe:S(p.classe), produto:nome, ativos:S(p.ativos), un:S(p.un),
-      estoque:N(p.estoque), pedido:N(p.pedido) }; ordem.push(nome); }
+      estoque:N(p.estoque), pedido:N(p.pedido), custoIni:N(p.custoIni) }; ordem.push(nome); }
   (D.produtos || []).forEach(add);
   var pa = D.precos_app && D.precos_app.safras;
   if (pa) Object.keys(pa).forEach(function(sf){ var s = pa[sf] || {};
