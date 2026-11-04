@@ -113,6 +113,19 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Financeiro: Livro Caixa (v275 — fase 4)
+
+- Colunas novas pelo cabeçalho: **PRODUTORES** (ENDEREÇO · NÚMERO · COMPLEMENTO · BAIRRO · UF · COD MUNICÍPIO · CEP ·
+  TELEFONE · E-MAIL · FORMA APURAÇÃO), **IMÓVEIS RURAIS** (CAEPF · INSCRIÇÃO ESTADUAL · ENDEREÇO · NÚMERO ·
+  COMPLEMENTO · BAIRRO · COD MUNICÍPIO · CEP), **CONTAS BANCÁRIAS** (PAÍS · NÚMERO BANCO).
+- Aba nova **CONTRAPARTES** (ID · IMÓVEL · TIPO · CPF/CNPJ · NOME · PARTICIPAÇÃO %), gravada por
+  `__cadFin {tipo:'contraparte'}`.
+- Contador em **CONFIG APP** (CONTADOR NOME · CONTADOR CPF-CNPJ · CONTADOR CRC · CONTADOR E-MAIL · CONTADOR
+  TELEFONE), gravado por `__cadFin {tipo:'contador'}`; carimbo `LCDPR GERADO <CPF> <ano>` por
+  `__cadFin {tipo:'lcdpr', itens:[{cpf, ano, quem}]}`. Tudo volta ao app na chave `financeiro`
+  (`contrapartes`, `contador`, `lcdprGerado`).
+- O arquivo é montado no navegador (`docs/LCDPR.md`); a planilha não gera texto.
+
 ## Financeiro: baixas na conta do produtor (v274 — fase 3)
 
 - Aba **BAIXAS** (ID · TÍTULO · PRODUTOR · CONTA · DATA · VALOR PAGO · JUROS · DESCONTO · COMPROVANTE · OBS · QUEM ·
