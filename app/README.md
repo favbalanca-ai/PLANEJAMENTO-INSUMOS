@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Livro Caixa Digital do Produtor Rural (v275, fase 4 do Financeiro)** — segmento **📒 Livro Caixa** no
+  Financeiro: escolhe produtor e ano, mostra as **pendências** que travam a geração (com link para resolver), o
+  **resumo mensal** (Q200) e os **lançamentos** (Q100, com filtro por mês), e gera o arquivo
+  `LCDPR_<CPF>_<ano>.txt` + um **CSV de conferência** para o contador. Um lançamento por **baixa** (valor que saiu
+  ou entrou na conta; conta "Caixa" vira 999 = numerário em trânsito; título a receber = receita, a pagar =
+  despesa, categoria "Adiantamento" = tipo 3). O leiaute inteiro fica em `LCDPR_LEIAUTE` (versão 1.3 como
+  conhecida — **confira o primeiro arquivo com o contador**). Cadastros ganham os campos do leiaute: produtor
+  (endereço, UF, código IBGE do município, CEP, telefone, e-mail, forma de apuração), imóvel (CAEPF, inscrição
+  estadual, endereço, código IBGE, CEP, código só números), conta (nº do banco, país), **contrapartes** do imóvel
+  (condômino, arrendante, parceiro, comodante) e o **contador** (um para todos, na CONFIG APP). Ao gerar, o app
+  carimba "LCDPR GERADO <CPF> <ano>" na CONFIG APP. Detalhes em `docs/LCDPR.md`. Funções: `lcdprDados`,
+  `lcdprTxt`, `lcdprCsv`, `finLivroHtml`, `lcGerarTxt`.
 - **Baixa na conta do produtor e extrato (v274, fase 3 do Financeiro)** — o botão "Pago" virou **💳 Baixar**:
   registra data, **conta do produtor** (só as dele; com uma só, já vem escolhida), valor pago (vem com o saldo),
   juros/multa (já dentro do valor pago, informado à parte), desconto, observação e **comprovante** (foto reduzida

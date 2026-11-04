@@ -2038,6 +2038,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fin-bx-list th,.fin-bx-list td{padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px;text-align:left}.fin-bx-list tr:last-child td{border-bottom:0}.fin-bx-list .num{text-align:right}
 .fin-neg{color:var(--red)}
 .fin-antes td{opacity:.6}
+/* Livro Caixa (v275) */
+.lc-pend{margin:0;padding:8px 14px 12px 30px;font-size:13px}.lc-pend li{margin:4px 0}.lc-pend li.erro{color:var(--red)}.lc-pend li.aviso{color:var(--amber)}.lc-pend li .link{margin-left:4px}
+.cad-cp{font-size:12px;margin-top:3px;color:var(--ink2)}.cad-cp .icon-btn{padding:0 4px;font-size:12px}
+.fin-t tr.on td{background:var(--teal-soft)}
 .fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
 @media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
@@ -2494,6 +2498,9 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .fin-bx-list{font-size:10px}
   .fin-bx-list th{font-size:9.5px}
   .fin-bx-list td{font-size:9.5px}
+  .lc-pend{font-size:10.5px}
+  .cad-cp{font-size:9.5px}
+  .cad-cp .icon-btn{font-size:9.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}

@@ -660,7 +660,8 @@ var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRI
   'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
 var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP','LOGIN','PIN NOVO','PIN',
-  'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA','TÍTULO'];   // financeiro (v273/v274)   // colunas guardadas como texto
+  'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA','TÍTULO',
+  'CEP','COD MUNICÍPIO','CAEPF','INSCRIÇÃO ESTADUAL','NÚMERO','TELEFONE','NÚMERO BANCO','CPF/CNPJ'];   // financeiro (v273–v275)   // colunas guardadas como texto
 
 // aba com colunas achadas PELO CABEÇALHO (cria a aba/colunas que faltarem; colunas de texto não perdem zero à esquerda)
 function sheetCols_(name, cols){
@@ -1147,18 +1148,22 @@ function nfeRecebimento_(r){
 // grava com __titulo (títulos) e __cadFin (cadastros, só ADMIN). Títulos de NF-e nascem na classificação da nota
 // (parcelas do bloco de cobrança do XML); nota sem parcelas vira 1 título com vencimento = emissão e aviso.
 var FIN_PROD_SHEET = 'PRODUTORES', FIN_IMOV_SHEET = 'IMÓVEIS RURAIS', FIN_CONTA_SHEET = 'CONTAS BANCÁRIAS', FIN_TIT_SHEET = 'TÍTULOS';
-var FIN_PROD_COLS = ['CPF','NOME','E-MAIL CONTADOR','IMÓVEL PADRÃO','ATIVO','ATUALIZADO'];
-var FIN_PROD_KEYS = ['cpf','nome','emailContador','imovelPadrao','ativo','atualizado'];
-var FIN_IMOV_COLS = ['CÓDIGO','NOME','CAD ITR','MUNICÍPIO','UF','EXPLORAÇÃO','PRODUTOR','PARTICIPAÇÃO %','FAZENDA APP','ATIVO','ATUALIZADO'];
-var FIN_IMOV_KEYS = ['codigo','nome','cadItr','municipio','uf','exploracao','produtor','participacao','fazendaApp','ativo','atualizado'];
-var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO','SALDO INICIAL','DATA SALDO'];   // v274: saldo inicial p/ o extrato
-var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado','saldoInicial','dataSaldo'];
+var FIN_PROD_COLS = ['CPF','NOME','E-MAIL CONTADOR','IMÓVEL PADRÃO','ATIVO','ATUALIZADO','ENDEREÇO','NÚMERO','COMPLEMENTO','BAIRRO','UF','COD MUNICÍPIO','CEP','TELEFONE','E-MAIL','FORMA APURAÇÃO'];   // v275: dados do 0030/0010 do LCDPR
+var FIN_PROD_KEYS = ['cpf','nome','emailContador','imovelPadrao','ativo','atualizado','endereco','numero','complemento','bairro','uf','codMunicipio','cep','telefone','email','formaApur'];
+var FIN_IMOV_COLS = ['CÓDIGO','NOME','CAD ITR','MUNICÍPIO','UF','EXPLORAÇÃO','PRODUTOR','PARTICIPAÇÃO %','FAZENDA APP','ATIVO','ATUALIZADO','CAEPF','INSCRIÇÃO ESTADUAL','ENDEREÇO','NÚMERO','COMPLEMENTO','BAIRRO','COD MUNICÍPIO','CEP'];   // v275: 0040
+var FIN_IMOV_KEYS = ['codigo','nome','cadItr','municipio','uf','exploracao','produtor','participacao','fazendaApp','ativo','atualizado','caepf','ie','endereco','numero','complemento','bairro','codMunicipio','cep'];
+var FIN_CP_SHEET = 'CONTRAPARTES';   // v275: condôminos/parceiros/arrendantes de cada imóvel (registro 0045)
+var FIN_CP_COLS = ['ID','IMÓVEL','TIPO','CPF/CNPJ','NOME','PARTICIPAÇÃO %','ATUALIZADO'];
+var FIN_CP_KEYS = ['id','imovel','tipo','doc','nome','participacao','atualizado'];
+var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO','SALDO INICIAL','DATA SALDO','PAÍS','NÚMERO BANCO'];   // v274: saldo inicial p/ o extrato · v275: 0050
+var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado','saldoInicial','dataSaldo','pais','numBanco'];
 var FIN_BAIXA_SHEET = 'BAIXAS';   // v274: cada pagamento/recebimento (o fato do caixa)
 var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO'];
 var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado'];
 var FIN_TIT_COLS = ['ID','TIPO','PRODUTOR','PARTICIPANTE','PARTICIPANTE NOME','DOC TIPO','DOC Nº','CHAVE','PARCELA','EMISSÃO','VENCIMENTO','VALOR','FORMA PGTO','CATEGORIA','IMÓVEL','STATUS','DATA PGTO','ORIGEM','OBS','ATUALIZADO','QUEM'];
 var FIN_TIT_KEYS = ['id','tipo','produtor','participante','participanteNome','docTipo','docNum','chave','parcela','emissao','vencimento','valor','formaPgto','categoria','imovel','status','dataPgto','origem','obs','atualizado','quem'];
-var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS] };
+var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS], contraparte:[FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS] };
+var FIN_CONTADOR_ = { nome:'CONTADOR NOME', doc:'CONTADOR CPF-CNPJ', crc:'CONTADOR CRC', email:'CONTADOR E-MAIL', fone:'CONTADOR TELEFONE' };   // CONFIG APP (um contador para todos os produtores)
 var FIN_TPAG_ = { '01':'Dinheiro','02':'Cheque','03':'Cartão de crédito','04':'Cartão de débito','05':'Crédito loja','10':'Vale alimentação','11':'Vale refeição','12':'Vale presente','13':'Vale combustível',
   '14':'Duplicata mercantil','15':'Boleto','16':'Depósito bancário','17':'PIX','18':'Transferência','19':'Carteira digital','90':'Sem pagamento','99':'Outros' };
 function _finVal_(v){ return (v instanceof Date) ? _fmtD(v) : (typeof v === 'number' ? v : S(v)); }
@@ -1166,8 +1171,12 @@ function _finLer_(name, cols, keys){ return _ler_(name, cols).map(function(o){ v
 function readFinanceiro(){
   return { produtores:_finLer_(FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS), imoveis:_finLer_(FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS),
     contas:_finLer_(FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS), titulos:_finLer_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS),
-    baixas:_finLer_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS) };
+    baixas:_finLer_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS), contrapartes:_finLer_(FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS),
+    contador:finContador_(), lcdprGerado:finLcdprGerado_() };
 }
+// v275: contador (CONFIG APP) e carimbo "LCDPR gerado" por produtor/ano
+function finContador_(){ var m = configAppMapa_(), o = {}; Object.keys(FIN_CONTADOR_).forEach(function(k){ o[k] = S(m[FIN_CONTADOR_[k]]); }); return o; }
+function finLcdprGerado_(){ var m = configAppMapa_(), o = {}; Object.keys(m).forEach(function(k){ var mt = k.match(/^LCDPR GERADO (\d+) (\d{4})$/); if (mt) o[mt[1] + '|' + mt[2]] = m[k]; }); return o; }
 // ---- v274: BAIXAS (pagamento/recebimento na conta do produtor) ----
 // abatido do título = valor pago − juros + desconto; saldo = valor − Σ abatidos; status ABERTO / PARCIAL / PAGO
 function baixaGrava_(p, acc){
@@ -1224,9 +1233,13 @@ function _finUpsert_(name, cols, keys, itens, extra){
   return n;
 }
 function cadFinGrava_(p){
-  var tipo = S(p && p.tipo), def = FIN_CAD_[tipo]; if (!def) return { rows:0, erro:'cadastro desconhecido: ' + tipo };
+  var tipo = S(p && p.tipo);
+  if (tipo === 'contador'){ var it0 = (p.itens || [])[0] || {}; Object.keys(FIN_CONTADOR_).forEach(function(k){ if (it0[k] !== undefined) configAppGravar_(FIN_CONTADOR_[k], S(it0[k]), 'contador do Livro Caixa (LCDPR, registro 9999)'); }); return { rows:1 }; }
+  if (tipo === 'lcdpr'){ var g = (p.itens || [])[0] || {}; if (!_doc_(g.cpf) || !/^\d{4}$/.test(S(g.ano))) return { rows:0, erro:'cpf/ano' };
+    configAppGravar_('LCDPR GERADO ' + _doc_(g.cpf) + ' ' + S(g.ano), Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm') + (g.quem ? ' por ' + S(g.quem) : ''), 'arquivo do Livro Caixa gerado pelo app'); return { rows:1 }; }
+  var def = FIN_CAD_[tipo]; if (!def) return { rows:0, erro:'cadastro desconhecido: ' + tipo };
   var itens = (p.itens || []).map(function(it){ var x = {}; for (var k in it) x[k] = it[k];
-    if (tipo === 'produtor') x.cpf = _doc_(it.cpf); if (tipo === 'imovel' || tipo === 'conta') x.produtor = _doc_(it.produtor); return x; });
+    if (tipo === 'produtor') x.cpf = _doc_(it.cpf); if (tipo === 'imovel' || tipo === 'conta') x.produtor = _doc_(it.produtor); if (tipo === 'contraparte' && x.doc !== undefined) x.doc = _doc_(x.doc); return x; });
   return { rows:_finUpsert_(def[0], def[1], def[2], itens) };
 }
 function tituloGrava_(p, acc){

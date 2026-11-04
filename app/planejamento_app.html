@@ -2055,6 +2055,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fin-bx-list th,.fin-bx-list td{padding:5px 8px;border-bottom:1px solid var(--line);font-size:12px;text-align:left}.fin-bx-list tr:last-child td{border-bottom:0}.fin-bx-list .num{text-align:right}
 .fin-neg{color:var(--red)}
 .fin-antes td{opacity:.6}
+/* Livro Caixa (v275) */
+.lc-pend{margin:0;padding:8px 14px 12px 30px;font-size:13px}.lc-pend li{margin:4px 0}.lc-pend li.erro{color:var(--red)}.lc-pend li.aviso{color:var(--amber)}.lc-pend li .link{margin-left:4px}
+.cad-cp{font-size:12px;margin-top:3px;color:var(--ink2)}.cad-cp .icon-btn{padding:0 4px;font-size:12px}
+.fin-t tr.on td{background:var(--teal-soft)}
 .fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
 @media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
@@ -2511,6 +2515,9 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .fin-bx-list{font-size:10px}
   .fin-bx-list th{font-size:9.5px}
   .fin-bx-list td{font-size:9.5px}
+  .lc-pend{font-size:10.5px}
+  .cad-cp{font-size:9.5px}
+  .cad-cp .icon-btn{font-size:9.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
@@ -2630,7 +2637,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-274';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-275';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5302,7 +5309,7 @@ const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Par
 const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
 const FIN_SIT={vencido:['Vencido','neg'], d7:['Vence em 7 dias','warn'], d30:['Vence em 30 dias',''], aberto:['Aberto',''], pago:['Pago','ok'], cancelado:['Cancelado','off']};
 let FIN_UI={st:'aberto', prod:'', q:'', mes:''}, finDraft=null, CAD_EDIT=null;
-function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[]}; }
+function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}}; }
 // ---- baixas (v274): abatido = valor pago − juros + desconto; saldo do título = valor − Σ abatidos ----
 function finBaixasDe(id){ return FIN().baixas.filter(b=>b.titulo===id).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))); }
 const finAbatido=b=>(+b.valorPago||0)-(+b.juros||0)+(+b.desconto||0);
@@ -5358,7 +5365,7 @@ V.financeiro=function(){
   if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${FIN_UI.view!=='extrato'?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${FIN_UI.view!=='extrato'&&FIN_UI.view!=='livro'?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button></div>`;
   const kpis=`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
     <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
@@ -5366,6 +5373,7 @@ V.financeiro=function(){
     <div class="kpi"><div class="k-label">Vencem em 30 dias</div><div class="k-value">${brl0(R.d30)}</div><div class="k-sub">${R.n30} título(s), com os vencidos</div></div>
   </div>`;
   if(FIN_UI.view==='extrato') return kpis+seg+finExtratoHtml();
+  if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
   const L=finLista(), hj=_hojeISO();
   const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
   const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
@@ -5481,10 +5489,97 @@ function finSalvar(){ const d=finDraft; if(!d) return;
   if(!d.id){ t.status='ABERTO'; t.origem='manual'; }
   const bak=finDraft; finDraft=null;   // fecha o formulário já; volta se a planilha recusar
   finPost([t], d.id?'Título atualizado':'Título registrado').then(ok=>{ if(!ok){ finDraft=bak; route({keepScroll:true}); } }); }
+/* ================= LIVRO CAIXA DIGITAL DO PRODUTOR RURAL — fase 4 (v275) =================
+   Gera o arquivo .txt (um por produtor e ano) a partir dos cadastros, títulos e baixas. O LEIAUTE fica todo em
+   LCDPR_LEIAUTE (ordem dos campos e códigos, versão 1.3 como conhecida): se o contador ou o validador do e-CAC
+   apontar diferença, ajusta-se só aqui. Regras: campos separados por "|", sem "|" no início/fim; datas ddmmaaaa;
+   valores em centavos sem separador; saldo acumulado = receitas − despesas desde 1º de janeiro (não é saldo bancário);
+   conta 999 = numerário em trânsito (pagamento que não passou por conta: a conta "Caixa" vira 999). */
+const LCDPR_LEIAUTE={
+  versao:'0013',                       // COD_VER do registro 0000 (leiaute 1.3)
+  histMax:200,                         // tamanho do HISTORICO do Q100
+  exploracao:FIN_EXPL,                 // TIPO_EXPLORACAO do 0040: 1 individual · 2 condomínio · 3 arrendado · 4 parceria · 5 comodato · 6 outros
+  contraparte:['Condômino','Arrendante','Parceiro','Comodante','Outros'],   // TIPO_CONTRAPARTE do 0045 (código = posição)
+  docTipos:FIN_DOC_TIPOS,              // TIPO_DOC do Q100: 1 nota fiscal · 2 fatura · 3 recibo · 4 contrato · 5 folha · 6 outros
+  lanc:{receita:'1', despesa:'2', adiantamento:'3'},   // TIPO_LANC do Q100
+  contaTransito:'999'
+};
+const lcC=v=>String(Math.round((+v||0)*100));                      // centavos sem separador
+const lcD=iso=>_isISO(iso)?iso.slice(8,10)+iso.slice(5,7)+iso.slice(0,4):'';   // ddmmaaaa
+const lcT=(s,n)=>String(s==null?'':s).replace(/[|\r\n\t]/g,' ').replace(/\s+/g,' ').trim().slice(0,n||255);
+const lcN=s=>String(s==null?'':s).replace(/\D/g,'');
+let LC_UI={cpf:'', ano:String(new Date().getFullYear()), mes:'', todos:false};
+function lcContaCod(c){ if(!c) return ''; if(/caixa/i.test(c.tipo||'')) return LCDPR_LEIAUTE.contaTransito; return lcN(c.codigo); }
+// monta tudo o que o arquivo precisa + pendências que travam a geração
+function lcdprDados(cpf, ano){
+  const F=FIN(), P=F.produtores.find(p=>p.cpf===cpf)||null, pend=[], add=(nivel,msg,go)=>pend.push({nivel,msg,go});
+  if(!P){ add('erro','Escolha o produtor.'); return {P:null,pend,lanc:[],meses:[],linhas:[]}; }
+  const im=F.imoveis.filter(x=>_finAtivo(x.ativo)&&(!x.produtor||x.produtor===cpf)), ct=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)), C=F.contador||{};
+  if(!P.endereco||!P.uf||!P.codMunicipio||!P.cep) add('erro',`Produtor ${P.nome}: falta endereço, UF, código do município ou CEP (registro 0030).`,'#/cadastros');
+  if(!C.nome||!lcN(C.doc)) add('erro','Dados do contador (nome e CPF/CNPJ) em branco (registro 9999).','#/cadastros');
+  if(!im.length) add('erro','Nenhum imóvel rural ativo para este produtor (registro 0040).','#/cadastros');
+  im.forEach(x=>{ if(!x.cadItr||!x.codMunicipio||!x.uf||!x.cep||!x.endereco) add('erro',`Imóvel ${x.nome||x.codigo}: falta CAD ITR, endereço, município (código IBGE), UF ou CEP.`,'#/cadastros'); if(!/^\d+$/.test(lcN(x.codigo))||!lcN(x.codigo)) add('erro',`Imóvel ${x.nome||x.codigo}: o código precisa ser só números (ex.: 001).`,'#/cadastros'); });
+  ct.forEach(c=>{ if(lcContaCod(c)!==LCDPR_LEIAUTE.contaTransito && (!lcN(c.codigo)||!c.numBanco||!c.agencia||!c.conta)) add('erro',`Conta ${c.banco||c.codigo}: código numérico, número do banco, agência e conta são obrigatórios (registro 0050).`,'#/cadastros'); });
+  // lançamentos: baixas do ano, do produtor
+  const ini=`${ano}-01-01`, fim=`${ano}-12-31`, tit={}; F.titulos.forEach(t=>tit[t.id]=t);
+  const semBaixa=F.titulos.filter(t=>t.produtor===cpf&&finSemConta(t)&&String(t.dataPgto||'').slice(0,4)===String(ano));
+  if(semBaixa.length) add('erro',`${semBaixa.length} título(s) marcados como pagos sem conta em ${ano} — use "Completar baixa" para entrarem no livro.`,'#/financeiro');
+  const bx=F.baixas.filter(b=>{ const t=tit[b.titulo]; return t&&t.produtor===cpf&&String(t.status||'').toUpperCase()!=='CANCELADO'&&b.data>=ini&&b.data<=fim; })
+    .sort((a,b)=>String(a.data).localeCompare(String(b.data))||String(a.atualizado||'').localeCompare(String(b.atualizado||'')));
+  let saldo=0; const lanc=[]; const codIm=x=>lcN(x.codigo);
+  bx.forEach(b=>{ const t=tit[b.titulo], receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER', conta=F.contas.find(c=>c.codigo===b.conta)||null;
+    const imv=im.find(x=>x.codigo===(t.imovel||P.imovelPadrao))||im[0]||null;
+    if(!t.imovel&&!P.imovelPadrao&&im.length>1) add('aviso',`${t.participanteNome||'título'} ${t.docNum||''}: sem imóvel e o produtor tem ${im.length} imóveis — vai no primeiro (${im[0].nome||im[0].codigo}).`,'#/financeiro');
+    if(!lcN(t.participante)) add('erro',`${t.participanteNome||'título'} ${t.docNum||''}: sem CPF/CNPJ do ${receber?'comprador':'fornecedor'} (ID_PARTIC).`,'#/financeiro');
+    if(!conta) add('erro',`Baixa de ${t.participanteNome||'título'} em ${_dtBRc(b.data)}: conta "${b.conta}" não está no cadastro.`,'#/cadastros');
+    const tipoLanc=/adiantamento/i.test(t.categoria||'')?LCDPR_LEIAUTE.lanc.adiantamento:(receber?LCDPR_LEIAUTE.lanc.receita:LCDPR_LEIAUTE.lanc.despesa);   // adiantamento recebido = tipo 3
+    const vp=+(+b.valorPago||0).toFixed(2), ent=receber?vp:0, sai=receber?0:vp; saldo+=ent-sai;
+    const docLbl=String(t.docTipo||'6').replace(/^\d\s*-\s*/,''), tipoDoc=(String(t.docTipo||'').match(/^\d/)||['6'])[0];
+    const hist=lcT(`${docLbl} ${t.docNum||''}${t.parcela?' parc. '+t.parcela:''} ${t.participanteNome||''}${t.categoria?' - '+t.categoria:''}${+b.juros?' (juros '+nf2.format(+b.juros)+')':''}`, LCDPR_LEIAUTE.histMax);
+    lanc.push({b, t, data:b.data, imovel:imv?codIm(imv):'', conta:conta?lcContaCod(conta):'', numDoc:lcT(t.docNum,20), tipoDoc, hist, partic:lcN(t.participante), tipoLanc, ent, sai, saldo:+saldo.toFixed(2)}); });
+  // resumo mensal (Q200)
+  const meses=[]; for(let m=1;m<=12;m++){ const mm=String(m).padStart(2,'0'), L=lanc.filter(l=>l.data.slice(5,7)===mm); if(!L.length) continue; meses.push({mes:mm, ent:L.reduce((s,l)=>s+l.ent,0), sai:L.reduce((s,l)=>s+l.sai,0), saldo:L[L.length-1].saldo, n:L.length}); }
+  if(!lanc.length) add('aviso',`Nenhuma baixa em ${ano} para este produtor.`);
+  // linhas do arquivo
+  const Lg=LCDPR_LEIAUTE, nat=v=>v<0?'N':'P', L=[];
+  L.push(['0000','LCDPR',Lg.versao,lcN(P.cpf),lcT(P.nome,100),'0','0','',lcD(ini),lcD(fim)]);
+  L.push(['0010',String(P.formaApur||'1').replace(/\D/g,'')||'1']);
+  L.push(['0030',lcT(P.endereco,100),lcT(P.numero,10),lcT(P.complemento,60),lcT(P.bairro,60),lcT(P.uf,2).toUpperCase(),lcN(P.codMunicipio),lcN(P.cep),lcN(P.telefone),lcT(P.email||P.emailContador,100)]);
+  im.forEach(x=>{ L.push(['0040',codIm(x),'BR','BRL',lcN(x.cadItr),lcN(x.caepf),lcT(x.ie,20),lcT(x.nome,100),lcT(x.endereco,100),lcT(x.numero,10),lcT(x.complemento,60),lcT(x.bairro,60),lcT(x.uf,2).toUpperCase(),lcN(x.codMunicipio),lcN(x.cep),String(Math.max(1,Lg.exploracao.indexOf(x.exploracao)+1)),lcC(x.participacao===''||x.participacao==null?100:x.participacao)]);
+    F.contrapartes.filter(c=>c.imovel===x.codigo).forEach(c=>L.push(['0045',codIm(x),String(Math.max(1,Lg.contraparte.indexOf(c.tipo)+1)),lcN(c.doc),lcT(c.nome,100),lcC(c.participacao)])); });
+  ct.forEach(c=>{ L.push(['0050',lcContaCod(c),lcT(c.pais||'BR',2).toUpperCase(),lcN(c.numBanco),lcT(c.banco,60),lcN(c.agencia),lcT(c.conta,20)]); });
+  lanc.forEach(l=>L.push(['Q100',lcD(l.data),l.imovel,l.conta,l.numDoc,l.tipoDoc,l.hist,l.partic,l.tipoLanc,lcC(l.ent),lcC(l.sai),lcC(Math.abs(l.saldo)),nat(l.saldo)]));
+  meses.forEach(m=>L.push(['Q200',m.mes+String(ano),lcC(m.ent),lcC(m.sai),lcC(Math.abs(m.saldo)),nat(m.saldo)]));
+  L.push(['9999',lcT(C.nome,100),lcN(C.doc),lcT(C.crc,20),lcT(C.email,100),lcN(C.fone),String(L.length+1)]);
+  return {P, im, ct, pend, lanc, meses, linhas:L, erros:pend.filter(p=>p.nivel==='erro').length};
+}
+function lcdprTxt(d){ return d.linhas.map(l=>l.join('|')).join('\r\n')+'\r\n'; }
+function lcdprCsv(d){ const cab=['Data','Imóvel','Conta','Nº doc','Tipo doc','Histórico','CPF/CNPJ participante','Tipo lanç.','Entrada','Saída','Saldo acumulado','Fornecedor/Comprador','Categoria','Juros','Desconto'];
+  const lin=[cab.map(_usoCsvEsc).join(';')]; d.lanc.forEach(l=>lin.push([_dtBRc(l.data), l.imovel, l.conta, l.numDoc, l.tipoDoc, l.hist, l.partic, l.tipoLanc, nf2.format(l.ent), nf2.format(l.sai), nf2.format(l.saldo), l.t.participanteNome||'', l.t.categoria||'', nf2.format(+l.b.juros||0), nf2.format(+l.b.desconto||0)].map(_usoCsvEsc).join(';'))); return '﻿'+lin.join('\r\n'); }
+function finLivroHtml(){ const F=FIN(), prods=finProdutores(), anos=[...new Set(F.baixas.map(b=>String(b.data||'').slice(0,4)).filter(Boolean).concat([String(new Date().getFullYear())]))].sort().reverse();
+  if(!LC_UI.cpf&&prods.length) LC_UI.cpf=prods[0].cpf; if(!anos.includes(LC_UI.ano)) LC_UI.ano=anos[0];
+  const d=lcdprDados(LC_UI.cpf, LC_UI.ano), ger=F.lcdprGerado[LC_UI.cpf+'|'+LC_UI.ano]||'';
+  const top=`<div class="toolbar fin-ext-top"><label class="faz-wrap"><span>Produtor</span><select class="sel" id="lc-prod">${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===LC_UI.cpf?' selected':''}>${esc(p.nome)}</option>`).join('')||'<option value="">— cadastre um produtor —</option>'}</select></label>
+      <label class="faz-wrap"><span>Ano</span><select class="sel" id="lc-ano">${anos.map(a=>`<option${a===LC_UI.ano?' selected':''}>${a}</option>`).join('')}</select></label>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="lcCsv"${d.lanc.length?'':' disabled'}>⬇ CSV de conferência</button><button class="btn btn-primary btn-sm" data-act="lcTxt"${d.erros||!d.lanc.length?' disabled':''} title="${d.erros?'resolva as pendências primeiro':'gera o arquivo .txt do Livro Caixa'}">📒 Gerar arquivo .txt</button></div>`;
+  if(!d.P) return top+`<p class="mut" style="padding:14px">Cadastre o produtor em <a class="link" data-go="#/cadastros">Cadastros</a>.</p>`;
+  const pend=d.pend.length?`<div class="panel"><div class="panel-head"><h2>${d.erros?'⛔':'✔'} Pendências</h2><span class="sub">${d.erros?`${d.erros} impedem a geração`:'nada impede a geração'}${d.pend.length-d.erros?` · ${d.pend.length-d.erros} aviso(s)`:''}</span></div><ul class="lc-pend">${d.pend.map(p=>`<li class="${p.nivel}">${p.nivel==='erro'?'⛔':'⚠️'} ${esc(p.msg)}${p.go?` <a class="link" data-go="${p.go}">resolver →</a>`:''}</li>`).join('')}</ul></div>`:`<div class="panel"><div class="panel-head"><h2>✔ Pendências</h2><span class="sub">nenhuma — o arquivo pode ser gerado</span></div></div>`;
+  const tE=d.lanc.reduce((s,l)=>s+l.ent,0), tS=d.lanc.reduce((s,l)=>s+l.sai,0);
+  const resumo=`<div class="panel"><div class="panel-head"><h2>Resumo mensal (Q200)</h2><span class="sub">${d.lanc.length} lançamento(s) · receitas ${brl0(tE)} · despesas ${brl0(tS)} · resultado ${brl0(tE-tS)}${ger?` · <b>arquivo gerado em ${esc(ger)}</b>`:''}</span></div>
+    <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Mês</th><th class="num">Lançamentos</th><th class="num">Receitas</th><th class="num">Despesas</th><th class="num">Saldo acumulado</th></tr></thead><tbody>${d.meses.map(m=>`<tr class="${LC_UI.mes===m.mes?'on':''}"><td class="c-full"><a class="link" data-act="lcMes" data-mes="${m.mes}">${_MESN[+m.mes-1]}/${esc(LC_UI.ano)}</a></td><td class="num" data-th="Lançamentos">${m.n}</td><td class="num" data-th="Receitas">${brl(m.ent)}</td><td class="num" data-th="Despesas">${brl(m.sai)}</td><td class="num" data-th="Saldo acumulado"><b class="${m.saldo<0?'fin-neg':''}">${brl(m.saldo)}</b></td></tr>`).join('')||'<tr><td colspan="5" class="mut" style="padding:12px">Sem lançamentos no ano.</td></tr>'}</tbody></table></div></div>`;
+  const lan=d.lanc.filter(l=>!LC_UI.mes||l.data.slice(5,7)===LC_UI.mes), lim=LC_UI.todos?lan:lan.slice(0,60);
+  const lancs=`<div class="panel"><div class="panel-head"><h2>Lançamentos (Q100)${LC_UI.mes?` · ${_MESN[+LC_UI.mes-1]} <a class="link" data-act="lcMes" data-mes="">todos os meses</a>`:''}</h2><span class="sub">como vão sair no arquivo · data da baixa · conta ${LCDPR_LEIAUTE.contaTransito} = numerário em trânsito</span></div>
+    <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Data</th><th>Histórico</th><th>Imóvel</th><th>Conta</th><th>Participante</th><th>Tipo</th><th class="num">Entrada</th><th class="num">Saída</th><th class="num">Saldo</th></tr></thead><tbody>${lim.map(l=>`<tr><td data-th="Data">${_dtBRc(l.data)}</td><td class="c-full">${esc(l.hist)}</td><td data-th="Imóvel">${esc(l.imovel||'—')}</td><td data-th="Conta">${esc(l.conta||'—')}</td><td data-th="Participante">${esc(l.partic||'—')}</td><td data-th="Tipo">${l.tipoLanc==='1'?'Receita':l.tipoLanc==='3'?'Adiantamento':'Despesa'} · doc ${esc(l.tipoDoc)}</td><td class="num" data-th="Entrada">${l.ent?brl(l.ent):'·'}</td><td class="num" data-th="Saída">${l.sai?brl(l.sai):'·'}</td><td class="num" data-th="Saldo"><b class="${l.saldo<0?'fin-neg':''}">${brl(l.saldo)}</b></td></tr>`).join('')||'<tr><td colspan="9" class="mut" style="padding:12px">Nenhum lançamento.</td></tr>'}</tbody></table></div>
+    ${lan.length>lim.length?`<div class="bulk-add" style="padding:8px 14px"><button class="btn btn-outline btn-sm" data-act="lcTodos">Mostrar todos (${lan.length})</button></div>`:''}</div>`;
+  return top+pend+resumo+lancs+`<p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Leiaute ${LCDPR_LEIAUTE.versao.replace(/^00/,'')}.x do LCDPR: campos separados por "|", datas ddmmaaaa, valores em centavos. Lançamento = cada baixa, pelo valor que saiu ou entrou na conta (juros dentro). <b>Confira o primeiro arquivo com o contador e no validador do e-CAC</b>; o leiaute fica num só lugar do app para ajustar.</p>`; }
+function lcGerarTxt(){ const d=lcdprDados(LC_UI.cpf, LC_UI.ano); if(!d.P) return; if(d.erros){ toast('Resolva as pendências antes de gerar'); return; } if(!d.lanc.length){ toast('Nenhum lançamento no ano'); return; }
+  download(`LCDPR_${lcN(d.P.cpf)}_${LC_UI.ano}.txt`, lcdprTxt(d), 'text/plain;charset=utf-8'); toast(`Arquivo gerado: ${d.linhas.length} linhas`);
+  cadPost('lcdpr', {cpf:d.P.cpf, ano:LC_UI.ano, quem:(sessUsuario()||{}).nome||''}, '').then(()=>{ const F=FIN(); F.lcdprGerado[d.P.cpf+'|'+LC_UI.ano]=fmtDataBR(_hojeISO())+' (este aparelho)'; }); }
+function lcGerarCsv(){ const d=lcdprDados(LC_UI.cpf, LC_UI.ano); if(!d.P||!d.lanc.length){ toast('Nenhum lançamento'); return; } download(`LCDPR_conferencia_${lcN(d.P.cpf)}_${LC_UI.ano}.csv`, lcdprCsv(d), 'text/csv;charset=utf-8'); toast('CSV de conferência exportado'); }
 V.cadastros=function(){
   if(sessUsuario()&&!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
   if(!(DATA&&DATA.financeiro)) return `<div class="empty">🗃️ Cadastros ainda não disponíveis: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo).</div>`;
-  const F=FIN(), E=CAD_EDIT, prods=F.produtores, imov=F.imoveis, contas=F.contas;
+  const F=FIN(), E=CAD_EDIT, prods=F.produtores, imov=F.imoveis, contas=F.contas, cps=F.contrapartes, CT=F.contador||{};
   const pSel=(k,v)=>`<select class="sel" data-cadf="${k}"><option value="">—</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===v?' selected':''}>${esc(p.nome)}</option>`).join('')}</select>`;
   const inp=(k,v,ph,extra)=>`<input class="txt" data-cadf="${k}" value="${esc(v==null?'':v)}" placeholder="${esc(ph||'')}" ${extra||''}>`;
   const ativo=(k,v)=>`<label class="cad-chk"><input type="checkbox" data-cadf="${k}"${_finAtivo(v)?' checked':''}> ativo</label>`;
@@ -5493,30 +5588,38 @@ V.cadastros=function(){
   const it=E?E.item:{};
   return `
   <div class="panel"><div class="panel-head"><h2>👤 Produtores</h2><span class="sub">cada produtor tem o seu Livro Caixa; a captura de NF-e aceita notas emitidas para estes CPFs</span></div>
-    ${form('produtor', `<label>CPF/CNPJ${inp('cpf',it.cpf,'só números',E&&!E.novo?'readonly':'')}</label><label>Nome${inp('nome',it.nome,'nome do produtor')}</label><label>E-mail do contador${inp('emailContador',it.emailContador,'opcional')}</label><label>Imóvel padrão<select class="sel" data-cadf="imovelPadrao"><option value="">—</option>${imov.map(x=>`<option value="${esc(x.codigo)}"${x.codigo===it.imovelPadrao?' selected':''}>${esc(x.nome||x.codigo)}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>`)}
+    ${form('produtor', `<label>CPF/CNPJ${inp('cpf',it.cpf,'só números',E&&!E.novo?'readonly':'')}</label><label>Nome${inp('nome',it.nome,'nome do produtor')}</label><label>Imóvel padrão<select class="sel" data-cadf="imovelPadrao"><option value="">—</option>${imov.map(x=>`<option value="${esc(x.codigo)}"${x.codigo===it.imovelPadrao?' selected':''}>${esc(x.nome||x.codigo)}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>
+      <label>Endereço (Livro Caixa)${inp('endereco',it.endereco,'rua / fazenda')}</label><label>Número${inp('numero',it.numero,'S/N')}</label><label>Complemento${inp('complemento',it.complemento,'')}</label><label>Bairro${inp('bairro',it.bairro,'zona rural')}</label><label>UF${inp('uf',it.uf,'GO','maxlength="2"')}</label><label>Cód. município (IBGE)${inp('codMunicipio',it.codMunicipio,'7 dígitos','inputmode="numeric"')}</label><label>CEP${inp('cep',it.cep,'só números','inputmode="numeric"')}</label><label>Telefone${inp('telefone',it.telefone,'DDD + número','inputmode="numeric"')}</label><label>E-mail${inp('email',it.email,'')}</label><label>Forma de apuração<select class="sel" data-cadf="formaApur"><option value="1"${String(it.formaApur||'1')==='1'?' selected':''}>1 · Livro Caixa</option><option value="2"${String(it.formaApur)==='2'?' selected':''}>2 · Arbitrado</option></select></label><label>E-mail do contador (aviso)${inp('emailContador',it.emailContador,'opcional')}</label>`)}
     <div class="cad-list">${prods.map(p=>`<div class="cad-row${_finAtivo(p.ativo)?'':' off'}"><div><b>${esc(p.nome||'—')}</b><small>${esc(nfeCnpjFmt(p.cpf))}</small></div><div class="mut">${esc(p.emailContador||'')}${p.imovelPadrao?` · imóvel ${esc(p.imovelPadrao)}`:''}${_finAtivo(p.ativo)?'':' · <b>inativo</b>'}</div><button class="icon-btn" data-act="cadEditar" data-tipo="produtor" data-id="${esc(p.cpf)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhum produtor cadastrado.</p>'}</div>
     <div class="bulk-add" style="padding:10px 14px">${btnNovo('produtor')}</div></div>
   <div class="panel"><div class="panel-head"><h2>🏡 Imóveis rurais</h2><span class="sub">como no Livro Caixa: código, CAD ITR, forma de exploração e participação do produtor</span></div>
-    ${form('imovel', `<label>Código${inp('codigo',it.codigo,'ex.: 001',E&&!E.novo?'readonly':'')}</label><label>Nome${inp('nome',it.nome,'nome do imóvel')}</label><label>CAD ITR${inp('cadItr',it.cadItr,'número no ITR')}</label><label>Município${inp('municipio',it.municipio,'')}</label><label>UF${inp('uf',it.uf,'GO','maxlength="2"')}</label><label>Exploração<select class="sel" data-cadf="exploracao">${FIN_EXPL.map(x=>`<option${x===(it.exploracao||FIN_EXPL[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Participação %${inp('participacao',it.participacao==null?100:it.participacao,'100','inputmode="decimal"')}</label><label>Fazenda no app<select class="sel" data-cadf="fazendaApp"><option value="">—</option>${Object.keys(FAZENDAS).map(k=>`<option value="${k}"${k===it.fazendaApp?' selected':''}>${esc(FAZENDAS[k])}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>`)}
-    <div class="cad-list">${imov.map(x=>`<div class="cad-row${_finAtivo(x.ativo)?'':' off'}"><div><b>${esc(x.nome||x.codigo)}</b><small>cód. ${esc(x.codigo)}${x.cadItr?' · ITR '+esc(x.cadItr):''}</small></div><div class="mut">${esc(x.exploracao||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))} ${esc(String(x.participacao||''))}%`:''}${x.fazendaApp?` · ${esc(FAZENDAS[x.fazendaApp]||x.fazendaApp)}`:''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="imovel" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhum imóvel cadastrado.</p>'}</div>
+    ${form('imovel', `<label>Código (só números)${inp('codigo',it.codigo,'ex.: 001',(E&&!E.novo?'readonly ':'')+'inputmode="numeric"')}</label><label>Nome${inp('nome',it.nome,'nome do imóvel')}</label><label>CAD ITR${inp('cadItr',it.cadItr,'número no ITR','inputmode="numeric"')}</label><label>CAEPF${inp('caepf',it.caepf,'opcional','inputmode="numeric"')}</label><label>Inscrição estadual${inp('ie',it.ie,'opcional')}</label><label>Endereço${inp('endereco',it.endereco,'rodovia / fazenda')}</label><label>Número${inp('numero',it.numero,'S/N')}</label><label>Complemento${inp('complemento',it.complemento,'')}</label><label>Bairro${inp('bairro',it.bairro,'zona rural')}</label><label>Município${inp('municipio',it.municipio,'')}</label><label>Cód. município (IBGE)${inp('codMunicipio',it.codMunicipio,'7 dígitos','inputmode="numeric"')}</label><label>CEP${inp('cep',it.cep,'só números','inputmode="numeric"')}</label><label>UF${inp('uf',it.uf,'GO','maxlength="2"')}</label><label>Exploração<select class="sel" data-cadf="exploracao">${FIN_EXPL.map(x=>`<option${x===(it.exploracao||FIN_EXPL[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Participação %${inp('participacao',it.participacao==null?100:it.participacao,'100','inputmode="decimal"')}</label><label>Fazenda no app<select class="sel" data-cadf="fazendaApp"><option value="">—</option>${Object.keys(FAZENDAS).map(k=>`<option value="${k}"${k===it.fazendaApp?' selected':''}>${esc(FAZENDAS[k])}</option>`).join('')}</select></label><label>${ativo('ativo',it.ativo==null?'S':it.ativo)}</label>`)}
+    ${form('contraparte', `<label>Imóvel<select class="sel" data-cadf="imovel">${imov.map(x=>`<option value="${esc(x.codigo)}"${x.codigo===it.imovel?' selected':''}>${esc(x.nome||x.codigo)}</option>`).join('')}</select></label><label>Tipo<select class="sel" data-cadf="tipo">${LCDPR_LEIAUTE.contraparte.map(x=>`<option${x===(it.tipo||LCDPR_LEIAUTE.contraparte[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>CPF/CNPJ${inp('doc',it.doc,'só números','inputmode="numeric"')}</label><label>Nome${inp('nome',it.nome,'')}</label><label>Participação %${inp('participacao',it.participacao==null?'':it.participacao,'','inputmode="decimal"')}</label>`)}
+    <div class="cad-list">${imov.map(x=>`<div class="cad-row${_finAtivo(x.ativo)?'':' off'}"><div><b>${esc(x.nome||x.codigo)}</b><small>cód. ${esc(x.codigo)}${x.cadItr?' · ITR '+esc(x.cadItr):''}${x.codMunicipio?' · mun. '+esc(x.codMunicipio):''}</small></div><div class="mut">${esc(x.exploracao||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))} ${esc(String(x.participacao||''))}%`:''}${x.fazendaApp?` · ${esc(FAZENDAS[x.fazendaApp]||x.fazendaApp)}`:''}${cps.filter(c=>c.imovel===x.codigo).map(c=>`<div class="cad-cp">↳ ${esc(c.tipo)} <b>${esc(c.nome||c.doc)}</b> ${esc(String(c.participacao||''))}% <button class="icon-btn" data-act="cadEditar" data-tipo="contraparte" data-id="${esc(c.id)}" title="Editar">✎</button></div>`).join('')}<div class="cad-cp"><a class="link" data-act="cadNovoCp" data-imovel="${esc(x.codigo)}">➕ contraparte (condômino, parceiro, arrendante)</a></div></div><button class="icon-btn" data-act="cadEditar" data-tipo="imovel" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhum imóvel cadastrado.</p>'}</div>
     <div class="bulk-add" style="padding:10px 14px">${btnNovo('imovel')}</div></div>
   <div class="panel"><div class="panel-head"><h2>🏦 Contas bancárias</h2><span class="sub">a baixa dos títulos (fase 3) aponta para uma conta do produtor; dinheiro em espécie é uma conta "Caixa"</span></div>
-    ${form('conta', `<label>Código${inp('codigo',it.codigo,'ex.: 001',E&&!E.novo?'readonly':'')}</label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Banco${inp('banco',it.banco,'nº e nome, ex.: 001 Banco do Brasil')}</label><label>Agência${inp('agencia',it.agencia,'')}</label><label>Conta${inp('conta',it.conta,'com dígito')}</label><label>Tipo<select class="sel" data-cadf="tipo">${FIN_CONTA_TIPOS.map(x=>`<option${x===(it.tipo||FIN_CONTA_TIPOS[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Saldo inicial (R$)${inp('saldoInicial',it.saldoInicial==null||it.saldoInicial===''?'':fmtDose(+it.saldoInicial||0),'0,00','inputmode="decimal" title="saldo da conta na data abaixo — o extrato parte daqui"')}</label><label>Data do saldo<input type="date" class="cell" data-cadf="dataSaldo" value="${esc(it.dataSaldo||'')}"></label><label>${ativo('ativa',it.ativa==null?'S':it.ativa)}</label>`)}
+    ${form('conta', `<label>Código (só números)${inp('codigo',it.codigo,'ex.: 001',(E&&!E.novo?'readonly ':'')+'inputmode="numeric"')}</label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Nome do banco${inp('banco',it.banco,'ex.: Banco do Brasil')}</label><label>Nº do banco${inp('numBanco',it.numBanco,'ex.: 001','inputmode="numeric"')}</label><label>País${inp('pais',it.pais||'BR','BR','maxlength="2"')}</label><label>Agência${inp('agencia',it.agencia,'')}</label><label>Conta${inp('conta',it.conta,'com dígito')}</label><label>Tipo<select class="sel" data-cadf="tipo">${FIN_CONTA_TIPOS.map(x=>`<option${x===(it.tipo||FIN_CONTA_TIPOS[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Saldo inicial (R$)${inp('saldoInicial',it.saldoInicial==null||it.saldoInicial===''?'':fmtDose(+it.saldoInicial||0),'0,00','inputmode="decimal" title="saldo da conta na data abaixo — o extrato parte daqui"')}</label><label>Data do saldo<input type="date" class="cell" data-cadf="dataSaldo" value="${esc(it.dataSaldo||'')}"></label><label>${ativo('ativa',it.ativa==null?'S':it.ativa)}</label>`)}
     <div class="cad-list">${contas.map(x=>`<div class="cad-row${_finAtivo(x.ativa)?'':' off'}"><div><b>${esc(x.banco||x.codigo)}</b><small>cód. ${esc(x.codigo)} · ag. ${esc(x.agencia||'—')} · conta ${esc(x.conta||'—')}</small></div><div class="mut">${esc(x.tipo||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))}`:''}${x.saldoInicial!==''&&x.saldoInicial!=null?` · saldo inicial ${brl0(+x.saldoInicial||0)}${x.dataSaldo?' em '+_dtBRc(x.dataSaldo):''}`:''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="conta" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhuma conta cadastrada.</p>'}</div>
-    <div class="bulk-add" style="padding:10px 14px">${btnNovo('conta')}</div></div>`;
+    <div class="bulk-add" style="padding:10px 14px">${btnNovo('conta')}</div></div>
+  <div class="panel"><div class="panel-head"><h2>🧾 Contador</h2><span class="sub">um só para todos os produtores · vai no encerramento (registro 9999) do Livro Caixa</span></div>
+    ${form('contador', `<label>Nome${inp('nome',it.nome,'')}</label><label>CPF/CNPJ${inp('doc',it.doc,'só números','inputmode="numeric"')}</label><label>CRC${inp('crc',it.crc,'registro no CRC')}</label><label>E-mail${inp('email',it.email,'')}</label><label>Telefone${inp('fone',it.fone,'DDD + número','inputmode="numeric"')}</label>`)}
+    <div class="cad-list"><div class="cad-row"><div><b>${esc(CT.nome||'— não informado —')}</b><small>${esc(CT.doc||'')}${CT.crc?' · CRC '+esc(CT.crc):''}</small></div><div class="mut">${esc(CT.email||'')}${CT.fone?' · '+esc(CT.fone):''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="contador" data-id="x" title="Editar">✎</button></div></div></div>`;
 };
-const CAD_KEY={produtor:'cpf', imovel:'codigo', conta:'codigo'};
-function cadLista(tipo){ const F=FIN(); return tipo==='produtor'?F.produtores:(tipo==='imovel'?F.imoveis:F.contas); }
+const CAD_KEY={produtor:'cpf', imovel:'codigo', conta:'codigo', contraparte:'id', contador:'x'};
+function cadLista(tipo){ const F=FIN(); return tipo==='produtor'?F.produtores:(tipo==='imovel'?F.imoveis:(tipo==='contraparte'?F.contrapartes:F.contas)); }
 async function cadPost(tipo, item, msgOk){ const url=syncUrl(); if(!url) return false;
   try{ const r=await syncPost(url, JSON.stringify({__cadFin:{tipo, itens:[item]}}));
     if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
-    const k=CAD_KEY[tipo], L=cadLista(tipo), i=L.findIndex(x=>x[k]===item[k]); if(item.del){ if(i>=0) L.splice(i,1); } else if(i>=0) Object.assign(L[i], item); else L.push(item);
+    if(tipo==='contador'){ DATA.financeiro.contador=Object.assign({}, FIN().contador, item); }
+    else if(tipo!=='lcdpr'){ const k=CAD_KEY[tipo], L=cadLista(tipo), i=L.findIndex(x=>x[k]===item[k]); if(item.del){ if(i>=0) L.splice(i,1); } else if(i>=0) Object.assign(L[i], item); else L.push(item); }
     if(msgOk) toast(msgOk); CAD_EDIT=null; route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
   catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
 function cadSalvar(){ const E=CAD_EDIT; if(!E) return; const it=Object.assign({}, E.item), k=CAD_KEY[E.tipo];
-  if(E.tipo==='produtor'){ it.cpf=String(it.cpf||'').replace(/\D/g,''); if(!(it.cpf.length===11||it.cpf.length===14)){ toast('CPF (11) ou CNPJ (14) só com números'); return; } if(!String(it.nome||'').trim()){ toast('Informe o nome'); return; } }
+  if(E.tipo==='contador'){ it.doc=String(it.doc||'').replace(/\D/g,''); if(!String(it.nome||'').trim()){ toast('Informe o nome do contador'); return; } cadPost('contador', it, 'Contador salvo'); return; }
+  if(E.tipo==='contraparte'){ it.doc=String(it.doc||'').replace(/\D/g,''); if(!it.imovel){ toast('Escolha o imóvel'); return; } if(!(it.doc.length===11||it.doc.length===14)){ toast('CPF (11) ou CNPJ (14) só com números'); return; } it.participacao=+(_mmC(it.participacao)||0); if(!it.id) it.id='cp:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); if(!it.tipo) it.tipo=LCDPR_LEIAUTE.contraparte[0]; cadPost('contraparte', it, 'Contraparte salva'); return; }
+  if(E.tipo==='produtor'){ it.cpf=String(it.cpf||'').replace(/\D/g,''); if(!(it.cpf.length===11||it.cpf.length===14)){ toast('CPF (11) ou CNPJ (14) só com números'); return; } if(!String(it.nome||'').trim()){ toast('Informe o nome'); return; } ['codMunicipio','cep','telefone'].forEach(f=>{ if(it[f]!=null) it[f]=String(it[f]).replace(/\D/g,''); }); }
   else { it.codigo=String(it.codigo||'').trim(); if(!it.codigo){ toast('Informe o código'); return; } if(it.produtor) it.produtor=String(it.produtor).replace(/\D/g,''); }
-  if(E.tipo==='imovel'){ if(!String(it.nome||'').trim()){ toast('Informe o nome do imóvel'); return; } it.participacao=+(_mmC(it.participacao)||100); if(!it.exploracao) it.exploracao=FIN_EXPL[0]; }
+  if(E.tipo==='imovel'){ if(!String(it.nome||'').trim()){ toast('Informe o nome do imóvel'); return; } it.participacao=+(_mmC(it.participacao)||100); if(!it.exploracao) it.exploracao=FIN_EXPL[0]; ['cadItr','caepf','codMunicipio','cep'].forEach(f=>{ if(it[f]!=null) it[f]=String(it[f]).replace(/\D/g,''); }); }
   if(E.tipo==='conta'){ if(!it.tipo) it.tipo=FIN_CONTA_TIPOS[0]; it.saldoInicial=(it.saldoInicial===''||it.saldoInicial==null)?'':+(_mmC(it.saldoInicial)||0); if(it.saldoInicial!==''&&!_isISO(it.dataSaldo||'')){ toast('Informe a data do saldo inicial'); return; } }
   if(E.novo && cadLista(E.tipo).some(x=>x[k]===it[k])){ toast('Já existe um cadastro com esse '+(k==='cpf'?'CPF':'código')); return; }
   ['ativo','ativa'].forEach(f=>{ if(f in it) it[f]=it[f]&&it[f]!=='N'?'S':'N'; });
@@ -11296,6 +11399,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
+  if(e.target.id==='lc-prod'||e.target.id==='lc-ano'){ LC_UI[e.target.id==='lc-prod'?'cpf':'ano']=e.target.value||''; LC_UI.mes=''; LC_UI.todos=false; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='fin-prod'||e.target.id==='fin-mes'||e.target.id==='fin-conta'||e.target.id==='fin-de'||e.target.id==='fin-ate'){ FIN_UI[{'fin-prod':'prod','fin-mes':'mes','fin-conta':'conta','fin-de':'de','fin-ate':'ate'}[e.target.id]]=e.target.value||''; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.matches&&e.target.matches('input[data-finarq]')){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f&&finBaixa) finArqLer(f).then(a=>{ if(a&&finBaixa){ finBaixa.arq=a; finBaixaRefresh(); } }); return; }
   if(e.target.id==='rel-ap-de'||e.target.id==='rel-ap-ate'||e.target.id==='rel-ap-faz'||e.target.id==='rel-ap-tal'){   // relatório Agro1 (v271)
@@ -11738,10 +11842,15 @@ document.addEventListener('click',e=>{
     else if(a.act==='finCancelar'){ if(ask('Cancelar este título? A nota continua como está; só o valor deixa de ser cobrado aqui.')) finPost([{id:a.id, status:'CANCELADO'}], 'Título cancelado'); }
     else if(a.act==='finDel'){ if(ask('Excluir este título?')) finPost([{id:a.id, del:true}], 'Título excluído'); }
     else if(a.act==='cadNovo'){ const tipo=a.tipo; CAD_EDIT={tipo, novo:true, item:tipo==='produtor'?{cpf:'',nome:'',emailContador:'',imovelPadrao:'',ativo:'S'}:tipo==='imovel'?{codigo:'',nome:'',cadItr:'',municipio:'',uf:'',exploracao:FIN_EXPL[0],produtor:'',participacao:100,fazendaApp:'',ativo:'S'}:{codigo:'',produtor:'',banco:'',agencia:'',conta:'',tipo:FIN_CONTA_TIPOS[0],ativa:'S'}}; route({keepScroll:true}); }
-    else if(a.act==='cadEditar'){ const it=cadLista(a.tipo).find(x=>x[CAD_KEY[a.tipo]]===a.id); if(it){ CAD_EDIT={tipo:a.tipo, novo:false, item:Object.assign({}, it)}; route({keepScroll:true}); } }
+    else if(a.act==='cadEditar'){ if(a.tipo==='contador'){ CAD_EDIT={tipo:'contador', novo:false, item:Object.assign({}, FIN().contador)}; route({keepScroll:true}); } else { const it=cadLista(a.tipo).find(x=>x[CAD_KEY[a.tipo]]===a.id); if(it){ CAD_EDIT={tipo:a.tipo, novo:false, item:Object.assign({}, it)}; route({keepScroll:true}); } } }
+    else if(a.act==='cadNovoCp'){ CAD_EDIT={tipo:'contraparte', novo:true, item:{id:'', imovel:a.imovel||'', tipo:LCDPR_LEIAUTE.contraparte[0], doc:'', nome:'', participacao:''}}; route({keepScroll:true}); }
+    else if(a.act==='lcTxt'){ lcGerarTxt(); }
+    else if(a.act==='lcCsv'){ lcGerarCsv(); }
+    else if(a.act==='lcMes'){ LC_UI.mes=a.mes||''; LC_UI.todos=false; route({keepScroll:true}); }
+    else if(a.act==='lcTodos'){ LC_UI.todos=true; route({keepScroll:true}); }
     else if(a.act==='cadCancelar'){ CAD_EDIT=null; route({keepScroll:true}); }
     else if(a.act==='cadSalvar'){ cadSalvar(); }
-    else if(a.act==='cadExcluir'){ const E=CAD_EDIT; if(E&&!E.novo&&ask('Excluir este cadastro?')){ const it={del:true}; it[CAD_KEY[E.tipo]]=E.item[CAD_KEY[E.tipo]]; cadPost(E.tipo, it, 'Cadastro excluído'); } }
+    else if(a.act==='cadExcluir'){ const E=CAD_EDIT; if(E&&E.tipo!=='contador'&&!E.novo&&ask('Excluir este cadastro?')){ const it={del:true}; it[CAD_KEY[E.tipo]]=E.item[CAD_KEY[E.tipo]]; cadPost(E.tipo, it, 'Cadastro excluído'); } }
     else if(a.act==='tarSalvar'){ const d=tarefaDraft; if(!d||!(d.titulo||'').trim()){ toast('Informe a tarefa/operação'); return; }
       const rec={ titulo:(d.titulo||'').trim(), talhaoId:d.talhaoId||'', funcionarioId:d.funcionarioId||'', inicio:d.inicio||new Date().toISOString().slice(0,10), dias:Math.max(1,+d.dias||1), status:(TAR_ORDER.indexOf(d.status)>=0?d.status:'afazer'), obs:(d.obs||'').trim() };
       rec._u=tsAgora();
