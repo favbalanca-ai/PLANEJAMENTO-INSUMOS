@@ -666,6 +666,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .pdf-kv{margin:6px 0 4px}
   #print-area .pdf-kv td{border:1px solid #bbb;padding:5px 8px;font-size:11px;background:#fafafa}
   #print-area .pdf-kv small{display:block;font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.04em}
+  #print-area .rel-ap-pdf{page-break-inside:avoid;margin-bottom:10px}
+  #print-area .rel-ap-pdf .pdf-kv{margin-bottom:2px}
   #print-area .pdf-kv b{font-size:12.5px}
   #print-area .op-blk{break-inside:avoid;page-break-inside:avoid;margin:0 0 8px}
   #print-area .op-blk h3{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0 3px;font-size:12px}
@@ -1811,6 +1813,25 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rel-uso-t tfoot td{font-weight:800;background:var(--bg);padding:9px 14px}
 @media(max-width:640px){ .rel-uso-t tbody tr::after{display:none} .rel-uso-t tbody tr{cursor:default} }
 .rel-uso-t .pill{background:var(--line);color:var(--muted);margin-left:4px}
+/* Aplicações no período — relatório para o Agro1 (v271): uma ficha por operação com seus insumos */
+.rel-ap-top{align-items:flex-end}
+.rel-ap-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}
+.rel-ap-top .faz-wrap .cell{width:150px;font-weight:600;color:var(--ink)}
+.rel-ap-top .faz-wrap .sel{flex:0 0 auto;min-width:150px;max-width:220px}
+.rel-ap-marca{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 14px 0;padding:8px 12px;background:var(--bg);border:1px dashed var(--line);border-radius:10px;font-size:13px}
+.rel-ap-aviso{margin:8px 14px 0;padding:8px 12px;background:var(--amber-soft,#fff6df);color:var(--amber,#8a5a00);border-radius:10px;font-size:12.5px;line-height:1.45}
+.rel-ap-tal span{font-weight:600;text-transform:none;letter-spacing:0}
+.rel-ap-card{margin:6px 14px 10px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.rel-ap-card.lanc{opacity:.78}
+.rel-ap-hd{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:9px 12px;background:var(--bg);font-size:14px}
+.rel-ap-data{font-size:15px;color:var(--teal)}
+.rel-ap-tipo{background:var(--teal-soft);color:var(--teal)}
+.rel-ap-area{margin-left:auto;font-weight:800;white-space:nowrap}
+.rel-ap-meta{display:flex;flex-wrap:wrap;gap:3px 6px;padding:6px 12px;font-size:12.5px;color:var(--ink2)}
+.rel-ap-meta i{color:var(--line);font-style:normal}
+.rel-ap-card .table-wrap{border:0;border-radius:0;margin:0}
+.rel-ap-card tbody tr:last-child td{border-bottom:0}
+@media(max-width:640px){ .rel-ap-area{margin-left:0} .rel-ap-top .faz-wrap{flex:1 1 45%} .rel-ap-top .faz-wrap .cell,.rel-ap-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 /* ===== Bulas dos produtos (módulo Preços) ===== */
 .bula-btn.on{background:var(--teal-soft);border-color:var(--teal)}
 .bula-box{width:min(680px,100%)}
@@ -2394,6 +2415,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ci-x.on{font-size:12px}
   .rel-uso-kpis span{font-size:12px}
   .rel-uso-h{font-size:10.5px}
+  .rel-ap-marca{font-size:10.5px}
+  .rel-ap-aviso{font-size:10px}
+  .rel-ap-hd{font-size:11.5px}
+  .rel-ap-data{font-size:12px}
+  .rel-ap-meta{font-size:10px}
   .bula-arq{font-size:10.5px}
   .mi-info{font-size:10.5px}
   .mi-nota{font-size:11.5px}
@@ -2563,7 +2589,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-270';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-271';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6806,7 +6832,7 @@ function tsMarca(r, feito, quem){
 function tsMarcaSalva(r, feito, quem){ const re=tsMarca(r,feito,quem); if(!r||!r.tsOp) return;
   saveOverrides(); scheduleRealizadoPush(); if(re) pushOpSaida(r.tsOp).catch(()=>{}); }
 // baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
-function opBaixaEff(r){ const b=(r&&r.baixa)||{}; if(!tsFeito(r)) return b;
+function opBaixaEff(r, b0){ const b=b0||(r&&r.baixa)||{}; if(!tsFeito(r)) return b;   // b0: baixa de UMA etapa (relatório Agro1, v271)
   if(r.ts.recom){ const rr=recomById(r.ts.recom); if(rr&&rr.tsCfg&&rr.tsCfg.semInfo) return {}; }   // operação só de TS: tudo já saiu pela recomendação de TS
   const tb=r.ts.baixa;   // o que o TS baixou (se o operador do TS deixou a semente em branco, o plantio baixa a semente)
   const o={}; for(const p in b){ if((_isTS({produto:p})||_isSemente({produto:p})) && (!tb || tb[p]!=null)) continue; o[p]=b[p]; } return o; }
@@ -9802,6 +9828,131 @@ function exportUsoProdutosPDF(){
   html+=`<div class="pdf-foot">Quantidades = baixas aprovadas (operação concluída, TS feito ou retorno do operador aprovado). Valor = quantidade × preço da planilha.</div>`;
   printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
 }
+// ===== APLICAÇÕES NO PERÍODO (v271) — relatório para lançar no sistema externo (Agro1) =====
+// Uma ficha por OPERAÇÃO realizada (data da aplicação, talhão, área, operador, máquina, calda, estádio…) com os insumos
+// daquela operação embaixo (tipo do item, item, unidade, área, dose/ha, total) — espelha a tela "Aplicação de Insumos" do Agro1.
+// Período, talhão/fazenda e a marca "já lançado até" ficam no aparelho (localStorage) — não mudam a planilha.
+const AGRO1_KEY='planejamento_agro1_rel';
+let AGRO1={de:'', ate:'', faz:'', tal:'', lancadoAte:''}; try{ Object.assign(AGRO1, JSON.parse(localStorage.getItem(AGRO1_KEY)||'{}')); }catch(e){}
+function agro1Salvar(){ try{ localStorage.setItem(AGRO1_KEY, JSON.stringify(AGRO1)); }catch(e){} }
+function agro1DiaSeguinte(iso){ if(!_isISO(iso)) return ''; const d=new Date(iso.slice(0,10)+'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().slice(0,10); }
+// período em vigor: "de" = o que a dona digitou ou o dia seguinte à última marca "lançado até"; "até" = digitado ou hoje
+function agro1Periodo(){ return { de: AGRO1.de || (AGRO1.lancadoAte?agro1DiaSeguinte(AGRO1.lancadoAte):''), ate: AGRO1.ate || _hojeISO() }; }
+// classificação da operação para o campo "Operação de Campo" do Agro1
+function agro1Tipo(itens, rc, app, ehPlantio){
+  if(ehPlantio) return 'Plantio';
+  if(rc && rc.tipoApl) return rc.tipoApl==='Terrestre'?'Pulverização terrestre':rc.tipoApl;
+  if(app && app.tipo==='aereo') return 'Pulverização aérea';
+  const cls=itens.map(i=>String(i.classe||'').toUpperCase());
+  if(cls.length && cls.every(c=>/FERTIL|ADUBO|CORRETIV|CALC|GESSO/.test(c))) return 'Adubação';
+  return (app && +app.vazao>0) || (rc && _mmC(rc.calda)>0) ? 'Pulverização' : 'Aplicação';
+}
+// monta UMA ficha (operação + insumos). b = {produto: quantidade}
+function _agro1Ficha(o){
+  const t=o.t, area=+o.area||0, itens=[];
+  for(const p in (o.baixa||{})){ const q=+o.baixa[p]||0; if(!(q>0)) continue; const pr=PROD[p]||{};
+    itens.push({produto:p, classe:pr.classe||'', un:pr.un||'', qtd:q, dose:area>0?q/area:0, valor:q*precoDe(p)}); }
+  if(!itens.length) return null;
+  itens.sort((a,b)=>a.classe.localeCompare(b.classe)||a.produto.localeCompare(b.produto));
+  const app=o.app||{}, rc=o.rc||null, vazao=+app.vazao||_mmC(rc&&rc.calda)||0, tanque=+app.tanque||_mmC(rc&&rc.tanque)||0;
+  const caldaTotal=vazao>0?vazao*area:0, nT=(tanque>0&&caldaTotal>0)?Math.ceil(caldaTotal/tanque):0;
+  let estadio=(rc&&rc.estadio)||''; if(!estadio && o.seq && _isISO(o.data)){ try{ const e=estadioEm(estadiosDe(t,o.seq),o.data.slice(0,10)); if(e) estadio=e.cod; }catch(e){} }
+  return { id:o.id, data:_isISO(o.data)?String(o.data).slice(0,10):'', t, talId:t.id, talNome:tNome(t), faz:fazendaKey(t), fazNome:fazendaNome(fazendaKey(t)),
+    cultura:o.cultura||'', seq:o.seq||'', op:o.op||'', tipo:o.tipo||agro1Tipo(itens, rc, app, !!o.ehPlantio), origem:o.origem||'Operação', area,
+    operador:app.operador||(rc&&rc.retorno&&rc.retorno.quem)||o.quem||'', maq:app.maq||(rc&&rc.maquina)||'', vazao, tanque, nT, caldaTotal,
+    hIni:app.hIni||'', hFim:app.hFim||'', estadio, alvo:(rc&&rc.alvo)||'', recom:rc?(rc.nome||rc.opNome||''):'', obs:o.obs||'', etapa:o.etapa||'',
+    itens, valor:itens.reduce((s,i)=>s+i.valor,0) };
+}
+// todas as fichas de aplicação já realizadas (sem filtro de período) — operações concluídas/parciais, TS feito e recomendações avulsas aprovadas
+function agro1Todas(){
+  const out=[], tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true}));
+  tals.forEach(t=>{
+    eachOp(t,(seq,tag,oi,op,tagoi)=>{ const key=`${t.id}|${tagoi}`, r=OV.realizado&&OV.realizado[key]; if(!r) return;
+      const nome=op.nome||('Operação '+(oi+1)), cultura=seq==='safrinha'?empSafDe(t):empDe(t), ehPlantio=opTemSemente(t.id,tagoi);
+      const rc=((RECOM&&RECOM.registros)||[]).filter(x=>x.opKey===key&&x.tipo!=='ts'&&x.status==='aprovada').sort((a,b)=>((b.aprov&&b.aprov.ts)||0)-((a.aprov&&a.aprov.ts)||0))[0]||null;
+      if(opBaixou(r)){
+        const et=(r.etapas||[]).concat(r.etapaAtual?[r.etapaAtual]:[]);
+        if(et.length>1){ et.forEach((e,i)=>{ const f=_agro1Ficha({id:key+'#'+(i+1), t, seq, data:e.data||r.data, area:+e.area||0, baixa:opBaixaEff(r,e.baixa||{}), app:r.app, rc, op:nome, cultura, ehPlantio, obs:r.obs, etapa:`${i+1}ª etapa de ${et.length}`}); if(f) out.push(f); }); }
+        else { const f=_agro1Ficha({id:key, t, seq, data:r.data, area:opAreaFeita(r)||opAreaDe(t,r), baixa:opBaixaEff(r), app:r.app, rc, op:nome, cultura, ehPlantio, obs:r.obs}); if(f) out.push(f); }
+      }
+      if(tsFeito(r) && r.ts.baixa){ const f=_agro1Ficha({id:key+'#ts', t, seq, data:r.ts.em?_dISO(r.ts.em):r.data, area:opAreaDe(t,r), baixa:r.ts.baixa, app:{}, rc:null, op:nome, cultura, tipo:'Tratamento de sementes', origem:'TS', quem:r.ts.quem||''}); if(f) out.push(f); }
+    });
+    ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.talhao!==t.id || r0.opKey || r0.tipo==='ts') return; const r=recomNorm(r0); if(r.status!=='aprovada') return;
+      const b={}; (r.itens||[]).forEach(it=>{ if(it.produto && +it.real>0) b[it.produto]=(b[it.produto]||0)+(+it.real); });
+      const f=_agro1Ficha({id:'rec:'+r.id, t, seq:'', data:_isISO(r.data)?r.data:(r.aprov&&r.aprov.ts?_dISO(r.aprov.ts):''), area:+r.area||areaDe(t)||0, baixa:b, app:{}, rc:r, op:r.nome||r.opNome||'Recomendação', cultura:r.cultura||empDe(t), origem:'Recomendação', obs:r.justif||''}); if(f) out.push(f); });
+  });
+  return out.sort((a,b)=>String(a.talId).localeCompare(String(b.talId),'pt',{numeric:true})||(a.data||'9').localeCompare(b.data||'9')||a.op.localeCompare(b.op));
+}
+// fichas do período/filtro em vigor + as sem data (não entram em período nenhum — a dona precisa completar a data no Campo)
+function agro1Filtradas(){
+  const p=agro1Periodo(), todas=agro1Todas().filter(f=>(!AGRO1.faz||f.faz===AGRO1.faz)&&(!AGRO1.tal||f.talId===AGRO1.tal));
+  return { de:p.de, ate:p.ate, lista:todas.filter(f=>f.data && (!p.de||f.data>=p.de) && f.data<=p.ate), semData:todas.filter(f=>!f.data) };
+}
+function agro1Lancada(f){ return !!(AGRO1.lancadoAte && f.data && f.data<=AGRO1.lancadoAte); }
+function agro1MetaTxt(f, sep){ const L=[];
+  if(f.operador) L.push('Operador: '+f.operador); if(f.maq) L.push('Máquina: '+f.maq);
+  if(f.vazao) L.push('Vazão: '+_oqN(f.vazao,1)+' L/ha'); if(f.tanque) L.push('Tanque: '+_oqN(f.tanque,0)+' L'); if(f.nT) L.push('Nº tanques: '+f.nT); if(f.caldaTotal) L.push('Calda total: '+_oqN(f.caldaTotal,0)+' L');
+  if(f.hIni||f.hFim) L.push('Horário: '+(f.hIni||'—')+' às '+(f.hFim||'—')); if(f.estadio) L.push('Estádio: '+f.estadio); if(f.alvo) L.push('Alvo: '+f.alvo);
+  if(f.recom) L.push('Recomendação: '+f.recom); if(f.etapa) L.push(f.etapa); if(f.obs) L.push('Obs.: '+f.obs);
+  return L.map(esc).join(sep||' · '); }
+function aplicacoesPeriodoHtml(){
+  const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true})), fazs=fazendasLista(tals);
+  if(AGRO1.faz && !fazs.includes(AGRO1.faz)) AGRO1.faz=''; if(AGRO1.tal && !tals.some(t=>t.id===AGRO1.tal)) AGRO1.tal='';
+  const R=agro1Filtradas(), lista=R.lista, hoje=_hojeISO();
+  const selFaz=fazs.length>1?`<label class="faz-wrap"><span>Fazenda</span><select class="sel" id="rel-ap-faz"><option value="">Todas</option>${fazs.map(k=>`<option value="${esc(k)}"${k===AGRO1.faz?' selected':''}>${esc(fazendaNome(k))}</option>`).join('')}</select></label>`:'';
+  const selTal=`<label class="faz-wrap"><span>Talhão</span><select class="sel" id="rel-ap-tal"><option value="">Todos</option>${tals.filter(t=>!AGRO1.faz||fazendaKey(t)===AGRO1.faz).map(t=>`<option value="${esc(t.id)}"${t.id===AGRO1.tal?' selected':''}>${esc(tNome(t))}</option>`).join('')}</select></label>`;
+  const areaTot=lista.reduce((s,f)=>s+f.area,0), nItens=lista.reduce((s,f)=>s+f.itens.length,0), nTal=new Set(lista.map(f=>f.talId)).size, nLanc=lista.filter(agro1Lancada).length;
+  const marca=`<div class="rel-ap-marca">${AGRO1.lancadoAte?`<span>✅ Já lançado no Agro1 até <b>${_dtBRc(AGRO1.lancadoAte)}</b>${nLanc?` · ${nLanc} ficha(s) deste período já marcadas`:''}</span>`:`<span class="mut">Nenhuma marca de "lançado" ainda.</span>`}
+      <span class="spacer"></span>
+      <button class="btn btn-primary btn-sm" data-act="relApMarcar" data-dia="${esc(R.ate)}" title="Depois de lançar tudo no Agro1, marque aqui: o próximo período começa no dia seguinte">✔ Marcar como lançado até ${_dtBRc(R.ate)}</button>
+      ${AGRO1.lancadoAte?`<button class="btn btn-outline btn-sm" data-act="relApDesmarcar">Limpar marca</button>`:''}</div>`;
+  let corpo='';
+  if(!lista.length) corpo=`<p class="mut" style="padding:14px">Nenhuma aplicação realizada ${R.de?`entre ${_dtBRc(R.de)} e ${_dtBRc(R.ate)}`:`até ${_dtBRc(R.ate)}`}${AGRO1.tal||AGRO1.faz?' neste filtro':''}. As fichas aparecem quando a operação é concluída no Campo (com baixa de produtos), o TS é marcado como feito ou uma recomendação avulsa é aprovada.</p>`;
+  else {
+    let talAtual=null;
+    lista.forEach(f=>{
+      if(f.talId!==talAtual){ talAtual=f.talId; const n=lista.filter(x=>x.talId===talAtual).length;
+        corpo+=`<h3 class="rel-uso-h rel-ap-tal">${esc(f.talNome)} <span>· ${num(areaDe(f.t))} ha${f.fazNome&&fazs.length>1?' · '+esc(f.fazNome):''} · ${n} aplicaç${n===1?'ão':'ões'}</span></h3>`; }
+      const lanc=agro1Lancada(f);
+      corpo+=`<div class="rel-ap-card${lanc?' lanc':''}">
+        <div class="rel-ap-hd"><b class="rel-ap-data">${_dtBRc(f.data)}</b><span class="pill rel-ap-tipo">${esc(f.tipo)}</span><b>${esc(f.op)}</b>${f.seq==='safrinha'?'<span class="mut">· 2ª safra</span>':''}<span class="mut">· ${esc(f.cultura||'—')}</span><span class="rel-ap-area">${num(f.area)} ha</span>${lanc?'<span class="pill pill-buy">✓ lançado</span>':''}</div>
+        ${agro1MetaTxt(f)?`<div class="rel-ap-meta">${agro1MetaTxt(f,'<i>·</i>')}</div>`:''}
+        <div class="table-wrap"><table class="cards-sm rel-uso-t rel-ap-t"><thead><tr><th>Tipo item</th><th>Item</th><th>Un.</th><th class="num">Área</th><th class="num">Dose/ha</th><th class="num">Total</th></tr></thead>
+          <tbody>${f.itens.map(i=>`<tr><td data-th="Tipo item">${esc(i.classe||'—')}</td><td class="c-full"><b>${esc(i.produto)}</b></td><td data-th="Un.">${esc(i.un||'—')}</td><td class="num" data-th="Área">${num(f.area)} ha</td><td class="num" data-th="Dose/ha">${f.area>0?fmtDose(i.dose):'—'} ${esc(i.un)}</td><td class="num" data-th="Total"><b>${fmtDose(i.qtd)}</b> ${esc(i.un)}</td></tr>`).join('')}</tbody></table></div></div>`;
+    });
+  }
+  const semData=R.semData.length?`<p class="rel-ap-aviso">⚠️ ${R.semData.length} aplicaç${R.semData.length===1?'ão':'ões'} sem data não entra${R.semData.length===1?'':'m'} em período nenhum: ${R.semData.map(f=>`<a class="link" href="#/campo/${encodeURIComponent(f.talId)}">${esc(f.talNome)} — ${esc(f.op)}</a>`).join(' · ')}. Informe a data da operação no Campo.</p>`:'';
+  return `<div class="panel" id="rel-ap"><div class="panel-head"><h2>Aplicações no período</h2><span class="sub">para lançar no Agro1 · uma ficha por operação, com os insumos daquela operação · data = data da aplicação</span></div>
+    <div class="rel-uso-top rel-ap-top"><label class="faz-wrap"><span>De</span><input type="date" class="cell" id="rel-ap-de" value="${esc(R.de)}" max="${esc(R.ate)}"></label><label class="faz-wrap"><span>Até</span><input type="date" class="cell" id="rel-ap-ate" value="${esc(R.ate)}" max="${hoje}"></label>${selFaz}${selTal}
+      <span class="spacer"></span><button class="btn btn-outline btn-sm" data-act="relApCsv"${lista.length?'':' disabled'}>⬇ CSV</button><button class="btn btn-outline btn-sm" data-act="relApPdf"${lista.length?'':' disabled'}>🖨 PDF</button></div>
+    <div class="rel-uso-kpis"><span><small>Aplicações</small>${lista.length}</span><span><small>Talhões</small>${nTal}</span><span><small>Área aplicada</small>${num(areaTot)} ha</span><span><small>Linhas de insumo</small>${nItens}</span><span><small>Período</small>${R.de?_dtBRc(R.de)+' a ':'até '}${_dtBRc(R.ate)}</span></div>
+    ${marca}${semData}${corpo}</div>`;
+}
+function exportAplicacoesCsv(){
+  const R=agro1Filtradas(); if(!R.lista.length){ toast('Nenhuma aplicação no período para exportar'); return; }
+  const cab=['Data','Fazenda','Talhão','Cultura','Área (ha)','Operação','Tipo','Operador','Máquina','Vazão (L/ha)','Tanque (L)','Nº tanques','Calda total (L)','Hora início','Hora fim','Estádio','Alvo','Etapa','Tipo item','Item','Un.','Dose/ha','Total','Lançado no Agro1','Observação'];
+  const linhas=[cab.map(_usoCsvEsc).join(';')];
+  R.lista.forEach(f=>f.itens.forEach(i=>linhas.push([_dtBRc(f.data), f.fazNome, f.talNome, f.cultura+(f.seq==='safrinha'?' (2ª safra)':''), nf2.format(f.area), f.op, f.tipo, f.operador, f.maq,
+    f.vazao?nf2.format(f.vazao):'', f.tanque?nf0.format(f.tanque):'', f.nT||'', f.caldaTotal?nf0.format(f.caldaTotal):'', f.hIni, f.hFim, f.estadio, f.alvo, f.etapa,
+    i.classe, i.produto, i.un, f.area>0?fmtDose(i.dose):'', fmtDose(i.qtd), agro1Lancada(f)?'sim':'não', f.obs].map(_usoCsvEsc).join(';'))));
+  download(`aplicacoes_${(R.de||'inicio').replace(/-/g,'')}_${R.ate.replace(/-/g,'')}.csv`, '﻿'+linhas.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado — uma linha por insumo, com os dados da operação repetidos');
+}
+function exportAplicacoesPDF(){
+  const R=agro1Filtradas(); if(!R.lista.length){ toast('Nenhuma aplicação no período para imprimir'); return; }
+  const fazs=fazendasLista(), filtro=[AGRO1.faz?fazendaNome(AGRO1.faz):'', AGRO1.tal?tNome(findTalhao(AGRO1.tal)):''].filter(Boolean).join(' · ');
+  let html=`<div class="pdf-head"><h1>Aplicações realizadas — ${R.de?`${_dtBRc(R.de)} a ${_dtBRc(R.ate)}`:`até ${_dtBRc(R.ate)}`}</h1><div class="meta">Para lançamento no Agro1 · uma ficha por operação com seus insumos · data = data da aplicação${filtro?' · '+esc(filtro):''} · gerado em ${fmtDataBR(_hojeISO())}</div></div>`;
+  let talAtual=null;
+  R.lista.forEach(f=>{
+    if(f.talId!==talAtual){ talAtual=f.talId; html+=`<h2>${esc(f.talNome)} <span class="mut2">— ${num(areaDe(f.t))} ha${fazs.length>1?' · '+esc(f.fazNome):''} · ${esc(empDe(f.t)||'—')}${temSafrinha(f.t)?` → ${esc(empSafDe(f.t))}`:''}</span></h2>`; }
+    html+=`<section class="rel-ap-pdf"><table class="pdf-kv"><tr><td><small>Data</small><b>${_dtBRc(f.data)}</b></td><td><small>Operação</small><b>${esc(f.op)}</b>${f.seq==='safrinha'?' (2ª safra)':''}</td><td><small>Tipo</small>${esc(f.tipo)}</td><td><small>Cultura</small>${esc(f.cultura||'—')}</td><td><small>Área</small><b>${num(f.area)} ha</b></td>${agro1Lancada(f)?'<td><small>Agro1</small>✓ lançado</td>':''}</tr></table>
+      ${agro1MetaTxt(f)?`<div class="meta">${agro1MetaTxt(f,' · ')}</div>`:''}
+      <table class="pdf-ops"><colgroup><col style="width:18%"><col style="width:40%"><col style="width:8%"><col style="width:11%"><col style="width:11%"><col style="width:12%"></colgroup>
+        <thead><tr><th>Tipo item</th><th>Item</th><th>Un.</th><th class="num">Área</th><th class="num">Dose/ha</th><th class="num">Total</th></tr></thead>
+        <tbody>${f.itens.map(i=>`<tr><td>${esc(i.classe||'—')}</td><td>${esc(i.produto)}</td><td>${esc(i.un||'—')}</td><td class="num">${num(f.area)} ha</td><td class="num">${f.area>0?fmtDose(i.dose):'—'}</td><td class="num"><b>${fmtDose(i.qtd)}</b> ${esc(i.un)}</td></tr>`).join('')}</tbody></table></section>`;
+  });
+  html+=`<div class="pdf-foot">${R.lista.length} aplicações · ${nf2.format(R.lista.reduce((s,f)=>s+f.area,0))} ha · quantidades = baixas aprovadas (operação concluída, TS feito ou recomendação avulsa aprovada). Dose/ha = total ÷ área aplicada.</div>`;
+  printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
+}
 V.relatorios = function(){
   const tals=talhoesAll(), ev=camposEventos();
   const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,apl:0,oper:0,ult:0});
@@ -9818,6 +9969,7 @@ V.relatorios = function(){
   return `
   <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
+  ${aplicacoesPeriodoHtml()}
   ${usoProdutosHtml()}
   <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
     <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Aplic.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
@@ -10868,6 +11020,10 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-af]')){ const f=afFormAtual(); if(f){ f[e.target.dataset.af]=e.target.value; route({keepScroll:true}); } return; }
   if(e.target.id==='est-saldo'){ estoqueSaldo=e.target.value; filterEstoque(); return; }
   if(e.target.id==='rel-uso-tal'){ relUsoTal=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
+  if(e.target.id==='rel-ap-de'||e.target.id==='rel-ap-ate'||e.target.id==='rel-ap-faz'||e.target.id==='rel-ap-tal'){   // relatório Agro1 (v271)
+    const k={'rel-ap-de':'de','rel-ap-ate':'ate','rel-ap-faz':'faz','rel-ap-tal':'tal'}[e.target.id]; AGRO1[k]=e.target.value||'';
+    if(k==='faz') AGRO1.tal=''; if((k==='de'||k==='ate') && AGRO1.de && AGRO1.ate && AGRO1.de>AGRO1.ate){ toast('A data "de" ficou depois do "até" — ajustei'); if(k==='de') AGRO1.ate=AGRO1.de; else AGRO1.de=AGRO1.ate; }
+    agro1Salvar(); setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.id==='oq-modo'){ oqModo=e.target.value==='op'?'op':'data'; try{ localStorage.setItem('planejamento_oq_modo',oqModo); }catch(err){} route({keepScroll:true}); return; }
   if(e.target.id==='ag-cult'){ AGROFIT.cultura=e.target.value; AGROFIT.lim=60; AGROFIT.limA=60; agrofitListaRefresh(); agrofitAlvosRefresh(); return; }
   if(e.target.id==='ag-outras'){ if(e.target.value){ AGROFIT.classe=e.target.value; AGROFIT.lim=60; } agrofitListaRefresh(); return; }
@@ -11243,6 +11399,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='bulaSalvar'){ bulaSalvar(); }
     else if(a.act==='bulaFechar'){ bulaFechar(); }
     else if(a.act==='bulaExcluir'){ bulaExcluir(); }
+    else if(a.act==='relApCsv'){ exportAplicacoesCsv(); }
+    else if(a.act==='relApPdf'){ exportAplicacoesPDF(); }
+    else if(a.act==='relApMarcar'){ const dia=a.dia||agro1Periodo().ate; if(ask(`Marcar como já lançado no Agro1 tudo o que foi aplicado até ${_dtBRc(dia)}? O próximo período começa em ${_dtBRc(agro1DiaSeguinte(dia))}.`)){ AGRO1.lancadoAte=dia; AGRO1.de=''; AGRO1.ate=''; agro1Salvar(); route({keepScroll:true}); toast(`Marcado: lançado até ${_dtBRc(dia)}`); } }
+    else if(a.act==='relApDesmarcar'){ AGRO1.lancadoAte=''; agro1Salvar(); route({keepScroll:true}); toast('Marca de "lançado" removida'); }
     else if(a.act==='relUsoCsv'){ exportUsoProdutosCsv(); }
     else if(a.act==='relUsoPdf'){ exportUsoProdutosPDF(); }
     else if(a.act==='relUsoTal'){ relUsoTal=a.id||''; route(); const el=document.getElementById('rel-uso'); if(el) el.scrollIntoView({block:'start'}); }
