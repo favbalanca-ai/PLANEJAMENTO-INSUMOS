@@ -71,6 +71,21 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Peças e serviços apropriados por máquina (v276)** — na conferência da NF-e cada item tem um terceiro caminho
+  além de "produto do app" e "ignorar": **🔧 Peça ou serviço → máquina**. O item não entra no estoque; vira uma
+  linha na aba **MANUTENÇÃO MÁQUINAS** (data, fornecedor, NF, máquina, tipo do gasto, item, quantidade, valor real
+  com frete e impostos, produtor). O app **reconhece** a nota de peças pelo nome do fornecedor (máquinas, peças,
+  implementos, serviços, oficina, pneus, posto…), pela descrição dos itens (filtro, óleo, rolamento, correia,
+  pneu, mão de obra, revisão, frete…), pelo CFOP de serviço/conserto e pela memória do de-para; mostra o aviso
+  "Parece nota de peças ou serviços" com o botão **Apropriar a nota inteira** (máquina da última compra desse
+  fornecedor já sugerida) e deixa trocar item a item (rádio Insumo × Peça/serviço, máquina com lista dos
+  conjuntos + "outro bem" digitável, tipo do gasto: peça, pneu, óleo, serviço, combustível, frete, outro).
+  O de-para memoriza destino, máquina e tipo (colunas DESTINO · MÁQUINA · TIPO GASTO). Nota só de peças gera o
+  título do Financeiro com categoria **Manutenção**. Tela **Máquinas** ganha o painel **🔧 Manutenção na safra**
+  (total por máquina, por tipo, lista e CSV) — só informação, o R$/ha das operações continua pelo R$/HM. Notas
+  **ignoradas** podem ser listadas em Compras ("Ver as N notas ignoradas") e reabertas com **Reabrir e conferir**.
+  Funções: `nfeDetectaPecas`, `nfeTipoMaqGuess`, `nfeMaqUltima`, `maqListaManut`, `nfeItemValor`, `manutPainelHtml`,
+  `exportManutCsv`, `nfeIgnoradasHtml`, `nfeReabrirConferir`.
 - **Livro Caixa Digital do Produtor Rural (v275, fase 4 do Financeiro)** — segmento **📒 Livro Caixa** no
   Financeiro: escolhe produtor e ano, mostra as **pendências** que travam a geração (com link para resolver), o
   **resumo mensal** (Q200) e os **lançamentos** (Q100, com filtro por mês), e gera o arquivo

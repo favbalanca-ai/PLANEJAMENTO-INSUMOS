@@ -113,6 +113,16 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Peças e serviços por máquina (v276)
+
+- Aba **MANUTENÇÃO MÁQUINAS** (ID · CHAVE · Nº · DATA · FORNECEDOR · CNPJ · MÁQUINA · TIPO · ITEM · QTD · UN · VALOR ·
+  PRODUTOR · OBS · ATUALIZADO): gravada dentro de `nfeClassifica_` a partir dos itens com `dest:'maquina'`
+  (`manutGrava_`, regrava a nota pela CHAVE; nota IGNORADA apaga). Vai ao app na chave `manutencao`
+  (Administrativo e Planejamento).
+- **DE-PARA NFE** ganha DESTINO (`estoque`/`maquina`) · MÁQUINA · TIPO GASTO; **NFE ITENS** ganha MÁQUINA.
+- O título da nota (`finTitulosDaNota_`) recebe a `categoria` enviada pelo app ("Manutenção" quando todos os
+  itens são peça/serviço).
+
 ## Financeiro: Livro Caixa (v275 — fase 4)
 
 - Colunas novas pelo cabeçalho: **PRODUTORES** (ENDEREÇO · NÚMERO · COMPLEMENTO · BAIRRO · UF · COD MUNICÍPIO · CEP ·
