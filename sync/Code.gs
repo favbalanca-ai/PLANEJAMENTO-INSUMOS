@@ -110,7 +110,7 @@ function readBase_(){
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
-  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao'];
+  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas'];
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600 };   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
@@ -119,7 +119,7 @@ var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:fun
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
   precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); }, config_app:function(){ return readConfigApp(); },
-  chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); }, manutencao:function(){ return readManutencao(); } };
+  chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); }, manutencao:function(){ return readManutencao(); }, vendas:function(){ return readVendas(); } };
 function readAppKeys_(keys){
   _LER_MEMO_ = {}; var out = {};
   try {
@@ -767,7 +767,7 @@ function nfeLerGs_(txt){
   return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
     nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
     cnpj:(_xt(emit,'CNPJ') || _xt(emit,'CPF')).replace(/\D/g,''), fornecedor:_xt(emit,'xNome'),
-    dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
+    dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
     ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length };
 }
 // texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
@@ -903,10 +903,13 @@ function processarXmlNfe(txt, origem){
   var row = _nfeLinha_(t, n.chave);
   if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()))   // mesma nota 2× não duplica
     return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' };
-  var fora = cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
+  // v277: VENDA DO PRODUTOR — nota emitida por um produtor cadastrado, ou contranota de ENTRADA (tpNF 0) do comprador com o produtor como destinatário
+  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0, vendaProd = emitProd || (n.tpNF === '0' && cfg.produtores.indexOf(n.dest) >= 0);
+  var fora = !vendaProd && cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
     'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora };
+  if (vendaProd){ vals['TIPO'] = 'VENDA PRODUTOR'; vals['PRODUTOR'] = emitProd ? n.cnpj : n.dest; vals['CNPJ EMITENTE'] = emitProd ? n.dest : n.cnpj; vals['FORNECEDOR'] = emitProd ? n.destNome : n.fornecedor; }   // FORNECEDOR/CNPJ = comprador
   var stRow = row ? S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase() : '';
   if (row && stRow === 'RECEBIDA SEM XML'){            // caminhão chegou antes do XML: a nota casa sozinha com o recebimento
     vals['STATUS'] = 'RECEBIDA'; vals['OBS'] = 'XML chegou depois do recebimento na fazenda — conferir de-para e custo';
@@ -914,7 +917,7 @@ function processarXmlNfe(txt, origem){
     return { status:'casada', chave:n.chave, motivo:vals['OBS'] }; }
   if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
   else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
-    vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
+    vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : vendaProd ? 'venda do produtor — conferir em Compras (Conferir venda)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
     row = _novaLinha_(t.s); }
   _setCells_(t, row, vals);
   return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '', dest:fora ? n.dest : '' };
@@ -1177,8 +1180,8 @@ var FIN_CP_KEYS = ['id','imovel','tipo','doc','nome','participacao','atualizado'
 var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO','SALDO INICIAL','DATA SALDO','PAÍS','NÚMERO BANCO'];   // v274: saldo inicial p/ o extrato · v275: 0050
 var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado','saldoInicial','dataSaldo','pais','numBanco'];
 var FIN_BAIXA_SHEET = 'BAIXAS';   // v274: cada pagamento/recebimento (o fato do caixa)
-var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO'];
-var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado'];
+var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO','COMPENSAÇÃO','REF'];   // v277: compensação de adiantamento (não é dinheiro)
+var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado','compensacao','ref'];
 var FIN_TIT_COLS = ['ID','TIPO','PRODUTOR','PARTICIPANTE','PARTICIPANTE NOME','DOC TIPO','DOC Nº','CHAVE','PARCELA','EMISSÃO','VENCIMENTO','VALOR','FORMA PGTO','CATEGORIA','IMÓVEL','STATUS','DATA PGTO','ORIGEM','OBS','ATUALIZADO','QUEM'];
 var FIN_TIT_KEYS = ['id','tipo','produtor','participante','participanteNome','docTipo','docNum','chave','parcela','emissao','vencimento','valor','formaPgto','categoria','imovel','status','dataPgto','origem','obs','atualizado','quem'];
 var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS], contraparte:[FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS] };
@@ -1283,7 +1286,7 @@ function finDupsGs_(txt){
 function finFormaPgto_(pag){ var ts = []; (pag || []).forEach(function(x){ var l = FIN_TPAG_[S(x.t)] || (x.t ? 'Código ' + x.t : ''); if (l && l !== 'Sem pagamento' && ts.indexOf(l) < 0) ts.push(l); }); return ts.join(' + '); }
 // títulos de UMA nota, a partir da linha da NFE RECEBIDAS + XML guardado no Drive (reserva: parcelas enviadas pelo app).
 // Idempotente: regrava os títulos ABERTOS da nota; os PAGOS/CANCELADOS ficam como estão.
-function finTitulosDaNota_(chave, dupsApp, pagApp, categoria){
+function finTitulosDaNota_(chave, dupsApp, pagApp, categoria, tipoTit){
   chave = S(chave); if (!/^\d{44}$/.test(chave)) return 0;
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return 0;
   var o = _rowObj(t, t.s.getRange(row, 1, 1, t.ncol).getValues()[0]), g = function(h){ return o[_hkey(h)]; };
@@ -1300,7 +1303,7 @@ function finTitulosDaNota_(chave, dupsApp, pagApp, categoria){
   tit.forEach(function(x){ if (S(x['CHAVE']) !== chave) return; var s = S(x['STATUS']).toUpperCase();
     if (s === 'ABERTO') abertos.push(x['__r']); else fechados[S(x['ID'])] = 1; });
   if (abertos.length) _delLinhas_(sheetCols_(FIN_TIT_SHEET, FIN_TIT_COLS).s, abertos);
-  var base = { tipo:'PAGAR', produtor:_doc_(g('PRODUTOR')), participante:S(g('CNPJ EMITENTE')), participanteNome:S(g('FORNECEDOR')), docTipo:'1 - Nota fiscal', docNum:S(g('Nº')) + (S(g('SÉRIE')) ? '/' + S(g('SÉRIE')) : ''),
+  var base = { tipo:S(tipoTit) === 'RECEBER' ? 'RECEBER' : 'PAGAR', produtor:_doc_(g('PRODUTOR')), participante:S(g('CNPJ EMITENTE')), participanteNome:S(g('FORNECEDOR')), docTipo:'1 - Nota fiscal', docNum:S(g('Nº')) + (S(g('SÉRIE')) ? '/' + S(g('SÉRIE')) : ''),
     chave:chave, emissao:emissao, formaPgto:forma, categoria:S(categoria) || 'Insumos', origem:(st === 'A ENTREGAR' || tipoNota === 'FATURAMENTO') ? 'contrato' : 'nfe', status:'ABERTO', quem:'nota' };
   var novos = [];
   dups.forEach(function(d, i){ var id = chave + '-' + (S(d.n) || String(i + 1)); if (fechados[id]) return;
@@ -1314,6 +1317,46 @@ function finCancelaTitulos_(chave, motivo){
   _ler_(FIN_TIT_SHEET, FIN_TIT_COLS).forEach(function(x){ if (S(x['CHAVE']) !== S(chave) || S(x['STATUS']).toUpperCase() !== 'ABERTO') return;
     _setCells_(t, x['__r'], { 'STATUS':'CANCELADO', 'OBS':S(motivo), 'ATUALIZADO':agora }); n++; });
   return n;
+}
+// ===== v277: VENDAS DO PRODUTOR (nota de venda emitida pelo produtor ou contranota do comprador) =====
+var VENDAS_SHEET = 'VENDAS';
+var VENDAS_COLS = ['ID','CHAVE','Nº','DATA','COMPRADOR','CNPJ','PRODUTOR','PRODUTO','CULTURA APP','SAFRA','QTD KG','SACAS 60','PREÇO/SC','VALOR','OBS','ATUALIZADO'];
+var VENDAS_KEYS = ['id','chave','nNF','data','comprador','cnpj','produtor','produto','cultura','safra','kg','sacas','precoSc','valor','obs','atualizado'];
+function readVendas(){ if (!sh(VENDAS_SHEET)) return []; return _ler_(VENDAS_SHEET, VENDAS_COLS).map(function(o){ var x = {}; VENDAS_KEYS.forEach(function(k, i){ var v = o[VENDAS_COLS[i]]; x[k] = (v instanceof Date) ? _fmtD(v) : (typeof v === 'number' ? v : S(v)); }); return x; }); }
+function vendasGrava_(chave, lista, cab){
+  chave = S(chave); var t = sheetCols_(VENDAS_SHEET, VENDAS_COLS), s = t.s, last = s.getLastRow();
+  if (last >= 2){ var v = s.getRange(2, t.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2); _delLinhas_(s, apagar); }
+  if (!lista || !lista.length) return 0; var agora = new Date();
+  return _appendRowsByHeader_(t, lista.map(function(m, k){ var sc = N(m.sacas) || (N(m.kg) / 60); return { 'ID':chave + '-' + S(m.n || k + 1), 'CHAVE':chave, 'Nº':S(cab.nNF), 'DATA':S(cab.data), 'COMPRADOR':S(cab.comprador), 'CNPJ':S(cab.cnpj), 'PRODUTOR':S(cab.produtor),
+    'PRODUTO':S(m.xprod), 'CULTURA APP':S(cab.cultura), 'SAFRA':S(cab.safra), 'QTD KG':N(m.kg), 'SACAS 60':Math.round(sc * 100) / 100, 'PREÇO/SC':sc > 0 ? Math.round(N(m.valor) / sc * 100) / 100 : '', 'VALOR':N(m.valor), 'OBS':S(m.obs), 'ATUALIZADO':agora }; }));
+}
+// confirma (ou desfaz) uma venda: status VENDA, aba VENDAS, títulos A RECEBER (parcelas) e compensações de adiantamento
+function nfeVenda_(p, acc){
+  var chave = S(p && p.chave); if (!/^\d{44}$/.test(chave)) return { rows:0, erro:'chave inválida' };
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return { rows:0, erro:'nota não encontrada' };
+  var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase(); if (st === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
+  var agora = new Date();
+  if (p.desfazer){ _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'TIPO':S(p.tipo) || 'OUTRA', 'OBS':'não é venda — voltou para compra' }); vendasGrava_(chave, [], {}); finCancelaTitulos_(chave, 'venda desfeita'); return { rows:1 }; }
+  var vals = { 'STATUS':'VENDA', 'TIPO':'VENDA PRODUTOR', 'CLASSIFICADA EM':agora };
+  if (S(p.comprador)) vals['FORNECEDOR'] = S(p.comprador); if (_doc_(p.cnpj)) vals['CNPJ EMITENTE'] = _doc_(p.cnpj); if (_doc_(p.produtor)) vals['PRODUTOR'] = _doc_(p.produtor);
+  _setCells_(t, row, vals);
+  var g = function(h){ return t.s.getRange(row, t.col(h) + 1).getValue(); };
+  var cab = { nNF:S(g('Nº')), data:_fmtD(g('EMISSÃO')), comprador:S(g('FORNECEDOR')), cnpj:S(g('CNPJ EMITENTE')), produtor:_doc_(g('PRODUTOR')), cultura:S(p.cultura), safra:S(p.safra) };
+  var n = vendasGrava_(chave, p.itens || [], cab);
+  try { finTitulosDaNota_(chave, p.dups, p.pag, 'Venda de grãos', 'RECEBER'); } catch (e) { Logger.log('títulos da venda ' + chave + ': ' + e); }
+  // compensação de adiantamento: baixa marcada (conta 999) nos títulos da venda, em ordem de vencimento; não é dinheiro novo (fica fora do Livro Caixa e do extrato)
+  var comp = (p.compensar || []).filter(function(c){ return N(c.valor) > 0 && S(c.ref); });
+  if (comp.length){ var _m = _LER_MEMO_; _LER_MEMO_ = null;
+    var abertos = _ler_(FIN_TIT_SHEET, FIN_TIT_COLS).filter(function(x){ return S(x['CHAVE']) === chave && S(x['STATUS']).toUpperCase() === 'ABERTO'; }).sort(function(a, b){ return S(_fmtD(a['VENCIMENTO'])).localeCompare(S(_fmtD(b['VENCIMENTO']))); });
+    var bx = _ler_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS), saldoT = {}; abertos.forEach(function(x){ saldoT[S(x['ID'])] = N(x['VALOR']); });
+    bx.forEach(function(b){ var id = S(b['TÍTULO']); if (saldoT[id] != null) saldoT[id] -= N(b['VALOR PAGO']) - N(b['JUROS']) + N(b['DESCONTO']); });
+    var baixas = [], hoje = Utilities.formatDate(agora, tz_(), 'yyyy-MM-dd');
+    comp.forEach(function(c){ var resta = N(c.valor);
+      abertos.forEach(function(x){ if (resta <= 0.004) return; var id = S(x['ID']), sd = saldoT[id] || 0; if (sd <= 0.004) return; var v = Math.min(sd, resta);
+        baixas.push({ titulo:id, produtor:cab.produtor, conta:'999', data:hoje, valorPago:Math.round(v * 100) / 100, juros:0, desconto:0, compensacao:'S', ref:S(c.ref), obs:'compensação de adiantamento ' + S(c.ref) + (c.obs ? ' · ' + S(c.obs) : '') });
+        saldoT[id] = sd - v; resta -= v; }); });
+    _LER_MEMO_ = _m; if (baixas.length) baixaGrava_({ baixas:baixas }, acc); }
+  return { rows:n + 1 };
 }
 // ---- FASE 5: divergências na conferência (aba PENDÊNCIAS RECEBIMENTO) ----
 var NFE_PEND_SHEET = 'PENDÊNCIAS RECEBIMENTO';
@@ -1942,16 +1985,16 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao'],
-  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas'],
   precos:['precos_app','bulas_app'],
-  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao'],
+  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
   __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
-  __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
+  __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
   plantio:['campo','planejamento'], plantio_safrinha:['campo','planejamento'], dae:['campo','planejamento'], ciclo:['campo','planejamento'], ciclo_safrinha:['campo','planejamento'] };
@@ -2105,12 +2148,12 @@ function cachePutK_(pfx, str, ttl){
 function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; } catch (e) { return ''; } }
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
-var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao'];   // financeiro: classificar/cancelar nota mexe nos títulos
+var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao','vendas'];   // financeiro: classificar/cancelar nota mexe nos títulos
 var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
 var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
-  __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_,
+  __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
   __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro'], __baixa:['financeiro'], __finArquivo:[] };
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
@@ -2351,13 +2394,14 @@ function gravaUm_(payload, acc, cfg, out){
     } else if (payload && payload.__cadFin){        // cadastros do financeiro (produtores, imóveis, contas) — só ADMIN quando há login
       if (acc && acc.u && !acc.admin){ out.fail = 1; out.msgs.push('só administrador'); }
       else { var cg = cadFinGrava_(payload.__cadFin); out.ok = cg.rows; if (cg.erro){ out.fail = 1; out.msgs.push(cg.erro); } }
-    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto || payload.__nfeReabrir || payload.__nfeProdutor)){   // NF-e: exigem o token
+    } else if (payload && (payload.__nfeClassifica || payload.__nfeUpload || payload.__recebimento || payload.__pendencia || payload.__nfeFoto || payload.__nfeReabrir || payload.__nfeProdutor || payload.__nfeVenda)){   // NF-e: exigem o token
       if (!nfeTokenOk_(payload.token) && !(_ACC_ && _ACC_.u)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
       else if (payload.__recebimento){ var rb = nfeRecebimento_(payload.__recebimento); out.ok = rb.rows; if (rb.erro){ out.fail = 1; out.msgs.push(rb.erro); } }
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
       else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
       else if (payload.__nfeProdutor){ var np = nfeAddProdutor_(payload.__nfeProdutor); out.ok = np.rows; if (np.erro){ out.fail = 1; out.msgs.push(np.erro); } }
       else if (payload.__nfeReabrir){ var ra = nfeReabrir_(payload.__nfeReabrir); out.ok = ra.rows; if (ra.erro){ out.fail = 1; out.msgs.push(ra.erro); } }
+      else if (payload.__nfeVenda){ var vd = nfeVenda_(payload.__nfeVenda, acc); out.ok = vd.rows; if (vd.erro){ out.fail = 1; out.msgs.push(vd.erro); } }   // v277
       else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
       else if (payload.__nfeUpload){ out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; }   // (a trava do doPost já protege)
     } else if (payload && payload.__nfeDepara){        // NF-e: memória de-para (CNPJ + código do produto -> produto do app)

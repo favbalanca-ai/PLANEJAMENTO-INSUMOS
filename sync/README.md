@@ -113,6 +113,21 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Venda de grãos do produtor (v277 — fase 5)
+
+- `nfeLerGs_` lê também `tpNF` e o nome do destinatário. Em `processarXmlNfe`, nota emitida por um produtor da
+  `CONFIG NFE`, ou contranota de entrada (`tpNF` 0) com o produtor como destinatário, recebe TIPO
+  **VENDA PRODUTOR** (comprador em FORNECEDOR / CNPJ EMITENTE, produtor em PRODUTOR) e não cai em IGNORADA.
+- Aba nova **VENDAS** (ID · CHAVE · Nº · DATA · COMPRADOR · CNPJ · PRODUTOR · PRODUTO · CULTURA APP · SAFRA · QTD KG ·
+  SACAS 60 · PREÇO/SC · VALOR · OBS · ATUALIZADO), gravada por `__nfeVenda` (`nfeVenda_` → `vendasGrava_`, regrava
+  pela CHAVE). Vai ao app na chave `vendas` (Administrativo, Planejamento e Campo).
+- `__nfeVenda` também muda o STATUS para **VENDA**, gera os títulos **A RECEBER** (`finTitulosDaNota_` com o novo
+  parâmetro `tipoTit`, categoria "Venda de grãos") e grava as **compensações de adiantamento**: baixas na conta
+  999 com as colunas novas **COMPENSAÇÃO** (S) e **REF** (título do adiantamento) na aba BAIXAS, aplicadas às
+  parcelas da venda em ordem de vencimento. `desfazer:true` volta a nota para A CLASSIFICAR, apaga as linhas da
+  VENDAS e cancela os títulos em aberto.
+- Permissão: `__nfeVenda` só ADMIN; invalida o pacote NF-e + `vendas`.
+
 ## Peças e serviços por máquina (v276)
 
 - Aba **MANUTENÇÃO MÁQUINAS** (ID · CHAVE · Nº · DATA · FORNECEDOR · CNPJ · MÁQUINA · TIPO · ITEM · QTD · UN · VALOR ·
