@@ -229,7 +229,9 @@ Seguir o padrão existente (`__nome` no `doPost`). Nomes propostos:
 | `doPost {__finArquivo:{nome, mime, b64}}` | Comprovante da baixa (JPEG/PDF) para a pasta Financeiro/Comprovantes no Drive (v274) |
 
 Na classificação (`__nfeClassifica`), a planilha também gera os títulos da nota a partir das parcelas do XML
-(`cobr/dup`); o app manda `dups` e `pag` como reserva.
+(`cobr/dup`); o app manda `dups` e `pag` como reserva. Itens com `dest:'maquina'` (peça/serviço, com `maq`,
+`tipoMaq` e `valor`) não entram no estoque: vão para a aba `MANUTENÇÃO MÁQUINAS` (v276), e `categoria:'Manutenção'`
+marca o título quando a nota é só de peças/serviços.
 
 Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 

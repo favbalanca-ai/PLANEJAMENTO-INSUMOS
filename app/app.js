@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-275';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-276';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1739,15 +1739,37 @@ function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(
 // ---- estado de cada item na conferência ----
 function nfeItemInicial(nota,it){
   const dp=deparaDe(nota.cnpj,it.cprod);
+  if(dp && dp.destino==='maquina') return Object.assign({},it,{fonte:'auto',produto:'',ignorar:false,fator:1,ok:true,dest:'maquina',maq:dp.maquina||nfeMaqUltima(nota.cnpj),tipoMaq:dp.tipoGasto||nfeTipoMaqGuess(it.xprod)});   // v276: memória "peça/serviço → máquina"
+  const det=nfeDetectaPecas(nota), idx=(nota.itens||[]).indexOf(it), sugP=nfeSugereProduto(it.xprod), pecaSug=det.itens[idx]||(det.forn&&!sugP&&!(dp&&PROD[dp.produto]));   // fornecedor de peças: item que não parece insumo conhecido vai para máquina
   if(dp && (dp.ignorar || PROD[dp.produto])){ let fat=+dp.fator||1;
     if(!dp.ignorar && fat===1 && semPorUn((PROD[dp.produto]||{}).un)) fat=nfeFatorDe(it.xprod,it.ucom,PROD[dp.produto].un);   // semente gravada com fator 1 (antes contava embalagem de 200 mil como bag de 5 milhões)
     return Object.assign({},it,{fonte:'auto',produto:dp.ignorar?'':dp.produto,ignorar:!!dp.ignorar,fator:fat,ok:true}); }
-  const sug=nfeSugereProduto(it.xprod);
-  if(sug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
+  const sug=sugP;
+  if(sug && !pecaSug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
+  if(pecaSug) return Object.assign({},it,{fonte:'sug',produto:'',fator:1,ignorar:false,ok:false,dest:'maquina',maq:nfeMaqUltima(nota.cnpj),tipoMaq:nfeTipoMaqGuess(it.xprod)});   // v276: parece peça/serviço
   return Object.assign({},it,{fonte:'novo',produto:'',fator:nfeFatorDe(it.xprod,it.ucom,''),ignorar:false,ok:false}); }
-function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':'ok'; return it.fonte==='sug'?'sug':'novo'; }
-function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || ((s==='auto'||s==='ok') && +it.fator>0); }
-const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫']};
+function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(it.dest==='maquina') return String(it.maq||'').trim()?'maq':'maqsug'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':'ok'; return it.fonte==='sug'?'sug':'novo'; }
+function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || s==='maq' || ((s==='auto'||s==='ok') && +it.fator>0); }
+const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫'],maq:['Máquina','🔧'],maqsug:['Máquina?','🔧']};
+// ===== v276: peças e serviços apropriados por máquina (não entram no estoque; vão para a aba MANUTENÇÃO MÁQUINAS) =====
+const MANUT_TIPOS=['Peça','Pneu','Óleo/lubrificante','Serviço/mão de obra','Combustível','Frete','Outro'];
+const _RX_FORN_PECAS=/M[AÁ]QUINA|PE[CÇ]AS?\b|IMPLEMENTO|SERVI[CÇ]O|OFICINA|PNEU|AUTO ?PE|TRATOR|MEC[AÂ]NIC|RETIFIC|RET[IÍ]FICA|FERRAGEM|FERRAMENT|LUBRIFIC|POSTO|COMBUST|DIESEL|BORRACH|HIDR[AÁ]ULIC|EL[EÉ]TRIC|SOLDA|TORNEAR/i;
+const _RX_ITEM_PECAS=/\b(filtro|[oó]leo|lubrif|graxa|rolamento|correia|pneu|c[aâ]mara|parafuso|porca|arruela|mangueira|bico|pastilha|lona|freio|bateria|l[aâ]mpada|farol|retentor|junta|veda[cç]|bomba|pist[aã]o|cilindro|embreagem|disco|haste|mola|pino|bucha|eixo|engrenagem|rolo|corrente|faca|navalha|l[aâ]mina|dente|ponteira|enxada|servi[cç]o|m[aã]o de obra|revis|hora t[eé]cnica|conserto|reparo|manuten|solda|torno|frete|deslocamento|diesel|arla|gasolina|hidr[aá]ulic|terminal|cabo|rel[eé]|fus[ií]vel|sensor|v[aá]lvula|radiador|turbina|injetor|pist[aã]o|cubo|roda|aro)\b/i;
+const _RX_CFOP_SERV=/^(5933|6933|5915|6915|5916|6916|5949|6949)$/;
+function nfeTipoMaqGuess(xprod){ const x=String(xprod||''); if(/pneu|c[aâ]mara/i.test(x)) return 'Pneu'; if(/filtro|elemento/i.test(x)) return 'Peça'; if(/[oó]leo|lubrif|graxa|fluido|arla/i.test(x)) return /arla|diesel/i.test(x)?'Combustível':'Óleo/lubrificante'; if(/diesel|gasolina|etanol|combust/i.test(x)) return 'Combustível'; if(/frete|deslocamento/i.test(x)) return 'Frete'; if(/servi[cç]o|m[aã]o de obra|revis|hora t[eé]cnica|conserto|reparo|manuten|solda|torno/i.test(x)) return 'Serviço/mão de obra'; return 'Peça'; }
+// a nota parece de peças/serviços? pelo fornecedor (nome ou memória), pelos itens e pelo CFOP
+function nfeDetectaPecas(n){ const cnpj=n.cnpj||'', mem=Object.values(Object.assign({}, (DATA&&DATA.depara_nfe)||{}, deparaLocal())).filter(d=>d.cnpj===cnpj);
+  const fornMem=mem.length&&mem.filter(d=>d.destino==='maquina').length>mem.filter(d=>d.destino!=='maquina'&&d.produto).length;
+  const forn=_RX_FORN_PECAS.test(n.fornecedor||'')||fornMem;
+  const itens=(n.itens||[]).map(it=>_RX_ITEM_PECAS.test(it.xprod||'')||_RX_CFOP_SERV.test(String(it.cfop||'')));
+  const nItem=itens.filter(Boolean).length, nota=forn||(n.itens&&n.itens.length&&nItem>=Math.ceil(n.itens.length/2));
+  return {nota, forn, itens, nItem}; }
+// última máquina usada com este fornecedor (memória do de-para)
+function nfeMaqUltima(cnpj){ const L=Object.values(Object.assign({}, (DATA&&DATA.depara_nfe)||{}, deparaLocal())).filter(d=>d.cnpj===cnpj&&d.destino==='maquina'&&d.maquina).sort((a,b)=>(+b._u||0)-(+a._u||0)||String(b.data||'').localeCompare(String(a.data||''))); return L.length?L[0].maquina:''; }
+// máquinas para apropriar: máquinas e implementos dos conjuntos + bens já usados na manutenção (+ "outro bem" digitável)
+function maqListaManut(){ const set=new Set(); maquinasAll().forEach(m=>{ if(m.maquina) set.add(String(m.maquina).trim()); if(m.implemento) set.add(String(m.implemento).trim()); });
+  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina) set.add(String(r.maquina).trim()); }); set.delete(''); return [...set].sort((a,b)=>a.localeCompare(b,'pt')); }
+const nfeItemValor=it=>+(((+it.vprod||0)-(+it.vdesc||0)+(+it.vfrete||0)+(+it.voutro||0)+(+it.vipi||0)+(+it.vst||0)).toFixed(2));
 async function nfeImportarArquivo(file){
   // foto/câmera: nesta fase o app lê o ARQUIVO XML da nota, não o código de barras do DANFE (leitura pela câmera = fase 4)
   if(/^image\//i.test(file.type||'') || /\.(jpe?g|png|heic|heif|webp|gif|bmp)$/i.test(file.name||'')){
@@ -1855,6 +1877,17 @@ async function nfeAddProdutor(doc){
     toast(`Produtor cadastrado${r&&r.ok?` — ${r.ok} nota(s) voltaram para classificar`:''}`); await nfeListaCarregar(true); }
   catch(e){ toast('Não deu para cadastrar: '+(e.message||e)+' (confira se colou o Code.gs novo)'); }
 }
+let NFE_IGN=null;   // notas ignoradas (carregadas sob demanda) — v276: "Reabrir e conferir" para apropriar peças/serviços
+async function nfeIgnoradasCarregar(){ NFE_IGN={carregando:true}; route({keepScroll:true});
+  try{ const d=await nfeGet({acao:'nfe_lista', status:'IGNORADA'}); NFE_IGN={notas:(d&&d.ok&&d.notas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):''}; }catch(e){ NFE_IGN={notas:[], erro:'sem conexão com a planilha'}; }
+  route({keepScroll:true}); }
+function nfeIgnoradasHtml(L){ const n=(L.contagem||{})['IGNORADA']||0; if(!n&&!NFE_IGN) return '';
+  if(!NFE_IGN) return `<div class="nfe-ign-box"><a class="link" data-act="nfeIgnVer">📂 Ver as ${n} nota(s) ignoradas</a> <span class="mut">— dá para reabrir e apropriar peças/serviços a uma máquina</span></div>`;
+  if(NFE_IGN.carregando) return `<div class="nfe-ign-box mut">carregando ignoradas…</div>`;
+  const rows=(NFE_IGN.notas||[]).map(nt=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(nt.tipo)}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span><div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b>${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
+      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeReabrirConferir" data-chave="${esc(nt.chave)}" title="Volta a nota para 'a classificar' e abre a conferência">Reabrir e conferir</button></div></div>`).join('');
+  return `<div class="nfe-ign-box"><b>📂 Ignoradas</b> <span class="mut">(${(NFE_IGN.notas||[]).length})</span> <a class="link" data-act="nfeIgnVer" style="margin-left:8px">atualizar</a>${NFE_IGN.erro?`<div class="nfe-aviso err">${esc(NFE_IGN.erro)}</div>`:''}${rows||'<div class="mut">Nenhuma.</div>'}</div>`; }
+async function nfeReabrirConferir(chave){ await nfeReabrir(chave); NFE_IGN=null; nfeConferirServidor(chave); }
 async function nfeReabrir(chave){
   try{ const r=await nfePost({__nfeReabrir:{chave}}); if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')||'falha');
     toast('Nota voltou para "a classificar"'); await nfeListaCarregar(true); }
@@ -1946,6 +1979,7 @@ function nfeListaHtml(){
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(c)}
     ${rows||vazio}
+    ${nfeIgnoradasHtml(L)}
     ${nfeRecebidasHtml()}
     ${nfeHistoricoHtml(L)}</div>`;
 }
@@ -1954,11 +1988,13 @@ function nfeListaHtml(){
 function nfeCustoItem(imp,i){ if(imp.nota.tipo==='REMESSA'){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref), it=c&&c.itens.find(x=>x.produto===i.produto);
     if(it && it.custo>0) return it.custo; }
   return nfeCustoReal(i,i.fator); }
-function nfeItensPayload(imp){ return imp.itens.map(i=>({n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:i.ignorar?'':i.produto, fator:+i.fator||1,
-  qtd:i.ignorar?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:(PROD[i.produto]||{}).un||'', custo:i.ignorar?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar})); }
+function nfeItensPayload(imp){ return imp.itens.map(i=>{ const mq=!i.ignorar&&i.dest==='maquina'; return {n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:(i.ignorar||mq)?'':i.produto, fator:mq?1:(+i.fator||1),
+  qtd:(i.ignorar||mq)?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:mq?'':((PROD[i.produto]||{}).un||''), custo:(i.ignorar||mq)?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar,
+  dest:mq?'maquina':'estoque', maq:mq?String(i.maq||'').trim():'', tipoMaq:mq?(i.tipoMaq||'Peça'):'', valor:mq?nfeItemValor(i):0}; }); }   // v276: dest/maq/tipoMaq/valor
 function nfeSalvarDePara(imp){ if(!imp.lembrar) return; const n=imp.nota, L=deparaLocal(), now=Date.now();
-  imp.itens.forEach(i=>{ L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:i.ignorar?'':i.produto, fator:+i.fator||1, ignorar:!!i.ignorar,
-    custo:(i.ignorar||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:tsAgora()}; });   // remessa não mexe no último custo
+  imp.itens.forEach(i=>{ const mq=!i.ignorar&&i.dest==='maquina'; L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:(i.ignorar||mq)?'':i.produto, fator:mq?1:(+i.fator||1), ignorar:!!i.ignorar,
+    custo:(i.ignorar||mq||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:tsAgora(),
+    destino:mq?'maquina':(i.ignorar?'':'estoque'), maquina:mq?String(i.maq||'').trim():'', tipoGasto:mq?(i.tipoMaq||'Peça'):''}; });   // remessa não mexe no último custo · v276: destino máquina
   saveDeParaLocal(); }
 // modo: 'entrada' (já chegou: entrada direta, RECEBIDA) · 'transito' (venda/remessa: EM TRÂNSITO, entra ao receber na fazenda)
 //       'contrato' (faturamento de entrega futura: A ENTREGAR)
@@ -1971,8 +2007,10 @@ function nfeConfirmar(modo){
   if(imp.reclass && modo!=='entrada'){ toast('Reclassificar só regrava a entrada'); return; }
   const ja=imp.reclass?'':nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
   if(n.tipo==='OUTRA' && !confirm(`Esta nota não é de venda nem de remessa (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}).\nEx.: bonificação, devolução, remessa para conserto.\n\nContinuar mesmo assim?`)) return;
-  const itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&i.produto);
-  if(!usados.length){ toast('Todos os itens estão marcados como Ignorar — nada a registrar'); return; }
+  const itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&i.dest!=='maquina'&&i.produto), manut=itensP.filter(i=>!i.ignorar&&i.dest==='maquina');   // v276
+  if(!usados.length&&!manut.length){ toast('Todos os itens estão marcados como Ignorar — nada a registrar'); return; }
+  if(manut.length&&!srv){ toast('Peças e serviços por máquina precisam da NF-e ligada à planilha (token + Code.gs novo)'); return; }
+  if(manut.length&&!usados.length&&modo!=='entrada'&&modo!=='contrato') modo='entrada';   // nota só de peças/serviços: nada para esperar na fazenda
   if(n.tipo==='REMESSA' && modo!=='entrada' && !imp.ref && !confirm('Esta remessa não está ligada a nenhum contrato (faturamento).\nO saldo "a entregar" do contrato não vai baixar.\n\nContinuar sem vincular?')) return;
   if(n.tipo==='REMESSA' && imp.ref){ const exc=nfeRemessaExcesso(imp); if(exc.length && !confirm('⚠ Remessa maior que o saldo do contrato:\n'+exc.join('\n')+'\n\nContinuar mesmo assim?')) return; }
   // faturamento: produto com EM PEDIDO manual → abater (o contrato passa a contar como "a entregar")
@@ -1981,7 +2019,7 @@ function nfeConfirmar(modo){
       ped.forEach(i=>{ const v=Math.max(0, pedidoDe(i.produto)-i.qtd); if(v>0) OV.pedido[i.produto]=+v.toFixed(4); else OV.pedido[i.produto]=0; });
       saveOverrides(); try{ scheduleAutoPush(); }catch(e){} } }
   let rec=null;
-  if(modo==='entrada'){
+  if(modo==='entrada'&&usados.length){
     const itens=usados.map(i=>({produto:i.produto, un:i.un, qtd:i.qtd, preco:i.custo}));
     rec={ id:n.chave, fornecedor:n.fornecedor, data:imp.data||_hojeISO(), nf:`${n.nNF}/${n.serie}`,
       obs:`NF-e emitida em ${fmtDataBR(n.emissao)}${n.tipo!=='VENDA'?' · '+NFE_TIPO[n.tipo]:''}`, itens, pushed:false, ts:Date.now(),
@@ -1997,13 +2035,14 @@ function nfeConfirmar(modo){
   nfeSalvarDePara(imp);
   if(srv){
     const cl={chave:n.chave, status:modo==='entrada'?'RECEBIDA':(modo==='contrato'?'A ENTREGAR':'EM TRÂNSITO'), data:imp.data||_hojeISO(), por:'app',
-      xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP, dups:n.dups||[], pag:n.pag||[]};   // dups/pag: reserva p/ os títulos quando a planilha não tem o XML (v273)
+      xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP, dups:n.dups||[], pag:n.pag||[], categoria:(manut.length&&!usados.length)?'Manutenção':''};   // dups/pag: reserva p/ os títulos (v273) · categoria Manutenção quando só peças/serviços (v276)
     if(n.tipo==='REMESSA') cl.ref=imp.ref||'';
     (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
     if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
     NFE_CONTRATOS=null;
   }
   nfeImport=null; route(); updateEditBadge();
+  if(manut.length) toast(`${manut.length} item(ns) apropriado(s) a máquina (${brl(manut.reduce((s,i)=>s+i.valor,0))}) — veja em Máquinas`);
   toast(imp.reclass?`Entrada da NF-e ${n.nNF} regravada: ${usados.length} produto(s) (a anterior foi substituída)`:modo==='entrada'?`Entrada da NF-e ${n.nNF} registrada: ${usados.length} produto(s)`:modo==='contrato'?`Contrato da NF-e ${n.nNF} registrado — ${usados.length} produto(s) a entregar`:`NF-e ${n.nNF} em trânsito — dá entrada ao receber na fazenda`);
   if(rec && !imp.reclass) pedidoAbater(rec.itens);   // chegou: abate o "em pedido" (regravação não abate de novo)
   if(rec) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
@@ -2047,13 +2086,23 @@ function nfeConferirHtml(){
     : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`:'';
   const reclass=imp.reclass?`<div class="nfe-aviso warn">♻️ <b>Reclassificando</b> — esta nota já deu entrada${imp.reclass.data?` em <b>${esc(fmtDataBR(imp.reclass.data))}</b>`:''}. Corrija o produto ou o <b>fator</b> e confirme: a entrada anterior é <b>substituída</b> (estoque, razão e de-para) — nada duplica.</div>`:'';
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
+  const det=nfeDetectaPecas(n), nMaq=imp.itens.filter(i=>i.dest==='maquina'&&!i.ignorar).length, maqAll=nfeMaqUltima(n.cnpj);   // v276
+  const pecas=(det.nota||nMaq)?`<div class="nfe-aviso ${det.nota?'warn':'info'} nfe-pecas">🔧 <b>${det.nota?'Parece nota de peças ou serviços':'Itens apropriados a máquina'}</b>${det.nota?` (${det.forn?'pelo fornecedor':''}${det.forn&&det.nItem?' e ':''}${det.nItem?`${det.nItem} item(ns) com cara de peça/serviço`:''}).`:'.'} ${nMaq?`<b>${nMaq}</b> item(ns) vão para a aba Máquinas, sem entrar no estoque.`:''}
+      <div class="nfe-pecas-all"><input list="maqlist" class="txt" id="nfe-maq-all" value="${esc(maqAll)}" placeholder="máquina ou bem"><button class="btn btn-primary btn-sm" data-act="nfeMaqTodos">🔧 Apropriar a nota inteira</button>${nMaq?`<button class="btn btn-outline btn-sm" data-act="nfeMaqNenhum">Voltar tudo para insumo</button>`:''}</div>
+      ${!nfeServerOk()?'<div class="mut" style="margin-top:4px">Peças e serviços por máquina precisam da NF-e ligada à planilha (token + Code.gs).</div>':''}</div>`:'';
+  const maqList=`<datalist id="maqlist">${maqListaManut().map(m=>`<option value="${esc(m)}">`).join('')}</datalist>`;
   const cards=imp.itens.map((it,i)=>{ const st=nfeItemStatus(it), [lbl,ico]=NFE_ST[st], q=(+it.qcom||0)*(+it.fator||0), c=nfeCustoItem(imp,it), ref=precoDe(it.produto);
     const dif=(ref>0&&c>0)?(c/ref-1)*100:null;
     const extras=[it.vdesc?`desc. −${brl(it.vdesc)}`:'', it.vfrete?`frete ${brl(it.vfrete)}`:'', it.voutro?`outras ${brl(it.voutro)}`:'', it.vipi?`IPI ${brl(it.vipi)}`:'', it.vst?`ICMS-ST ${brl(it.vst)}`:''].filter(Boolean).join(' · ');
     return `<div class="nfe-it st-${st}">
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
       <div class="nfe-it-sub">cód. ${esc(it.cprod)} · CFOP ${esc(it.cfop)} · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
-      ${it.ignorar?'':`<div class="nfe-it-map">
+      ${it.ignorar?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${it.dest!=='maquina'?' checked':''}> 📦 Insumo (entra no estoque)</label><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="maquina"${it.dest==='maquina'?' checked':''}> 🔧 Peça ou serviço → máquina</label></div>`}
+      ${it.ignorar?'':it.dest==='maquina'?`<div class="nfe-it-map nfe-it-maq">
+        <label class="nfe-prod">Máquina ou bem<input list="maqlist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="trator, pulverizador, caminhonete, outro bem…"></label>
+        <label>Tipo do gasto<select class="sel" data-nfi="tipoMaq" data-i="${i}">${MANUT_TIPOS.map(x=>`<option${x===(it.tipoMaq||'Peça')?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+        <div class="nfe-kv"><small>Custo apropriado</small><b>${brl(nfeItemValor(it))}</b><span>não entra no estoque · vai para Máquinas</span></div>
+      </div>`:`<div class="nfe-it-map">
         <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button><button type="button" class="btn btn-outline btn-sm" data-act="nfiNovo" data-i="${i}" title="Cadastrar este item como produto novo no portfólio">➕</button></span></label>
         <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
         <div class="nfe-kv"><small>Entra no estoque</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
@@ -2061,7 +2110,7 @@ function nfeConferirHtml(){
       </div>`}
       ${st==='novo'&&it.catSug?`<div class="nfe-catsug">🏛️ Catálogo MAPA sugere: <b>${esc(it.catSug.marca)}</b> <span class="ag-cl">${esc(it.catSug.classe)}</span> <button class="btn btn-outline btn-sm" data-act="nfiMapaUsar" data-i="${i}" title="Usa este produto (e cadastra no portfólio se faltar)">✓ Usar</button></div>`:''}
       <div class="nfe-it-act">${st==='sug'?`<button class="btn btn-outline btn-sm" data-act="nfeAceitar" data-i="${i}">✓ Aceitar sugestão</button>`:''}
-        <label class="nfe-ign"><input type="checkbox" data-nfi="ignorar" data-i="${i}"${it.ignorar?' checked':''}> Ignorar (não é insumo: palete, frete, peça…)</label></div>
+        <label class="nfe-ign"><input type="checkbox" data-nfi="ignorar" data-i="${i}"${it.ignorar?' checked':''}> Ignorar (palete, embalagem, brinde…)</label></div>
     </div>`; }).join('');
   return `<div class="panel nfe-panel"><div class="panel-head"><h2>📄 Conferir NF-e</h2><span class="sub">${esc(imp.arquivo)}</span></div>
     <div class="nfe-head">
@@ -2072,7 +2121,7 @@ function nfeConferirHtml(){
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
-    ${reclass}${aviso}${semSrv}
+    ${reclass}${aviso}${semSrv}${pecas}${maqList}
     <div class="nfe-itens">${cards}</div>
     <div class="nfe-foot">
       <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>
@@ -3656,6 +3705,23 @@ V.precos = function(){
   <p class="mut" style="font-size:12px">Duas formas de definir o preço: <b>(1) direto</b> — digite o <b>Preço à vista/a prazo</b> de cada produto (o que você recebe pronto na cotação); ou <b>(2) composto</b> — cadastre a <b>referência por classe</b> e o <b>%</b> de cada produto (o preço aparece sozinho). Se o campo de preço estiver preenchido, ele <b>manda</b>; senão, usa o composto. Tudo é salvo por <b>safra</b>.<br>💡 Se você tinha digitado o <b>preço no campo de %</b>, clique em <b>“↦ usar % como preço”</b> para mover tudo de uma vez.</p>`;
 };
 
+// ---- v276: manutenção (peças/serviços das notas) por máquina — só informação; o R$/ha das operações continua pelo R$/HM ----
+function manutLista(){ return ((DATA&&DATA.manutencao)||[]).slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))); }
+function manutPainelHtml(){ const L=manutLista(); if(!L.length) return '';
+  const porMaq={}, porTipo={}; let tot=0; L.forEach(r=>{ const v=+r.valor||0; tot+=v; porMaq[r.maquina||'—']=(porMaq[r.maquina||'—']||0)+v; porTipo[r.tipo||'Outro']=(porTipo[r.tipo||'Outro']||0)+v; });
+  const maqs=Object.keys(porMaq).sort((a,b)=>porMaq[b]-porMaq[a]), tipos=Object.keys(porTipo).sort((a,b)=>porTipo[b]-porTipo[a]);
+  const ult=L.slice(0,40);
+  return `<div class="panel" id="manut"><div class="panel-head"><h2>🔧 Manutenção na safra</h2><span class="sub">peças, pneus, óleo, serviços e frete apropriados por máquina nas notas (Compras → conferir NF-e) · ${brl0(tot)} em ${L.length} item(ns)</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="manutCsv">⬇ CSV</button></div>
+    <div class="rel-uso-kpis">${maqs.slice(0,6).map(m=>`<span><small>${esc(m)}</small>${brl0(porMaq[m])}</span>`).join('')}</div>
+    <div class="manut-tipos">${tipos.map(t=>`<span class="pill">${esc(t)} <b>${brl0(porTipo[t])}</b></span>`).join('')}</div>
+    <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Data</th><th>Máquina</th><th>Item</th><th>Tipo</th><th>Fornecedor · NF</th><th class="num">Valor</th></tr></thead>
+      <tbody>${ult.map(r=>`<tr><td class="num" data-th="Data">${r.data?_dtBRc(r.data):'—'}</td><td data-th="Máquina"><b>${esc(r.maquina||'—')}</b></td><td class="c-full">${esc(r.item||'')}${+r.qtd?` <span class="mut">· ${num(+r.qtd)} ${esc(r.un||'')}</span>`:''}</td><td data-th="Tipo">${esc(r.tipo||'—')}</td><td data-th="Fornecedor · NF">${esc(r.fornecedor||'—')}${r.nNF?` <span class="mut">· NF ${esc(r.nNF)}</span>`:''}</td><td class="num" data-th="Valor"><b>${brl(+r.valor||0)}</b></td></tr>`).join('')}</tbody></table></div>
+    ${L.length>ult.length?`<p class="mut" style="padding:6px 14px 10px;font-size:12px">Mostrando os ${ult.length} mais recentes de ${L.length}. O CSV traz todos.</p>`:''}</div>`; }
+function exportManutCsv(){ const L=manutLista(); if(!L.length){ toast('Nenhuma manutenção registrada'); return; }
+  const cab=['Data','Máquina','Tipo','Item','Qtd','Un','Valor (R$)','Fornecedor','CNPJ','NF','Chave NF-e','Produtor','Obs'];
+  const lin=[cab.map(_usoCsvEsc).join(';')]; L.forEach(r=>lin.push([r.data?_dtBRc(r.data):'', r.maquina, r.tipo, r.item, nf2.format(+r.qtd||0), r.un, nf2.format(+r.valor||0), r.fornecedor, r.cnpj, r.nNF, r.chave, r.produtor, r.obs].map(_usoCsvEsc).join(';')));
+  download('manutencao_maquinas.csv', '\ufeff'+lin.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado'); }
 V.maquinas = function(){
   const ms=maquinasAll(), medio=custoMedioPassada();
   const attrEd=(m,k)=>(OV.maqAttr[m.conjunto]&&OV.maqAttr[m.conjunto][k]!=null)?'edited':'';
@@ -3667,6 +3733,7 @@ V.maquinas = function(){
       <div class="k-value"><input class="cell ${OV.diesel!==6?'edited':''}" data-edit="diesel" value="${OV.diesel}" style="width:110px;font-size:20px;font-weight:700"> <span style="font-size:13px;color:var(--muted)">R$/L</span></div>
       <div class="k-sub">aplicado ao consumo (L/ha)</div></div>
   </div>
+  ${manutPainelHtml()}
   <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento — largura e velocidade definem o rendimento</span></div>
     <div class="bulk-add">
       <input class="txt" id="mq-maq" placeholder="máquina (ex.: Trator JD 7500)" style="min-width:170px">
@@ -8805,6 +8872,9 @@ document.addEventListener('change',e=>{
   if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') recRerender(); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
+    else if(f==='dest'){ it.dest=e.target.value==='maquina'?'maquina':'estoque'; if(it.dest==='maquina'){ if(!it.maq) it.maq=nfeMaqUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-maq-all')||{}).value||''; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); } }   // v276
+    else if(f==='maq'){ it.maq=e.target.value.trim(); return; }
+    else if(f==='tipoMaq'){ it.tipoMaq=e.target.value; return; }
     else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
     else if(f==='produto'){ const v=e.target.value.trim(); if(v && !PROD[v]){ toast('Produto não encontrado no portfólio — escolha da lista'); }
       it.produto=PROD[v]?v:''; it.ok=!!PROD[v]; if(it.fonte==='auto') it.fonte='manual';
@@ -9191,6 +9261,11 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
+    else if(a.act==='nfeMaqTodos'){ if(nfeImport){ const m=((document.getElementById('nfe-maq-all')||{}).value||'').trim(); if(!m){ toast('Digite ou escolha a máquina'); return; } nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='maquina'; it.maq=m; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); }); route({keepScroll:true}); toast(`Nota inteira apropriada a ${m}`); } }
+    else if(a.act==='nfeMaqNenhum'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(it.dest==='maquina'){ it.dest='estoque'; it.ok=!!PROD[it.produto]; } }); route({keepScroll:true}); } }
+    else if(a.act==='nfeIgnVer'){ nfeIgnoradasCarregar(); }
+    else if(a.act==='nfeReabrirConferir'){ nfeReabrirConferir(a.chave); }
+    else if(a.act==='manutCsv'){ exportManutCsv(); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
     else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
     else if(a.act==='finNovo'){ finDraft=finNovoDraft(); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); }

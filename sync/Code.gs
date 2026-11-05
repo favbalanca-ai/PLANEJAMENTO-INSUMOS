@@ -110,7 +110,7 @@ function readBase_(){
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
-  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro'];
+  'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao'];
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600 };   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
@@ -119,7 +119,7 @@ var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:fun
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
   precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); }, config_app:function(){ return readConfigApp(); },
-  chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); } };
+  chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); }, manutencao:function(){ return readManutencao(); } };
 function readAppKeys_(keys){
   _LER_MEMO_ = {}; var out = {};
   try {
@@ -603,7 +603,7 @@ function writeCompraApp(ent){ return writeComprasApp([ent || {}]); }
 // Aba "DE-PARA NFE" (criada se faltar). Uma linha por CNPJ do emitente + código do produto na nota (cProd).
 // Colunas localizadas PELO CABEÇALHO (pode reordenar/adicionar colunas na planilha sem quebrar).
 var DEPARA_SHEET = 'DE-PARA NFE';
-var DEPARA_COLS = ['CNPJ EMITENTE','CPROD','XPROD','PRODUTO APP','FATOR','IGNORAR','ÚLTIMO CUSTO','CONFIRMADO POR','DATA'];
+var DEPARA_COLS = ['CNPJ EMITENTE','CPROD','XPROD','PRODUTO APP','FATOR','IGNORAR','ÚLTIMO CUSTO','CONFIRMADO POR','DATA','DESTINO','MÁQUINA','TIPO GASTO'];   // v276: peça/serviço → máquina
 function _hkey(t){ return S(t).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Z0-9]/g,''); }
 function deParaSheet_(){
   var s = sh(DEPARA_SHEET);
@@ -624,6 +624,7 @@ function readDeParaNfe(){
     var ig = S(g(r,'IGNORAR')).toUpperCase();
     out[cnpj + '|' + cprod] = { cnpj:cnpj, cprod:cprod, xprod:S(g(r,'XPROD')), produto:S(g(r,'PRODUTO APP')), fator:N(g(r,'FATOR')) || 1,
       ignorar:(ig === 'SIM' || ig === 'TRUE' || ig === 'X' || ig === '1'), custo:N(g(r,'ÚLTIMO CUSTO')), por:S(g(r,'CONFIRMADO POR')),
+      destino:S(g(r,'DESTINO')).toLowerCase(), maquina:S(g(r,'MÁQUINA')), tipoGasto:S(g(r,'TIPO GASTO')),
       data:(g(r,'DATA') instanceof Date) ? Utilities.formatDate(g(r,'DATA'), tz_(), 'yyyy-MM-dd') : S(g(r,'DATA')).slice(0,10) }; }
   return out;
 }
@@ -638,6 +639,7 @@ function writeDeParaNfe(itens){
     var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
     var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = T_(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : T_(it.produto);
     vals['FATOR'] = N(it.fator) || 1; vals['IGNORAR'] = it.ignorar ? 'SIM' : ''; vals['ÚLTIMO CUSTO'] = N(it.custo) || '';
+    vals['DESTINO'] = it.destino === 'maquina' ? 'maquina' : (it.ignorar ? '' : 'estoque'); vals['MÁQUINA'] = it.destino === 'maquina' ? T_(it.maquina) : ''; vals['TIPO GASTO'] = it.destino === 'maquina' ? T_(it.tipoGasto) : '';
     vals['CONFIRMADO POR'] = T_(it.por) || 'app'; vals['DATA'] = hoje;
     var i = rows[cnpj + '|' + cprod];
     if (i == null){ var a = []; for (var c = 0; c < d.ncol; c++) a.push(''); v.push(a); i = v.length - 1; rows[cnpj + '|' + cprod] = i; novos++; }
@@ -658,10 +660,23 @@ var NFE_CONFIG_SHEET = 'CONFIG NFE', NFE_IDX_SHEET = 'NFE RECEBIDAS', NFE_ITENS_
 var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
 var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
   'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
-var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR'];
+var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR','MÁQUINA'];
+// v276: peças e serviços apropriados por máquina (não entram no estoque)
+var MANUT_SHEET = 'MANUTENÇÃO MÁQUINAS';
+var MANUT_COLS = ['ID','CHAVE','Nº','DATA','FORNECEDOR','CNPJ','MÁQUINA','TIPO','ITEM','QTD','UN','VALOR','PRODUTOR','OBS','ATUALIZADO'];
+var MANUT_KEYS = ['id','chave','nNF','data','fornecedor','cnpj','maquina','tipo','item','qtd','un','valor','produtor','obs','atualizado'];
+function readManutencao(){ if (!sh(MANUT_SHEET)) return []; return _ler_(MANUT_SHEET, MANUT_COLS).map(function(o){ var x = {}; MANUT_KEYS.forEach(function(k, i){ var v = o[MANUT_COLS[i]]; x[k] = (v instanceof Date) ? _fmtD(v) : (typeof v === 'number' ? v : S(v)); }); return x; }); }
+// regrava as linhas da nota (idempotente pela CHAVE); lista vazia = só apaga
+function manutGrava_(chave, lista, cab){
+  chave = S(chave); var t = sheetCols_(MANUT_SHEET, MANUT_COLS), s = t.s, last = s.getLastRow();
+  if (last >= 2){ var v = s.getRange(2, t.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2); _delLinhas_(s, apagar); }
+  if (!lista || !lista.length) return 0; var agora = new Date();
+  return _appendRowsByHeader_(t, lista.map(function(m, k){ return { 'ID':chave + '-' + S(m.n || k + 1), 'CHAVE':chave, 'Nº':S(cab.nNF), 'DATA':S(cab.data), 'FORNECEDOR':S(cab.fornecedor), 'CNPJ':S(cab.cnpj),
+    'MÁQUINA':S(m.maq), 'TIPO':S(m.tipoMaq), 'ITEM':S(m.xprod), 'QTD':N(m.qcom), 'UN':S(m.ucom), 'VALOR':N(m.valor), 'PRODUTOR':S(cab.produtor), 'OBS':S(m.obs), 'ATUALIZADO':agora }; }));
+}
 var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP','LOGIN','PIN NOVO','PIN',
   'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA','TÍTULO',
-  'CEP','COD MUNICÍPIO','CAEPF','INSCRIÇÃO ESTADUAL','NÚMERO','TELEFONE','NÚMERO BANCO','CPF/CNPJ'];   // financeiro (v273–v275)   // colunas guardadas como texto
+  'CEP','COD MUNICÍPIO','CAEPF','INSCRIÇÃO ESTADUAL','NÚMERO','TELEFONE','NÚMERO BANCO','CPF/CNPJ','CNPJ'];   // financeiro (v273–v275)   // colunas guardadas como texto
 
 // aba com colunas achadas PELO CABEÇALHO (cria a aba/colunas que faltarem; colunas de texto não perdem zero à esquerda)
 function sheetCols_(name, cols){
@@ -1028,13 +1043,17 @@ function nfeClassifica_(c){
       _delLinhas_(s, apagar); }
     n = _appendRowsByHeader_(ti, c.itens.map(function(it){ return { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
         'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
-        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '' }; }));
+        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '', 'MÁQUINA':it.dest === 'maquina' ? S(it.maq) : '' }; }));
   }
+  // v276: peças/serviços → aba MANUTENÇÃO MÁQUINAS (regrava a nota; ignorar/cancelar apaga)
+  try { var cabM = {}; ['Nº','FORNECEDOR','CNPJ EMITENTE','PRODUTOR','EMISSÃO'].forEach(function(h){ cabM[h] = t.s.getRange(row, t.col(h) + 1).getValue(); });
+    var manut = (c.itens || []).filter(function(it){ return it.dest === 'maquina' && S(it.maq); });
+    if (manut.length || sh(MANUT_SHEET)) manutGrava_(S(c.chave), st === 'IGNORADA' ? [] : manut, { nNF:cabM['Nº'], fornecedor:cabM['FORNECEDOR'], cnpj:cabM['CNPJ EMITENTE'], produtor:_doc_(cabM['PRODUTOR']), data:_fmtD(cabM['EMISSÃO']) }); } catch (e) { Logger.log('manutenção ' + c.chave + ': ' + e); }
   if (c.depara && c.depara.length) writeDeParaNfe(c.depara);
   // contrato afetado: o próprio (faturamento) ou o da remessa
   var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue());
   if (st === 'A ENTREGAR') _atualizaContrato_(S(c.chave)); else if (ref) _atualizaContrato_(ref);
-  try { if (['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0) finTitulosDaNota_(S(c.chave), c.dups, c.pag); else if (st === 'IGNORADA') finCancelaTitulos_(S(c.chave), 'nota ignorada'); }   // v273
+  try { if (['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0) finTitulosDaNota_(S(c.chave), c.dups, c.pag, S(c.categoria)); else if (st === 'IGNORADA') finCancelaTitulos_(S(c.chave), 'nota ignorada'); }   // v273 (v276: categoria Manutenção)
   catch (e) { Logger.log('títulos da nota ' + c.chave + ': ' + e); }
   return { rows:n + 1 };
 }
@@ -1264,7 +1283,7 @@ function finDupsGs_(txt){
 function finFormaPgto_(pag){ var ts = []; (pag || []).forEach(function(x){ var l = FIN_TPAG_[S(x.t)] || (x.t ? 'Código ' + x.t : ''); if (l && l !== 'Sem pagamento' && ts.indexOf(l) < 0) ts.push(l); }); return ts.join(' + '); }
 // títulos de UMA nota, a partir da linha da NFE RECEBIDAS + XML guardado no Drive (reserva: parcelas enviadas pelo app).
 // Idempotente: regrava os títulos ABERTOS da nota; os PAGOS/CANCELADOS ficam como estão.
-function finTitulosDaNota_(chave, dupsApp, pagApp){
+function finTitulosDaNota_(chave, dupsApp, pagApp, categoria){
   chave = S(chave); if (!/^\d{44}$/.test(chave)) return 0;
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return 0;
   var o = _rowObj(t, t.s.getRange(row, 1, 1, t.ncol).getValues()[0]), g = function(h){ return o[_hkey(h)]; };
@@ -1282,7 +1301,7 @@ function finTitulosDaNota_(chave, dupsApp, pagApp){
     if (s === 'ABERTO') abertos.push(x['__r']); else fechados[S(x['ID'])] = 1; });
   if (abertos.length) _delLinhas_(sheetCols_(FIN_TIT_SHEET, FIN_TIT_COLS).s, abertos);
   var base = { tipo:'PAGAR', produtor:_doc_(g('PRODUTOR')), participante:S(g('CNPJ EMITENTE')), participanteNome:S(g('FORNECEDOR')), docTipo:'1 - Nota fiscal', docNum:S(g('Nº')) + (S(g('SÉRIE')) ? '/' + S(g('SÉRIE')) : ''),
-    chave:chave, emissao:emissao, formaPgto:forma, categoria:'Insumos', origem:(st === 'A ENTREGAR' || tipoNota === 'FATURAMENTO') ? 'contrato' : 'nfe', status:'ABERTO', quem:'nota' };
+    chave:chave, emissao:emissao, formaPgto:forma, categoria:S(categoria) || 'Insumos', origem:(st === 'A ENTREGAR' || tipoNota === 'FATURAMENTO') ? 'contrato' : 'nfe', status:'ABERTO', quem:'nota' };
   var novos = [];
   dups.forEach(function(d, i){ var id = chave + '-' + (S(d.n) || String(i + 1)); if (fechados[id]) return;
     var x = {}; for (var k in base) x[k] = base[k];
@@ -1923,10 +1942,10 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao'],
   campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est'],
   precos:['precos_app','bulas_app'],
-  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro'],
+  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'],
@@ -2086,7 +2105,7 @@ function cachePutK_(pfx, str, ttl){
 function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; } catch (e) { return ''; } }
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
-var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro'];   // financeiro: classificar/cancelar nota mexe nos títulos
+var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao'];   // financeiro: classificar/cancelar nota mexe nos títulos
 var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
 var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],

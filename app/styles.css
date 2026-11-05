@@ -2042,6 +2042,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .lc-pend{margin:0;padding:8px 14px 12px 30px;font-size:13px}.lc-pend li{margin:4px 0}.lc-pend li.erro{color:var(--red)}.lc-pend li.aviso{color:var(--amber)}.lc-pend li .link{margin-left:4px}
 .cad-cp{font-size:12px;margin-top:3px;color:var(--ink2)}.cad-cp .icon-btn{padding:0 4px;font-size:12px}
 .fin-t tr.on td{background:var(--teal-soft)}
+/* peças/serviços → máquina (v276) */
+.nfe-dest{display:flex;flex-wrap:wrap;gap:6px 16px;margin:6px 0 8px;font-size:12.5px;font-weight:600}.nfe-dest label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.nfe-it-maq{grid-template-columns:2fr 1.2fr 1.3fr}
+.nfe-it.st-maq{border-left:3px solid var(--teal)}.nfe-it.st-maqsug{border-left:3px solid var(--amber)}
+.nfe-chip.st-maq{background:var(--teal-soft);color:var(--teal)}.nfe-chip.st-maqsug{background:var(--amber-soft);color:var(--amber)}
+.nfe-pecas-all{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}.nfe-pecas-all .txt{flex:1 1 220px;min-width:0}
+.nfe-ign-box{margin:10px 0;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
+.manut-tipos{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}.manut-tipos .pill{background:var(--line);color:var(--ink2)}
+@media(max-width:640px){ .nfe-it-maq{grid-template-columns:1fr} }
 .fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
 @media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
@@ -2501,6 +2510,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .lc-pend{font-size:10.5px}
   .cad-cp{font-size:9.5px}
   .cad-cp .icon-btn{font-size:9.5px}
+  .nfe-dest{font-size:10px}
+  .nfe-ign-box{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
