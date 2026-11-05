@@ -44,6 +44,9 @@ hora de programar. **Confira o primeiro arquivo com o contador** antes de entreg
 - Participação em parceria/condomínio: o lançamento vai **integral** (decisão da dona); a parte do parceiro é tratada pela contabilidade.
 - Histórico = "`tipo do documento` `nº` parc. `x/y` `fornecedor` - `categoria` (juros …)", limitado ao tamanho do leiaute.
 - Títulos marcados como pagos **sem baixa** (versão anterior) não entram: a tela lista como pendência e pede "Completar baixa".
+- **Compensação de adiantamento** (v277): quando a nota de venda quita um adiantamento já recebido, a baixa é
+  gravada na conta 999 com COMPENSAÇÃO = S e REF = título do adiantamento. Ela **não** gera Q100 (o dinheiro já
+  entrou como adiantamento, tipo 3) nem aparece no extrato por conta; serve só para dar baixa no título da venda.
 
 ## Pendências que travam a geração
 

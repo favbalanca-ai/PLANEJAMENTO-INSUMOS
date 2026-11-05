@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Venda de grãos pela nota fiscal (v277 — fase 5 do financeiro)** — a planilha reconhece a nota de **venda do
+  produtor** (emitida pelo CPF/CNPJ de um produtor cadastrado) e a **contranota de entrada** do comprador
+  (`tpNF` 0 com o produtor como destinatário): ficam em Compras com a etiqueta *Venda do produtor* e o botão
+  **🌾 Conferir venda** (nada entra no estoque). A tela mostra comprador, produtor, parcelas e os itens em **kg
+  (padrão)**, **sacas de 60 kg** e **toneladas** (T/TON, SC, @ são convertidos), com R$/sc; sugere a **cultura do
+  app** pela descrição (soja, milho, sorgo…) e a safra. Se o comprador já tinha **adiantamento** recebido (título a
+  receber com categoria Adiantamento, pago), dá para marcar o que esta nota quita: vira uma baixa especial
+  (conta 999, etiqueta *compensação*) que **não** entra no extrato nem no Livro Caixa. Ao confirmar: aba
+  **VENDAS**, títulos **a receber** (categoria Venda de grãos) com as parcelas do XML, e o **preço médio por saca
+  passa a ser o preço real** em Resultados (painel *Vendas da safra*; o preço digitado no talhão continua
+  valendo se existir) e no Painel do Campo (card *Vendas da safra*). "Não é venda" volta para a conferência
+  de compra; a planilha aceita desfazer (`__nfeVenda {desfazer:true}`).
 - **Peças e serviços apropriados por máquina (v276)** — na conferência da NF-e cada item tem um terceiro caminho
   além de "produto do app" e "ignorar": **🔧 Peça ou serviço → máquina**. O item não entra no estoque; vira uma
   linha na aba **MANUTENÇÃO MÁQUINAS** (data, fornecedor, NF, máquina, tipo do gasto, item, quantidade, valor real

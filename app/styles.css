@@ -2051,6 +2051,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-ign-box{margin:10px 0;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
 .manut-tipos{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}.manut-tipos .pill{background:var(--line);color:var(--ink2)}
 @media(max-width:640px){ .nfe-it-maq{grid-template-columns:1fr} }
+/* venda do produtor (v277) */
+.nfe-venda .panel-head h2{color:var(--green)}
+.nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
+.nfe-comp-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}.nfe-comp-row:first-of-type{border-top:0}.nfe-comp-row span{flex:1 1 220px}.nfe-comp-row .cell{width:120px}
+.nfe-tipo.t-VENDA_PROD,.nfe-tipo.t-VENDA_PRODUTOR{background:#e3f3e6;color:#1b5e20;padding:1px 6px;border-radius:6px}
 .fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
 @media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
@@ -2512,6 +2517,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .cad-cp .icon-btn{font-size:9.5px}
   .nfe-dest{font-size:10px}
   .nfe-ign-box{font-size:10.5px}
+  .nfe-comp{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}

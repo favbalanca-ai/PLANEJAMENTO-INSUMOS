@@ -2068,6 +2068,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-ign-box{margin:10px 0;padding:8px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
 .manut-tipos{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}.manut-tipos .pill{background:var(--line);color:var(--ink2)}
 @media(max-width:640px){ .nfe-it-maq{grid-template-columns:1fr} }
+/* venda do produtor (v277) */
+.nfe-venda .panel-head h2{color:var(--green)}
+.nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
+.nfe-comp-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}.nfe-comp-row:first-of-type{border-top:0}.nfe-comp-row span{flex:1 1 220px}.nfe-comp-row .cell{width:120px}
+.nfe-tipo.t-VENDA_PROD,.nfe-tipo.t-VENDA_PRODUTOR{background:#e3f3e6;color:#1b5e20;padding:1px 6px;border-radius:6px}
 .fin-ext-top{align-items:flex-end;flex-wrap:wrap;gap:8px}.fin-ext-top .faz-wrap{flex-direction:column;align-items:flex-start;gap:3px}.fin-ext-top .faz-wrap .cell{width:150px}.fin-ext-top .faz-wrap .sel{min-width:160px;max-width:260px}
 @media(max-width:640px){ .fin-bxs td{padding:8px 10px} .fin-bx-list table,.fin-bx-list thead,.fin-bx-list tbody,.fin-bx-list tr,.fin-bx-list td{display:block} .fin-bx-list thead{display:none} .fin-bx-list tr{border-bottom:1px solid var(--line);padding:4px 0} .fin-bx-list td{border:0;padding:2px 8px} .fin-ext-top .faz-wrap{flex:1 1 45%} .fin-ext-top .faz-wrap .cell,.fin-ext-top .faz-wrap .sel{width:100%;max-width:none;min-width:0} }
 @media(max-width:640px){ .cad-list .cad-row{grid-template-columns:minmax(0,1fr) auto} .cad-row>.mut{grid-column:1/-1} .fin-acts{justify-content:flex-start;flex-wrap:wrap} }
@@ -2529,6 +2534,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .cad-cp .icon-btn{font-size:9.5px}
   .nfe-dest{font-size:10px}
   .nfe-ign-box{font-size:10.5px}
+  .nfe-comp{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
   .nt-sec h4{font-size:11px}
@@ -2648,7 +2654,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-276';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-277';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4325,7 +4331,7 @@ function nfeLerXml(txt){
   return { chave:(prot&&_nt(prot,'chNFe'))||String(inf.getAttribute('Id')||'').replace(/^NFe/,''), temProt:!!prot, cstat:prot?_nt(prot,'cStat'):'',
     nNF:_nt(ide,'nNF'), serie:_nt(ide,'serie'), emissao:(_nt(ide,'dhEmi')||_nt(ide,'dEmi')).slice(0,10),
     cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), ref:_nt(ide,'refNFe'), itens,
-    dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''),   // produtor destinatário
+    dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''), destNome:_nt(dest,'xNome'), tpNF:_nt(ide,'tpNF'),   // produtor destinatário · tpNF 0 = nota de entrada (contranota do comprador, v277)
     dups:[...inf.getElementsByTagNameNS('*','dup')].map(d=>({n:_nt(d,'nDup'), venc:_nt(d,'dVenc').slice(0,10), valor:_nn(d,'vDup')})).filter(d=>d.valor>0),   // parcelas (v273)
     pag:[...inf.getElementsByTagNameNS('*','detPag')].map(d=>({t:_nt(d,'tPag'), v:_nn(d,'vPag')})) };
 }
@@ -4347,7 +4353,62 @@ function nfeTipoCfop(cfop){ const c=String(cfop||'').replace(/\D/g,''), f=c.slic
   return 'OUTRA'; }
 function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop));
   return t.includes('FATURAMENTO')?'FATURAMENTO':t.includes('REMESSA')?'REMESSA':t.includes('VENDA')?'VENDA':'OUTRA'; }
-const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',OUTRA:'Outra operação'};
+const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',OUTRA:'Outra operação',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};
+// ===== v277: VENDA DO PRODUTOR (receita) — nota emitida pelo produtor OU contranota de entrada do comprador =====
+function nfeProdutoresDocs(){ return FIN().produtores.map(p=>String(p.cpf||'').replace(/\D/g,'')).filter(Boolean); }
+function nfeEhVenda(n){ const prods=nfeProdutoresDocs();
+  if(prods.length) return prods.includes(n.cnpj) || (n.tpNF==='0' && prods.includes(n.dest));
+  return n.tpNF==='0' || (String(n.cnpj||'').length===11 && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
+}
+const VENDA_CULT=[['SOJA',/\bSOJA\b/i],['MILHO',/\bMILHO\b/i],['SORGO',/\bSORGO\b/i],['TRIGO',/\bTRIGO\b/i],['FEIJ',/FEIJ/i],['BRAQ',/BRAQ|BRACH/i],['ALGOD',/ALGOD/i],['ARROZ',/\bARROZ\b/i],['GIRASSOL',/GIRASSOL/i],['AVEIA',/\bAVEIA\b/i],['MILHETO',/MILHETO/i]];
+function nfeVendaCultura(xprod){ const k=(VENDA_CULT.find(([,rx])=>rx.test(xprod||''))||[])[0]; if(!k) return ''; const emps=empList().filter(e=>e&&e!=='—'&&String(e).toUpperCase().includes(k)); return emps[0]||''; }
+function nfeVendaSafra(emp){ return talhoesAll().some(t=>empSafDe(t)===emp)&&!talhoesAll().some(t=>empDe(t)===emp)?'safrinha':'principal'; }
+function nfeKgDe(q,un){ const u=String(un||'').toUpperCase().replace(/\s/g,''); q=+q||0; if(/^(T|TON|TONS|TONELADA|TONELADAS)$/.test(u)) return q*1000; if(/^(SC|SCS|SACA|SACAS|SACO|SACOS|SC60|SACA60)$/.test(u)) return q*60; if(/^SC50$/.test(u)) return q*50; if(/^(AR|ARROBA|@)$/.test(u)) return q*15; return q; }
+function nfeVendaPrep(imp){ const n=imp.nota, prods=nfeProdutoresDocs(), emitProd=prods.includes(n.cnpj)||(String(n.cnpj||'').length===11&&!prods.length);
+  imp.venda={ produtor:emitProd?n.cnpj:n.dest, comprador:emitProd?(n.destNome||'—'):n.fornecedor, cnpj:emitProd?n.dest:n.cnpj, cultura:nfeVendaCultura(n.itens.map(i=>i.xprod).join(' ')), safra:'', comp:{} };
+  imp.venda.safra=imp.venda.cultura?nfeVendaSafra(imp.venda.cultura):'principal';
+  imp.venda.itens=n.itens.map(it=>{ const kg=nfeKgDe(it.qcom,it.ucom), valor=nfeItemValor(it), sc=kg/60; return {n:it.n, xprod:it.xprod, qcom:it.qcom, ucom:it.ucom, kg, sacas:+sc.toFixed(2), ton:kg/1000, valor, precoSc:sc>0?valor/sc:0}; }); }
+// adiantamentos do comprador: títulos A RECEBER, categoria Adiantamento, já recebidos, com saldo a compensar
+function finAdiantamentos(cnpj){ const F=FIN(); return F.titulos.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER'&&/adiantamento/i.test(t.categoria||'')&&String(t.status||'').toUpperCase()==='PAGO'&&(!cnpj||t.participante===cnpj))
+  .map(t=>{ const usado=F.baixas.filter(b=>b.compensacao==='S'&&b.ref===t.id).reduce((s,b)=>s+(+b.valorPago||0),0); return {t, usado, saldo:+Math.max(0,(+t.valor||0)-usado).toFixed(2)}; }).filter(x=>x.saldo>0.004); }
+function nfeVendaHtml(){ const imp=nfeImport, n=imp.nota, V=imp.venda, pg=nfePagTxt(n), emps=empList().filter(e=>e&&e!=='—'), srv=nfeServerOk();
+  const kg=V.itens.reduce((s,i)=>s+i.kg,0), valor=V.itens.reduce((s,i)=>s+i.valor,0), sc=kg/60;
+  const adi=finAdiantamentos(V.cnpj), compTot=Object.keys(V.comp).reduce((s,k)=>s+(+V.comp[k]||0),0);
+  const rows=V.itens.map((i,k)=>`<tr><td class="c-full"><b>${esc(i.xprod)}</b> <span class="mut">${num(i.qcom)} ${esc(i.ucom)}</span></td><td class="num" data-th="kg">${nf0.format(i.kg)}</td><td class="num" data-th="Sacas 60 kg">${nf2.format(i.sacas)}</td><td class="num c-more" data-th="Toneladas">${nf2.format(i.ton)}</td><td class="num" data-th="R$/sc">${i.precoSc?brl(i.precoSc):'—'}</td><td class="num" data-th="Valor"><b>${brl(i.valor)}</b></td></tr>`).join('');
+  return `<div class="panel nfe-panel nfe-venda"><div class="panel-head"><h2>🌾 Conferir venda</h2><span class="sub">${esc(imp.arquivo)} · receita do produtor — não entra no estoque</span></div>
+    <div class="nfe-head">
+      <div><small>Comprador</small><b>${esc(V.comprador||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(V.cnpj))}</span></div>
+      <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}${n.tpNF==='0'?' · contranota de entrada':' · emitida pelo produtor'}</span></div>
+      <div><small>Produtor</small><b>${esc(finProdNome(V.produtor))}</b><span>${esc(nfeCnpjFmt(V.produtor))}</span></div>
+      <div><small>Valor da nota</small><b>${brl(n.vNF||valor)}</b><span>${nf0.format(kg)} kg · ${nf2.format(sc)} sc · ${nf2.format(kg/1000)} t</span></div>
+      <div title="parcelas do XML — viram títulos a receber no Financeiro"><small>Recebimento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>
+    </div>
+    <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
+    ${srv?'':'<div class="nfe-aviso warn">A venda precisa da NF-e ligada à planilha (token + Code.gs novo) para gravar a aba VENDAS e os títulos a receber.</div>'}
+    <div class="app-grid" style="padding:10px 14px 0">
+      <label>Cultura do app<select class="sel" data-nfv="cultura"><option value="">— escolha —</option>${emps.map(e=>`<option value="${esc(e)}"${e===V.cultura?' selected':''}>${esc(e)}</option>`).join('')}</select></label>
+      <label>Safra<select class="sel" data-nfv="safra"><option value="principal"${V.safra!=='safrinha'?' selected':''}>1ª cultura</option><option value="safrinha"${V.safra==='safrinha'?' selected':''}>2ª cultura (safrinha)</option></select></label>
+      <div class="nfe-kv"><small>Preço médio</small><b>${sc>0?brl(valor/sc):'—'}/sc</b><span>${kg>0?brl(valor/kg*1000)+'/t':''}</span></div>
+    </div>
+    <div class="table-wrap" style="margin:10px 14px"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody>
+      <tfoot><tr><td>Total</td><td class="num">${nf0.format(kg)}</td><td class="num">${nf2.format(sc)}</td><td class="num c-more">${nf2.format(kg/1000)}</td><td class="num">${sc>0?brl(valor/sc):'—'}</td><td class="num">${brl(valor)}</td></tr></tfoot></table></div>
+    ${adi.length?`<div class="nfe-comp"><b>💰 Adiantamentos deste comprador já recebidos</b> <span class="mut">— marque o que esta nota quita (não é dinheiro novo: fica fora do Livro Caixa e do extrato)</span>
+      ${adi.map(a=>`<label class="nfe-comp-row"><input type="checkbox" data-nfv="comp" data-id="${esc(a.t.id)}"${V.comp[a.t.id]!=null?' checked':''}> <span>${esc(a.t.docNum||'')} ${a.t.dataPgto?_dtBRc(a.t.dataPgto):''} · saldo <b>${brl(a.saldo)}</b>${a.usado?` <small class="mut">(já compensado ${brl(a.usado)})</small>`:''}</span><input class="cell" inputmode="decimal" data-nfv="compv" data-id="${esc(a.t.id)}" value="${V.comp[a.t.id]!=null?fmtDose(+V.comp[a.t.id]):''}" placeholder="${fmtDose(Math.min(a.saldo,valor))}"${V.comp[a.t.id]!=null?'':' disabled'}></label>`).join('')}
+      <div class="mut" style="font-size:12px">Compensado: <b>${brl(compTot)}</b> · fica a receber ${brl(Math.max(0,valor-compTot))}</div></div>`:''}
+    <div class="nfe-foot"><button class="btn btn-primary" data-act="nfeVendaOk"${srv?'':' disabled'}>✅ Confirmar venda</button><button class="btn btn-outline" data-act="nfeVendaNao" title="Tratar como compra de insumo/peça">Não é venda</button><button class="btn btn-outline" data-act="nfeCancelar">Cancelar</button></div>
+    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Padrão em kg; sacas de 60 kg e toneladas só para leitura. Ao confirmar: aba <b>VENDAS</b>, títulos <b>a receber</b> (categoria Venda de grãos) com as parcelas do XML, e o preço médio passa a valer como <b>preço real</b> em Resultados.</p></div>`; }
+async function nfeVendaOk(){ const imp=nfeImport; if(!imp||!imp.venda) return; const n=imp.nota, V=imp.venda;
+  if(!V.cultura && !ask('Sem cultura do app escolhida — a venda não vai aparecer em Resultados. Confirmar mesmo assim?')) return;
+  const valor=V.itens.reduce((s,i)=>s+i.valor,0), comp=Object.keys(V.comp).map(k=>({ref:k, valor:+(+V.comp[k]||0).toFixed(2)})).filter(c=>c.valor>0);
+  if(comp.reduce((s,c)=>s+c.valor,0)>valor+0.005){ toast('Compensação maior que o valor da nota'); return; }
+  const pl={chave:n.chave, cultura:V.cultura, safra:V.safra, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, itens:V.itens.map(i=>({n:i.n, xprod:i.xprod, kg:+i.kg.toFixed(3), sacas:i.sacas, valor:i.valor})), dups:n.dups||[], pag:n.pag||[], compensar:comp};
+  try{ if(imp.uploadP) await imp.uploadP; const r=await nfePost({__nfeVenda:pl}); if(!r||r.fail){ toast('Não gravou: '+((r&&r.msgs)||[]).join(' ')); return; }
+    DATA.vendas=(DATA.vendas||[]).filter(v=>v.chave!==n.chave).concat(V.itens.map(i=>({id:n.chave+'-'+i.n, chave:n.chave, nNF:n.nNF, data:n.emissao, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, produto:i.xprod, cultura:V.cultura, safra:V.safra, kg:i.kg, sacas:i.sacas, precoSc:i.precoSc, valor:i.valor})));
+    if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
+    nfeImport=null; route(); toast(`Venda registrada: ${nf2.format(valor/60>0?V.itens.reduce((s,i)=>s+i.sacas,0):0)} sc · ${brl(valor)}${comp.length?' · adiantamento compensado':''}`); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600);
+  }catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
+// vendas por cultura/safra (aba VENDAS): kg, sacas, valor, preço médio por saca
+function vendasDe(emp, seq){ const L=((DATA&&DATA.vendas)||[]).filter(v=>(!emp||v.cultura===emp)&&(!seq||(v.safra||'principal')===seq)); const kg=L.reduce((s,v)=>s+(+v.kg||0),0), valor=L.reduce((s,v)=>s+(+v.valor||0),0), sc=kg/60; return {n:L.length, kg, sc, t:kg/1000, valor, precoSc:sc>0?valor/sc:0, precoT:kg>0?valor/kg*1000:0}; }
 // ---- fator: quanto de 1 unidade da nota vale na unidade do app (CX 10X1KG → 10 · GL 5L → 5 · BB 20L → 20) ----
 function _unBase(u){ u=String(u||'').toUpperCase().replace(/\./g,'');
   if(/^(KG|KGS|QUILO|QUILOS)$/.test(u)) return ['KG',1]; if(u==='G'||u==='GR') return ['KG',0.001]; if(/^(T|TN|TON)$/.test(u)) return ['KG',1000];
@@ -4438,6 +4499,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     if(!nota.itens.length) throw new Error('a nota não tem itens');
     nota.tipo=nfeTipoNota(nota.itens);
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
+    if(!opts.reclass && !opts.compra && nfeEhVenda(nota)){ nota.tipo='VENDA_PROD'; nfeVendaPrep(nfeImport); }   // v277: receita do produtor
     nfeSugereCatalogo();   // itens sem parecido no portfólio: sugestão pelo catálogo MAPA (assíncrono)
     if(opts.reclass) nfeImport.reclass={data:ja||''};   // regrava a entrada desta nota (mesma chave = substitui, não duplica)
     // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
@@ -4530,7 +4592,7 @@ async function nfeIgnoradasCarregar(){ NFE_IGN={carregando:true}; route({keepScr
 function nfeIgnoradasHtml(L){ const n=(L.contagem||{})['IGNORADA']||0; if(!n&&!NFE_IGN) return '';
   if(!NFE_IGN) return `<div class="nfe-ign-box"><a class="link" data-act="nfeIgnVer">📂 Ver as ${n} nota(s) ignoradas</a> <span class="mut">— dá para reabrir e apropriar peças/serviços a uma máquina</span></div>`;
   if(NFE_IGN.carregando) return `<div class="nfe-ign-box mut">carregando ignoradas…</div>`;
-  const rows=(NFE_IGN.notas||[]).map(nt=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(nt.tipo)}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span><div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b>${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
+  const rows=(NFE_IGN.notas||[]).map(nt=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span><div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b>${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeReabrirConferir" data-chave="${esc(nt.chave)}" title="Volta a nota para 'a classificar' e abre a conferência">Reabrir e conferir</button></div></div>`).join('');
   return `<div class="nfe-ign-box"><b>📂 Ignoradas</b> <span class="mut">(${(NFE_IGN.notas||[]).length})</span> <a class="link" data-act="nfeIgnVer" style="margin-left:8px">atualizar</a>${NFE_IGN.erro?`<div class="nfe-aviso err">${esc(NFE_IGN.erro)}</div>`:''}${rows||'<div class="mut">Nenhuma.</div>'}</div>`; }
 async function nfeReabrirConferir(chave){ await nfeReabrir(chave); NFE_IGN=null; nfeConferirServidor(chave); }
@@ -4608,9 +4670,9 @@ function nfeListaHtml(){
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
   const rows=(L.notas||[]).map(nt=>`<div class="nfe-row">
-      <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(nt.tipo)}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span>
+      <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span>
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
-      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Conferir</button>
+      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${nt.tipo==='VENDA PRODUTOR'?'🌾 Conferir venda':'Conferir'}</button>
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
   const nN=(L.notas||[]).length, c=L.captura;
   let ult=''; if(c){ const d=new Date(String(c.em).replace(' ','T')); ult=isNaN(d)?esc(c.em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
@@ -4721,6 +4783,7 @@ function nfeRemessaHtml(imp){
     ${exc.length?`<div class="nfe-warn-t">⚠ Remessa maior que o saldo:<br>${exc.map(esc).join('<br>')}</div>`:''}</div>`;
 }
 function nfeConferirHtml(){
+  if(nfeImport&&nfeImport.venda) return nfeVendaHtml();   // v277
   const imp=nfeImport, n=imp.nota, un=it=>(PROD[it.produto]||{}).un||'';
   const pend=imp.itens.filter(i=>!nfeResolvido(i)).length, nSug=imp.itens.filter(i=>nfeItemStatus(i)==='sug').length;
   const cfops=[...new Set(n.itens.map(i=>i.cfop))].join(', ');
@@ -5440,7 +5503,7 @@ V.financeiro=function(){
   const rows=L.map(t=>{ const sit=finSit(t), [lbl,cls]=FIN_SIT[sit], pagar=String(t.tipo||'PAGAR').toUpperCase()==='PAGAR', d=finDias(t), manual=/^m:/.test(String(t.id));
     const bx=finBaixasDe(t.id), saldo=finSaldo(t), parcial=String(t.status||'').toUpperCase()==='PARCIAL'||(bx.length&&_finAberto(sit)), semConta=finSemConta(t), aberto=FIN_UI.open&&FIN_UI.open[t.id];
     const stTxt=sit==='pago'?(semConta?'Pago · sem conta':'Pago '+(t.dataPgto?_dtBRc(t.dataPgto):'')):(parcial?'Parcial · saldo '+brl(saldo):lbl);
-    const sub=aberto?`<tr class="fin-bxs"><td colspan="7"><div class="fin-bx-list"><b>Baixas deste título</b>${bx.length?`<table><thead><tr><th>Data</th><th>Conta</th><th class="num">Valor pago</th><th class="num">Juros</th><th class="num">Desconto</th><th>Comprovante</th><th></th></tr></thead><tbody>${bx.map(b=>`<tr><td>${b.data?_dtBRc(b.data):'—'}</td><td>${esc(finContaNome(b.conta))}</td><td class="num"><b>${brl(+b.valorPago||0)}</b></td><td class="num">${+b.juros?brl(+b.juros):'·'}</td><td class="num">${+b.desconto?brl(+b.desconto):'·'}</td><td>${b.comprovante?`<a class="link" href="${esc(b.comprovante)}" target="_blank" rel="noopener">📎 abrir</a>`:'<span class="mut">—</span>'}${b.obs?` <small class="mut">${esc(b.obs)}</small>`:''}</td><td><button class="icon-btn del" data-act="finBxDel" data-id="${esc(b.id)}" title="Excluir baixa">🗑</button></td></tr>`).join('')}</tbody></table>`:'<span class="mut">Nenhuma baixa registrada.</span>'}${semConta?'<div class="mut" style="margin-top:4px">Marcado como pago na versão anterior, sem conta bancária. Use <b>Completar baixa</b> para o Livro Caixa ter a conta.</div>':''}</div></td></tr>`:'';
+    const sub=aberto?`<tr class="fin-bxs"><td colspan="7"><div class="fin-bx-list"><b>Baixas deste título</b>${bx.length?`<table><thead><tr><th>Data</th><th>Conta</th><th class="num">Valor pago</th><th class="num">Juros</th><th class="num">Desconto</th><th>Comprovante</th><th></th></tr></thead><tbody>${bx.map(b=>`<tr><td>${b.data?_dtBRc(b.data):'—'}</td><td>${esc(finContaNome(b.conta))}</td><td class="num"><b>${brl(+b.valorPago||0)}</b></td><td class="num">${+b.juros?brl(+b.juros):'·'}</td><td class="num">${+b.desconto?brl(+b.desconto):'·'}</td><td>${b.compensacao==='S'?'<span class="pill cm-ref">compensação</span> ':''}${b.comprovante?`<a class="link" href="${esc(b.comprovante)}" target="_blank" rel="noopener">📎 abrir</a>`:'<span class="mut">—</span>'}${b.obs?` <small class="mut">${esc(b.obs)}</small>`:''}</td><td><button class="icon-btn del" data-act="finBxDel" data-id="${esc(b.id)}" title="Excluir baixa">🗑</button></td></tr>`).join('')}</tbody></table>`:'<span class="mut">Nenhuma baixa registrada.</span>'}${semConta?'<div class="mut" style="margin-top:4px">Marcado como pago na versão anterior, sem conta bancária. Use <b>Completar baixa</b> para o Livro Caixa ter a conta.</div>':''}</div></td></tr>`:'';
     return `<tr class="fin-r" data-id="${esc(t.id)}">
       <td class="num" data-th="Vencimento"><b class="fin-venc ${cls}">${t.vencimento?_dtBRc(t.vencimento):'—'}</b>${_finAberto(sit)&&d!=null&&d<=30?`<small>${d<0?`${-d} d de atraso`:(d===0?'vence hoje':`em ${d} d`)}</small>`:''}</td>
       <td class="c-full"><b>${esc(t.participanteNome||t.participante||'—')}</b> <span class="mut">${esc(String(t.docTipo||'').replace(/^\d\s*-\s*/,''))} ${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''}${!pagar?' · <b>a receber</b>':''}</span>${t.obs?`<div class="mut fin-obs">${esc(t.obs)}</div>`:''}${bx.length||semConta?`<a class="link fin-bx-tg" data-act="finBxToggle" data-id="${esc(t.id)}">${aberto?'▾':'▸'} ${bx.length?bx.length+' baixa(s)':'sem baixa'}</a>`:''}</td>
@@ -5508,7 +5571,7 @@ async function finBxDel(id){ const b=FIN().baixas.find(x=>x.id===id); if(!b||!as
     route({keepScroll:true}); toast('Baixa excluída'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); }catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
 // ---- extrato por conta (v274): movimentos = baixas; saldo corrente a partir do saldo inicial da conta ----
 function finMovimentos(){ const F=FIN(), tit={}; F.titulos.forEach(t=>tit[t.id]=t);
-  return F.baixas.map(b=>{ const t=tit[b.titulo]||{}, receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER'; return {b, t, receber, data:String(b.data||'').slice(0,10), valor:+b.valorPago||0, ent:receber?(+b.valorPago||0):0, sai:receber?0:(+b.valorPago||0)}; })
+  return F.baixas.filter(b=>b.compensacao!=='S').map(b=>{ /* compensação de adiantamento não é dinheiro (v277) */ const t=tit[b.titulo]||{}, receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER'; return {b, t, receber, data:String(b.data||'').slice(0,10), valor:+b.valorPago||0, ent:receber?(+b.valorPago||0):0, sai:receber?0:(+b.valorPago||0)}; })
     .sort((a,b)=>a.data.localeCompare(b.data)||String(a.b.atualizado||'').localeCompare(String(b.b.atualizado||''))); }
 function finExtratoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.ativa)), U=FIN_UI;
   if(U.conta&&!contas.some(c=>c.codigo===U.conta)) U.conta='';
@@ -5584,7 +5647,7 @@ function lcdprDados(cpf, ano){
   const ini=`${ano}-01-01`, fim=`${ano}-12-31`, tit={}; F.titulos.forEach(t=>tit[t.id]=t);
   const semBaixa=F.titulos.filter(t=>t.produtor===cpf&&finSemConta(t)&&String(t.dataPgto||'').slice(0,4)===String(ano));
   if(semBaixa.length) add('erro',`${semBaixa.length} título(s) marcados como pagos sem conta em ${ano} — use "Completar baixa" para entrarem no livro.`,'#/financeiro');
-  const bx=F.baixas.filter(b=>{ const t=tit[b.titulo]; return t&&t.produtor===cpf&&String(t.status||'').toUpperCase()!=='CANCELADO'&&b.data>=ini&&b.data<=fim; })
+  const bx=F.baixas.filter(b=>{ const t=tit[b.titulo]; return b.compensacao!=='S'&&t&&t.produtor===cpf&&String(t.status||'').toUpperCase()!=='CANCELADO'&&b.data>=ini&&b.data<=fim; })   // compensação de adiantamento fica fora (v277)
     .sort((a,b)=>String(a.data).localeCompare(String(b.data))||String(a.atualizado||'').localeCompare(String(b.atualizado||'')));
   let saldo=0; const lanc=[]; const codIm=x=>lcN(x.codigo);
   bx.forEach(b=>{ const t=tit[b.titulo], receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER', conta=F.contas.find(c=>c.codigo===b.conta)||null;
@@ -6416,6 +6479,13 @@ V.maquinas = function(){
   <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão.</p>`;
 };
 
+// v277: vendas da safra por cultura (aba VENDAS) — kg padrão, sacas de 60 kg e toneladas para leitura
+function vendasPainelHtml(){ const L=(DATA&&DATA.vendas)||[]; if(!L.length) return '';
+  const g={}; L.forEach(v=>{ const k=(v.cultura||'— sem cultura —')+'|'+(v.safra||'principal'); const x=g[k]||(g[k]={emp:v.cultura||'— sem cultura —', seq:v.safra||'principal', kg:0, valor:0, n:0, notas:new Set()}); x.kg+=+v.kg||0; x.valor+=+v.valor||0; x.n++; x.notas.add(v.chave); });
+  const rows=Object.values(g).sort((a,b)=>b.valor-a.valor).map(x=>{ const sc=x.kg/60; return `<tr><td class="c-full"><b>${esc(x.emp)}</b>${x.seq==='safrinha'?' <span class="mut">· 2ª</span>':''}</td><td class="num" data-th="Notas">${x.notas.size}</td><td class="num" data-th="kg">${nf0.format(x.kg)}</td><td class="num" data-th="Sacas 60 kg">${nf2.format(sc)}</td><td class="num c-more" data-th="Toneladas">${nf2.format(x.kg/1000)}</td><td class="num" data-th="R$/sc">${sc>0?brl(x.valor/sc):'—'}</td><td class="num" data-th="Valor"><b>${brl0(x.valor)}</b></td></tr>`; }).join('');
+  const kg=L.reduce((s,v)=>s+(+v.kg||0),0), valor=L.reduce((s,v)=>s+(+v.valor||0),0);
+  return `<div class="panel" id="vendas"><div class="panel-head"><h2>🌾 Vendas da safra</h2><span class="sub">notas de venda confirmadas em Compras → Conferir venda · ${nf0.format(kg)} kg = ${nf2.format(kg/60)} sc · ${brl0(valor)} · o preço médio vira o preço real da cultura (pode sobrescrever por talhão)</span></div>
+    <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Notas</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; }
 V.resultados = function(){
   const cfg=OV.dreCfg||{};
   const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0;
@@ -6427,7 +6497,8 @@ V.resultados = function(){
     const prodHaOrc=(cv.seq==='safrinha'?prodSafDe(t):prodvDe(t))||0;
     const res=OV.result[key]||{};
     const prodHaReal=(res.prodHa!=null&&res.prodHa!=='')?+res.prodHa:prodHaOrc;
-    const precoOrc=precoCultura(emp), precoReal=(res.preco!=null&&res.preco!=='')?+res.preco:precoOrc;
+    const vd=vendasDe(emp,cv.seq), precoVenda=(unit==='sc'&&vd.precoSc>0)?vd.precoSc:0;   // v277: preço real das vendas (sacas de 60 kg)
+    const precoOrc=precoCultura(emp), precoReal=(res.preco!=null&&res.preco!=='')?+res.preco:(precoVenda||precoOrc);
     const receitaOrc=prodHaOrc*area*precoOrc, receitaReal=prodHaReal*area*precoReal;
     const insOrc=cv.ins, insReal=custoInsumoRealSeq(t,cv.seq);
     const maq=cv.maqHa*area, arr=((emp in OV.arrend)?+OV.arrend[emp]:0)*area, estr=estruturaHa*area;
@@ -6436,7 +6507,7 @@ V.resultados = function(){
     const margOrc=receitaOrc-impOrc-insOrc-maq-arr-estr-finOrc;
     const margReal=receitaReal-impReal-insReal-maq-arr-estr-finReal;
     const temReal=(res.prodHa!=null&&res.prodHa!=='');
-    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,receitaOrc,receitaReal,insOrc,insReal,maq,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
+    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,precoVenda,receitaOrc,receitaReal,insOrc,insReal,maq,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
   });
   const T=f=>rows.reduce((s,r)=>s+f(r),0);
   const tArea=T(r=>r.area), tRecR=T(r=>r.receitaReal), tRecO=T(r=>r.receitaOrc);
@@ -6448,7 +6519,7 @@ V.resultados = function(){
       <td class="c-full"><b>${esc(tNome(r.t))}</b><br><span class="mut" style="font-size:11px">${esc(r.emp)}${r.cv.seq==='safrinha'?' · 2ª':''}</span></td>
       <td class="num" data-th="Área">${num(r.area)}</td>
       <td class="num" data-th="Colhido/ha"><input class="cell ${r.temReal?'edited':''}" inputmode="decimal" data-edit="resProd" data-key="${esc(r.key)}" value="${r.temReal?esc(String(OV.result[r.key].prodHa)):''}" placeholder="${num(r.prodHaReal)}"><small> ${esc(r.unit)}</small></td>
-      <td class="num c-more" data-th="Preço"><input class="cell ${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'edited':''}" inputmode="decimal" data-edit="resPreco" data-key="${esc(r.key)}" value="${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?esc(String(OV.result[r.key].preco)):''}" placeholder="${nf2.format(r.precoReal)}"></td>
+      <td class="num c-more" data-th="Preço"><input class="cell ${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'edited':''}" inputmode="decimal" data-edit="resPreco" data-key="${esc(r.key)}" value="${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?esc(String(OV.result[r.key].preco)):''}" placeholder="${nf2.format(r.precoReal)}" title="${r.precoVenda?'preço médio das vendas registradas (aba VENDAS)':'preço orçado'}">${r.precoVenda&&!(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'<small class="mut" title="preço médio das vendas"> venda</small>':''}</td>
       <td class="num c-more" data-th="Receita">${brl0(r.receitaReal)}</td>
       <td class="num c-more" data-th="Insumos (real)" title="Orçado: ${brl0(r.insOrc)}">${brl0(r.insReal)}</td>
       <td class="num c-more" data-th="Margem orçada">${sgn(r.margOrc)}</td>
@@ -6463,6 +6534,7 @@ V.resultados = function(){
   </div>
   <div class="toolbar"><div class="search"><input id="q-res" placeholder="Buscar talhão ou cultura…" autocomplete="off"></div>
     <div class="spacer"></div><span class="badge badge-muted">Informe <b>Colhido/ha</b> e <b>Preço</b> de cada talhão. Impostos, estrutura, financeiro e máquina usam as premissas da <a class="link" data-go="#/dre">DRE</a>.</span></div>
+  ${vendasPainelHtml()}
   <div class="panel"><div class="panel-head"><h2>Resultado por talhão — Planejado × Realizado</h2><span class="sub">receita − custos = margem</span></div>
     <div class="table-wrap"><table id="res-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Colhido/ha</th><th class="num c-more">Preço</th><th class="num c-more">Receita</th><th class="num c-more">Insumos</th><th class="num c-more">Margem orç.</th><th class="num">Margem real</th><th class="num c-more">Desvio</th></tr></thead>
       <tbody>${body}</tbody>
@@ -9971,6 +10043,7 @@ V.campopainel = function(){
     <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
     ${(()=>{ let tot=0, ref=0, ar=0; tals.forEach(t=>{ const c=custoRealTalhao(t); if(c.n){ tot+=c.total; ref+=c.ref; ar+=c.area; } });   // v272: custo real dos insumos já aplicados
       return tot||ref?`<a class="kpi kpi-link" data-go="#/relatorios" title="insumos já aplicados (baixas aprovadas) valorados pelo custo médio pago nas notas · a preço de referência: ${brl0(ref)}"><div class="k-label">Insumos aplicados · custo real</div><div class="k-value">${brl0(tot)}</div><div class="k-sub">${ar?brl(tot/ar)+'/ha nos talhões com aplicação':'—'}</div></a>`:''; })()}
+    ${(()=>{ const v=vendasDe('',''); return v.n?`<a class="kpi kpi-link" data-go="#/resultados" title="notas de venda confirmadas (aba VENDAS)"><div class="k-label">Vendas da safra 🌾</div><div class="k-value">${nf0.format(v.sc)} sc</div><div class="k-sub">${nf0.format(v.kg)} kg · ${brl0(v.valor)} · ${v.precoSc?brl(v.precoSc)+'/sc':''}</div></a>`:''; })()}
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
     ${(()=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return `<div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>`;
       const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), ult=ed.slice().reverse().find(x=>x.mm>0);
@@ -11516,6 +11589,11 @@ document.addEventListener('change',e=>{
   if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
   if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') recRerender(); return; }
+  if(e.target.dataset && e.target.dataset.nfv!=null && nfeImport && nfeImport.venda){ const V=nfeImport.venda, f=e.target.dataset.nfv;   // v277: conferência de venda
+    if(f==='cultura'){ V.cultura=e.target.value; V.safra=V.cultura?nfeVendaSafra(V.cultura):V.safra; } else if(f==='safra') V.safra=e.target.value;
+    else if(f==='comp'){ const id=e.target.dataset.id; if(e.target.checked){ const a=finAdiantamentos(V.cnpj).find(x=>x.t.id===id), valor=V.itens.reduce((s,i)=>s+i.valor,0), ja=Object.keys(V.comp).reduce((s,k)=>s+(+V.comp[k]||0),0); V.comp[id]=a?Math.max(0,Math.min(a.saldo, valor-ja)):0; } else delete V.comp[id]; }
+    else if(f==='compv'){ const id=e.target.dataset.id; if(id in V.comp) V.comp[id]=_mmC(e.target.value)||0; }
+    recRerender(); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
     else if(f==='dest'){ it.dest=e.target.value==='maquina'?'maquina':'estoque'; if(it.dest==='maquina'){ if(!it.maq) it.maq=nfeMaqUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-maq-all')||{}).value||''; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); } }   // v276
@@ -11907,6 +11985,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
+    else if(a.act==='nfeVendaOk'){ nfeVendaOk(); }
+    else if(a.act==='nfeVendaNao'){ if(nfeImport&&nfeImport.venda){ nfeImport.venda=null; nfeImport.nota.tipo=nfeTipoNota(nfeImport.nota.itens); route({keepScroll:true}); toast('Tratando como compra'); } }
     else if(a.act==='nfeMaqTodos'){ if(nfeImport){ const m=((document.getElementById('nfe-maq-all')||{}).value||'').trim(); if(!m){ toast('Digite ou escolha a máquina'); return; } nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='maquina'; it.maq=m; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); }); route({keepScroll:true}); toast(`Nota inteira apropriada a ${m}`); } }
     else if(a.act==='nfeMaqNenhum'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(it.dest==='maquina'){ it.dest='estoque'; it.ok=!!PROD[it.produto]; } }); route({keepScroll:true}); } }
     else if(a.act==='nfeIgnVer'){ nfeIgnoradasCarregar(); }
