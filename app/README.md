@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Estoque de grãos com valor estimado (v280, fase 6B)** — a aba *Estoque* da balança (sacas colhidas na recepção e
+  expedidas, por safra e cultura) chega ao app em `pesagem.estoque`. Por cultura do app: **em estoque** = colhido −
+  vendido, **comprometido** = saldo dos contratos, **disponível** = estoque − comprometido. Valor estimado pelo
+  **preço médio das vendas da safra** (aba VENDAS); sem nota da cultura, pelo preço médio contratado; sem contrato,
+  pelo preço orçado — a tabela diz qual foi usado. Aparece em **Resultados → Vendas da safra** (tabela "Estoque de
+  grãos"), como KPI em **Financeiro → Vendas** e como card no **Painel do Campo**. Não entra na margem nem na DRE. O
+  de-para em Cadastros → Balança lista também as culturas da aba Estoque.
 - **Balança (Pesagem v2) — contratos de venda e cargas (v279, fase 6A)** — a planilha do Planejamento lê, só para
   consulta, a planilha do app da balança (abas *Contratos*, *Pesagem* e *NFAs_Emitidas*) a cada 10 min e manda ao
   app na chave `pesagem`. **Cadastros → ⚖️ Balança**: link da planilha (vazio = a planilha procura sozinha) e o

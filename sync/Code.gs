@@ -1383,7 +1383,7 @@ function _pesAba_(b, nome){ var s = b.getSheetByName(nome); if (!s || s.getLastR
 function _pesIso_(v){ if (v instanceof Date) return Utilities.formatDate(v, tz_(), 'yyyy-MM-dd'); var t = S(v), m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); return t.slice(0, 10); }
 function readPesagem(){
   var cfg = pesagemCfg_(), id = _idPlanilha_(cfg.link); if (!id) id = localizarPlanilhaPesagem_();
-  var out = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), cfg:{ link:cfg.link || '', depara:cfg.depara || {} }, contratos:[], cargas:[], nfas:[] };
+  var out = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), cfg:{ link:cfg.link || '', depara:cfg.depara || {} }, contratos:[], cargas:[], nfas:[], estoque:[] };
   if (!id){ out.aviso = 'planilha da balança não configurada: cole o link em Cadastros → Balança'; return out; }
   var b; try { b = SpreadsheetApp.openById(id); } catch (e) { out.erro = 'não consegui abrir a planilha da balança — compartilhe-a com a conta desta planilha ou confira o link em Cadastros → Balança'; return out; }
   out.nome = b.getName(); out.link = b.getUrl();
@@ -1394,6 +1394,9 @@ function readPesagem(){
   _pesAba_(b, 'NFAs_Emitidas').forEach(function(r){ var tk = S(r.TICKET), num = S(r.NNFA); if (!tk && !num) return;
     var x = { numero:num, ticket:tk, contrato:S(r.CONTRATO), emitente:S(r.EMITENTE), dest:S(r.DESTINATARIO), sacas:N(r.SACAS), data:_pesIso_(r.DATAEMISSAO), drive:S(r.DRIVEURL), kg:N(r.PESOKG) || N(r.SACAS) * 60, xml:S(r.XMLURL) };
     out.nfas.push(x); (porTicket[tk] = porTicket[tk] || []).push(x); });
+  // v280: aba Estoque da balança (sacas por safra e cultura: entradas = recepção da colheita, saídas = expedição)
+  _pesAba_(b, 'Estoque').forEach(function(r){ var cu = S(r.CULTURA); if (!cu) return;
+    out.estoque.push({ safra:S(r.SAFRA), cultura:cu, entradasSc:N(r.ENTRADASSC), saidasSc:N(r.SAIDASSC), saldoSc:N(r.SALDOSC), em:_pesIso_(r.ULTIMAATUALIZACAO) }); });
   _pesAba_(b, 'Pesagem').forEach(function(r){ var tk = S(r.ID); if (!tk) return; var st = S(r.STATUS); if (st.indexOf('Finalizado') < 0) return; var ns = porTicket[tk] || [];
     out.cargas.push({ ticket:tk, data:_pesIso_(r.DATA), contrato:S(r.NUMORDEM), placa:S(r.PLACA), motorista:S(r.MOTORISTA), kg:Math.round(N(r.CARGAT) * 1000), tara:N(r.TARAT), bruto:N(r.BRUTOT),
       nfa:ns.map(function(x){ return x.numero; }).filter(Boolean).join(', '), nfaKg:Math.round(ns.reduce(function(s, x){ return s + x.kg; }, 0)), xml:(ns.map(function(x){ return x.xml; }).filter(Boolean)[0]) || '', autorizada:S(r.NFAAUTORIZADA) === 'Sim' }); });
@@ -2045,7 +2048,7 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
   planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem'],
-  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem'],
   precos:['precos_app','bulas_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
