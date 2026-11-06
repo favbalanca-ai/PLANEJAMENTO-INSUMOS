@@ -2674,7 +2674,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-278';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-279';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4387,6 +4387,9 @@ function nfeVendaSafra(emp){ return talhoesAll().some(t=>empSafDe(t)===emp)&&!ta
 function nfeKgDe(q,un){ const u=String(un||'').toUpperCase().replace(/\s/g,''); q=+q||0; if(/^(T|TON|TONS|TONELADA|TONELADAS)$/.test(u)) return q*1000; if(/^(SC|SCS|SACA|SACAS|SACO|SACOS|SC60|SACA60)$/.test(u)) return q*60; if(/^SC50$/.test(u)) return q*50; if(/^(AR|ARROBA|@)$/.test(u)) return q*15; return q; }
 function nfeVendaPrep(imp){ const n=imp.nota, prods=nfeProdutoresDocs(), emitProd=prods.includes(n.cnpj)||(String(n.cnpj||'').length===11&&!prods.length);
   imp.venda={ produtor:emitProd?n.cnpj:n.dest, comprador:emitProd?(n.destNome||'—'):n.fornecedor, cnpj:emitProd?n.dest:n.cnpj, cultura:nfeVendaCultura(n.itens.map(i=>i.xprod).join(' ')), safra:'', comp:{} };
+  imp.venda.contrato=''; imp.venda.ticket='';
+  if(pesOk()){ const cg=pesCargaDaNota(n.nNF), cs=pesContratosDo(imp.venda.cnpj); if(cg){ imp.venda.ticket=cg.ticket; imp.venda.contrato=cg.contrato; } else if(cs.length===1) imp.venda.contrato=cs[0].id;   // v279: carga da balança pelo nº da NFA
+    const c=pesContrato(imp.venda.contrato); if(c&&pesCulturaDe(c.produto)) imp.venda.cultura=pesCulturaDe(c.produto); }
   imp.venda.safra=imp.venda.cultura?nfeVendaSafra(imp.venda.cultura):'principal';
   imp.venda.itens=n.itens.map(it=>{ const kg=nfeKgDe(it.qcom,it.ucom), valor=nfeItemValor(it), sc=kg/60; return {n:it.n, xprod:it.xprod, qcom:it.qcom, ucom:it.ucom, kg, sacas:+sc.toFixed(2), ton:kg/1000, valor, precoSc:sc>0?valor/sc:0}; }); }
 // adiantamentos do comprador: títulos A RECEBER, categoria Adiantamento, já recebidos, com saldo a compensar
@@ -4409,8 +4412,12 @@ function nfeVendaHtml(){ const imp=nfeImport, n=imp.nota, V=imp.venda, pg=nfePag
     <div class="app-grid" style="padding:10px 14px 0">
       <label>Cultura do app<select class="sel" data-nfv="cultura"><option value="">— escolha —</option>${emps.map(e=>`<option value="${esc(e)}"${e===V.cultura?' selected':''}>${esc(e)}</option>`).join('')}</select></label>
       <label>Safra<select class="sel" data-nfv="safra"><option value="principal"${V.safra!=='safrinha'?' selected':''}>1ª cultura</option><option value="safrinha"${V.safra==='safrinha'?' selected':''}>2ª cultura (safrinha)</option></select></label>
-      <div class="nfe-kv"><small>Preço médio</small><b>${sc>0?brl(valor/sc):'—'}/sc</b><span>${kg>0?brl(valor/kg*1000)+'/t':''}</span></div>
+      <div class="nfe-kv"><small>Preço médio</small><b>${sc>0?brl(valor/sc):'—'}/sc</b><span>${kg>0?brl(valor/kg*1000)+'/t':''}${(()=>{ const c=pesContrato(V.contrato), ps=c?pesPrecoSc(c):0; if(!ps||!(sc>0)) return ''; const d=(valor/sc/ps-1)*100; return ` · contrato ${brl(ps)}/sc${Math.abs(d)>=0.5?` <b class="${d<0?'exp-warn':''}">(${d>0?'+':''}${nf1.format(d)}%)</b>`:''}`; })()}</span></div>
+      ${pesOk()&&PES().contratos.length?(()=>{ const cs=pesContratosDo(V.cnpj).length?pesContratosDo(V.cnpj):PES().contratos, cg=V.contrato?pesCargasDo(V.contrato):PES().cargas.slice(0,80);
+        return `<label>Contrato (balança)<select class="sel" data-nfv="contrato"><option value="">— sem contrato —</option>${cs.map(c=>`<option value="${esc(c.id)}"${c.id===V.contrato?' selected':''}>${esc(c.id)} · ${esc(c.produto)} · saldo ${nf0.format(Math.max(0,c.saldo))} kg${c.cnpj!==V.cnpj?' · '+esc(c.comprador):''}</option>`).join('')}</select></label>
+        <label>Carga (ticket da balança)<select class="sel" data-nfv="ticket"><option value="">—</option>${cg.map(g=>`<option value="${esc(g.ticket)}"${g.ticket===V.ticket?' selected':''}>${esc(_dtBRc(g.data))} · ${esc(g.placa)} · ${nf0.format(g.kg)} kg${g.nfa?' · NFA '+esc(g.nfa):''}</option>`).join('')}</select></label>`; })():''}
     </div>
+    ${(()=>{ const g=V.ticket?PES().cargas.find(x=>x.ticket===V.ticket):null; if(!g||!g.kg||!kg) return ''; const d=(kg/g.kg-1)*100; return Math.abs(d)>=1?`<div class="nfe-aviso ${Math.abs(d)>=5?'warn':'info'}" style="margin:8px 14px 0">⚖️ Balança: <b>${nf0.format(g.kg)} kg</b> na carga ${esc(g.placa)} · nota: <b>${nf0.format(kg)} kg</b> (${d>0?'+':''}${nf1.format(d)}%)</div>`:''; })()}
     <div class="table-wrap" style="margin:10px 14px"><table class="cards-sm rel-uso-t"><thead><tr><th>Produto</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody>
       <tfoot><tr><td>Total</td><td class="num">${nf0.format(kg)}</td><td class="num">${nf2.format(sc)}</td><td class="num c-more">${nf2.format(kg/1000)}</td><td class="num">${sc>0?brl(valor/sc):'—'}</td><td class="num">${brl(valor)}</td></tr></tfoot></table></div>
     ${adi.length?`<div class="nfe-comp"><b>💰 Adiantamentos deste comprador já recebidos</b> <span class="mut">— marque o que esta nota quita (não é dinheiro novo: fica fora do Livro Caixa e do extrato)</span>
@@ -4422,14 +4429,29 @@ async function nfeVendaOk(){ const imp=nfeImport; if(!imp||!imp.venda) return; c
   if(!V.cultura && !ask('Sem cultura do app escolhida — a venda não vai aparecer em Resultados. Confirmar mesmo assim?')) return;
   const valor=V.itens.reduce((s,i)=>s+i.valor,0), comp=Object.keys(V.comp).map(k=>({ref:k, valor:+(+V.comp[k]||0).toFixed(2)})).filter(c=>c.valor>0);
   if(comp.reduce((s,c)=>s+c.valor,0)>valor+0.005){ toast('Compensação maior que o valor da nota'); return; }
-  const pl={chave:n.chave, cultura:V.cultura, safra:V.safra, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, itens:V.itens.map(i=>({n:i.n, xprod:i.xprod, kg:+i.kg.toFixed(3), sacas:i.sacas, valor:i.valor})), dups:n.dups||[], pag:n.pag||[], compensar:comp};
+  const pl={chave:n.chave, cultura:V.cultura, safra:V.safra, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, contrato:V.contrato||'', ticket:V.ticket||'', itens:V.itens.map(i=>({n:i.n, xprod:i.xprod, kg:+i.kg.toFixed(3), sacas:i.sacas, valor:i.valor})), dups:n.dups||[], pag:n.pag||[], compensar:comp};
   try{ if(imp.uploadP) await imp.uploadP; const r=await nfePost({__nfeVenda:pl}); if(!r||r.fail){ toast('Não gravou: '+((r&&r.msgs)||[]).join(' ')); return; }
-    DATA.vendas=(DATA.vendas||[]).filter(v=>v.chave!==n.chave).concat(V.itens.map(i=>({id:n.chave+'-'+i.n, chave:n.chave, nNF:n.nNF, data:n.emissao, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, produto:i.xprod, cultura:V.cultura, safra:V.safra, kg:i.kg, sacas:i.sacas, precoSc:i.precoSc, valor:i.valor})));
+    DATA.vendas=(DATA.vendas||[]).filter(v=>v.chave!==n.chave).concat(V.itens.map(i=>({id:n.chave+'-'+i.n, chave:n.chave, nNF:n.nNF, data:n.emissao, comprador:V.comprador, cnpj:V.cnpj, produtor:V.produtor, produto:i.xprod, cultura:V.cultura, safra:V.safra, kg:i.kg, sacas:i.sacas, precoSc:i.precoSc, valor:i.valor, contrato:V.contrato||'', ticket:V.ticket||''})));
     if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
     nfeImport=null; route(); toast(`Venda registrada: ${nf2.format(valor/60>0?V.itens.reduce((s,i)=>s+i.sacas,0):0)} sc · ${brl(valor)}${comp.length?' · adiantamento compensado':''}`); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600);
   }catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
 // vendas por cultura/safra (aba VENDAS): kg, sacas, valor, preço médio por saca
 function vendasDe(emp, seq){ const L=((DATA&&DATA.vendas)||[]).filter(v=>(!emp||v.cultura===emp)&&(!seq||(v.safra||'principal')===seq)); const kg=L.reduce((s,v)=>s+(+v.kg||0),0), valor=L.reduce((s,v)=>s+(+v.valor||0),0), sc=kg/60; return {n:L.length, kg, sc, t:kg/1000, valor, precoSc:sc>0?valor/sc:0, precoT:kg>0?valor/kg*1000:0}; }
+// ===== v279: BALANÇA (Pesagem v2) — contratos de venda, cargas e NFAs lidos da planilha da balança (só leitura) =====
+function PES(){ const p=(DATA&&DATA.pesagem)||{}; return {cfg:Object.assign({link:'',depara:{}}, p.cfg||{}), contratos:p.contratos||[], cargas:p.cargas||[], nfas:p.nfas||[], erro:p.erro||'', aviso:p.aviso||'', nome:p.nome||'', link:p.link||'', em:p.em||''}; }
+function pesOk(){ return !!(DATA&&DATA.pesagem); }
+function pesCulturaDe(produto){ const dp=PES().cfg.depara||{}; return dp[produto]||nfeVendaCultura(produto)||''; }
+// preço do contrato por saca de 60 kg (a balança guarda o volume sempre em kg; a unidade é a do preço)
+function pesPrecoSc(c){ const u=String(c.un||'').toUpperCase(), p=+c.preco||0; if(!p) return 0; if(/SC|SACA/.test(u)) return p; if(/^(T|TON|TONELADA)/.test(u)) return p/1000*60; if(/KG/.test(u)) return p*60; if(/@|ARROBA/.test(u)) return p/15*60; return p; }
+function pesContratosDo(cnpj){ return PES().contratos.filter(c=>!cnpj||c.cnpj===cnpj).sort((a,b)=>((b.saldo>0)-(a.saldo>0))||String(b.criado||'').localeCompare(String(a.criado||''))); }
+function pesContrato(id){ return PES().contratos.find(c=>c.id===id)||null; }
+function pesCargasDo(cid){ return PES().cargas.filter(c=>c.contrato===cid).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))); }
+const _nfaNum=x=>String(x||'').trim().replace(/^0+/,'');
+function pesCargaDaNota(nNF){ const n=_nfaNum(nNF); if(!n) return null; return PES().cargas.find(c=>String(c.nfa||'').split(',').map(_nfaNum).includes(n))||null; }
+// resumo por cultura do app: contratado, entregue (balança), saldo e preço médio contratado por saca
+function pesResumo(){ const g={}; PES().contratos.forEach(c=>{ const emp=pesCulturaDe(c.produto)||'— sem cultura do app —'; const x=g[emp]||(g[emp]={emp, n:0, kg:0, entregue:0, saldo:0, valor:0, vSaldo:0}); const ps=pesPrecoSc(c);
+  x.n++; x.kg+=+c.total||0; x.entregue+=+c.entregue||0; x.saldo+=Math.max(0,+c.saldo||0); x.valor+=(+c.total||0)/60*ps; x.vSaldo+=Math.max(0,+c.saldo||0)/60*ps; });
+  return Object.values(g).map(x=>Object.assign(x,{precoSc:x.kg>0?x.valor/(x.kg/60):0})); }
 // ---- fator: quanto de 1 unidade da nota vale na unidade do app (CX 10X1KG → 10 · GL 5L → 5 · BB 20L → 20) ----
 function _unBase(u){ u=String(u||'').toUpperCase().replace(/\./g,'');
   if(/^(KG|KGS|QUILO|QUILOS)$/.test(u)) return ['KG',1]; if(u==='G'||u==='GR') return ['KG',0.001]; if(/^(T|TN|TON)$/.test(u)) return ['KG',1000];
@@ -5509,7 +5531,7 @@ V.financeiro=function(){
   if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${FIN_UI.view!=='extrato'&&FIN_UI.view!=='livro'?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button></div>`;
   const kpis=`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
     <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
@@ -5518,6 +5540,7 @@ V.financeiro=function(){
   </div>`;
   if(FIN_UI.view==='extrato') return kpis+seg+finExtratoHtml();
   if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
+  if(FIN_UI.view==='vendas') return kpis+seg+finVendasHtml();   // v279: contratos e cargas da balança
   const L=finLista(), hj=_hojeISO();
   const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
   const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
@@ -5700,6 +5723,25 @@ function lcdprDados(cpf, ano){
 function lcdprTxt(d){ return d.linhas.map(l=>l.join('|')).join('\r\n')+'\r\n'; }
 function lcdprCsv(d){ const cab=['Data','Imóvel','Conta','Nº doc','Tipo doc','Histórico','CPF/CNPJ participante','Tipo lanç.','Entrada','Saída','Saldo acumulado','Fornecedor/Comprador','Categoria','Juros','Desconto'];
   const lin=[cab.map(_usoCsvEsc).join(';')]; d.lanc.forEach(l=>lin.push([_dtBRc(l.data), l.imovel, l.conta, l.numDoc, l.tipoDoc, l.hist, l.partic, l.tipoLanc, nf2.format(l.ent), nf2.format(l.sai), nf2.format(l.saldo), l.t.participanteNome||'', l.t.categoria||'', nf2.format(+l.b.juros||0), nf2.format(+l.b.desconto||0)].map(_usoCsvEsc).join(';'))); return '﻿'+lin.join('\r\n'); }
+// v279: Vendas — contratos de venda e cargas da balança (Pesagem v2) × notas conferidas (aba VENDAS)
+function finVendasHtml(){ const P=PES(), V=(DATA&&DATA.vendas)||[]; FIN_UI.pesOpen=FIN_UI.pesOpen||{};
+  const st=!pesOk()?`<div class="nfe-aviso warn" style="margin:0 14px 10px">A planilha ainda não manda os dados da balança: implante o <b>Code.gs</b> novo e puxe de novo.</div>`
+    :P.erro?`<div class="nfe-aviso warn" style="margin:0 14px 10px">⚠️ ${esc(P.erro)} · <a class="link" data-go="#/cadastros">Cadastros → Balança</a></div>`
+    :P.aviso?`<div class="nfe-aviso info" style="margin:0 14px 10px">${esc(P.aviso)} · <a class="link" data-go="#/cadastros">Cadastros → Balança</a></div>`
+    :`<div class="mut" style="padding:0 14px 8px;font-size:12px">⚖️ ${esc(P.nome||'planilha da balança')}${P.link?` · <a class="link" href="${esc(P.link)}" target="_blank" rel="noopener">abrir</a>`:''} · lida ${esc((P.em||'').replace('T',' '))} · atualiza a cada 10 min</div>`;
+  const R=pesResumo(), kgC=R.reduce((s,x)=>s+x.kg,0), kgE=R.reduce((s,x)=>s+x.entregue,0), kgS=R.reduce((s,x)=>s+x.saldo,0), vS=R.reduce((s,x)=>s+x.vSaldo,0), kgF=V.reduce((s,v)=>s+(+v.kg||0),0), semNf=P.cargas.filter(c=>!c.nfa).length;
+  const kp=`<div class="kpi-grid"><div class="kpi accent"><div class="k-label">Contratado</div><div class="k-value">${nf0.format(kgC/60)} sc</div><div class="k-sub">${P.contratos.length} contrato(s) · ${nf0.format(kgC)} kg</div></div>
+    <div class="kpi"><div class="k-label">Entregue (balança)</div><div class="k-value">${nf0.format(kgE/60)} sc</div><div class="k-sub">${P.cargas.length} carga(s)${semNf?` · <b>${semNf} sem NFA</b>`:''}</div></div>
+    <div class="kpi"><div class="k-label">Faturado (notas conferidas)</div><div class="k-value">${nf0.format(kgF/60)} sc</div><div class="k-sub">${new Set(V.map(v=>v.chave)).size} nota(s) na aba VENDAS</div></div>
+    <div class="kpi"><div class="k-label">Saldo a entregar</div><div class="k-value">${nf0.format(kgS/60)} sc</div><div class="k-sub">${brl0(vS)} a receber previsto</div></div></div>`;
+  const notaDa=g=>V.find(v=>(g.ticket&&v.ticket===g.ticket)||(g.nfa&&String(g.nfa).split(',').map(_nfaNum).includes(_nfaNum(v.nNF))));
+  const rows=pesContratosDo('').map(c=>{ const cu=pesCulturaDe(c.produto), ps=pesPrecoSc(c), cg=pesCargasDo(c.id), nfC=V.filter(v=>v.contrato===c.id), aberto=!!FIN_UI.pesOpen[c.id], enc=/encerr|inativ|^n[aã]o$/i.test(c.status||'');
+    const sub=aberto?`<tr class="fin-bxs"><td colspan="7"><div class="fin-bx-list"><b>Cargas deste contrato</b>${cg.length?`<table><thead><tr><th>Data</th><th>Placa</th><th class="num">kg</th><th class="num">sc</th><th>NFA</th><th>Nota no app</th></tr></thead><tbody>${cg.map(g=>{ const vn=notaDa(g); return `<tr><td>${esc(_dtBRc(g.data))}</td><td>${esc(g.placa)}</td><td class="num">${nf0.format(g.kg)}</td><td class="num">${nf2.format(g.kg/60)}</td><td>${g.nfa?esc(g.nfa):'<span class="exp-warn">sem NFA</span>'}</td><td>${vn?'<span class="pill cm-ref">conferida</span>':g.nfa?'<span class="mut">a conferir em Compras</span>':'—'}</td></tr>`; }).join('')}</tbody></table>`:'<p class="mut">Nenhuma carga finalizada.</p>'}</div></td></tr>`:'';
+    return `<tr class="fin-r${enc?' off':''}"><td class="c-full"><a class="link" data-act="pesToggle" data-id="${esc(c.id)}"><b>${esc(c.id)}</b></a> <span class="mut">${esc(c.comprador||'')}</span><br><small class="mut">${esc(c.produto)}${cu?' → '+esc(cu):' → <span class="exp-warn">sem cultura do app (Cadastros → Balança)</span>'}${c.safra?' · '+esc(c.safra):''}</small></td>
+      <td class="num" data-th="Preço">${ps?brl(ps)+'/sc':'—'}${c.preco?`<br><small class="mut">${brl(c.preco)}/${esc(c.un||'')}</small>`:''}</td><td class="num" data-th="Contratado sc">${nf0.format(c.total/60)}</td><td class="num" data-th="Entregue sc">${nf0.format(c.entregue/60)}</td><td class="num" data-th="Saldo sc"><b>${nf0.format(Math.max(0,c.saldo)/60)}</b></td><td class="num" data-th="Faturado sc">${nfC.length?nf0.format(nfC.reduce((s,v)=>s+(+v.kg||0),0)/60):'—'}</td><td data-th="Status">${esc(c.status||'')}${c.liberado==='Sim'?' <span class="pill cm-ref">liberado</span>':''}<br><small class="mut">${cg.length} carga(s)</small></td></tr>`+sub; }).join('');
+  return st+kp+`<div class="panel"><div class="panel-head"><h2>🌾 Contratos de venda (balança)</h2><span class="sub">cadastrados no Pesagem v2 · toque no nº para ver as cargas · sacas de 60 kg</span></div>
+    ${P.contratos.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Contrato · comprador</th><th class="num">Preço</th><th class="num">Contratado sc</th><th class="num">Entregue sc</th><th class="num">Saldo sc</th><th class="num">Faturado sc</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 12px">Nenhum contrato na planilha da balança.</p>'}
+    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Os XML das NFAs emitidas pela balança entram sozinhos em <b>Compras</b> como "Venda do produtor" (a cada 15 min); ao conferir, a nota vira título a receber e o preço real em Resultados. Contratos e cargas são da balança: este app só lê.</p></div>`; }
 function finLivroHtml(){ const F=FIN(), prods=finProdutores(), anos=[...new Set(F.baixas.map(b=>String(b.data||'').slice(0,4)).filter(Boolean).concat([String(new Date().getFullYear())]))].sort().reverse();
   if(!LC_UI.cpf&&prods.length) LC_UI.cpf=prods[0].cpf; if(!anos.includes(LC_UI.ano)) LC_UI.ano=anos[0];
   const d=lcdprDados(LC_UI.cpf, LC_UI.ano), ger=F.lcdprGerado[LC_UI.cpf+'|'+LC_UI.ano]||'';
@@ -5745,6 +5787,13 @@ V.cadastros=function(){
     ${form('conta', `<label>Código (só números)${inp('codigo',it.codigo,'ex.: 001',(E&&!E.novo?'readonly ':'')+'inputmode="numeric"')}</label><label>Produtor${pSel('produtor',it.produtor)}</label><label>Nome do banco${inp('banco',it.banco,'ex.: Banco do Brasil')}</label><label>Nº do banco${inp('numBanco',it.numBanco,'ex.: 001','inputmode="numeric"')}</label><label>País${inp('pais',it.pais||'BR','BR','maxlength="2"')}</label><label>Agência${inp('agencia',it.agencia,'')}</label><label>Conta${inp('conta',it.conta,'com dígito')}</label><label>Tipo<select class="sel" data-cadf="tipo">${FIN_CONTA_TIPOS.map(x=>`<option${x===(it.tipo||FIN_CONTA_TIPOS[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label><label>Saldo inicial (R$)${inp('saldoInicial',it.saldoInicial==null||it.saldoInicial===''?'':fmtDose(+it.saldoInicial||0),'0,00','inputmode="decimal" title="saldo da conta na data abaixo — o extrato parte daqui"')}</label><label>Data do saldo<input type="date" class="cell" data-cadf="dataSaldo" value="${esc(it.dataSaldo||'')}"></label><label>${ativo('ativa',it.ativa==null?'S':it.ativa)}</label>`)}
     <div class="cad-list">${contas.map(x=>`<div class="cad-row${_finAtivo(x.ativa)?'':' off'}"><div><b>${esc(x.banco||x.codigo)}</b><small>cód. ${esc(x.codigo)} · ag. ${esc(x.agencia||'—')} · conta ${esc(x.conta||'—')}</small></div><div class="mut">${esc(x.tipo||'')}${x.produtor?` · ${esc(finProdNome(x.produtor))}`:''}${x.saldoInicial!==''&&x.saldoInicial!=null?` · saldo inicial ${brl0(+x.saldoInicial||0)}${x.dataSaldo?' em '+_dtBRc(x.dataSaldo):''}`:''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="conta" data-id="${esc(x.codigo)}" title="Editar">✎</button></div>`).join('')||'<p class="mut" style="padding:10px 14px">Nenhuma conta cadastrada.</p>'}</div>
     <div class="bulk-add" style="padding:10px 14px">${btnNovo('conta')}</div></div>
+  ${(()=>{ const P=PES(), prods=[...new Set(P.contratos.map(c=>c.produto).filter(Boolean))], emps=empList().filter(e=>e&&e!=='—'), dp=P.cfg.depara||{};   // v279
+    return `<div class="panel"><div class="panel-head"><h2>⚖️ Balança (Pesagem v2)</h2><span class="sub">planilha do app da balança: contratos de venda, cargas e NFAs — só leitura, atualiza a cada 10 min</span></div>
+    ${pesOk()?'':'<div class="nfe-aviso warn" style="margin:0 14px 10px">A planilha ainda não manda os dados da balança: implante o <b>Code.gs</b> novo e puxe de novo.</div>'}
+    <div class="app-grid" style="padding:0 14px"><label style="grid-column:1/-1">Link da planilha da balança<input class="txt" id="pes-link" value="${esc(P.cfg.link||'')}" placeholder="cole o link da planilha do Pesagem v2 (vazio = o app procura sozinho)"></label>
+      ${P.erro?`<div class="nfe-aviso warn" style="grid-column:1/-1">⚠️ ${esc(P.erro)}</div>`:P.nome?`<div class="mut" style="grid-column:1/-1;font-size:12px">✅ ${esc(P.nome)} · ${P.contratos.length} contrato(s) · ${P.cargas.length} carga(s) · ${P.nfas.length} NFA(s) · lida ${esc((P.em||'').replace('T',' '))}</div>`:P.aviso?`<div class="mut" style="grid-column:1/-1;font-size:12px">${esc(P.aviso)}</div>`:''}
+      ${prods.length?`<div style="grid-column:1/-1"><b style="font-size:13px">De-para: produto da balança → cultura do app</b><div class="mut" style="font-size:12px">liga o contrato à cultura em Resultados e sugere a cultura ao conferir a venda</div></div>`+prods.map(p=>`<label>${esc(p)}<select class="sel" data-pesdp="${esc(p)}"><option value="">— escolher —</option>${emps.map(e=>`<option value="${esc(e)}"${(dp[p]||'')===e?' selected':''}>${esc(e)}</option>`).join('')}</select></label>`).join(''):''}
+    </div><div class="bulk-add" style="padding:10px 14px"><button class="btn btn-primary btn-sm" data-act="pesSalvar">💾 Salvar</button></div></div>`; })()}
   <div class="panel"><div class="panel-head"><h2>🧾 Contador</h2><span class="sub">um só para todos os produtores · vai no encerramento (registro 9999) do Livro Caixa</span></div>
     ${form('contador', `<label>Nome${inp('nome',it.nome,'')}</label><label>CPF/CNPJ${inp('doc',it.doc,'só números','inputmode="numeric"')}</label><label>CRC${inp('crc',it.crc,'registro no CRC')}</label><label>E-mail${inp('email',it.email,'')}</label><label>Telefone${inp('fone',it.fone,'DDD + número','inputmode="numeric"')}</label>`)}
     <div class="cad-list"><div class="cad-row"><div><b>${esc(CT.nome||'— não informado —')}</b><small>${esc(CT.doc||'')}${CT.crc?' · CRC '+esc(CT.crc):''}</small></div><div class="mut">${esc(CT.email||'')}${CT.fone?' · '+esc(CT.fone):''}</div><button class="icon-btn" data-act="cadEditar" data-tipo="contador" data-id="x" title="Editar">✎</button></div></div></div>`;
@@ -5755,9 +5804,12 @@ async function cadPost(tipo, item, msgOk){ const url=syncUrl(); if(!url) return 
   try{ const r=await syncPost(url, JSON.stringify({__cadFin:{tipo, itens:[item]}}));
     if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
     if(tipo==='contador'){ DATA.financeiro.contador=Object.assign({}, FIN().contador, item); }
+    else if(tipo==='pesagem'){ if(DATA.pesagem) DATA.pesagem.cfg=Object.assign({}, DATA.pesagem.cfg||{}, item); }
     else if(tipo!=='lcdpr'){ const k=CAD_KEY[tipo], L=cadLista(tipo), i=L.findIndex(x=>x[k]===item[k]); if(item.del){ if(i>=0) L.splice(i,1); } else if(i>=0) Object.assign(L[i], item); else L.push(item); }
     if(msgOk) toast(msgOk); CAD_EDIT=null; route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
   catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
+function pesSalvar(){ const link=((document.getElementById('pes-link')||{}).value||'').trim(), depara={}; document.querySelectorAll('[data-pesdp]').forEach(s=>{ if(s.value) depara[s.dataset.pesdp]=s.value; });
+  if(link && !/^(https?:\/\/|[A-Za-z0-9_-]{20,}$)/.test(link)){ toast('Cole o link completo da planilha'); return; } cadPost('pesagem', {link, depara}, 'Balança salva — os dados chegam na próxima sincronização'); }
 function cadSalvar(){ const E=CAD_EDIT; if(!E) return; const it=Object.assign({}, E.item), k=CAD_KEY[E.tipo];
   if(E.tipo==='contador'){ it.doc=String(it.doc||'').replace(/\D/g,''); if(!String(it.nome||'').trim()){ toast('Informe o nome do contador'); return; } cadPost('contador', it, 'Contador salvo'); return; }
   if(E.tipo==='contraparte'){ it.doc=String(it.doc||'').replace(/\D/g,''); if(!it.imovel){ toast('Escolha o imóvel'); return; } if(!(it.doc.length===11||it.doc.length===14)){ toast('CPF (11) ou CNPJ (14) só com números'); return; } it.participacao=+(_mmC(it.participacao)||0); if(!it.id) it.id='cp:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); if(!it.tipo) it.tipo=LCDPR_LEIAUTE.contraparte[0]; cadPost('contraparte', it, 'Contraparte salva'); return; }
@@ -6501,12 +6553,14 @@ V.maquinas = function(){
 };
 
 // v277: vendas da safra por cultura (aba VENDAS) — kg padrão, sacas de 60 kg e toneladas para leitura
-function vendasPainelHtml(){ const L=(DATA&&DATA.vendas)||[]; if(!L.length) return '';
+function vendasPainelHtml(){ const L=(DATA&&DATA.vendas)||[], RC=pesOk()?pesResumo():[]; if(!L.length&&!RC.length) return '';
   const g={}; L.forEach(v=>{ const k=(v.cultura||'— sem cultura —')+'|'+(v.safra||'principal'); const x=g[k]||(g[k]={emp:v.cultura||'— sem cultura —', seq:v.safra||'principal', kg:0, valor:0, n:0, notas:new Set()}); x.kg+=+v.kg||0; x.valor+=+v.valor||0; x.n++; x.notas.add(v.chave); });
   const rows=Object.values(g).sort((a,b)=>b.valor-a.valor).map(x=>{ const sc=x.kg/60; return `<tr><td class="c-full"><b>${esc(x.emp)}</b>${x.seq==='safrinha'?' <span class="mut">· 2ª</span>':''}</td><td class="num" data-th="Notas">${x.notas.size}</td><td class="num" data-th="kg">${nf0.format(x.kg)}</td><td class="num" data-th="Sacas 60 kg">${nf2.format(sc)}</td><td class="num c-more" data-th="Toneladas">${nf2.format(x.kg/1000)}</td><td class="num" data-th="R$/sc">${sc>0?brl(x.valor/sc):'—'}</td><td class="num" data-th="Valor"><b>${brl0(x.valor)}</b></td></tr>`; }).join('');
   const kg=L.reduce((s,v)=>s+(+v.kg||0),0), valor=L.reduce((s,v)=>s+(+v.valor||0),0);
   return `<div class="panel" id="vendas"><div class="panel-head"><h2>🌾 Vendas da safra</h2><span class="sub">notas de venda confirmadas em Compras → Conferir venda · ${nf0.format(kg)} kg = ${nf2.format(kg/60)} sc · ${brl0(valor)} · o preço médio vira o preço real da cultura (pode sobrescrever por talhão)</span></div>
-    <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Notas</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; }
+    ${L.length?`<div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Notas</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 8px">Nenhuma nota de venda conferida ainda.</p>'}
+    ${RC.length?`<div class="panel-head" style="padding-top:6px"><h2 style="font-size:15px">⚖️ Contratos de venda (balança)</h2><span class="sub">preço contratado é só referência; o preço real continua vindo das notas conferidas</span></div>
+    <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Contratos</th><th class="num">Contratado sc</th><th class="num">Entregue sc</th><th class="num">Saldo sc</th><th class="num">R$/sc contratado</th><th class="num">Valor</th></tr></thead><tbody>${RC.sort((a,b)=>b.valor-a.valor).map(x=>`<tr><td class="c-full"><b>${esc(x.emp)}</b></td><td class="num" data-th="Contratos">${x.n}</td><td class="num" data-th="Contratado sc">${nf0.format(x.kg/60)}</td><td class="num" data-th="Entregue sc">${nf0.format(x.entregue/60)}</td><td class="num" data-th="Saldo sc">${nf0.format(x.saldo/60)}</td><td class="num" data-th="R$/sc contratado">${x.precoSc?brl(x.precoSc):'—'}</td><td class="num" data-th="Valor"><b>${brl0(x.valor)}</b></td></tr>`).join('')}</tbody></table></div>`:''}</div>`; }
 V.resultados = function(){
   const cfg=OV.dreCfg||{};
   const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0;
@@ -11746,6 +11800,8 @@ document.addEventListener('change',e=>{
     if(f==='cultura'){ V.cultura=e.target.value; V.safra=V.cultura?nfeVendaSafra(V.cultura):V.safra; } else if(f==='safra') V.safra=e.target.value;
     else if(f==='comp'){ const id=e.target.dataset.id; if(e.target.checked){ const a=finAdiantamentos(V.cnpj).find(x=>x.t.id===id), valor=V.itens.reduce((s,i)=>s+i.valor,0), ja=Object.keys(V.comp).reduce((s,k)=>s+(+V.comp[k]||0),0); V.comp[id]=a?Math.max(0,Math.min(a.saldo, valor-ja)):0; } else delete V.comp[id]; }
     else if(f==='compv'){ const id=e.target.dataset.id; if(id in V.comp) V.comp[id]=_mmC(e.target.value)||0; }
+    else if(f==='contrato'){ V.contrato=e.target.value; V.ticket=''; const c=pesContrato(V.contrato), cu=c?pesCulturaDe(c.produto):''; if(cu){ V.cultura=cu; V.safra=nfeVendaSafra(cu); } }   // v279
+    else if(f==='ticket'){ V.ticket=e.target.value; const g=PES().cargas.find(x=>x.ticket===V.ticket); if(g&&g.contrato&&!V.contrato){ V.contrato=g.contrato; const c=pesContrato(g.contrato), cu=c?pesCulturaDe(c.produto):''; if(cu&&!V.cultura){ V.cultura=cu; V.safra=nfeVendaSafra(cu); } } }
     recRerender(); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
@@ -12165,6 +12221,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='finReabrir'){ finPost([{id:a.id, status:'ABERTO', dataPgto:''}], 'Título reaberto'); }
     else if(a.act==='finCancelar'){ if(ask('Cancelar este título? A nota continua como está; só o valor deixa de ser cobrado aqui.')) finPost([{id:a.id, status:'CANCELADO'}], 'Título cancelado'); }
     else if(a.act==='finDel'){ if(ask('Excluir este título?')) finPost([{id:a.id, del:true}], 'Título excluído'); }
+    else if(a.act==='pesSalvar'){ pesSalvar(); }
+    else if(a.act==='pesToggle'){ FIN_UI.pesOpen=FIN_UI.pesOpen||{}; FIN_UI.pesOpen[a.id]=!FIN_UI.pesOpen[a.id]; route({keepScroll:true}); }
     else if(a.act==='cadNovo'){ const tipo=a.tipo; CAD_EDIT={tipo, novo:true, item:tipo==='produtor'?{cpf:'',nome:'',emailContador:'',imovelPadrao:'',ativo:'S'}:tipo==='imovel'?{codigo:'',nome:'',cadItr:'',municipio:'',uf:'',exploracao:FIN_EXPL[0],produtor:'',participacao:100,fazendaApp:'',ativo:'S'}:{codigo:'',produtor:'',banco:'',agencia:'',conta:'',tipo:FIN_CONTA_TIPOS[0],ativa:'S'}}; route({keepScroll:true}); }
     else if(a.act==='cadEditar'){ if(a.tipo==='contador'){ CAD_EDIT={tipo:'contador', novo:false, item:Object.assign({}, FIN().contador)}; route({keepScroll:true}); } else { const it=cadLista(a.tipo).find(x=>x[CAD_KEY[a.tipo]]===a.id); if(it){ CAD_EDIT={tipo:a.tipo, novo:false, item:Object.assign({}, it)}; route({keepScroll:true}); } } }
     else if(a.act==='cadNovoCp'){ CAD_EDIT={tipo:'contraparte', novo:true, item:{id:'', imovel:a.imovel||'', tipo:LCDPR_LEIAUTE.contraparte[0], doc:'', nome:'', participacao:''}}; route({keepScroll:true}); }

@@ -71,6 +71,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Balança (Pesagem v2) — contratos de venda e cargas (v279, fase 6A)** — a planilha do Planejamento lê, só para
+  consulta, a planilha do app da balança (abas *Contratos*, *Pesagem* e *NFAs_Emitidas*) a cada 10 min e manda ao
+  app na chave `pesagem`. **Cadastros → ⚖️ Balança**: link da planilha (vazio = a planilha procura sozinha) e o
+  **de-para produto da balança → cultura do app**. **Financeiro → 🌾 Vendas**: contratado, entregue na balança,
+  faturado (notas conferidas) e saldo a entregar com valor previsto; tabela de contratos (comprador, produto →
+  cultura, preço por saca, contratado/entregue/saldo/faturado em sacas, status) e, tocando no nº, as cargas
+  (data, placa, kg, NFA, nota conferida / a conferir / sem NFA). Os **XML das NFAs** emitidas pela balança entram
+  sozinhos na captura de 15 min como "Venda do produtor". Em **Conferir venda** o contrato e a carga (ticket) vêm
+  sugeridos pelo nº da NFA, a cultura pelo de-para, e a tela compara o preço da nota com o do contrato e o peso da
+  balança com o da nota. A aba VENDAS ganha CONTRATO e TICKET. **Resultados → Vendas da safra** mostra também os
+  contratos por cultura (contratado, entregue, saldo, R$/sc contratado); o preço real continua vindo só das notas.
 - **Experimento: área de referência marcada com o celular (v278)** — em *Nova Ação* do talhão (Mapa → toque no
   talhão, ou Campo) o item **🧪 Experimento** abre a tela `#/experimento/<talhão>`: um sub-limite **dentro do talhão**
   para faixa de variedade, teste de produto, dose ou testemunha. Só referência: não muda a área do talhão, o estoque

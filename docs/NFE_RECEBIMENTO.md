@@ -227,7 +227,7 @@ Seguir o padrão existente (`__nome` no `doPost`). Nomes propostos:
 | `doPost {__cadFin:{tipo, itens[]}}` | Cadastros do financeiro (v273): produtores, imóveis rurais, contas bancárias (só ADMIN) |
 | `doPost {__baixa:{baixas:[{id, titulo, conta, data, valorPago, juros, desconto, comprovante, del}]}}` | Baixa de título na conta do produtor (v274); recalcula o status do título — aba `BAIXAS` |
 | `doPost {__finArquivo:{nome, mime, b64}}` | Comprovante da baixa (JPEG/PDF) para a pasta Financeiro/Comprovantes no Drive (v274) |
-| `doPost {__nfeVenda:{chave, cultura, safra, comprador, cnpj, produtor, itens:[{n, xprod, kg, sacas, valor}], dups, pag, compensar:[{ref, valor}], desfazer}}` | Venda do produtor (v277): status `VENDA`, aba `VENDAS`, títulos **a receber** (Venda de grãos) e compensação de adiantamento (baixa conta 999 marcada COMPENSAÇÃO/REF). `desfazer` volta a A CLASSIFICAR |
+| `doPost {__nfeVenda:{chave, cultura, safra, comprador, cnpj, produtor, contrato, ticket, itens:[{n, xprod, kg, sacas, valor}], dups, pag, compensar:[{ref, valor}], desfazer}}` | Venda do produtor (v277): status `VENDA`, aba `VENDAS`, títulos **a receber** (Venda de grãos) e compensação de adiantamento (baixa conta 999 marcada COMPENSAÇÃO/REF). `desfazer` volta a A CLASSIFICAR |
 
 Na classificação (`__nfeClassifica`), a planilha também gera os títulos da nota a partir das parcelas do XML
 (`cobr/dup`); o app manda `dups` e `pag` como reserva. Itens com `dest:'maquina'` (peça/serviço, com `maq`,
@@ -237,6 +237,10 @@ marca o título quando a nota é só de peças/serviços.
 Na captura (`processarXmlNfe`), a nota cujo **emitente** é um produtor da `CONFIG NFE`, ou a contranota de
 **entrada** (`tpNF` 0) de um comprador com o produtor como destinatário, recebe TIPO `VENDA PRODUTOR` (v277): o
 comprador fica em FORNECEDOR/CNPJ EMITENTE e o produtor em PRODUTOR; ela não é marcada IGNORADA.
+
+Os XML das NFAs emitidas pelo app da balança (Pesagem v2, aba `NFAs_Emitidas`, coluna XML URL) entram na mesma
+captura com origem `balança` (v279) e são sempre venda do produtor; `contrato` e `ticket` ligam a nota ao contrato
+de venda e à carga pesada.
 
 Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
 

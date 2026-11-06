@@ -113,6 +113,21 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Balança (Pesagem v2): contratos de venda, cargas e NFAs (v279 — fase 6A)
+
+- **CONFIG APP** → `PLANILHA PESAGEM` = link (ou id) da planilha do app Pesagem v2; `PESAGEM DEPARA` = JSON
+  `{produto da balança: cultura do app}`. Sem link, `localizarPlanilhaPesagem_` procura (1× a cada 6 h) uma planilha
+  recente com as abas *Pesagem* e *Contratos* e grava o link. Gravados por `__cadFin {tipo:'pesagem', itens:[{link, depara}]}`.
+- `readPesagem` (chave `pesagem`, TTL 10 min, Administrativo e Planejamento): lê pelo **cabeçalho** as abas *Contratos*
+  (id, emitente, CNPJ/nome do comprador, produto, unidade, preço, volume total/entregue/saldo em kg, safra, status,
+  liberado), *Pesagem* (só tickets finalizados: data, contrato, placa, motorista, carga em kg) e *NFAs_Emitidas*
+  (nº, ticket, sacas, kg, PDF e XML no Drive), ligando NFA ↔ ticket. **Só leitura**: nada é gravado na planilha da balança.
+  A conta dona desta planilha precisa ter acesso à planilha da balança (se for outra conta, compartilhe).
+- `capturarNfaPesagem_` roda dentro de `capturarNfe`: lê os XML apontados na coluna XML URL (até 25 por busca, cada
+  arquivo uma vez — propriedade `NFA_PES_LIDAS`) e passa por `processarXmlNfe(txt, 'balança')`, que marca TIPO
+  **VENDA PRODUTOR** mesmo que o emitente não esteja na CONFIG NFE.
+- Aba **VENDAS** ganha CONTRATO e TICKET (`__nfeVenda {contrato, ticket}`).
+
 ## Experimentos — áreas de referência dentro do talhão (v278)
 
 - Aba nova **EXPERIMENTOS APP** (KEY|JSON|ATUALIZADO, igual à LIMITES APP): cada chave é um experimento
