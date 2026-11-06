@@ -127,6 +127,8 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   arquivo uma vez — propriedade `NFA_PES_LIDAS`) e passa por `processarXmlNfe(txt, 'balança')`, que marca TIPO
   **VENDA PRODUTOR** mesmo que o emitente não esteja na CONFIG NFE.
 - Aba **VENDAS** ganha CONTRATO e TICKET (`__nfeVenda {contrato, ticket}`).
+- v280: `readPesagem` lê também a aba *Estoque* da balança (SAFRA · CULTURA · ENTRADAS_SC · SAIDAS_SC · SALDO_SC ·
+  ULTIMA_ATUALIZACAO) → `pesagem.estoque`; a chave `pesagem` passa a ir também ao módulo Campo (card no Painel).
 
 ## Experimentos — áreas de referência dentro do talhão (v278)
 
