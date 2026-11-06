@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-282';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-283';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6280,7 +6280,7 @@ function talFichaOpen(tid){
     <div class="tf-resumo">${resumo}</div>
     <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button>${lm?`<button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(tid)}" title="Tirar este contorno do mapa (dá para restaurar na lista abaixo do mapa)">🗑️ Remover limite</button>`:''}</div>
     ${secs}
-    ${(()=>{ const L=expLista(tid); return L.length?`<details class="tf-sec" open><summary><h4>🧪 Experimentos</h4><span class="mut">${L.length}</span></summary>${L.map(x=>`<div class="tf-ev"><span class="exp-sw" style="background:${esc(x.cor||'#ff7043')}"></span><span><b>${esc(x.nome||'')}</b> · ${(EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl} · ${nf2.format(expHa(x))} ha</span><button class="icon-btn" data-act="expVer" data-id="${esc(x.id)}" title="Ver no mapa">🔍</button></div>`).join('')}<a class="link" data-go="#/experimento/${id}" style="font-size:12px">➕ novo experimento</a></details>`:''; })()}
+    ${(()=>{ const L=expLista(tid); return L.length?`<details class="tf-sec" open><summary><h4>🧪 Experimentos</h4><span class="mut">${L.length}</span></summary>${L.map(x=>`<div class="tf-ev"><span class="exp-sw" style="background:${esc(x.cor||'#ff7043')}"></span><span><b>${esc(x.nome||'')}</b> · ${(EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl} · ${nf2.format(expHa(x))} ha</span><button class="icon-btn" data-act="expMostrar" data-id="${esc(x.id)}" title="${MAPA_EXP.ids.has(x.id)?'Ocultar do mapa':'Mostrar no mapa'}">${MAPA_EXP.ids.has(x.id)?'🙈':'👁️'}</button></div>`).join('')}<div style="display:flex;gap:12px;flex-wrap:wrap"><a class="link" data-go="#/experimento/${id}" style="font-size:12px">➕ novo experimento</a>${L.length>1?`<a class="link" data-act="expMostrarTodos" data-id="${esc(tid)}" style="font-size:12px">👁️ mostrar todos no mapa</a>`:''}${[...MAPA_EXP.ids].some(k=>L.some(x=>x.id===k))?`<a class="link" data-act="expOcultarTodos" data-id="${esc(tid)}" style="font-size:12px">🙈 ocultar do mapa</a>`:''}</div></details>`:''; })()}
     <details class="tf-sec"><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
     <div class="na-links"><a class="link" data-go="#/timeline/${id}">Timeline</a> · <a class="link" data-go="#/campo/${id}">Operações</a></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); });
@@ -7279,7 +7279,22 @@ function expEditar(id){ const x=expById(id); if(!x) return; const R=EXP_REC; nov
 function expCancelarEd(){ const R=EXP_REC; R.pts=[]; R.editId=''; R.form=null; R.ativo=false; R.pausado=false; route({keepScroll:true}); }
 function expVer(id){ const x=expById(id); if(!x) return; const R=EXP_REC; novaAcaoFechar();
   if(R.map&&R.L&&location.hash.startsWith('#/experimento')){ try{ R.map.fitBounds(R.L.polygon(x.coords).getBounds(),{padding:[20,20]}); }catch(e){} return; }
-  if(location.hash!=='#/mapa') location.hash='#/mapa'; setTimeout(()=>{ if(_map&&window.L){ try{ _map.fitBounds(window.L.polygon(x.coords).getBounds(),{padding:[30,30]}); }catch(e){} } }, 900); }
+  expMostrar(id, true); }
+// v283: experimentos no MAPA só quando a pessoa pede (ficha do talhão → 👁️); a escolha vale até fechar o app
+const MAPA_EXP={ids:new Set(), layers:{}};
+function expMapaDesenha(id){ const x=expById(id), L=window.L; if(!x||!_map||!L) return null; const cor=x.cor||'#ff7043', t=findTalhao(x.talhao), T=EXP_TIPOS[x.tipo]||EXP_TIPOS.outro;
+  if(MAPA_EXP.layers[id]){ try{ _map.removeLayer(MAPA_EXP.layers[id]); }catch(e){} }
+  const pg=L.polygon(x.coords,{color:cor,weight:4,dashArray:'8 6',fillColor:cor,fillOpacity:.15,className:'mapa-exp'}).addTo(_map);
+  pg.bindTooltip(`🧪 ${esc(x.nome||'Experimento')} · ${nf2.format(expHa(x))} ha`,{permanent:true,direction:'bottom',className:'mapa-lbl mapa-lbl-exp'});
+  pg.bindPopup(`<b>🧪 ${esc(x.nome||'Experimento')}</b><br>${esc(T.lbl)} · ${nf2.format(expHa(x))} ha${t?`<br>${esc(tNome(t))}`:''}${x.obs?`<br><small>${esc(x.obs)}</small>`:''}<div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap"><a href="#" data-id="${esc(x.talhao)}" onclick="try{_map.closePopup();}catch(e){} talFichaOpen(this.dataset.id); return false" style="font-weight:700">📋 Ficha do talhão</a><a href="#/experimento/${encodeURIComponent(x.talhao)}">🧪 Experimentos</a><a href="#" data-id="${esc(x.id)}" onclick="expMostrar(this.dataset.id); return false">🙈 Ocultar</a></div>`);
+  try{ pg.bringToFront(); }catch(e){} MAPA_EXP.layers[id]=pg; return pg; }
+function expMostrar(id, soMostrar){ const x=expById(id); if(!x) return; novaAcaoFechar();
+  const go=()=>{ if(MAPA_EXP.ids.has(id)&&!soMostrar){ MAPA_EXP.ids.delete(id); const l=MAPA_EXP.layers[id]; if(l&&_map){ try{ _map.removeLayer(l); }catch(e){} } delete MAPA_EXP.layers[id]; try{ _map.closePopup(); }catch(e){} return; }
+    MAPA_EXP.ids.add(id); const pg=expMapaDesenha(id); if(pg){ try{ _map.fitBounds(pg.getBounds(),{padding:[30,30]}); }catch(e){} } };
+  if(location.hash==='#/mapa'&&_map) go(); else { location.hash='#/mapa'; setTimeout(go, 900); } }
+function expMostrarTodos(tid){ const L=expLista(tid); if(!L.length) return; novaAcaoFechar(); const go=()=>{ L.forEach(x=>{ MAPA_EXP.ids.add(x.id); expMapaDesenha(x.id); }); const lm=limitesAll()[tid]; if(lm&&window.L){ try{ _map.fitBounds(window.L.polygon(lm.coords).getBounds(),{padding:[30,30]}); }catch(e){} } };
+  if(location.hash==='#/mapa'&&_map) go(); else { location.hash='#/mapa'; setTimeout(go, 900); } }
+function expOcultarTodos(tid){ expLista(tid).forEach(x=>{ if(!MAPA_EXP.ids.has(x.id)) return; MAPA_EXP.ids.delete(x.id); const l=MAPA_EXP.layers[x.id]; if(l&&_map){ try{ _map.removeLayer(l); }catch(e){} } delete MAPA_EXP.layers[x.id]; }); novaAcaoFechar(); }
 function expKmlTxt(x){ const t=findTalhao(x.talhao), an=x.coords.slice(); if(an[0][0]!==an[an.length-1][0]||an[0][1]!==an[an.length-1][1]) an.push(an[0]);
   const desc=[t?tNome(t):'', (EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl, nf2.format(expHa(x))+' ha', x.obs||''].filter(Boolean).join(' · ');
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(x.nome||'Experimento')}</name><Placemark><name>${esc(x.nome||'Experimento')}</name><description>${esc(desc)}</description><Polygon><outerBoundaryIs><LinearRing><coordinates>${an.map(p=>`${p[1]},${p[0]},0`).join(' ')}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`; }
@@ -7338,14 +7353,8 @@ async function mapaInit(){
     pg.on('click', ()=>talFichaOpen(tid));   // tocar no talhão: ficha do talhão (resumo, operações por tipo, ocorrências); Nova Ação fica no botão
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
-  // v278: experimentos (áreas de referência) por cima dos talhões — tracejado na cor escolhida
-  expTodos().forEach(x=>{ const t=findTalhao(x.talhao); if(oqFaz && t && !fazOk(t)) return; const T=EXP_TIPOS[x.tipo]||EXP_TIPOS.outro, cor=x.cor||'#ff7043';
-    // v282: só o contorno tracejado (sem preenchimento) — a cor do semáforo do talhão continua visível; o toque dentro da
-    // faixa vai para o talhão (ficha), o toque na linha abre o balão do experimento
-    const pg=L.polygon(x.coords,{color:cor,weight:4,dashArray:'8 6',fill:false,className:'mapa-exp'}).addTo(_map); MAPA_NDVI.formas.push(pg);
-    pg.bindTooltip(`🧪 ${esc(x.nome||'Experimento')} · ${nf2.format(expHa(x))} ha`,{permanent:true,direction:'bottom',className:'mapa-lbl mapa-lbl-exp'});
-    pg.bindPopup(`<b>🧪 ${esc(x.nome||'Experimento')}</b><br>${esc(T.lbl)} · ${nf2.format(expHa(x))} ha${t?`<br>${esc(tNome(t))}`:''}${x.obs?`<br><small>${esc(x.obs)}</small>`:''}<div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap"><a href="#" data-id="${esc(x.talhao)}" onclick="try{_map.closePopup();}catch(e){} talFichaOpen(this.dataset.id); return false" style="font-weight:700">📋 Ficha do talhão</a><a href="#/experimento/${encodeURIComponent(x.talhao)}">🧪 Experimentos</a></div>`);   // v281: o experimento pode cobrir o talhão inteiro — a ficha continua ao alcance
-    try{ pg.bringToFront(); }catch(e){} x.coords.forEach(p=>bounds.push(p)); });
+  // v283: experimentos ficam OCULTOS no mapa; só aparecem os escolhidos na ficha do talhão (👁️) — e continuam depois de redesenhar
+  MAPA_EXP.layers={}; [...MAPA_EXP.ids].forEach(id=>{ if(!expById(id)) MAPA_EXP.ids.delete(id); else expMapaDesenha(id); });
   pts.forEach(r=>{
     const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
     L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
@@ -9548,7 +9557,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='expIniciar'){ expIniciar(); } else if(a.act==='expPausar'){ expPausar(); } else if(a.act==='expContinuar'){ expContinuar(); }
     else if(a.act==='expDesfazer'){ expDesfazer(); } else if(a.act==='expLimpar'){ expLimpar(); } else if(a.act==='expCor'){ expCor(a.c); }
     else if(a.act==='expSalvar'){ expSalvar(); } else if(a.act==='expCancelarEd'){ expCancelarEd(); }
-    else if(a.act==='expEditar'){ expEditar(a.id); } else if(a.act==='expVer'){ expVer(a.id); } else if(a.act==='expKml'){ expKml(a.id); } else if(a.act==='expDel'){ expRemover(a.id); }
+    else if(a.act==='expEditar'){ expEditar(a.id); } else if(a.act==='expVer'){ expVer(a.id); } else if(a.act==='expMostrar'){ expMostrar(a.id); } else if(a.act==='expMostrarTodos'){ expMostrarTodos(a.id); } else if(a.act==='expOcultarTodos'){ expOcultarTodos(a.id); } else if(a.act==='expKml'){ expKml(a.id); } else if(a.act==='expDel'){ expRemover(a.id); }
     else if(a.act==='nfeVendaNao'){ if(nfeImport&&nfeImport.venda){ nfeImport.venda=null; nfeImport.nota.tipo=nfeTipoNota(nfeImport.nota.itens); route({keepScroll:true}); toast('Tratando como compra'); } }
     else if(a.act==='nfeMaqTodos'){ if(nfeImport){ const m=((document.getElementById('nfe-maq-all')||{}).value||'').trim(); if(!m){ toast('Digite ou escolha a máquina'); return; } nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='maquina'; it.maq=m; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); }); route({keepScroll:true}); toast(`Nota inteira apropriada a ${m}`); } }
     else if(a.act==='nfeMaqNenhum'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(it.dest==='maquina'){ it.dest='estoque'; it.ok=!!PROD[it.produto]; } }); route({keepScroll:true}); } }

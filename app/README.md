@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Mapa: experimentos ocultos por padrão (v283)** — o mapa volta a mostrar só os talhões com a cor do semáforo. Os
+  experimentos aparecem apenas quando a pessoa pede: na ficha do talhão, cada experimento tem **👁️ Mostrar no mapa**
+  (vira 🙈 Ocultar), e há **mostrar todos** / **ocultar do mapa**. O escolhido é desenhado tracejado na cor dele, com
+  etiqueta e balão (Ficha do talhão · Experimentos · Ocultar), e continua visível ao redesenhar o mapa até ser ocultado
+  ou o app ser fechado.
 - **Mapa: experimento só no contorno (v282)** — a faixa de referência aparece como linha tracejada grossa na cor
   escolhida, **sem preenchimento**, com uma etiqueta pequena embaixo do nome do talhão; a cor do semáforo do talhão
   (verde, amarelo, vermelho) continua à vista. Tocar dentro da faixa abre a ficha do talhão; tocar na linha abre o
