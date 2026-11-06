@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-277';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-278';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -424,7 +424,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', sync:'both',
+  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both' };
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -435,7 +435,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -511,6 +511,7 @@ function loadOverrides(){
   OV.opPlan        = OV.opPlan        || {}; // "TL|seq" -> {order:[tagoi...], names:{tagoi:nome}, _u} (ordem + nomes das operações — sincroniza)
   OV.opExtra       = OV.opExtra       || {}; // "TL|tag" -> nº de operações NOVAS além das da planilha (viram blocos lá ao sincronizar)
   OV.opDel         = OV.opDel         || {}; // "TL|tagOp" -> true (operação excluída no app; some da planilha ao sincronizar)
+  OV.experimentos  = OV.experimentos  || {}; // id -> {talhao, nome, tipo, coords, ha, cor, obs, data, quem, del, _u} (v278: áreas de referência dentro do talhão)
   if(OV.diesel==null) OV.diesel = 6.00; // R$/L (global)
 }
 function saveOverrides(){
@@ -6120,6 +6121,7 @@ const NA_ITENS=[
   {k:'recom',lbl:'Recomendação',sub:'Registrar recomendações de aplicação.',ico:'📋',cls:'na-ciano',go:t=>'#/recomendacao/'+t},
   {k:'afer',lbl:'Aferição',sub:'Pulverizador, perda na colheita e semeadura (adubo/sementes).',ico:'🧮',cls:'na-verde',sub2:'afer'},
   {k:'apl',lbl:'Aplicação',sub:'Operações do talhão: registrar a execução.',ico:'🚿',cls:'na-ciano',go:t=>'#/campo/'+t},
+  {k:'exp',lbl:'Experimento',sub:'Marcar com o GPS uma área de referência dentro do talhão (variedade, produto, dose, testemunha).',ico:'🧪',cls:'na-verde',go:t=>'#/experimento/'+t},
   {k:'stand',lbl:'Stand',sub:'Registrar contagens de stand.',ico:'📏',cls:'na-ciano',go:t=>'#/stand/'+t},
   {k:'prod',lbl:'Estimativa de produtividade',sub:'Registrar estimativas de produtividade.',ico:'💰',cls:'na-amarelo',go:t=>'#/produtividade/'+t},
   {k:'outras',lbl:'Outras ocorrências',sub:'Climáticas, manutenção/melhoria ou solo/fertilidade.',ico:'🌦️',cls:'na-rosa',sub2:'outras'} ];
@@ -6206,6 +6208,7 @@ function talFichaOpen(tid){
     <div class="tf-resumo">${resumo}</div>
     <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(tid)}">➕ Nova Ação</button><a class="btn btn-outline btn-sm" data-go="#/campo/${id}">📋 Campo</a><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button>${lm?`<button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(tid)}" title="Tirar este contorno do mapa (dá para restaurar na lista abaixo do mapa)">🗑️ Remover limite</button>`:''}</div>
     ${secs}
+    ${(()=>{ const L=expLista(tid); return L.length?`<details class="tf-sec" open><summary><h4>🧪 Experimentos</h4><span class="mut">${L.length}</span></summary>${L.map(x=>`<div class="tf-ev"><span class="exp-sw" style="background:${esc(x.cor||'#ff7043')}"></span><span><b>${esc(x.nome||'')}</b> · ${(EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl} · ${nf2.format(expHa(x))} ha</span><button class="icon-btn" data-act="expVer" data-id="${esc(x.id)}" title="Ver no mapa">🔍</button></div>`).join('')}<a class="link" data-go="#/experimento/${id}" style="font-size:12px">➕ novo experimento</a></details>`:''; })()}
     <details class="tf-sec"><summary><h4>📝 Ocorrências e aferições</h4><span class="mut">${ev.length||'—'}</span></summary>${evHtml}</details>
     <div class="na-links"><a class="link" data-go="#/timeline/${id}">Timeline</a> · <a class="link" data-go="#/campo/${id}">Operações</a></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); });
@@ -6386,6 +6389,8 @@ function recomSetField(el){
   const f=el.dataset.recf, i=el.dataset.reci, v=el.value; let rerender=false;
   if(f==='area'){ r.area=_mmC(v); rerender=true;
     if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(r.area>0 && t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } }   // e leva para o Campo
+  else if(f==='exp'){ r.exp=v; const x=v?expById(v):null; rerender=true;   // v278: experimento → área a aplicar = área da faixa
+    if(x){ r.area=+expHa(x).toFixed(2); if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } } }
   else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
   else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true;
@@ -6567,6 +6572,7 @@ function recomCard(r,t){
       <label>Tipo de aplicação<select class="sel" ${F('tipoApl')}><option value="">—</option>${RECOM_TIPOS.map(x=>`<option${r.tipoApl===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
       <label>Data<input type="date" ${F('data')} value="${esc(r.data||'')}"></label>
       <label>Área (ha)<input class="cell" inputmode="decimal" ${F('area')} value="${area||''}"></label>
+      ${(()=>{ const L=expLista(r.talhao); return L.length?`<label>Área de referência<select class="sel" ${F('exp')}><option value="">— talhão inteiro —</option>${L.map(x=>`<option value="${esc(x.id)}"${r.exp===x.id?' selected':''}>🧪 ${esc(x.nome||'')} · ${nf2.format(expHa(x))} ha</option>`).join('')}</select></label>`:''; })()}
       <label>Cultura<input class="txt" ${F('cultura')} value="${esc(r.cultura||'')}"></label>
       <label>Estádio fenológico<input class="txt" ${F('estadio')} value="${esc(r.estadio||'')}" placeholder="ex.: V4, R1, pré-plantio"></label>
       <label>Cultivar<span class="agp-row"><input class="txt" ${F('cultivar')} value="${esc(r.cultivar||'')}" placeholder="opcional"><button type="button" class="btn btn-outline btn-sm" data-act="recCultivarMapa" data-id="${esc(r.id)}" title="Escolher cultivar (SIGEF) da espécie do talhão">🏛️</button></span></label>
@@ -6654,6 +6660,7 @@ function recomCard(r,t){
       <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
     ${tail}
+    ${(!editable&&r.exp&&expById(r.exp))?`<div class="rc-obs">🧪 Área de referência: <b>${esc(expById(r.exp).nome||'')}</b> · ${nf2.format(expHa(expById(r.exp)))} ha</div>`:''}
     ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
     ${retBlock}
     <div class="rc-actions">${actions}</div></div></div>`;
@@ -6677,7 +6684,7 @@ function exportTsPDF(r){
   const parcial=c.nBat && c.ult<c.bat-1e-6, cheias=parcial?c.nBat-1:c.nBat;
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE TRATAMENTO DE SEMENTES (TS)</h1><span class="n">${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
-    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Operação',esc(r.opNome||''))}</div></div>
+    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha${r.exp&&expById(r.exp)?' · 🧪 '+esc(expById(r.exp).nome||''):''}`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Operação',esc(r.opNome||''))}</div></div>
   <div class="rx-sec"><h2>2. Semente</h2><div class="rx-kv">
     ${rxKv('Cultivar',`<b>${esc(c.sem.produto)}</b>`)}${rxKv('Semente no talhão',`<b>${B(c.bags)}</b>`)}${rxKv('Sementes/ha',c.semHa?nf0.format(c.semHa):'')}${rxKv('kg/ha',c.kgHa?fmtDose(c.kgHa):'')}
     ${rxKv('Batelada',`<b>${B(c.bat)}</b>`)}${rxKv('Nº de bateladas',`<b>${c.nBat}</b>${parcial?` (${cheias} cheia(s) + 1 de ${B(c.ult)})`:''}`,'w2')}${rxKv('PMS',c.pms?`${fmtDose(c.pms)} g`:'')}</div></div>
@@ -6700,7 +6707,7 @@ function exportPlantioPDF(r){
   const o=opsDoTalhao(t).find(x=>x.key===r.opKey), dp=o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):'';
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE PLANTIO</h1><span class="n">${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
-    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}
+    ${rxKv('Talhão',`<b>${esc(tNome(t))}</b>`)}${rxKv('Área',`${num(c.area)} ha${r.exp&&expById(r.exp)?' · 🧪 '+esc(expById(r.exp).nome||''):''}`)}${rxKv('Cultura',esc(r.cultura||''))}${rxKv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}
     ${rxKv('Plantadeira',esc(r.maquina||''),'w2')}${rxKv('Operação',esc(r.opNome||''))}${rxKv('Tratamento (TS)',c.temTS?esc(plantioTsTxt(c).replace('⚠️ ','')):'sem TS')}</div></div>
   <div class="rx-sec"><h2>2. Semente — ${esc(c.multi?c.sems.map(m=>m.produto).join(' + '):c.sem.produto)}</h2>
     ${c.multi?`<table class="rx pdf-ops"><colgroup><col style="width:4%"><col style="width:32%"><col style="width:12%"><col style="width:14%"><col style="width:16%"><col style="width:12%"><col style="width:10%"></colgroup><thead><tr><th>#</th><th>Material</th><th class="num">Área</th><th class="num">Por ha</th><th class="num">Semente</th><th class="num">Sementes/ha</th><th class="num">Sem./m</th></tr></thead><tbody>
@@ -7089,6 +7096,122 @@ function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} restaurado`); }
 // removidos que dá para restaurar (o publicado com o app ou o importado guardado)
 function limRemovidos(){ const o=(OV&&OV.limites)||{}; return Object.keys(o).filter(k=>o[k]&&o[k].del&&(o[k].prev||(LIM_BASE&&LIM_BASE[k]))); }
+/* ===== EXPERIMENTOS (v278): área de referência marcada com o celular DENTRO do talhão (faixa de variedade, teste de
+   produto, dose, testemunha). É só referência: não muda a área do talhão, o estoque nem a demanda. Fica em
+   OV.experimentos e sobe para a aba EXPERIMENTOS APP quando o Code.gs tiver o ramo __experimentos. ===== */
+const EXP_TIPOS={variedade:{lbl:'Variedade',ico:'🌱'}, produto:{lbl:'Produto / aplicação',ico:'🧪'}, dose:{lbl:'Dose',ico:'⚖️'}, testemunha:{lbl:'Testemunha',ico:'🚫'}, outro:{lbl:'Outro',ico:'📌'}};
+const EXP_CORES=['#ff7043','#ab47bc','#29b6f6','#ffee58','#ec407a','#26c6da','#ffa726','#8d6e63'];
+const EXP_GPS={acc:15, passo:3};   // precisão máxima aceita (m) e distância mínima entre pontos ao caminhar (m)
+function expTodos(){ return Object.values((OV&&OV.experimentos)||{}).filter(x=>x&&!x.del&&Array.isArray(x.coords)&&x.coords.length>=3); }
+function expLista(tid){ return expTodos().filter(x=>x.talhao===tid).sort((a,b)=>(b.ts||0)-(a.ts||0)); }
+function expById(id){ const x=OV&&OV.experimentos&&OV.experimentos[id]; return (x&&!x.del)?x:null; }
+function expHa(x){ return (x&&x.coords)?(x.ha||limAreaHa([x.coords])):0; }
+function expNovoId(){ return 'x'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function expForaDoTalhao(tid, pts){ const lm=limitesAll()[tid], an=lm&&lm.coords&&lm.coords[0]; if(!an||!an.length) return 0; return (pts||[]).filter(p=>!pontoNoAnel(p[0],p[1],an)).length; }
+let lastExpSig='';
+function expSig(){ return sigHash(JSON.stringify((OV&&OV.experimentos)||{})); }
+function expServerOk(){ return !!(DATA && DATA.experimentos_app && typeof DATA.experimentos_app==='object'); }
+function expApplyPulled(map){ if(!map||typeof map!=='object'||!OV) return false; OV.experimentos=OV.experimentos||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc||typeof inc!=='object') continue; const loc=OV.experimentos[k], iu=+inc._u||0, lu=+(loc&&loc._u)||0; if(!loc||iu>lu){ OV.experimentos[k]=inc; changed=true; } }
+  const pend=expSig()!==lastExpSig && !!lastExpSig; if(changed){ saveOverrides(); if(!pend) lastExpSig=expSig(); } if(pend) loteAgendar('__experimentos'); return changed; }
+function expGravar(x){ OV.experimentos=OV.experimentos||{}; x.ha=+limAreaHa([x.coords]).toFixed(3); x._u=tsAgora(); OV.experimentos[x.id]=x; saveOverrides(); loteAgendar('__experimentos'); return x; }
+function expRemover(id){ const x=OV.experimentos&&OV.experimentos[id]; if(!x) return; if(!ask(`Remover o experimento "${x.nome||''}"? Ele some do mapa; as recomendações que o usam ficam com a área já preenchida.`)) return;
+  x.del=1; x._u=tsAgora(); saveOverrides(); loteAgendar('__experimentos'); toast('Experimento removido'); route({keepScroll:true}); }
+// gravação em andamento (só na memória): pontos, modo, GPS e o mapa da tela
+const EXP_REC={tid:'', modo:'cantos', pts:[], ativo:false, pausado:false, watch:null, pos:null, editId:'', form:null, map:null, L:null, poly:null, marks:[], me:null, meC:null, centrou:false};
+function expForm(tid){ const R=EXP_REC; if(!R.form||R.tid!==tid){ R.tid=tid; R.pts=[]; R.editId=''; R.ativo=false; R.pausado=false; const usadas=expLista(tid).map(x=>x.cor); R.form={nome:'', tipo:'variedade', obs:'', cor:EXP_CORES.find(c=>!usadas.includes(c))||EXP_CORES[expLista(tid).length%EXP_CORES.length], data:_hojeISO()}; } return R.form; }   // cor ainda não usada no talhão
+function expBarHtml(){ const R=EXP_REC, cam=R.modo==='caminhar';
+  const b=cam?`${!R.ativo?`<button class="btn btn-primary exp-btn" data-act="expIniciar">▶️ Iniciar caminhada</button>`:R.pausado?`<button class="btn btn-primary exp-btn" data-act="expContinuar">▶️ Continuar</button>`:`<button class="btn btn-outline exp-btn" data-act="expPausar">⏸ Pausar</button>`}<button class="btn btn-outline exp-btn" data-act="expMarcar" title="Acrescenta um ponto na posição atual">📍 Marcar ponto</button>`
+    :`<button class="btn btn-primary exp-btn" data-act="expMarcar">📍 Marcar este canto</button>`;
+  return b+`<button class="btn btn-outline exp-btn" data-act="expDesfazer"${R.pts.length?'':' disabled'}>↩️ Desfazer</button><button class="btn btn-outline exp-btn" data-act="expLimpar"${R.pts.length?'':' disabled'}>🗑 Limpar</button>`; }
+function expInfoHtml(){ const R=EXP_REC, ha=R.pts.length>=3?limAreaHa([R.pts]):0, fora=expForaDoTalhao(R.tid,R.pts);
+  return `<span><b>${R.pts.length}</b> ponto(s)</span><span>área <b>${ha?nf2.format(ha):'—'}</b> ha</span>${fora?`<span class="exp-warn">⚠️ ${fora} ponto(s) fora do limite do talhão</span>`:''}${R.pts.length&&R.pts.length<3?'<span class="mut">mínimo 3 pontos</span>':''}${R.ativo?`<span class="mut">${R.pausado?'⏸ pausado':'● gravando'}</span>`:''}`; }
+function expRefresh(){ const R=EXP_REC, b=document.querySelector('.exp-bar'), i=document.querySelector('.exp-info'), s=document.querySelector('[data-act="expSalvar"]'); if(b) b.innerHTML=expBarHtml(); if(i) i.innerHTML=expInfoHtml(); if(s) s.disabled=R.pts.length<3; }
+V.experimento=function(arg){
+  const tid=decodeURIComponent(String(arg||'')), t=findTalhao(tid);
+  if(!t) return `<div class="empty">Escolha o talhão no <a class="link" data-go="#/mapa">Mapa</a> (toque no talhão → Nova Ação → 🧪 Experimento).</div>`;
+  const f=expForm(tid), R=EXP_REC, lm=limitesAll()[tid], seq=talSafraAtual(t), emp=(seq==='safrinha'?empSafDe(t):empDe(t))||'', lista=expLista(tid), cam=R.modo==='caminhar';
+  const gps=R.pos?`GPS ±${R.pos.acc} m${R.pos.acc>EXP_GPS.acc?' · precisão fraca':''}`:(R.watch!=null?'📍 procurando o GPS…':'GPS desligado');
+  return `<div class="panel exp-panel"><div class="panel-head"><h2>🧪 ${R.editId?'Editar experimento':'Experimento'}</h2><span class="sub">${esc(tNome(t))} · ${esc(emp||'sem cultura')} · ${num(areaDe(t))} ha${lm?'':' · <b>talhão sem limite no mapa</b>'}</span></div>
+    <p class="mut exp-ajuda">Área de referência <b>dentro do talhão</b>: faixa de variedade, teste de produto, dose ou testemunha. Só referência — não muda a área do talhão, o estoque nem a demanda. Pode haver vários, inclusive sobrepostos.</p>
+    <div class="exp-modo"><button class="chip-f${!cam?' on':''}" data-act="expModo" data-m="cantos">📍 Marcar cantos</button><button class="chip-f${cam?' on':''}" data-act="expModo" data-m="caminhar">🚶 Caminhar o contorno</button><span class="mut exp-modo-tx">${cam?`ande pela borda: 1 ponto a cada ${EXP_GPS.passo} m, só com precisão até ${EXP_GPS.acc} m`:'vá até cada canto e toque em Marcar; também dá para tocar no mapa e arrastar os pontos'}</span></div>
+    <div class="exp-mapwrap"><div id="exp-map" class="mapa-canvas exp-map"></div><div id="exp-gps" class="mapa-geo-st${R.pos&&R.pos.acc>EXP_GPS.acc?' err':''}">${esc(gps)}</div></div>
+    <div class="exp-bar">${expBarHtml()}</div>
+    <div class="exp-info">${expInfoHtml()}</div>
+    <div class="app-grid exp-form">
+      <label>Nome<input class="txt" data-xf="nome" value="${esc(f.nome)}" placeholder="ex.: Faixa variedade X · Dose dobrada"></label>
+      <label>Tipo<select class="sel" data-xf="tipo">${Object.keys(EXP_TIPOS).map(k=>`<option value="${k}"${f.tipo===k?' selected':''}>${EXP_TIPOS[k].ico} ${EXP_TIPOS[k].lbl}</option>`).join('')}</select></label>
+      <label>Data<input type="date" data-xf="data" value="${esc(f.data)}"></label>
+      <label>Cor<span class="exp-cores">${EXP_CORES.map(c=>`<button type="button" class="exp-cor${f.cor===c?' on':''}" data-act="expCor" data-c="${c}" style="background:${c}" title="${c}"></button>`).join('')}</span></label>
+      <label style="grid-column:1/-1">Observação<input class="txt" data-xf="obs" value="${esc(f.obs)}" placeholder="o que está sendo testado: produto, dose, variedade…"></label>
+    </div>
+    <div class="exp-foot"><button class="btn btn-primary" data-act="expSalvar"${R.pts.length>=3?'':' disabled'}>💾 ${R.editId?'Salvar alterações':'Salvar experimento'}</button>${R.editId?`<button class="btn btn-outline" data-act="expCancelarEd">Cancelar edição</button>`:''}<a class="btn btn-outline" data-go="#/mapa">🗺️ Mapa</a></div>
+    ${lista.length?`<div class="exp-lista"><h3>Experimentos deste talhão <span class="mut">${lista.length}</span></h3>${lista.map(expRowHtml).join('')}</div>`:''}
+  </div>`; };
+function expRowHtml(x){ const T=EXP_TIPOS[x.tipo]||EXP_TIPOS.outro, fora=expForaDoTalhao(x.talhao,x.coords);
+  return `<div class="exp-row"><span class="exp-sw" style="background:${esc(x.cor||'#ff7043')}"></span><div class="exp-row-tx"><b>${esc(x.nome||'Experimento')}</b><br><span class="mut">${T.ico} ${T.lbl} · ${nf2.format(expHa(x))} ha · ${x.coords.length} pontos${x.data?' · '+fmtDataBR(x.data):''}${x.quem?' · '+esc(x.quem):''}${fora?` · <span class="exp-warn">${fora} fora do limite</span>`:''}</span>${x.obs?`<br><span class="mut">${esc(x.obs)}</span>`:''}</div>
+    <div class="exp-row-btns"><button class="icon-btn" data-act="expVer" data-id="${esc(x.id)}" title="Ver no mapa">🔍</button><button class="icon-btn" data-act="expEditar" data-id="${esc(x.id)}" title="Editar">✏️</button><button class="icon-btn" data-act="expKml" data-id="${esc(x.id)}" title="Baixar KML (monitor da máquina)">📥</button><button class="icon-btn del" data-act="expDel" data-id="${esc(x.id)}" title="Remover">🗑</button></div></div>`; }
+// mapa da tela (Leaflet): limite do talhão, experimentos já salvos, pontos marcados (arrastáveis) e a posição do GPS
+async function expMapaInit(){ const R=EXP_REC, el=document.getElementById('exp-map'); if(!el) return; if(R.watch==null) expGpsOn();   // GPS funciona mesmo sem o mapa
+  let L; try{ L=await loadLeaflet(); }catch(e){ el.innerHTML='<div class="mut" style="padding:18px;text-align:center">🌐 Sem internet o mapa não aparece, mas os pontos continuam sendo marcados pelo GPS.</div>'; el.classList.add('exp-semmapa'); return; }
+  if(!document.getElementById('exp-map')) return;   // mudou de tela enquanto carregava
+  if(R.map){ try{ R.map.remove(); }catch(e){} R.map=null; }
+  const lm=limitesAll()[R.tid]; R.L=L; R.map=L.map(el); R.poly=null; R.marks=[]; R.me=null; R.meC=null; R.centrou=false;
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19, attribution:'Esri World Imagery'}).addTo(R.map);
+  if(lm&&lm.coords){ L.polygon(lm.coords,{color:'#fff',weight:2,fillOpacity:.05}).addTo(R.map); try{ R.map.fitBounds(L.polygon(lm.coords).getBounds(),{padding:[20,20]}); }catch(e){} }
+  else if(R.pos) R.map.setView([R.pos.lat,R.pos.lng],17); else R.map.setView([-15.78,-47.93],4);
+  expLista(R.tid).forEach(x=>{ if(x.id===R.editId) return; L.polygon(x.coords,{color:x.cor||'#ff7043',weight:2,dashArray:'6 4',fillColor:x.cor||'#ff7043',fillOpacity:.18}).addTo(R.map).bindTooltip(`${esc(x.nome||'')} · ${nf2.format(expHa(x))} ha`,{direction:'center',className:'mapa-lbl mapa-lbl-exp'}); });
+  R.map.on('click', e=>{ expAddPonto([e.latlng.lat,e.latlng.lng]); });
+  expDesenha(); if(R.pos) expDesenhaEu();
+  setTimeout(()=>{ try{ R.map.invalidateSize(); }catch(e){} },120); }
+function expDesenha(){ const R=EXP_REC, L=R.L; if(!R.map||!L) return;
+  if(R.poly){ try{ R.map.removeLayer(R.poly); }catch(e){} R.poly=null; } R.marks.forEach(m=>{ try{ R.map.removeLayer(m); }catch(e){} }); R.marks=[];
+  const cor=(R.form&&R.form.cor)||'#ff7043';
+  if(R.pts.length>=2) R.poly=(R.pts.length>=3?L.polygon(R.pts,{color:cor,weight:3,dashArray:'6 4',fillColor:cor,fillOpacity:.25}):L.polyline(R.pts,{color:cor,weight:3,dashArray:'6 4'})).addTo(R.map);
+  if(R.modo==='cantos'||R.pts.length<=60) R.pts.forEach((p,i)=>{ const m=L.marker(p,{draggable:true, icon:L.divIcon({className:'exp-vtx', html:String(i+1), iconSize:[22,22]})}).addTo(R.map);
+    m.on('dragend', ()=>{ const ll=m.getLatLng(); R.pts[i]=[ll.lat,ll.lng]; expAtualiza(); }); R.marks.push(m); }); }
+function expDesenhaEu(){ const R=EXP_REC, L=R.L, q=R.pos; if(!R.map||!L||!q) return; const ll=[q.lat,q.lng];
+  if(!R.me){ R.me=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1e88e5',fillOpacity:1}).addTo(R.map); R.meC=L.circle(ll,{radius:q.acc||0,color:'#1e88e5',weight:1,fillOpacity:.08}).addTo(R.map); }
+  else { R.me.setLatLng(ll); R.meC.setLatLng(ll); R.meC.setRadius(q.acc||0); }
+  if(!R.centrou){ R.centrou=true; if(!limitesAll()[R.tid]) R.map.setView(ll,17); } }
+function expGpsStatus(txt,cls){ const el=document.getElementById('exp-gps'); if(el){ el.textContent=txt||''; el.className='mapa-geo-st'+(cls?' '+cls:''); el.hidden=!txt; } }
+function expGpsOn(){ const R=EXP_REC; if(!navigator.geolocation){ expGpsStatus('✖ Este aparelho não tem GPS — toque no mapa para marcar','err'); return; } if(R.watch!=null) return;
+  expGpsStatus('📍 procurando o GPS…'); R.watch=navigator.geolocation.watchPosition(expPos, err=>{ expGpsStatus('✖ GPS indisponível ('+((err&&err.message)||'')+') — permita a localização','err'); }, {enableHighAccuracy:true, maximumAge:2000, timeout:20000}); }
+function expGpsOff(){ const R=EXP_REC; if(R.watch!=null){ try{ navigator.geolocation.clearWatch(R.watch); }catch(e){} R.watch=null; }
+  if(R.map){ try{ R.map.remove(); }catch(e){} } R.map=null; R.poly=null; R.marks=[]; R.me=null; R.meC=null; R.ativo=false; R.pausado=false; }
+function expPos(p){ const R=EXP_REC; R.pos={lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), ts:Date.now()};
+  const fraco=R.pos.acc>EXP_GPS.acc; expGpsStatus(`GPS ±${R.pos.acc} m${fraco?' · precisão fraca':''}${R.ativo&&!R.pausado?' · gravando':''}`, fraco?'err':''); expDesenhaEu();
+  if(R.modo==='caminhar' && R.ativo && !R.pausado && !fraco){ const pt=[R.pos.lat,R.pos.lng], ult=R.pts[R.pts.length-1]; if(!ult || distKm(ult,pt)*1000>=EXP_GPS.passo) expAddPonto(pt); } }
+function expAddPonto(pt){ EXP_REC.pts.push([+pt[0],+pt[1]]); expAtualiza(); }
+function expAtualiza(){ expDesenha(); expRefresh(); }
+function expModo(m){ const R=EXP_REC; if(R.modo===m) return; if(R.ativo && !ask('Trocar o modo com a gravação em andamento?')) return; R.modo=m; R.ativo=false; R.pausado=false; route({keepScroll:true}); }
+function expMarcar(){ const R=EXP_REC; if(!R.pos){ toast('Ainda sem posição do GPS — aguarde o sinal ou toque no mapa'); return; }
+  if(R.pos.acc>EXP_GPS.acc && !ask(`Precisão fraca (±${R.pos.acc} m). Marcar mesmo assim?`)) return; expAddPonto([R.pos.lat,R.pos.lng]); toast(`Ponto ${R.pts.length} marcado`); }
+function expIniciar(){ const R=EXP_REC; if(!navigator.geolocation){ toast('Este aparelho não tem GPS'); return; } R.ativo=true; R.pausado=false; expGpsOn();
+  if(R.pos && R.pos.acc<=EXP_GPS.acc) expAddPonto([R.pos.lat,R.pos.lng]); else expRefresh(); toast('Gravando — ande pela borda da área'); }
+function expPausar(){ EXP_REC.pausado=true; expRefresh(); }
+function expContinuar(){ EXP_REC.pausado=false; expRefresh(); }
+function expDesfazer(){ const R=EXP_REC; if(!R.pts.length) return; R.pts.pop(); expAtualiza(); }
+function expLimpar(){ const R=EXP_REC; if(!R.pts.length) return; if(!ask('Apagar todos os pontos marcados?')) return; R.pts=[]; R.ativo=false; R.pausado=false; expAtualiza(); }
+function expCor(c){ const R=EXP_REC; if(!R.form) return; R.form.cor=c; document.querySelectorAll('.exp-cor').forEach(b=>b.classList.toggle('on', b.dataset.c===c)); expDesenha(); }
+function expSalvar(){ const R=EXP_REC, f=R.form||{}, t=findTalhao(R.tid); if(!t||R.pts.length<3){ toast('Marque pelo menos 3 pontos'); return; }
+  const fora=expForaDoTalhao(R.tid,R.pts); if(fora && !ask(`${fora} ponto(s) fora do limite do talhão. Salvar mesmo assim?`)) return;
+  const nome=(f.nome||'').trim()||`${(EXP_TIPOS[f.tipo]||EXP_TIPOS.outro).lbl} ${expLista(R.tid).length+1}`, u=sessUsuario(), ant=R.editId?expById(R.editId):null;
+  const x=Object.assign({}, ant||{}, {id:R.editId||expNovoId(), talhao:R.tid, nome, tipo:f.tipo||'outro', obs:(f.obs||'').trim(), cor:f.cor||EXP_CORES[0], data:f.data||_hojeISO(),
+    coords:R.pts.map(p=>[+(+p[0]).toFixed(7), +(+p[1]).toFixed(7)]), quem:(ant&&ant.quem)||(u&&u.nome)||'', ts:(ant&&ant.ts)||Date.now()});
+  if(ant) x.editadoEm=Date.now();
+  expGravar(x); R.pts=[]; R.editId=''; R.form=null; R.ativo=false; R.pausado=false; toast(`🧪 ${nome}: ${nf2.format(x.ha)} ha`); route({keepScroll:true}); }
+function expEditar(id){ const x=expById(id); if(!x) return; const R=EXP_REC; novaAcaoFechar(); R.tid=x.talhao; R.pts=x.coords.map(p=>p.slice()); R.editId=id; R.ativo=false; R.pausado=false;
+  R.form={nome:x.nome||'', tipo:x.tipo||'outro', obs:x.obs||'', cor:x.cor||EXP_CORES[0], data:x.data||_hojeISO()};
+  const h='#/experimento/'+encodeURIComponent(x.talhao); if(location.hash===h) route({toTop:true}); else location.hash=h; }
+function expCancelarEd(){ const R=EXP_REC; R.pts=[]; R.editId=''; R.form=null; R.ativo=false; R.pausado=false; route({keepScroll:true}); }
+function expVer(id){ const x=expById(id); if(!x) return; const R=EXP_REC; novaAcaoFechar();
+  if(R.map&&R.L&&location.hash.startsWith('#/experimento')){ try{ R.map.fitBounds(R.L.polygon(x.coords).getBounds(),{padding:[20,20]}); }catch(e){} return; }
+  if(location.hash!=='#/mapa') location.hash='#/mapa'; setTimeout(()=>{ if(_map&&window.L){ try{ _map.fitBounds(window.L.polygon(x.coords).getBounds(),{padding:[30,30]}); }catch(e){} } }, 900); }
+function expKmlTxt(x){ const t=findTalhao(x.talhao), an=x.coords.slice(); if(an[0][0]!==an[an.length-1][0]||an[0][1]!==an[an.length-1][1]) an.push(an[0]);
+  const desc=[t?tNome(t):'', (EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl, nf2.format(expHa(x))+' ha', x.obs||''].filter(Boolean).join(' · ');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(x.nome||'Experimento')}</name><Placemark><name>${esc(x.nome||'Experimento')}</name><description>${esc(desc)}</description><Polygon><outerBoundaryIs><LinearRing><coordinates>${an.map(p=>`${p[1]},${p[0]},0`).join(' ')}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark></Document></kml>`; }
+function expKml(id){ const x=expById(id); if(!x) return; download(`experimento_${(_normNome(x.nome||'')||'exp').toLowerCase()}.kml`, expKmlTxt(x), 'application/vnd.google-earth.kml+xml'); toast('KML baixado — serve para o monitor da máquina'); }
 // ---- sincronização (aba "LIMITES APP"; só envia se o Code.gs já tiver o ramo __limites) ----
 let lastLimitesSig='';
 function limitesSig(){ return sigHash(JSON.stringify((OV&&OV.limites)||{})); }
@@ -7143,6 +7266,12 @@ async function mapaInit(){
     pg.on('click', ()=>talFichaOpen(tid));   // tocar no talhão: ficha do talhão (resumo, operações por tipo, ocorrências); Nova Ação fica no botão
     lm.coords.forEach(r=>r.forEach(p=>bounds.push(p)));
   });
+  // v278: experimentos (áreas de referência) por cima dos talhões — tracejado na cor escolhida
+  expTodos().forEach(x=>{ const t=findTalhao(x.talhao); if(oqFaz && t && !fazOk(t)) return; const T=EXP_TIPOS[x.tipo]||EXP_TIPOS.outro, cor=x.cor||'#ff7043';
+    const pg=L.polygon(x.coords,{color:cor,weight:2,dashArray:'6 4',fillColor:cor,fillOpacity:.22,className:'mapa-exp'}).addTo(_map); MAPA_NDVI.formas.push(pg);
+    pg.bindTooltip(`🧪 ${esc(x.nome||'Experimento')} · ${nf2.format(expHa(x))} ha`,{direction:'center',className:'mapa-lbl mapa-lbl-exp'});
+    pg.bindPopup(`<b>🧪 ${esc(x.nome||'Experimento')}</b><br>${esc(T.lbl)} · ${nf2.format(expHa(x))} ha${t?`<br>${esc(tNome(t))}`:''}${x.obs?`<br><small>${esc(x.obs)}</small>`:''}<br><a href="#/experimento/${encodeURIComponent(x.talhao)}">abrir experimentos</a>`);
+    try{ pg.bringToFront(); }catch(e){} x.coords.forEach(p=>bounds.push(p)); });
   pts.forEach(r=>{
     const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
     L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
@@ -7317,7 +7446,7 @@ function numBR(v){ if(typeof v==='number') return isFinite(v)?v:0; let x=String(
 function _mmC(v){ return numBR(v); }
 const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicacao:{lbl:'Aplicação',ico:'🚿',cor:'#2e7d32'},
   monitoramento:{lbl:'Monitoramento',ico:'🐛',cor:'#b7791f'},
-  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, ocorrencia:{lbl:'Ocorrência',ico:'📝',cor:'#c2185b'}, produtividade:{lbl:'Produtividade',ico:'💰',cor:'#b7791f'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'} };
+  chuva:{lbl:'Chuva',ico:'🌧️',cor:'#3e9aaa'}, stand:{lbl:'Stand',ico:'🌱',cor:'#4caf50'}, ocorrencia:{lbl:'Ocorrência',ico:'📝',cor:'#c2185b'}, produtividade:{lbl:'Produtividade',ico:'💰',cor:'#b7791f'}, recomendacao:{lbl:'Recomendação',ico:'💊',cor:'#7e57c2'}, experimento:{lbl:'Experimento',ico:'🧪',cor:'#00897b'} };
 // lista unificada de eventos de campo (mais recentes primeiro)
 function camposEventos(){
   const ev=[];
@@ -7329,6 +7458,8 @@ function camposEventos(){
     titulo:`Estimativa de produtividade · ${afN(r.scHa,1)} sc/ha`, resumo:`${(r.plantas||[]).length} amostra(s) · ${afN(r.graosPl,1)} grãos/planta · PMS ${r.pms} g${r.estadio?' · '+r.estadio:''}`}));
   (OCOR?ocorLista():[]).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}, nf=(r.fotos||[]).length; ev.push({ts:_tsC(r),data:r.data,tipo:'ocorrencia',talhao:r.talhao,
     titulo:(T.lbl||'Ocorrência')+(r.tipo==='climatica'&&r.evento?' · '+r.evento:''), resumo:ocResumo(r)+(nf?` · 📷 ${nf} foto(s)`:'')}); });
+  expTodos().forEach(x=>ev.push({ts:x.ts||_tsC(x),data:x.data,tipo:'experimento',talhao:x.talhao,
+    titulo:`Experimento · ${x.nome||''}`, resumo:[(EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl, nf2.format(expHa(x))+' ha', x.obs||''].filter(Boolean).join(' · ')}));   // v278
   (STAND?standLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'stand',talhao:r.talhao,
     titulo:'Contagem de stand'+(r.cultura?' · '+r.cultura:''), resumo:[r.pop?nf0.format(r.pop)+' pl/ha':'', r.pctMeta!=null?r.pctMeta+'% da meta':''].filter(Boolean).join(' · ')}));
   (RECOM&&RECOM.registros||[]).forEach(r0=>{ const r=recomNorm(r0);
@@ -8515,7 +8646,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -8617,6 +8748,7 @@ function _route(opts){
   // ao ENTRAR no módulo Preços: puxa a última versão da planilha (fonte da verdade)
   if(view==='precos' && _lastView!=='precos' && syncUrl() && autoOn()){ precosPull({auto:true}); }
   if(view==='mapa'){ setTimeout(mapaInit, 40); }
+  if(view==='experimento'){ setTimeout(expMapaInit, 40); } else if(EXP_REC.watch!=null||EXP_REC.map) expGpsOff();   // v278: GPS e mapa do experimento só nessa tela
   if(view==='entradas'){ setTimeout(()=>nfeListaCarregar(), 60); }
   if(view==='receber'){ if(REC.etapa==='ler') setTimeout(()=>recTransitoCarregar(), 60); }
   if(view==='pendencias' && !PEND.lista){ pendCarregar(); }
@@ -8937,6 +9069,7 @@ document.addEventListener('change',e=>{
   if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
   if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') recRerender(); return; }
+  if(e.target.dataset && e.target.dataset.xf!=null && EXP_REC.form){ EXP_REC.form[e.target.dataset.xf]=e.target.value; return; }   // v278: formulário do experimento
   if(e.target.dataset && e.target.dataset.nfv!=null && nfeImport && nfeImport.venda){ const V=nfeImport.venda, f=e.target.dataset.nfv;   // v277: conferência de venda
     if(f==='cultura'){ V.cultura=e.target.value; V.safra=V.cultura?nfeVendaSafra(V.cultura):V.safra; } else if(f==='safra') V.safra=e.target.value;
     else if(f==='comp'){ const id=e.target.dataset.id; if(e.target.checked){ const a=finAdiantamentos(V.cnpj).find(x=>x.t.id===id), valor=V.itens.reduce((s,i)=>s+i.valor,0), ja=Object.keys(V.comp).reduce((s,k)=>s+(+V.comp[k]||0),0); V.comp[id]=a?Math.max(0,Math.min(a.saldo, valor-ja)):0; } else delete V.comp[id]; }
@@ -9334,6 +9467,11 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
     else if(a.act==='nfeVendaOk'){ nfeVendaOk(); }
+    else if(a.act==='expModo'){ expModo(a.m); } else if(a.act==='expMarcar'){ expMarcar(); }
+    else if(a.act==='expIniciar'){ expIniciar(); } else if(a.act==='expPausar'){ expPausar(); } else if(a.act==='expContinuar'){ expContinuar(); }
+    else if(a.act==='expDesfazer'){ expDesfazer(); } else if(a.act==='expLimpar'){ expLimpar(); } else if(a.act==='expCor'){ expCor(a.c); }
+    else if(a.act==='expSalvar'){ expSalvar(); } else if(a.act==='expCancelarEd'){ expCancelarEd(); }
+    else if(a.act==='expEditar'){ expEditar(a.id); } else if(a.act==='expVer'){ expVer(a.id); } else if(a.act==='expKml'){ expKml(a.id); } else if(a.act==='expDel'){ expRemover(a.id); }
     else if(a.act==='nfeVendaNao'){ if(nfeImport&&nfeImport.venda){ nfeImport.venda=null; nfeImport.nota.tipo=nfeTipoNota(nfeImport.nota.itens); route({keepScroll:true}); toast('Tratando como compra'); } }
     else if(a.act==='nfeMaqTodos'){ if(nfeImport){ const m=((document.getElementById('nfe-maq-all')||{}).value||'').trim(); if(!m){ toast('Digite ou escolha a máquina'); return; } nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='maquina'; it.maq=m; if(!it.tipoMaq) it.tipoMaq=nfeTipoMaqGuess(it.xprod); }); route({keepScroll:true}); toast(`Nota inteira apropriada a ${m}`); } }
     else if(a.act==='nfeMaqNenhum'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(it.dest==='maquina'){ it.dest='estoque'; it.ok=!!PROD[it.produto]; } }); route({keepScroll:true}); } }
@@ -9912,6 +10050,7 @@ const LOTE_TIPOS={
   __realizado:   { lbl:'Operações',     ok:()=>true,              dados:()=>(OV.realizado||{}),  sig:()=>realizadoSig(), last:()=>lastRealizadoSig, set:v=>{ lastRealizadoSig=v; } },
   __result:      { lbl:'Resultados',    ok:()=>true,              dados:()=>(OV.result||{}),     sig:()=>resultSig(),    last:()=>lastResultSig,    set:v=>{ lastResultSig=v; } },
   __limites:     { lbl:'Limites',       ok:()=>limitesServerOk(), dados:()=>(OV.limites||{}),    sig:()=>limitesSig(),   last:()=>lastLimitesSig,   set:v=>{ lastLimitesSig=v; } },
+  __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
   __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
   __stand:       { lbl:'Stand',         ok:()=>standServerOk(),   dados:()=>standMapa(),         sig:()=>standSig(),     last:()=>lastStandSig,     set:v=>{ lastStandSig=v; } },
   __ocorrencia:  { lbl:'Ocorrências',   ok:()=>ocorServerOk(),    dados:()=>(OCOR.reg||{}),      sig:()=>ocorSig(),      last:()=>lastOcorSig,      set:v=>{ lastOcorSig=v; },  antes:()=>ocorFotosEnviar() },
@@ -9969,7 +10108,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -10160,6 +10299,7 @@ function applyPulledData(d, raw){
   try{ limparMaqPendentes(); }catch(e){}
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
+  try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências

@@ -113,6 +113,14 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Experimentos — áreas de referência dentro do talhão (v278)
+
+- Aba nova **EXPERIMENTOS APP** (KEY|JSON|ATUALIZADO, igual à LIMITES APP): cada chave é um experimento
+  `{id, talhao, nome, tipo, coords:[[lat,lng]…], ha, cor, obs, data, quem, del, _u}` marcado com o GPS do celular.
+  Gravada por `__experimentos` (`writeMapApp`, merge por chave, o `_u` mais recente vence; remoção = `del`).
+- Vai ao app na chave `experimentos_app` (Planejamento e Campo). Gravação liberada para Campo e Planejamento.
+- Só referência: não mexe em PORTIFÓLIO, estoque nem demanda.
+
 ## Venda de grãos do produtor (v277 — fase 5)
 
 - `nfeLerGs_` lê também `tpNF` e o nome do destinatário. Em `processarXmlNfe`, nota emitida por um produtor da

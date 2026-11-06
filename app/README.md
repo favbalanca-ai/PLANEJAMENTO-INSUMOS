@@ -71,6 +71,20 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Experimento: área de referência marcada com o celular (v278)** — em *Nova Ação* do talhão (Mapa → toque no
+  talhão, ou Campo) o item **🧪 Experimento** abre a tela `#/experimento/<talhão>`: um sub-limite **dentro do talhão**
+  para faixa de variedade, teste de produto, dose ou testemunha. Só referência: não muda a área do talhão, o estoque
+  nem a demanda; pode haver vários no mesmo talhão, inclusive sobrepostos. Dois jeitos de marcar: **📍 Marcar cantos**
+  (vai a cada canto e toca em Marcar; também dá para tocar no mapa e arrastar os pontos numerados) e **🚶 Caminhar o
+  contorno** (Iniciar/Pausar/Continuar: um ponto a cada 3 m, só com precisão até 15 m; parado não grava). A tela
+  mostra o limite do talhão, a posição do GPS com a precisão (vermelho quando fraca — pede confirmação antes de
+  marcar), nº de pontos, área em ha e aviso de **ponto fora do limite**. Formulário: nome, tipo, data, cor (sugere
+  uma ainda não usada no talhão) e observação. Mínimo 3 pontos. Sem internet o mapa não aparece, mas o GPS continua
+  marcando. Depois: polígono tracejado na cor escolhida no **Mapa** (tocar mostra nome, tipo, ha e link), seção
+  **🧪 Experimentos** na ficha do talhão (ver, editar, baixar **KML** para o monitor da máquina, remover), evento na
+  Timeline, e na **Recomendação** o seletor **Área de referência** preenche a área a aplicar com os ha da faixa (o
+  cartão e o PDF mostram o experimento). Fica em `OV.experimentos` e sobe para a aba **EXPERIMENTOS APP** quando o
+  Code.gs tiver o ramo `__experimentos` (até lá funciona só no aparelho).
 - **Venda de grãos pela nota fiscal (v277 — fase 5 do financeiro)** — a planilha reconhece a nota de **venda do
   produtor** (emitida pelo CPF/CNPJ de um produtor cadastrado) e a **contranota de entrada** do comprador
   (`tpNF` 0 com o produtor como destinatário): ficam em Compras com a etiqueta *Venda do produtor* e o botão
