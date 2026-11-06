@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-280';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-281';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7342,7 +7342,7 @@ async function mapaInit(){
   expTodos().forEach(x=>{ const t=findTalhao(x.talhao); if(oqFaz && t && !fazOk(t)) return; const T=EXP_TIPOS[x.tipo]||EXP_TIPOS.outro, cor=x.cor||'#ff7043';
     const pg=L.polygon(x.coords,{color:cor,weight:2,dashArray:'6 4',fillColor:cor,fillOpacity:.22,className:'mapa-exp'}).addTo(_map); MAPA_NDVI.formas.push(pg);
     pg.bindTooltip(`🧪 ${esc(x.nome||'Experimento')} · ${nf2.format(expHa(x))} ha`,{direction:'center',className:'mapa-lbl mapa-lbl-exp'});
-    pg.bindPopup(`<b>🧪 ${esc(x.nome||'Experimento')}</b><br>${esc(T.lbl)} · ${nf2.format(expHa(x))} ha${t?`<br>${esc(tNome(t))}`:''}${x.obs?`<br><small>${esc(x.obs)}</small>`:''}<br><a href="#/experimento/${encodeURIComponent(x.talhao)}">abrir experimentos</a>`);
+    pg.bindPopup(`<b>🧪 ${esc(x.nome||'Experimento')}</b><br>${esc(T.lbl)} · ${nf2.format(expHa(x))} ha${t?`<br>${esc(tNome(t))}`:''}${x.obs?`<br><small>${esc(x.obs)}</small>`:''}<div style="margin-top:6px;display:flex;gap:10px;flex-wrap:wrap"><a href="#" data-id="${esc(x.talhao)}" onclick="try{_map.closePopup();}catch(e){} talFichaOpen(this.dataset.id); return false" style="font-weight:700">📋 Ficha do talhão</a><a href="#/experimento/${encodeURIComponent(x.talhao)}">🧪 Experimentos</a></div>`);   // v281: o experimento pode cobrir o talhão inteiro — a ficha continua ao alcance
     try{ pg.bringToFront(); }catch(e){} x.coords.forEach(p=>bounds.push(p)); });
   pts.forEach(r=>{
     const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
