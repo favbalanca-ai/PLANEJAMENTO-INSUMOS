@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Mapa: experimento que cobre o talhão (v281)** — o balão do experimento ganhou **📋 Ficha do talhão** ao lado de
+  🧪 Experimentos: quando a faixa de referência cobre o talhão inteiro, o toque cai no experimento e a ficha do
+  talhão continuava inacessível pelo mapa.
 - **Estoque de grãos com valor estimado (v280, fase 6B)** — a aba *Estoque* da balança (sacas colhidas na recepção e
   expedidas, por safra e cultura) chega ao app em `pesagem.estoque`. Por cultura do app: **em estoque** = colhido −
   vendido, **comprometido** = saldo dos contratos, **disponível** = estoque − comprometido. Valor estimado pelo
