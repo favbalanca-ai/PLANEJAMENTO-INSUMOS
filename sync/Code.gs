@@ -109,12 +109,12 @@ function readBase_(){
 }
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
-var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app',
+var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app',
   'ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas'];
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600 };   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
-  limites_app:function(){ return readMapApp('LIMITES APP'); }, afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
+  limites_app:function(){ return readMapApp('LIMITES APP'); }, experimentos_app:function(){ return readMapApp('EXPERIMENTOS APP'); },   // v278: áreas de referência dentro do talhão afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
   ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
@@ -1985,15 +1985,15 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas'],
-  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas'],
   precos:['precos_app','bulas_app'],
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -2155,7 +2155,7 @@ var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
-  __stand:['stand_app'], __limites:['limites_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro'], __baixa:['financeiro'], __finArquivo:[] };
+  __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro'], __baixa:['financeiro'], __finArquivo:[] };
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
 function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
 function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
@@ -2427,6 +2427,8 @@ function gravaUm_(payload, acc, cfg, out){
       var stn = writeStandApp(payload.__stand); out.ok = stn.rows;
     } else if (payload && payload.__limites){         // limites (contornos) dos talhões importados no Mapa (merge por chave)
       var lim = writeMapApp('LIMITES APP', payload.__limites); out.ok = lim.rows;
+    } else if (payload && payload.__experimentos){    // v278: experimentos (áreas de referência dentro do talhão), merge por chave
+      var exr = writeMapApp('EXPERIMENTOS APP', payload.__experimentos); out.ok = exr.rows;
     } else if (payload && payload.__opplan){          // ordem + nomes das operações (merge por chave)
       var opl = writeMapApp('PLANO OPS APP', payload.__opplan); out.ok = opl.rows;
     } else {
