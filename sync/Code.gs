@@ -639,7 +639,7 @@ function writeDeParaNfe(itens){
     var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
     var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = T_(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : T_(it.produto);
     vals['FATOR'] = N(it.fator) || 1; vals['IGNORAR'] = it.ignorar ? 'SIM' : ''; vals['ÚLTIMO CUSTO'] = N(it.custo) || '';
-    vals['DESTINO'] = it.destino === 'maquina' ? 'maquina' : (it.ignorar ? '' : 'estoque'); vals['MÁQUINA'] = it.destino === 'maquina' ? T_(it.maquina) : ''; vals['TIPO GASTO'] = it.destino === 'maquina' ? T_(it.tipoGasto) : '';
+    var mdest = _manutDest_(it.destino); vals['DESTINO'] = mdest ? S(it.destino).toLowerCase() : (it.ignorar ? '' : 'estoque'); vals['MÁQUINA'] = mdest ? T_(it.maquina) : ''; vals['TIPO GASTO'] = mdest ? T_(it.tipoGasto) : '';   // v285
     vals['CONFIRMADO POR'] = T_(it.por) || 'app'; vals['DATA'] = hoje;
     var i = rows[cnpj + '|' + cprod];
     if (i == null){ var a = []; for (var c = 0; c < d.ncol; c++) a.push(''); v.push(a); i = v.length - 1; rows[cnpj + '|' + cprod] = i; novos++; }
@@ -663,8 +663,9 @@ var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRI
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR','MÁQUINA'];
 // v276: peças e serviços apropriados por máquina (não entram no estoque)
 var MANUT_SHEET = 'MANUTENÇÃO MÁQUINAS';
-var MANUT_COLS = ['ID','CHAVE','Nº','DATA','FORNECEDOR','CNPJ','MÁQUINA','TIPO','ITEM','QTD','UN','VALOR','PRODUTOR','OBS','ATUALIZADO'];
-var MANUT_KEYS = ['id','chave','nNF','data','fornecedor','cnpj','maquina','tipo','item','qtd','un','valor','produtor','obs','atualizado'];
+var MANUT_COLS = ['ID','CHAVE','Nº','DATA','FORNECEDOR','CNPJ','MÁQUINA','TIPO','ITEM','QTD','UN','VALOR','PRODUTOR','OBS','ATUALIZADO','DESTINO'];   // v285: DESTINO = maquina · oficina · benfeitoria (MÁQUINA guarda a máquina ou o nome da benfeitoria)
+var MANUT_KEYS = ['id','chave','nNF','data','fornecedor','cnpj','maquina','tipo','item','qtd','un','valor','produtor','obs','atualizado','destino'];
+function _manutDest_(d){ d = S(d).toLowerCase(); return d === 'maquina' || d === 'oficina' || d === 'benfeitoria'; }
 function readManutencao(){ if (!sh(MANUT_SHEET)) return []; return _ler_(MANUT_SHEET, MANUT_COLS).map(function(o){ var x = {}; MANUT_KEYS.forEach(function(k, i){ var v = o[MANUT_COLS[i]]; x[k] = (v instanceof Date) ? _fmtD(v) : (typeof v === 'number' ? v : S(v)); }); return x; }); }
 // regrava as linhas da nota (idempotente pela CHAVE); lista vazia = só apaga
 function manutGrava_(chave, lista, cab){
@@ -672,7 +673,7 @@ function manutGrava_(chave, lista, cab){
   if (last >= 2){ var v = s.getRange(2, t.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2); _delLinhas_(s, apagar); }
   if (!lista || !lista.length) return 0; var agora = new Date();
   return _appendRowsByHeader_(t, lista.map(function(m, k){ return { 'ID':chave + '-' + S(m.n || k + 1), 'CHAVE':chave, 'Nº':S(cab.nNF), 'DATA':S(cab.data), 'FORNECEDOR':S(cab.fornecedor), 'CNPJ':S(cab.cnpj),
-    'MÁQUINA':S(m.maq), 'TIPO':S(m.tipoMaq), 'ITEM':S(m.xprod), 'QTD':N(m.qcom), 'UN':S(m.ucom), 'VALOR':N(m.valor), 'PRODUTOR':S(cab.produtor), 'OBS':S(m.obs), 'ATUALIZADO':agora }; }));
+    'MÁQUINA':S(m.maq), 'TIPO':S(m.tipoMaq), 'ITEM':S(m.xprod), 'QTD':N(m.qcom), 'UN':S(m.ucom), 'VALOR':N(m.valor), 'PRODUTOR':S(cab.produtor), 'OBS':S(m.obs), 'ATUALIZADO':agora, 'DESTINO':_manutDest_(m.dest) ? S(m.dest).toLowerCase() : 'maquina' }; }));
 }
 var NFE_TEXTO = ['CHAVE','PRODUTOR','CNPJ EMITENTE','Nº','SÉRIE','CHAVE REFERENCIADA','CPROD','CFOP','LOGIN','PIN NOVO','PIN',
   'CPF','PARTICIPANTE','DOC Nº','CÓDIGO','CAD ITR','AGÊNCIA','CONTA','IMÓVEL','IMÓVEL PADRÃO','PARCELA','TÍTULO',
@@ -1048,11 +1049,11 @@ function nfeClassifica_(c){
       _delLinhas_(s, apagar); }
     n = _appendRowsByHeader_(ti, c.itens.map(function(it){ return { 'CHAVE':S(c.chave), 'Nº ITEM':S(it.n), 'CPROD':S(it.cprod), 'XPROD':S(it.xprod), 'CFOP':S(it.cfop), 'UCOM':S(it.ucom), 'QCOM':N(it.qcom),
         'PRODUTO APP':it.ignorar ? '' : S(it.produto), 'FATOR':N(it.fator) || 1, 'QTD APP':it.ignorar ? '' : N(it.qtd), 'UN APP':S(it.un), 'CUSTO UNIT. REAL':it.ignorar ? '' : N(it.custo),
-        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '', 'MÁQUINA':it.dest === 'maquina' ? S(it.maq) : '' }; }));
+        'QTD RECEBIDA':(it.ignorar || st !== 'RECEBIDA') ? '' : N(it.qtd), 'IGNORAR':it.ignorar ? 'SIM' : '', 'MÁQUINA':_manutDest_(it.dest) ? S(it.maq) : '' }; }));
   }
   // v276: peças/serviços → aba MANUTENÇÃO MÁQUINAS (regrava a nota; ignorar/cancelar apaga)
   try { var cabM = {}; ['Nº','FORNECEDOR','CNPJ EMITENTE','PRODUTOR','EMISSÃO'].forEach(function(h){ cabM[h] = t.s.getRange(row, t.col(h) + 1).getValue(); });
-    var manut = (c.itens || []).filter(function(it){ return it.dest === 'maquina' && S(it.maq); });
+    var manut = (c.itens || []).filter(function(it){ return _manutDest_(it.dest) && S(it.maq); });   // v285: máquina, oficina ou benfeitoria
     if (manut.length || sh(MANUT_SHEET)) manutGrava_(S(c.chave), st === 'IGNORADA' ? [] : manut, { nNF:cabM['Nº'], fornecedor:cabM['FORNECEDOR'], cnpj:cabM['CNPJ EMITENTE'], produtor:_doc_(cabM['PRODUTOR']), data:_fmtD(cabM['EMISSÃO']) }); } catch (e) { Logger.log('manutenção ' + c.chave + ': ' + e); }
   if (c.depara && c.depara.length) writeDeParaNfe(c.depara);
   // contrato afetado: o próprio (faturamento) ou o da remessa
