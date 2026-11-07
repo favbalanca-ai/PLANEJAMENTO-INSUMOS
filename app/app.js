@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-283';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-284';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7603,10 +7603,6 @@ V.campopainel = function(){
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
     <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
-    ${(()=>{ let tot=0, ref=0, ar=0; tals.forEach(t=>{ const c=custoRealTalhao(t); if(c.n){ tot+=c.total; ref+=c.ref; ar+=c.area; } });   // v272: custo real dos insumos já aplicados
-      return tot||ref?`<a class="kpi kpi-link" data-go="#/relatorios" title="insumos já aplicados (baixas aprovadas) valorados pelo custo médio pago nas notas · a preço de referência: ${brl0(ref)}"><div class="k-label">Insumos aplicados · custo real</div><div class="k-value">${brl0(tot)}</div><div class="k-sub">${ar?brl(tot/ar)+'/ha nos talhões com aplicação':'—'}</div></a>`:''; })()}
-    ${(()=>{ const T=pesEstoqueTot(); return T.n?`<a class="kpi kpi-link" data-go="#/resultados" title="aba Estoque da balança (colhido − vendido), valorada pelo preço médio das vendas da safra"><div class="k-label">Grãos em estoque 🏬</div><div class="k-value">${nf0.format(T.sc)} sc</div><div class="k-sub">${brl0(T.valor)} estimado · ${nf0.format(T.disp)} sc disponíveis</div></a>`:''; })()}
-    ${(()=>{ const v=vendasDe('',''); return v.n?`<a class="kpi kpi-link" data-go="#/resultados" title="notas de venda confirmadas (aba VENDAS)"><div class="k-label">Vendas da safra 🌾</div><div class="k-value">${nf0.format(v.sc)} sc</div><div class="k-sub">${nf0.format(v.kg)} kg · ${brl0(v.valor)} · ${v.precoSc?brl(v.precoSc)+'/sc':''}</div></a>`:''; })()}
     <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
     ${(()=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return `<div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>`;
       const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), ult=ed.slice().reverse().find(x=>x.mm>0);

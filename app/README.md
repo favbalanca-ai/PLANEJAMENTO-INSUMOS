@@ -71,6 +71,8 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Painel do Campo só com parâmetros operacionais (v284)** — saíram os cartões financeiros (Insumos aplicados ·
+  custo real, Grãos em estoque e Vendas da safra). Esses números continuam em Resultados, Relatórios e Financeiro.
 - **Mapa: experimentos ocultos por padrão (v283)** — o mapa volta a mostrar só os talhões com a cor do semáforo. Os
   experimentos aparecem apenas quando a pessoa pede: na ficha do talhão, cada experimento tem **👁️ Mostrar no mapa**
   (vira 🙈 Ocultar), e há **mostrar todos** / **ocultar do mapa**. O escolhido é desenhado tracejado na cor dele, com
