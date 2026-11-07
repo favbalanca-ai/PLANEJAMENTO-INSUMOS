@@ -113,6 +113,13 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Apropriação: oficina e benfeitoria (v285)
+
+- **MANUTENÇÃO MÁQUINAS** ganha a coluna **DESTINO** (`maquina` · `oficina` · `benfeitoria`); MÁQUINA guarda a
+  máquina, "Oficina" ou o nome da benfeitoria. `manutGrava_` grava o `dest` de cada item (sem `dest` = `maquina`).
+- **DE-PARA NFE**: DESTINO aceita os três valores; MÁQUINA/TIPO GASTO valem para qualquer um deles.
+- O app manda `categoria` "Benfeitorias" ou "Manutenção" quando a nota é só de apropriações (`finTitulosDaNota_`).
+
 ## Balança (Pesagem v2): contratos de venda, cargas e NFAs (v279 — fase 6A)
 
 - **CONFIG APP** → `PLANILHA PESAGEM` = link (ou id) da planilha do app Pesagem v2; `PESAGEM DEPARA` = JSON

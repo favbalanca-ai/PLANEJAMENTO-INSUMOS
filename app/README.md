@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Apropriação da NF-e: máquina, oficina ou benfeitoria (v285)** — além de insumo (estoque) e peça/serviço → máquina,
+  cada item da conferência pode ir para **🧰 Material de oficina** (tipo: ferramenta, consumível, EPI, outro) ou
+  **🏗️ Benfeitoria** (nome da obra — galpão, cerca, curral… com memória dos nomes já usados — e tipo: construção,
+  reforma, elétrica, hidráulica, outro). O app sugere pela descrição (cimento, telha, arame, tinta, fio… → benfeitoria;
+  ferramenta, eletrodo, lixa, luva, EPI… → oficina) e a memória do de-para guarda destino, nome e tipo por item e
+  fornecedor. O banner da nota ganhou **Tudo → máquina / oficina / benfeitoria**. Nada disso entra no estoque: vai
+  para a aba MANUTENÇÃO MÁQUINAS com a coluna **DESTINO**. O título a pagar da nota recebe a categoria
+  **Benfeitorias** quando a obra vale mais que o resto, senão **Manutenção**. A tela Máquinas → "Manutenção e
+  benfeitorias" agrupa por máquina, 🧰 Oficina e cada 🏗️ benfeitoria; o CSV ganhou a coluna Destino.
 - **Painel do Campo só com parâmetros operacionais (v284)** — saíram os cartões financeiros (Insumos aplicados ·
   custo real, Grãos em estoque e Vendas da safra). Esses números continuam em Resultados, Relatórios e Financeiro.
 - **Mapa: experimentos ocultos por padrão (v283)** — o mapa volta a mostrar só os talhões com a cor do semáforo. Os
