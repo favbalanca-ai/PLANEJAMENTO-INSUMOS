@@ -113,6 +113,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Produtor na lista de notas (v286)
+
+- `nfeLista_` devolve também `produtor` (coluna PRODUTOR da NFE RECEBIDAS, só dígitos) para a lista de Compras.
+
 ## Apropriação: oficina e benfeitoria (v285)
 
 - **MANUTENÇÃO MÁQUINAS** ganha a coluna **DESTINO** (`maquina` · `oficina` · `benfeitoria`); MÁQUINA guarda a

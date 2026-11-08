@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Produtor da nota na lista e na conferência (v286)** — em Compras, cada nota a classificar mostra 👤 o produtor
+  (destinatário) e a conferência ganha o cartão **Produtor (destinatário)** com o nome do cadastro (Cadastros →
+  Produtores), ou o nome do XML quando o CPF/CNPJ não está cadastrado, destacado como "fora da lista de produtores".
 - **Apropriação da NF-e: máquina, oficina ou benfeitoria (v285)** — além de insumo (estoque) e peça/serviço → máquina,
   cada item da conferência pode ir para **🧰 Material de oficina** (tipo: ferramenta, consumível, EPI, outro) ou
   **🏗️ Benfeitoria** (nome da obra — galpão, cerca, curral… com memória dos nomes já usados — e tipo: construção,
