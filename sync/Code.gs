@@ -762,14 +762,17 @@ function nfeLerGs_(txt){
   }
   var inf = _xfirst(root, 'infNFe'); if (!inf) return { erro:'não é XML de NF-e' };
   var prot = _xfirst(root, 'infProt'), ide = _xfirst(inf,'ide'), emit = _xfirst(inf,'emit'), dest = _xfirst(inf,'dest');
-  var tipos = _xall(inf,'det').map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
+  var dets = _xall(inf,'det'), tipos = dets.map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
+  var cfops = dets.map(function(d){ return S(_xt(d,'CFOP')); }), xprods = dets.map(function(d){ return S(_xt(d,'xProd')); });   // v288
   var tipo = tipos.indexOf('FATURAMENTO')>=0 ? 'FATURAMENTO' : tipos.indexOf('REMESSA')>=0 ? 'REMESSA' : tipos.indexOf('VENDA')>=0 ? 'VENDA' : 'OUTRA';
   var idAttr = inf.getAttribute('Id');
   return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
     nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
     cnpj:(_xt(emit,'CNPJ') || _xt(emit,'CPF')).replace(/\D/g,''), fornecedor:_xt(emit,'xNome'),
     dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
-    ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length };
+    ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length,
+    entrada:_xt(ide,'tpNF') === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
+    producao:xprods.length > 0 && xprods.every(function(x){ return /\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i.test(x); }) };   // v288: só produtos que a fazenda produz
 }
 // texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
 function _blobTxt(b){ var t = b.getDataAsString('UTF-8'); if (/encoding=["']ISO-8859-1["']/i.test(t.slice(0,120))) t = b.getDataAsString('ISO-8859-1'); return t.replace(/^﻿/,''); }
@@ -905,7 +908,9 @@ function processarXmlNfe(txt, origem){
   if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()))   // mesma nota 2× não duplica
     return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' };
   // v277: VENDA DO PRODUTOR — nota emitida por um produtor cadastrado, ou contranota de ENTRADA (tpNF 0) do comprador com o produtor como destinatário
-  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança', vendaProd = emitProd || (n.tpNF === '0' && cfg.produtores.indexOf(n.dest) >= 0);   // v279: NFA da balança é sempre venda do produtor
+  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança' || (n.producao && !n.entrada && n.tpNF !== '0' && /^\d{11}$/.test(n.cnpj));   // v279: NFA da balança é sempre venda · v288: CPF vendendo produção
+  var entradaN = !!n.entrada || n.tpNF === '0';
+  var vendaProd = emitProd || (entradaN && (cfg.produtores.indexOf(n.dest) >= 0 || n.producao));   // contranota do comprador: produtor cadastrado OU só produtos da fazenda (soja, milho, feijão, laranja…)
   var fora = !vendaProd && cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,

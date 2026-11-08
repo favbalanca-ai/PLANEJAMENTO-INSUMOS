@@ -2677,7 +2677,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-287';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-288';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4383,15 +4383,21 @@ const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA
 function nfeProdutorTxt(doc, nomeXml){ doc=String(doc||'').replace(/\D/g,''); if(!doc) return {nome:nomeXml||'—', doc:'', fora:false}; const prods=FIN().produtores, p=prods.find(x=>x.cpf===doc);
   return {nome:p?p.nome:(nomeXml||nfeCnpjFmt(doc)), doc:nfeCnpjFmt(doc), fora:!!(prods.length&&!p)}; }
 function nfeProdutoresDocs(){ return FIN().produtores.map(p=>String(p.cpf||'').replace(/\D/g,'')).filter(Boolean); }
-function nfeEhVenda(n){ const prods=nfeProdutoresDocs();
-  if(prods.length) return prods.includes(n.cnpj) || (n.tpNF==='0' && prods.includes(n.dest));
-  return n.tpNF==='0' || (String(n.cnpj||'').length===11 && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
-}
-const VENDA_CULT=[['SOJA',/\bSOJA\b/i],['MILHO',/\bMILHO\b/i],['SORGO',/\bSORGO\b/i],['TRIGO',/\bTRIGO\b/i],['FEIJ',/FEIJ/i],['BRAQ',/BRAQ|BRACH/i],['ALGOD',/ALGOD/i],['ARROZ',/\bARROZ\b/i],['GIRASSOL',/GIRASSOL/i],['AVEIA',/\bAVEIA\b/i],['MILHETO',/MILHETO/i]];
+// v288: produtos que a fazenda PRODUZ — nota com só esses itens é venda (contranota de entrada do comprador ou nota
+// emitida pelo produtor), mesmo que o CPF do produtor ainda não esteja em Cadastros → Produtores
+const _RX_GRAOS=/\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i;
+function nfeItensProducao(n){ const its=n.itens||[]; return !!its.length && its.every(i=>_RX_GRAOS.test(i.xprod||'')); }
+function nfeNotaEntrada(n){ const its=n.itens||[]; return n.tpNF==='0' || (!!its.length && its.every(i=>/^[12]/.test(String(i.cfop||'')))); }   // contranota: tpNF 0 ou CFOP 1xxx/2xxx
+function nfeEhVenda(n){ const prods=nfeProdutoresDocs(), pf=String(n.cnpj||'').length===11;
+  if(prods.includes(n.cnpj)) return true; if(nfeNotaEntrada(n) && prods.includes(n.dest)) return true;
+  if(nfeItensProducao(n) && (nfeNotaEntrada(n) || pf)) return true;   // soja, milho, feijão, laranja… entrando no comprador ou saindo de um CPF
+  if(!prods.length) return n.tpNF==='0' || (pf && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
+  return false; }
+const VENDA_CULT=[['SOJA',/\bSOJA\b/i],['MILHO',/\bMILHO\b/i],['SORGO',/\bSORGO\b/i],['TRIGO',/\bTRIGO\b/i],['FEIJ',/FEIJ/i],['LARANJA',/LARANJA|CITR/i],['BRAQ',/BRAQ|BRACH/i],['ALGOD',/ALGOD/i],['ARROZ',/\bARROZ\b/i],['GIRASSOL',/GIRASSOL/i],['AVEIA',/\bAVEIA\b/i],['MILHETO',/MILHETO/i]];
 function nfeVendaCultura(xprod){ const k=(VENDA_CULT.find(([,rx])=>rx.test(xprod||''))||[])[0]; if(!k) return ''; const emps=empList().filter(e=>e&&e!=='—'&&String(e).toUpperCase().includes(k)); return emps[0]||''; }
 function nfeVendaSafra(emp){ return talhoesAll().some(t=>empSafDe(t)===emp)&&!talhoesAll().some(t=>empDe(t)===emp)?'safrinha':'principal'; }
 function nfeKgDe(q,un){ const u=String(un||'').toUpperCase().replace(/\s/g,''); q=+q||0; if(/^(T|TON|TONS|TONELADA|TONELADAS)$/.test(u)) return q*1000; if(/^(SC|SCS|SACA|SACAS|SACO|SACOS|SC60|SACA60)$/.test(u)) return q*60; if(/^SC50$/.test(u)) return q*50; if(/^(AR|ARROBA|@)$/.test(u)) return q*15; return q; }
-function nfeVendaPrep(imp){ const n=imp.nota, prods=nfeProdutoresDocs(), emitProd=prods.includes(n.cnpj)||(String(n.cnpj||'').length===11&&!prods.length);
+function nfeVendaPrep(imp){ const n=imp.nota, prods=nfeProdutoresDocs(), emitProd=prods.includes(n.cnpj)||(!nfeNotaEntrada(n)&&!prods.includes(n.dest));   // v288: contranota (entrada) → quem emite é o comprador
   imp.venda={ produtor:emitProd?n.cnpj:n.dest, comprador:emitProd?(n.destNome||'—'):n.fornecedor, cnpj:emitProd?n.dest:n.cnpj, cultura:nfeVendaCultura(n.itens.map(i=>i.xprod).join(' ')), safra:'', comp:{} };
   imp.venda.contrato=''; imp.venda.ticket='';
   if(pesOk()){ const cg=pesCargaDaNota(n.nNF), cs=pesContratosDo(imp.venda.cnpj); if(cg){ imp.venda.ticket=cg.ticket; imp.venda.contrato=cg.contrato; } else if(cs.length===1) imp.venda.contrato=cs[0].id;   // v279: carga da balança pelo nº da NFA
@@ -4401,6 +4407,7 @@ function nfeVendaPrep(imp){ const n=imp.nota, prods=nfeProdutoresDocs(), emitPro
 // adiantamentos do comprador: títulos A RECEBER, categoria Adiantamento, já recebidos, com saldo a compensar
 function finAdiantamentos(cnpj){ const F=FIN(); return F.titulos.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER'&&/adiantamento/i.test(t.categoria||'')&&String(t.status||'').toUpperCase()==='PAGO'&&(!cnpj||t.participante===cnpj))
   .map(t=>{ const usado=F.baixas.filter(b=>b.compensacao==='S'&&b.ref===t.id).reduce((s,b)=>s+(+b.valorPago||0),0); return {t, usado, saldo:+Math.max(0,(+t.valor||0)-usado).toFixed(2)}; }).filter(x=>x.saldo>0.004); }
+function emitProdNome(n,V){ return V.produtor===n.cnpj?n.fornecedor:(V.produtor===n.dest?n.destNome:''); }
 function nfeVendaHtml(){ const imp=nfeImport, n=imp.nota, V=imp.venda, pg=nfePagTxt(n), emps=empList().filter(e=>e&&e!=='—'), srv=nfeServerOk();
   const kg=V.itens.reduce((s,i)=>s+i.kg,0), valor=V.itens.reduce((s,i)=>s+i.valor,0), sc=kg/60;
   const adi=finAdiantamentos(V.cnpj), compTot=Object.keys(V.comp).reduce((s,k)=>s+(+V.comp[k]||0),0);
@@ -4409,7 +4416,7 @@ function nfeVendaHtml(){ const imp=nfeImport, n=imp.nota, V=imp.venda, pg=nfePag
     <div class="nfe-head">
       <div><small>Comprador</small><b>${esc(V.comprador||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(V.cnpj))}</span></div>
       <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}${n.tpNF==='0'?' · contranota de entrada':' · emitida pelo produtor'}</span></div>
-      <div><small>Produtor</small><b>${esc(finProdNome(V.produtor))}</b><span>${esc(nfeCnpjFmt(V.produtor))}</span></div>
+      <div${FIN().produtores.some(p=>p.cpf===V.produtor)?'':' class="nfe-fora"'}><small>Produtor</small><b>👤 ${esc(FIN().produtores.some(p=>p.cpf===V.produtor)?finProdNome(V.produtor):((emitProdNome(n,V))||nfeCnpjFmt(V.produtor)))}</b><span>${esc(nfeCnpjFmt(V.produtor))}${FIN().produtores.some(p=>p.cpf===V.produtor)?'':' · <b>não cadastrado</b> — <a class="link" data-go="#/cadastros">Cadastros → Produtores</a>'}</span></div>
       <div><small>Valor da nota</small><b>${brl(n.vNF||valor)}</b><span>${nf0.format(kg)} kg · ${nf2.format(sc)} sc · ${nf2.format(kg/1000)} t</span></div>
       <div title="parcelas do XML — viram títulos a receber no Financeiro"><small>Recebimento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>
     </div>
