@@ -418,3 +418,13 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   (candidatos, máquinas, benfeitorias) — nunca a chave de acesso completa, CPF do produtor nem dados bancários.
 - Próximas fases: **B** conciliação bancária (OFX/CSV → baixas em lote), **C** fechamento mensal e envio ao contador.
 
+## 15. Fase B do Administrativo (08/11/2026): conciliação bancária
+- Bancos da dona: **Banco do Brasil** e **Sicoob**. Formato principal **OFX** (SGML 1.x do BB em cp1252 e XML 2.x do
+  Sicoob); CSV dos dois como alternativa (linhas de saldo são puladas; Sicoob usa sufixo C/D).
+- Decisão: entre vários títulos possíveis o app **nunca grava sozinho** (cartão amarelo). Casamento automático só com um
+  candidato único: mesmo tipo (débito ↔ a pagar), valor igual ao saldo do título (±R$ 0,01), vencimento a até 10 dias,
+  mesmo produtor da conta.
+- A planilha recebe apenas o que foi confirmado; o arquivo do extrato não sobe. Idempotência pelo id da linha no banco
+  (FITID) + conta.
+- Próxima: **Fase C** — fechamento mensal (checklist, LCDPR, relatório) e envio ao contador.
+

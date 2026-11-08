@@ -1190,8 +1190,12 @@ var FIN_CP_KEYS = ['id','imovel','tipo','doc','nome','participacao','atualizado'
 var FIN_CONTA_COLS = ['CÓDIGO','PRODUTOR','BANCO','AGÊNCIA','CONTA','TIPO','ATIVA','ATUALIZADO','SALDO INICIAL','DATA SALDO','PAÍS','NÚMERO BANCO'];   // v274: saldo inicial p/ o extrato · v275: 0050
 var FIN_CONTA_KEYS = ['codigo','produtor','banco','agencia','conta','tipo','ativa','atualizado','saldoInicial','dataSaldo','pais','numBanco'];
 var FIN_BAIXA_SHEET = 'BAIXAS';   // v274: cada pagamento/recebimento (o fato do caixa)
-var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO','COMPENSAÇÃO','REF'];   // v277: compensação de adiantamento (não é dinheiro)
-var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado','compensacao','ref'];
+var FIN_BAIXA_COLS = ['ID','TÍTULO','PRODUTOR','CONTA','DATA','VALOR PAGO','JUROS','DESCONTO','COMPROVANTE','OBS','QUEM','ATUALIZADO','COMPENSAÇÃO','REF','BANCO ID'];   // v277: compensação de adiantamento (não é dinheiro) · v291: id da linha do extrato (conciliação)
+var FIN_BAIXA_KEYS = ['id','titulo','produtor','conta','data','valorPago','juros','desconto','comprovante','obs','quem','atualizado','compensacao','ref','bancoId'];
+// v291 (Fase B): conciliação bancária — linhas do extrato importado (OFX/CSV do BB e Sicoob) e regras de categoria por histórico
+var BANCO_SHEET = 'EXTRATO BANCO', BANCO_COLS = ['ID','CONTA','PRODUTOR','DATA','VALOR','HISTÓRICO','DOC','TÍTULO','STATUS','BAIXA','IMPORTADO EM','QUEM','ATUALIZADO'];
+var BANCO_KEYS = ['id','conta','produtor','data','valor','historico','doc','titulo','status','baixa','importadoEm','quem','atualizado'];
+var BANCO_REGRA_SHEET = 'DE-PARA BANCO', BANCO_REGRA_COLS = ['CONTÉM','TIPO','CATEGORIA','PARTICIPANTE','QUEM','ATUALIZADO'], BANCO_REGRA_KEYS = ['contem','tipo','categoria','participanteNome','quem','atualizado'];
 var FIN_TIT_COLS = ['ID','TIPO','PRODUTOR','PARTICIPANTE','PARTICIPANTE NOME','DOC TIPO','DOC Nº','CHAVE','PARCELA','EMISSÃO','VENCIMENTO','VALOR','FORMA PGTO','CATEGORIA','IMÓVEL','STATUS','DATA PGTO','ORIGEM','OBS','ATUALIZADO','QUEM'];
 var FIN_TIT_KEYS = ['id','tipo','produtor','participante','participanteNome','docTipo','docNum','chave','parcela','emissao','vencimento','valor','formaPgto','categoria','imovel','status','dataPgto','origem','obs','atualizado','quem'];
 var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS], contraparte:[FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS] };
@@ -1204,7 +1208,46 @@ function readFinanceiro(){
   return { produtores:_finLer_(FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS), imoveis:_finLer_(FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS),
     contas:_finLer_(FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS), titulos:_finLer_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS),
     baixas:_finLer_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS), contrapartes:_finLer_(FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS),
-    contador:finContador_(), lcdprGerado:finLcdprGerado_() };
+    contador:finContador_(), lcdprGerado:finLcdprGerado_(), extratoBanco:bancoExtratoLer_(), regrasBanco:sh(BANCO_REGRA_SHEET) ? _finLer_(BANCO_REGRA_SHEET, BANCO_REGRA_COLS, BANCO_REGRA_KEYS) : [] };   // v291
+}
+// v291: linhas do extrato já tratadas (últimos 180 dias) — para outros aparelhos não reimportarem e para o histórico
+function bancoExtratoLer_(){ if (!sh(BANCO_SHEET)) return []; var lim = new Date(); lim.setDate(lim.getDate() - 180); var l = Utilities.formatDate(lim, tz_(), 'yyyy-MM-dd');
+  return _finLer_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS).filter(function(x){ return S(x.data) >= l; }); }
+// v291: grava a conciliação de um extrato. Ids determinísticos (conta + id da linha no banco): reenviar o mesmo arquivo nunca duplica.
+// p = { conta, produtor, itens:[{ fitid, data, valor, historico, doc, titulo?, novo?:{tipo,categoria,participanteNome,imovel}, ignorar? }], regras:[{contem,tipo,categoria,participanteNome}] }
+function conciliaGrava_(p, acc){
+  var conta = S(p && p.conta), prod = _doc_(p && p.produtor), quem = (acc && acc.u && (acc.u.nome || acc.u.login)) || 'app';
+  if (!conta) return { rows:0, erro:'conta obrigatória' };
+  var agora = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'), titulos = [], baixas = [], linhas = [], n = { baixas:0, novos:0, ignorados:0, pulados:0 };
+  var antes = {}; if (sh(BANCO_SHEET)) _finLer_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS).forEach(function(x){ antes[S(x.id)] = x; });
+  (p.itens || []).forEach(function(it){ var fit = S(it.fitid); if (!fit) return; var id = conta + '|' + fit, key = id.replace(/[^A-Za-z0-9|_.-]/g, '_'), v = N(it.valor), data = S(it.data).slice(0, 10), hist = S(it.historico).slice(0, 200);
+    var ja = antes[id]; if (ja && S(ja.status) === 'CONCILIADO' && !it.refazer){ n.pulados++; return; }   // já tinha baixa desta linha: não mexe
+    var lin = { id:id, conta:conta, produtor:prod, data:data, valor:v, historico:hist, doc:S(it.doc).slice(0, 40), titulo:'', status:'PENDENTE', baixa:'', importadoEm:ja && ja.importadoEm ? ja.importadoEm : agora, quem:quem };
+    if (it.ignorar){ lin.status = 'IGNORADO'; n.ignorados++; linhas.push(lin); return; }
+    var tid = S(it.titulo);
+    if (!tid && it.novo && typeof it.novo === 'object'){ var nv = it.novo; tid = 'bk:' + key;
+      titulos.push({ id:tid, tipo:v < 0 ? 'PAGAR' : 'RECEBER', produtor:prod, participante:'', participanteNome:S(nv.participanteNome || hist).slice(0, 80), docTipo:'Extrato bancário', docNum:S(it.doc).slice(0, 40), chave:'', parcela:'', emissao:data, vencimento:data, valor:Math.abs(v),
+        formaPgto:S(nv.formaPgto || 'Débito em conta'), categoria:S(nv.categoria || 'Outros'), imovel:S(nv.imovel), status:'ABERTO', origem:'banco', obs:hist }); n.novos++; }
+    if (!tid){ linhas.push(lin); return; }   // sem título e sem lançamento novo: fica pendente
+    var bid = 'bb:' + key; baixas.push({ id:bid, titulo:tid, produtor:prod, conta:conta, data:data, valorPago:Math.abs(v), juros:0, desconto:0, comprovante:'', obs:'conciliação bancária: ' + hist, compensacao:'', ref:'', bancoId:id });
+    lin.titulo = tid; lin.baixa = bid; lin.status = 'CONCILIADO'; n.baixas++; linhas.push(lin); });
+  if (titulos.length) tituloGrava_(titulos, acc);
+  if (baixas.length) baixaGrava_(baixas, acc);   // grava e recalcula os títulos (ABERTO/PARCIAL/PAGO)
+  if (linhas.length) _finUpsert_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS, linhas);
+  var regras = (p.regras || []).filter(function(r){ return S(r.contem).length >= 3; }).map(function(r){ return { contem:S(r.contem).toUpperCase().slice(0, 60), tipo:S(r.tipo), categoria:S(r.categoria), participanteNome:S(r.participanteNome).slice(0, 80), quem:quem }; });
+  if (regras.length) _finUpsert_(BANCO_REGRA_SHEET, BANCO_REGRA_COLS, BANCO_REGRA_KEYS, regras);
+  n.rows = linhas.length + regras.length; return n;
+}
+// v291: sugestão de categoria pela IA para históricos sem regra (uma chamada para o lote). Sem chave: devolve vazio.
+function bancoIa_(p){ var key = iaChave_(); if (!key) return { ok:false, semChave:true, sug:[] }; var itens = (p && p.itens || []).slice(0, 60); if (!itens.length) return { ok:true, sug:[] };
+  var cats = ['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Venda de grãos','Adiantamento','Outros'];
+  var system = 'Você classifica lançamentos de extrato bancário de uma fazenda de grãos no Brasil. Para cada item devolva a categoria (uma de: ' + cats.join(', ') + '), um nome curto da contraparte (empresa/pessoa/banco, sem números) e confianca 0-1. Valor negativo = saída (pagamento), positivo = entrada. Tarifas, pacotes de serviços e IOF → categoria Outros com nome "Tarifa bancária". Transferência entre contas do próprio produtor → categoria "Transferência". Responda SOMENTE JSON: {"itens":[{"i":0,"categoria":"","nome":"","confianca":0.0}]}';
+  var payload = { model:IA_MODELO, max_tokens:1500, temperature:0, system:system, messages:[{ role:'user', content:JSON.stringify(itens.map(function(x, i){ return { i:i, historico:S(x.historico).slice(0, 120), valor:N(x.valor) }; })) }] };
+  try { var resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true });
+    if (resp.getResponseCode() !== 200) return { ok:false, erro:'IA recusou (HTTP ' + resp.getResponseCode() + ')', sug:[] };
+    var j = JSON.parse(resp.getContentText()), texto = (j.content || []).map(function(c){ return c.text || ''; }).join(''); var o = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1));
+    return { ok:true, sug:(o.itens || []).map(function(x){ var c = S(x.categoria); return { i:+x.i, categoria:cats.indexOf(c) >= 0 || c === 'Transferência' ? c : 'Outros', nome:S(x.nome).slice(0, 60), confianca:Math.max(0, Math.min(1, +x.confianca || 0)) }; }) };
+  } catch (e) { return { ok:false, erro:'IA: ' + e, sug:[] }; }
 }
 // v275: contador (CONFIG APP) e carimbo "LCDPR gerado" por produtor/ano
 function finContador_(){ var m = configAppMapa_(), o = {}; Object.keys(FIN_CONTADOR_).forEach(function(k){ o[k] = S(m[FIN_CONTADOR_[k]]); }); return o; }
@@ -2123,7 +2166,7 @@ var MOD_DADOS = {
   admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app'] };
 // quem pode GRAVAR cada tipo (payload __x) — módulos
-var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'],
+var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
   __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __campoFoto:['campo','planejamento'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
@@ -2281,13 +2324,13 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao','vendas'];   // financeiro: classificar/cancelar nota mexe nos títulos
-var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
+var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
 var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
-  __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[] };
+  __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[], __concilia:['financeiro'], __bancoIa:[] };
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
 function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
 function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
@@ -2522,6 +2565,10 @@ function gravaUm_(payload, acc, cfg, out){
       var tg = tituloGrava_(payload.__titulo, acc); out.ok = tg.rows; if (tg.erro){ out.fail = 1; out.msgs.push(tg.erro); }
     } else if (payload && payload.__baixa){         // financeiro (v274): baixa na conta do produtor (cria/edita/exclui; recalcula o título)
       var bg = baixaGrava_(payload.__baixa, acc); out.ok = bg.rows; if (bg.erro){ out.fail = 1; out.msgs.push(bg.erro); }
+    } else if (payload && payload.__concilia){      // v291: conciliação bancária (baixas + lançamentos avulsos + linhas do extrato + regras)
+      var cg2 = conciliaGrava_(payload.__concilia, acc); out.ok = cg2.rows; out.concilia = cg2; if (cg2.erro){ out.fail = 1; out.msgs.push(cg2.erro); }
+    } else if (payload && payload.__bancoIa){       // v291: categoria sugerida pela IA para linhas do extrato sem regra
+      var bi = bancoIa_(payload.__bancoIa); out.ok = 1; out.sug = bi.sug; out.semChave = !!bi.semChave; if (bi.erro) out.msgs.push(bi.erro);
     } else if (payload && payload.__finArquivo){    // comprovante da baixa → Drive
       out.arquivo = finArquivo_(payload.__finArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0;
     } else if (payload && payload.__cadFin){        // cadastros do financeiro (produtores, imóveis, contas) — só ADMIN quando há login

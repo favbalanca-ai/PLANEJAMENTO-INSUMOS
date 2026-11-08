@@ -2067,6 +2067,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 .fin-h3{font-size:14px;margin:10px 14px 6px}
 .nfe-ia{font-size:12px;margin-top:3px}.nfe-ia-ok{color:#2e7d32;font-weight:700}.nfe-ia-pend{color:#b26a00;font-weight:700}.nfe-row.ia-pronto{border-left:4px solid #43a047}.nfe-row.ia-pend{border-left:4px solid #fbc02d;background:#fffdf5}.nfe-iabox .btn{margin-left:6px}
+/* conciliação bancária (v291) */
+.bk-row{padding:10px 14px;border-top:1px solid var(--line);border-left:4px solid transparent}.bk-row.st-auto{border-left-color:#43a047}.bk-row.st-sug{border-left-color:#fbc02d;background:#fffdf5}.bk-row.st-novo{border-left-color:#90a4ae}.bk-row.st-novo.pronta{border-left-color:#43a047}.bk-row.st-ign{opacity:.75}.bk-row.st-ja{opacity:.55}
+.bk-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.bk-neg{color:#c62828}.bk-pos{color:#2e7d32}.bk-hist{font-size:13px;margin:3px 0 4px;word-break:break-word}.bk-tit{font-size:13px}.bk-tit .sel{max-width:100%;margin:4px 0}
+.bk-novo{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;font-size:12px}.bk-novo label{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}.bk-novo .txt,.bk-novo .sel{width:100%}.bk-acts{flex-basis:100%;font-size:12px}.bk-chk{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:4px;min-width:0!important;flex:0 0 auto!important}
+.bk-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px}.bk-dif{color:#c62828;font-weight:700}
+@media (max-width:640px){ .bk-novo label{min-width:100%} }
 /* venda do produtor (v277) */
 .nfe-venda .panel-head h2{color:var(--green)}
 .nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
@@ -2542,6 +2548,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .exp-row-tx .mut{font-size:9.5px}
   .fin-h3{font-size:11.5px}
   .nfe-ia{font-size:9.5px}
+  .bk-hist{font-size:10.5px}
+  .bk-tit{font-size:10.5px}
+  .bk-novo{font-size:9.5px}
+  .bk-acts{font-size:9.5px}
   .nfe-comp{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
