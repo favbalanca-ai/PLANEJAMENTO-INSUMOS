@@ -2081,6 +2081,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .exp-sw{display:inline-block;width:14px;height:14px;border-radius:4px;flex:0 0 auto;margin-top:3px;border:1px solid rgba(0,0,0,.2)}
 .exp-vtx{background:#fff;border:2px solid #333;border-radius:50%;font:700 11px/18px system-ui,sans-serif;text-align:center;color:#222}
 .mapa-lbl-exp{font-size:11px}
+.nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 /* venda do produtor (v277) */
 .nfe-venda .panel-head h2{color:var(--green)}
 .nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
@@ -2674,7 +2675,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-285';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-286';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4376,6 +4377,9 @@ function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop));
   return t.includes('FATURAMENTO')?'FATURAMENTO':t.includes('REMESSA')?'REMESSA':t.includes('VENDA')?'VENDA':'OUTRA'; }
 const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',OUTRA:'Outra operação',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};
 // ===== v277: VENDA DO PRODUTOR (receita) — nota emitida pelo produtor OU contranota de entrada do comprador =====
+// v286: produtor (destinatário) da nota, para mostrar na lista e na conferência
+function nfeProdutorTxt(doc, nomeXml){ doc=String(doc||'').replace(/\D/g,''); if(!doc) return {nome:nomeXml||'—', doc:'', fora:false}; const prods=FIN().produtores, p=prods.find(x=>x.cpf===doc);
+  return {nome:p?p.nome:(nomeXml||nfeCnpjFmt(doc)), doc:nfeCnpjFmt(doc), fora:!!(prods.length&&!p)}; }
 function nfeProdutoresDocs(){ return FIN().produtores.map(p=>String(p.cpf||'').replace(/\D/g,'')).filter(Boolean); }
 function nfeEhVenda(n){ const prods=nfeProdutoresDocs();
   if(prods.length) return prods.includes(n.cnpj) || (n.tpNF==='0' && prods.includes(n.dest));
@@ -4746,7 +4750,7 @@ function nfeListaHtml(){
   const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
   const rows=(L.notas||[]).map(nt=>`<div class="nfe-row">
       <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span>
-        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
+        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${nt.tipo==='VENDA PRODUTOR'?'🌾 Conferir venda':'Conferir'}</button>
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
   const nN=(L.notas||[]).length, c=L.captura;
@@ -4903,6 +4907,7 @@ function nfeConferirHtml(){
   return `<div class="panel nfe-panel"><div class="panel-head"><h2>📄 Conferir NF-e</h2><span class="sub">${esc(imp.arquivo)}</span></div>
     <div class="nfe-head">
       <div><small>Fornecedor</small><b>${esc(n.fornecedor||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(n.cnpj))}</span></div>
+      ${(()=>{ const pr=nfeProdutorTxt(n.dest, n.destNome); return `<div${pr.fora?' class="nfe-fora"':''}><small>Produtor (destinatário)</small><b>👤 ${esc(pr.nome)}</b><span>${esc(pr.doc)}${pr.fora?' · <b>fora da lista de produtores</b>':''}</span></div>`; })()}
       <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
       <div><small>Valor da nota</small><b>${brl(n.vNF)}</b><span>${n.itens.length} item(ns)</span></div>
       <div><small>Tipo (CFOP)</small><b class="nfe-tipo t-${n.tipo}">${esc(NFE_TIPO[n.tipo])}</b><span>CFOP ${esc(cfops)}</span></div>

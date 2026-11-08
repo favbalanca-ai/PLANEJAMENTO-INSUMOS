@@ -1016,7 +1016,7 @@ function nfeLista_(status){
   var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
   if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
     if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
-    var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),
+    var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), produtor:_doc_(o[_hkey('PRODUTOR')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),   // v286: produtor (destinatário) na lista
       emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
       capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]) };
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
