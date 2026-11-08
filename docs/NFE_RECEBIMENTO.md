@@ -406,3 +406,15 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   alimentada à mão (lida a cada 15 min pelo gatilho ou na hora pelo botão **Atualizar** do app).
 - O código do Gmail continua no `capturarNfe`, desligado: para voltar, na aba `CONFIG NFE` criar a
   linha **`LER E-MAIL` = `SIM`** (sem a linha, ou com `NÃO`, fica desligado). O `setupNfe` cria a linha com `NÃO`.
+
+## 14. Fase A do Administrativo (08/11/2026): caixa de entrada e IA
+- Objetivo da dona: módulo "o máximo possível automático". A tela **Notas** (antiga Compras) vira caixa de entrada.
+- A classificação acontece **na planilha** (`nfeIaClassificar_`), logo após a captura; o app só mostra o resultado e
+  aplica em `nfeItemInicial` (depois da memória do de-para, antes das heurísticas). Confiança mínima para entrar
+  sozinho: **0,75** (`NFE_IA_MIN`); abaixo disso o item fica amarelo (sugerido) e a pessoa decide.
+- **Aprovar** em um toque = mesma gravação do botão Confirmar da conferência (`nfeConfirmar`): compra → EM TRÂNSITO,
+  faturamento → contrato, só apropriações → RECEBIDA direto; venda → `nfeVendaOk`. Nada novo no `doPost`.
+- A chave da API fica em Propriedades do Script (`ANTHROPIC_KEY`); a IA recebe só fornecedor, itens e listas do app
+  (candidatos, máquinas, benfeitorias) — nunca a chave de acesso completa, CPF do produtor nem dados bancários.
+- Próximas fases: **B** conciliação bancária (OFX/CSV → baixas em lote), **C** fechamento mensal e envio ao contador.
+

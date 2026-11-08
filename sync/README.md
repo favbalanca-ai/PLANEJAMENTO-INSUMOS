@@ -113,6 +113,28 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Classificação automática das notas com IA (v290 — Fase A)
+
+- **Ligar:** no editor do Apps Script → ⚙️ Configurações do projeto → **Propriedades do script** → adicionar
+  `ANTHROPIC_KEY` com a chave da API da Anthropic (a mesma ideia do app da balança). A chave **nunca** vai para o
+  código nem para o app. Sem a propriedade, `iaChave_()` devolve vazio e nada da IA roda (o app mostra "IA desligada").
+- `nfeIaClassificar_(chave, forcar)`: lê o XML da nota (`nfeLerGs_` + `nfeItensGs_`), monta um resumo — fornecedor,
+  itens com até 12 **candidatos** do PORTIFÓLIO parecidos pelo nome (`iaCandidatos_`), memória do DE-PARA NFE do
+  fornecedor, máquinas (CUSTO OPERAÇÃO + MANUTENÇÃO MÁQUINAS), benfeitorias já usadas, se emitente/destinatário é
+  produtor da fazenda — e chama `https://api.anthropic.com/v1/messages` (modelo `IA_MODELO`, temperatura 0) pedindo
+  JSON: `tipo` (compra_insumo, venda, pecas, oficina, benfeitoria, servico, outra), `categoria`, `cultura`, `confianca`,
+  `motivo` e, por item, `destino` (estoque, maquina, oficina, benfeitoria, ignorar), `produto` (só um dos candidatos),
+  `fator`, `maquina`, `tipoGasto`, `confianca`. `iaSaneia_` descarta o que não existe (produto fora do portfólio,
+  destino inválido, fator ≤ 0) e rebaixa a confiança de item de estoque sem produto e de venda sem cultura.
+- Resultado gravado na **NFE RECEBIDAS**, colunas novas **IA** (JSON) e **IA EM**; `nfe_lista` devolve `ia` em cada
+  nota e `iaOn`, `nfe` devolve `ia` junto do XML. Ação nova `nfe_ia` (`chave`, `forcar=1` para refazer; sem `forcar`
+  usa o que já está gravado).
+- `capturarNfe` classifica as notas **novas** logo depois da captura, enquanto sobrar tempo (`fimTempo()`); erros da
+  IA vão para o log da captura e não travam a nota (ela aparece "ainda não classificada" e pode ser classificada pelo
+  app).
+- Custo: uma chamada curta por nota nova (texto, sem o XML inteiro). Se a API recusar (HTTP ≠ 200) o erro vem claro
+  no app ("IA recusou (HTTP 429)…").
+
 ## Nota de venda pelo produto da fazenda (v288)
 
 - `nfeLerGs_` devolve `entrada` (tpNF 0 ou todos os CFOP 1xxx/2xxx) e `producao` (todos os itens são soja, milho,

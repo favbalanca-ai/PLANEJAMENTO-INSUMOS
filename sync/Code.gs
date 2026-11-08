@@ -659,7 +659,7 @@ function writeDeParaNfe(itens){
 var NFE_CONFIG_SHEET = 'CONFIG NFE', NFE_IDX_SHEET = 'NFE RECEBIDAS', NFE_ITENS_SHEET = 'NFE ITENS', NFE_LABEL = 'NFE-OK';
 var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
 var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
-  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO'];
+  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO','IA','IA EM'];   // v290: classificação automática (JSON) e quando foi feita
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR','MÁQUINA'];
 // v276: peças e serviços apropriados por máquina (não entram no estoque)
 var MANUT_SHEET = 'MANUTENÇÃO MÁQUINAS';
@@ -973,6 +973,8 @@ function capturarNfe(maxMs){
           th.addLabel(label);
         } catch (e){ erros.push('e-mail "' + S(th.getFirstMessageSubject()).slice(0,60) + '": ' + e); } }
     } catch (e){ erros.push('Gmail: ' + e); }
+    // v290: classificação automática com IA das notas que acabaram de entrar (fora da trava: é chamada de rede)
+    if (iaChave_()) res.forEach(function(r){ if (r.status !== 'nova' || !r.chave || fimTempo()) return; try { nfeIaClassificar_(r.chave); } catch (e){ erros.push('IA ' + r.chave.slice(-6) + ': ' + e); } });
   } finally {
     _NFE_MEMO_ = null;
     _nfeCapturaSalva_(res, erros, parcial);
@@ -1023,7 +1025,7 @@ function nfeLista_(status){
     if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
     var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), produtor:_doc_(o[_hkey('PRODUTOR')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),   // v286: produtor (destinatário) na lista
       emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
-      capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]) };
+      capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]), ia:iaParse_(o[_hkey('IA')]) };   // v290
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
     if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
@@ -1033,7 +1035,7 @@ function nfeUma_(chave){
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(chave)); if (!row) return { ok:false, erro:'nota não encontrada' };
   var o = _rowObj(t, t.s.getRange(row,1,1,t.ncol).getValues()[0]), id = S(o[_hkey('FILE ID')]);
   if (!id) return { ok:false, erro:'XML da nota ainda não chegou' };
-  return { ok:true, status:S(o[_hkey('STATUS')]), xml:_blobTxt(DriveApp.getFileById(id).getBlob()) };
+  return { ok:true, status:S(o[_hkey('STATUS')]), xml:_blobTxt(DriveApp.getFileById(id).getBlob()), ia:iaParse_(o[_hkey('IA')]) };   // v290: sugestão da IA junto
 }
 // classifica/recebe (RECEBIDA) ou ignora (IGNORADA) uma nota: status + NFE ITENS + de-para
 function nfeClassifica_(c){
@@ -1426,6 +1428,68 @@ function capturarNfaPesagem_(passo, res, fimTempo){
   var ks = Object.keys(lidos); if (ks.length > 3000) ks.slice(0, ks.length - 3000).forEach(function(k){ delete lidos[k]; });
   pr.setProperty('NFA_PES_LIDAS', JSON.stringify(lidos)); return n;
 }
+// ===== v290 (Fase A): CLASSIFICAÇÃO AUTOMÁTICA DAS NOTAS COM IA =====
+// Chave da Anthropic em Propriedades do Script → ANTHROPIC_KEY (igual ao app da balança). Sem chave nada roda e as regras do
+// app continuam valendo. A IA só vê o resumo da nota (fornecedor, itens) e listas do próprio app (candidatos do portfólio,
+// máquinas, benfeitorias, culturas); devolve JSON com destino, produto, fator, máquina/benfeitoria, cultura e confiança.
+// O resultado fica na NFE RECEBIDAS (IA / IA EM) e vai ao app em nfe_lista e nfe (campo ia).
+var IA_MODELO = 'claude-haiku-5-5', IA_URL = 'https://api.anthropic.com/v1/messages';
+function iaChave_(){ try { return S(PropertiesService.getScriptProperties().getProperty('ANTHROPIC_KEY')); } catch (e) { return ''; } }
+function iaParse_(v){ v = S(v); if (!v) return null; try { return JSON.parse(v); } catch (e) { return null; } }
+function iaTok_(s){ return S(s).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^A-Z0-9]+/).filter(function(t){ return t.length >= 3; }); }
+function iaCandidatos_(prods, xprod){ var xt = iaTok_(xprod), out = [];
+  prods.forEach(function(p){ var pt = iaTok_(p.produto); if (!pt.length) return; var hit = pt.filter(function(t){ return xt.indexOf(t) >= 0; }).length; if (hit) out.push({ s:hit / pt.length + hit / Math.max(1, xt.length), p:p }); });
+  out.sort(function(a, b){ return b.s - a.s; }); return out.slice(0, 12).map(function(o){ return o.p; }); }
+function nfeItensGs_(txt){ var root = XmlService.parse(txt).getRootElement(), inf = _xfirst(root, 'infNFe'); if (!inf) return [];
+  return _xall(inf, 'det').map(function(d, i){ var pr = _xfirst(d, 'prod'), na = d.getAttribute('nItem');
+    return { n:na ? +na.getValue() : i + 1, cprod:_xt(pr, 'cProd'), xprod:_xt(pr, 'xProd'), cfop:_xt(pr, 'CFOP'), ucom:_xt(pr, 'uCom'), qcom:parseFloat(_xt(pr, 'qCom')) || 0, vun:parseFloat(_xt(pr, 'vUnCom')) || 0, vprod:parseFloat(_xt(pr, 'vProd')) || 0 }; }); }
+var IA_DESTINOS = ['estoque', 'maquina', 'oficina', 'benfeitoria', 'ignorar'], IA_TIPOS = ['compra_insumo', 'venda', 'pecas', 'oficina', 'benfeitoria', 'servico', 'outra'];
+var IA_CULTURAS = ['soja', 'milho', 'feijao', 'laranja', 'sorgo', 'trigo', 'algodao', 'arroz', 'girassol', 'braquiaria', 'aveia', 'milheto'];
+function nfeIaClassificar_(chave, forcar){
+  chave = S(chave); var key = iaChave_(); if (!key) return { ok:false, erro:'IA desligada: falta ANTHROPIC_KEY nas Propriedades do Script', semChave:true };
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return { ok:false, erro:'nota não encontrada' };
+  var o = _rowObj(t, t.s.getRange(row, 1, 1, t.ncol).getValues()[0]), g = function(h){ return o[_hkey(h)]; };
+  if (!forcar){ var ant = iaParse_(g('IA')); if (ant) return { ok:true, ia:ant, cache:true }; }
+  var fid = S(g('FILE ID')); if (!fid) return { ok:false, erro:'a nota ainda não tem XML' };
+  var txt; try { txt = _blobTxt(DriveApp.getFileById(fid).getBlob()); } catch (e) { return { ok:false, erro:'XML inacessível: ' + e }; }
+  var n, itens; try { n = nfeLerGs_(txt); itens = nfeItensGs_(txt); } catch (e) { return { ok:false, erro:'XML ilegível: ' + e }; }
+  var D = readBase_(), prods = (D.produtos || []).filter(function(p){ return p.produto && !/^M[AÁ]QUINA/i.test(p.classe || ''); });
+  var maqs = {}; (D.maquinas || []).forEach(function(m){ if (m.maquina) maqs[S(m.maquina)] = 1; if (m.implemento) maqs[S(m.implemento)] = 1; });
+  var benf = {}; try { readManutencao().forEach(function(r){ if (r.destino === 'benfeitoria' && r.maquina) benf[S(r.maquina)] = 1; else if (r.maquina && r.destino !== 'oficina') maqs[S(r.maquina)] = 1; }); } catch (e) {}
+  var dep = {}; try { var all = readDeParaNfe(); Object.keys(all).forEach(function(k){ var d = all[k]; if (d.cnpj === n.cnpj) dep[d.cprod] = d; }); } catch (e) {}
+  var cfg = nfeConfig_(), ehProdutor = cfg.produtores.indexOf(n.cnpj) >= 0, destProdutor = cfg.produtores.indexOf(n.dest) >= 0;
+  var linhas = itens.map(function(it){ var c = iaCandidatos_(prods, it.xprod), m = dep[it.cprod];
+    return { n:it.n, cprod:it.cprod, descricao:it.xprod, cfop:it.cfop, un:it.ucom, qtd:it.qcom, valor_total:it.vprod,
+      candidatos:c.map(function(p){ return p.produto + ' [' + S(p.un) + (p.classe ? ' · ' + p.classe : '') + ']'; }),
+      memoria:m ? { destino:m.destino || (m.ignorar ? 'ignorar' : 'estoque'), produto:m.produto || '', fator:m.fator, maquina:m.maquina || '', tipoGasto:m.tipoGasto || '' } : null }; });
+  var dados = { fornecedor:n.fornecedor, cnpj_emitente:n.cnpj, destinatario:n.destNome, doc_destinatario:n.dest, emitente_e_produtor_da_fazenda:ehProdutor, destinatario_e_produtor_da_fazenda:destProdutor,
+    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, itens:linhas, maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
+  var system = 'Você classifica notas fiscais (NF-e) de uma fazenda de grãos no Brasil para um sistema de estoque e contabilidade. Responda SOMENTE com JSON válido, sem comentários nem markdown.\n' +
+    'Regras: tipo = compra_insumo (insumo agrícola: sementes, fertilizantes, defensivos, corretivos, adjuvantes), venda (a fazenda vende sua produção: soja, milho, feijão, laranja etc.; a nota pode ser emitida pelo produtor ou ser contranota de ENTRADA do comprador), pecas (peça, pneu, óleo, filtro ou serviço de uma máquina), oficina (ferramenta, consumível, EPI de uso geral), benfeitoria (material de construção, cerca, elétrica, hidráulica, obra), servico (serviço sem máquina), outra.\n' +
+    'Por item: destino = estoque (insumo que entra no estoque; escolha "produto" EXATAMENTE como um dos candidatos, ou deixe vazio se nenhum candidato for o mesmo produto), maquina (informe "maquina" com um nome da lista maquinas_da_fazenda quando der; "tipoGasto" entre Peça, Pneu, Óleo/lubrificante, Serviço/mão de obra, Combustível, Frete, Outro), oficina ("tipoGasto" entre Ferramenta, Consumível, EPI, Outro), benfeitoria ("maquina" = nome da benfeitoria, reaproveite benfeitorias_ja_usadas quando for a mesma; "tipoGasto" entre Construção, Reforma, Elétrica, Hidráulica, Outro), ignorar (palete, embalagem, brinde, frete destacado).\n' +
+    'fator = quantas unidades do produto do app existem em 1 unidade da nota (ex.: caixa com 10 litros e produto em L → 10; saco de 25 kg e produto em kg → 25; mesma unidade → 1). Se houver "memoria" no item, siga-a salvo erro evidente.\n' +
+    'Se tipo = venda, informe "cultura" (uma das culturas) e nos itens use destino "estoque" com produto vazio. confianca de 0 a 1 por item e para a nota; abaixo de 0.75 a pessoa vai conferir.\n' +
+    'Formato: {"tipo":"","categoria":"Insumos|Manutenção|Benfeitorias|Venda de grãos|Serviços|Outros","cultura":"","confianca":0.0,"motivo":"frase curta em português","itens":[{"n":1,"destino":"","produto":"","fator":1,"maquina":"","tipoGasto":"","confianca":0.0}]}';
+  var payload = { model:IA_MODELO, max_tokens:1800, temperature:0, system:system, messages:[{ role:'user', content:JSON.stringify(dados) }] };
+  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+  catch (e) { return { ok:false, erro:'IA sem resposta: ' + e }; }
+  var code = resp.getResponseCode(), body = resp.getContentText();
+  if (code !== 200) return { ok:false, erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 160) };
+  var ia; try { var j = JSON.parse(body), texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); ia = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
+  catch (e) { return { ok:false, erro:'IA respondeu fora do formato' }; }
+  ia = iaSaneia_(ia, itens, prods); ia.em = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'); ia.modelo = IA_MODELO;
+  _setCells_(t, row, { 'IA':JSON.stringify(ia).slice(0, 45000), 'IA EM':new Date() });
+  return { ok:true, ia:ia };
+}
+// só aceita o que existe: produto entre os do portfólio, destino/tipo da lista, números válidos
+function iaSaneia_(ia, itens, prods){ ia = ia && typeof ia === 'object' ? ia : {}; var nomes = {}; prods.forEach(function(p){ nomes[p.produto] = 1; });
+  var out = { tipo:IA_TIPOS.indexOf(S(ia.tipo)) >= 0 ? S(ia.tipo) : 'outra', categoria:S(ia.categoria), cultura:IA_CULTURAS.indexOf(S(ia.cultura).toLowerCase()) >= 0 ? S(ia.cultura).toLowerCase() : '', confianca:Math.max(0, Math.min(1, +ia.confianca || 0)), motivo:S(ia.motivo).slice(0, 240), itens:[] };
+  var porN = {}; (ia.itens || []).forEach(function(x){ porN[+x.n] = x; });
+  itens.forEach(function(it){ var x = porN[+it.n] || {}, dest = IA_DESTINOS.indexOf(S(x.destino)) >= 0 ? S(x.destino) : 'estoque', prod = S(x.produto); if (!nomes[prod]) prod = '';
+    var f = +x.fator; if (!(f > 0)) f = 1; var conf = Math.max(0, Math.min(1, +x.confianca || 0)); if (dest === 'estoque' && !prod && out.tipo !== 'venda') conf = Math.min(conf, 0.5);
+    out.itens.push({ n:it.n, destino:dest, produto:prod, fator:Math.round(f * 10000) / 10000, maquina:S(x.maquina).slice(0, 80), tipoGasto:S(x.tipoGasto).slice(0, 40), confianca:Math.round(conf * 100) / 100 }); });
+  if (out.tipo === 'venda' && !out.cultura) out.confianca = Math.min(out.confianca, 0.5);
+  return out; }
 // ---- FASE 5: divergências na conferência (aba PENDÊNCIAS RECEBIMENTO) ----
 var NFE_PEND_SHEET = 'PENDÊNCIAS RECEBIMENTO';
 var NFE_PEND_COLS = ['ID','CHAVE','Nº','FORNECEDOR','PRODUTO','TIPO','QTD','UN','FICOU NA FAZENDA','FOTO','CONFERIDO POR','DATA','STATUS','SOLUÇÃO','OBS'];
@@ -2364,9 +2428,10 @@ function doGet_(e){
     }
     var sessOk = acc && acc.u && (acc.admin || acc.mods.admin);
     if (!nfeTokenOk_(p.token) && !sessOk) return json({ ok:false, erro:(acc && acc.erro) || 'token da NF-e inválido ou NF-e não configurada' });
-    if (p.acao === 'nfe_lista') return json(nfeLista_(p.status));
+    if (p.acao === 'nfe_lista'){ var nl = nfeLista_(p.status); nl.iaOn = !!iaChave_(); return json(nl); }   // v290: iaOn
     if (p.acao === 'capturar'){ var cr = capturarNfe(25000); return json({ ok:cr !== 'ocupado', erro:(typeof cr === 'string') ? cr : '', captura:nfeCapturaInfo_() }); }
     if (p.acao === 'nfe') return json(nfeUma_(p.chave));
+    if (p.acao === 'nfe_ia') return json(nfeIaClassificar_(p.chave, p.forcar === '1'));   // v290: classificar uma nota com IA agora
     if (p.acao === 'contratos') return json({ ok:true, contratos:nfeContratos_() });
     if (p.acao === 'nfe_chave') return json(nfeChave_(p.chave));
     if (p.acao === 'pendencias') return json(nfePendenciasLista_(p.status));

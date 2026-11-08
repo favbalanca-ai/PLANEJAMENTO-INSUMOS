@@ -1159,7 +1159,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-it-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .nfe-it-top b{font-size:13.5px}
 .nfe-chip{font-size:11px;font-weight:800;padding:2px 8px;border-radius:9px;background:#eef2f4;color:#46565c;white-space:nowrap}
-.nfe-chip.st-auto,.nfe-chip.st-ok{background:#e3f2e5;color:#1b5e20}.nfe-chip.st-sug{background:#fff1c2;color:#7a5600}.nfe-chip.st-ignorar{background:#eee;color:#666}
+.nfe-chip.st-auto,.nfe-chip.st-ok{background:#e3f2e5;color:#1b5e20}.nfe-chip.st-ia{background:#ede7f6;color:#4527a0}.nfe-it.st-ia{border-left-color:#7e57c2}.nfe-chip.st-sug{background:#fff1c2;color:#7a5600}.nfe-chip.st-ignorar{background:#eee;color:#666}
 .nfe-it-sub{font-size:12px;color:var(--muted);margin:4px 0 8px;overflow-wrap:anywhere}
 .nfe-it-map{display:grid;grid-template-columns:2.2fr .7fr 1fr 1.3fr;gap:10px;align-items:end}
 .nfe-it-map label{display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
@@ -2066,6 +2066,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .mapa-lbl-exp{font-size:11px}
 .nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 .fin-h3{font-size:14px;margin:10px 14px 6px}
+.nfe-ia{font-size:12px;margin-top:3px}.nfe-ia-ok{color:#2e7d32;font-weight:700}.nfe-ia-pend{color:#b26a00;font-weight:700}.nfe-row.ia-pronto{border-left:4px solid #43a047}.nfe-row.ia-pend{border-left:4px solid #fbc02d;background:#fffdf5}.nfe-iabox .btn{margin-left:6px}
 /* venda do produtor (v277) */
 .nfe-venda .panel-head h2{color:var(--green)}
 .nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
@@ -2540,6 +2541,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .exp-row-tx{font-size:10.5px}
   .exp-row-tx .mut{font-size:9.5px}
   .fin-h3{font-size:11.5px}
+  .nfe-ia{font-size:9.5px}
   .nfe-comp{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
