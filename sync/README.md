@@ -113,6 +113,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Nota de venda pelo produto da fazenda (v288)
+
+- `nfeLerGs_` devolve `entrada` (tpNF 0 ou todos os CFOP 1xxx/2xxx) e `producao` (todos os itens são soja, milho,
+  feijão, laranja, sorgo, trigo, algodão, arroz ou girassol). Em `processarXmlNfe`, contranota de entrada com só
+  produção, ou nota de CPF com só produção, vira **VENDA PRODUTOR** mesmo sem o produtor na CONFIG NFE.
+
 ## Produtor na lista de notas (v286)
 
 - `nfeLista_` devolve também `produtor` (coluna PRODUTOR da NFE RECEBIDAS, só dígitos) para a lista de Compras.
