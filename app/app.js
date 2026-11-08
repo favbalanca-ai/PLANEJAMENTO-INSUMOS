@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-286';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-287';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3091,26 +3091,41 @@ function lcdprDados(cpf, ano){
 function lcdprTxt(d){ return d.linhas.map(l=>l.join('|')).join('\r\n')+'\r\n'; }
 function lcdprCsv(d){ const cab=['Data','Imóvel','Conta','Nº doc','Tipo doc','Histórico','CPF/CNPJ participante','Tipo lanç.','Entrada','Saída','Saldo acumulado','Fornecedor/Comprador','Categoria','Juros','Desconto'];
   const lin=[cab.map(_usoCsvEsc).join(';')]; d.lanc.forEach(l=>lin.push([_dtBRc(l.data), l.imovel, l.conta, l.numDoc, l.tipoDoc, l.hist, l.partic, l.tipoLanc, nf2.format(l.ent), nf2.format(l.sai), nf2.format(l.saldo), l.t.participanteNome||'', l.t.categoria||'', nf2.format(+l.b.juros||0), nf2.format(+l.b.desconto||0)].map(_usoCsvEsc).join(';'))); return '﻿'+lin.join('\r\n'); }
-// v279: Vendas — contratos de venda e cargas da balança (Pesagem v2) × notas conferidas (aba VENDAS)
-function finVendasHtml(){ const P=PES(), V=(DATA&&DATA.vendas)||[]; FIN_UI.pesOpen=FIN_UI.pesOpen||{};
-  const st=!pesOk()?`<div class="nfe-aviso warn" style="margin:0 14px 10px">A planilha ainda não manda os dados da balança: implante o <b>Code.gs</b> novo e puxe de novo.</div>`
-    :P.erro?`<div class="nfe-aviso warn" style="margin:0 14px 10px">⚠️ ${esc(P.erro)} · <a class="link" data-go="#/cadastros">Cadastros → Balança</a></div>`
-    :P.aviso?`<div class="nfe-aviso info" style="margin:0 14px 10px">${esc(P.aviso)} · <a class="link" data-go="#/cadastros">Cadastros → Balança</a></div>`
-    :`<div class="mut" style="padding:0 14px 8px;font-size:12px">⚖️ ${esc(P.nome||'planilha da balança')}${P.link?` · <a class="link" href="${esc(P.link)}" target="_blank" rel="noopener">abrir</a>`:''} · lida ${esc((P.em||'').replace('T',' '))} · atualiza a cada 10 min</div>`;
-  const R=pesResumo(), kgC=R.reduce((s,x)=>s+x.kg,0), kgE=R.reduce((s,x)=>s+x.entregue,0), kgS=R.reduce((s,x)=>s+x.saldo,0), vS=R.reduce((s,x)=>s+x.vSaldo,0), kgF=V.reduce((s,v)=>s+(+v.kg||0),0), semNf=P.cargas.filter(c=>!c.nfa).length;
-  const kp=`<div class="kpi-grid"><div class="kpi accent"><div class="k-label">Contratado</div><div class="k-value">${nf0.format(kgC/60)} sc</div><div class="k-sub">${P.contratos.length} contrato(s) · ${nf0.format(kgC)} kg</div></div>
-    <div class="kpi"><div class="k-label">Entregue (balança)</div><div class="k-value">${nf0.format(kgE/60)} sc</div><div class="k-sub">${P.cargas.length} carga(s)${semNf?` · <b>${semNf} sem NFA</b>`:''}</div></div>
-    <div class="kpi"><div class="k-label">Faturado (notas conferidas)</div><div class="k-value">${nf0.format(kgF/60)} sc</div><div class="k-sub">${new Set(V.map(v=>v.chave)).size} nota(s) na aba VENDAS</div></div>
-    <div class="kpi"><div class="k-label">Saldo a entregar</div><div class="k-value">${nf0.format(kgS/60)} sc</div><div class="k-sub">${brl0(vS)} a receber previsto</div></div>
-    ${(()=>{ const T=pesEstoqueTot(); return T.n?`<a class="kpi kpi-link" data-go="#/resultados" title="aba Estoque da balança, valorada pelo preço médio das vendas da safra"><div class="k-label">Grãos em estoque 🏬</div><div class="k-value">${nf0.format(T.sc)} sc</div><div class="k-sub">${brl0(T.valor)} estimado · ${nf0.format(T.disp)} sc disponíveis (${brl0(T.valorDisp)})</div></a>`:''; })()}</div>`;
-  const notaDa=g=>V.find(v=>(g.ticket&&v.ticket===g.ticket)||(g.nfa&&String(g.nfa).split(',').map(_nfaNum).includes(_nfaNum(v.nNF))));
-  const rows=pesContratosDo('').map(c=>{ const cu=pesCulturaDe(c.produto), ps=pesPrecoSc(c), cg=pesCargasDo(c.id), nfC=V.filter(v=>v.contrato===c.id), aberto=!!FIN_UI.pesOpen[c.id], enc=/encerr|inativ|^n[aã]o$/i.test(c.status||'');
-    const sub=aberto?`<tr class="fin-bxs"><td colspan="7"><div class="fin-bx-list"><b>Cargas deste contrato</b>${cg.length?`<table><thead><tr><th>Data</th><th>Placa</th><th class="num">kg</th><th class="num">sc</th><th>NFA</th><th>Nota no app</th></tr></thead><tbody>${cg.map(g=>{ const vn=notaDa(g); return `<tr><td>${esc(_dtBRc(g.data))}</td><td>${esc(g.placa)}</td><td class="num">${nf0.format(g.kg)}</td><td class="num">${nf2.format(g.kg/60)}</td><td>${g.nfa?esc(g.nfa):'<span class="exp-warn">sem NFA</span>'}</td><td>${vn?'<span class="pill cm-ref">conferida</span>':g.nfa?'<span class="mut">a conferir em Compras</span>':'—'}</td></tr>`; }).join('')}</tbody></table>`:'<p class="mut">Nenhuma carga finalizada.</p>'}</div></td></tr>`:'';
-    return `<tr class="fin-r${enc?' off':''}"><td class="c-full"><a class="link" data-act="pesToggle" data-id="${esc(c.id)}"><b>${esc(c.id)}</b></a> <span class="mut">${esc(c.comprador||'')}</span><br><small class="mut">${esc(c.produto)}${cu?' → '+esc(cu):' → <span class="exp-warn">sem cultura do app (Cadastros → Balança)</span>'}${c.safra?' · '+esc(c.safra):''}</small></td>
-      <td class="num" data-th="Preço">${ps?brl(ps)+'/sc':'—'}${c.preco?`<br><small class="mut">${brl(c.preco)}/${esc(c.un||'')}</small>`:''}</td><td class="num" data-th="Contratado sc">${nf0.format(c.total/60)}</td><td class="num" data-th="Entregue sc">${nf0.format(c.entregue/60)}</td><td class="num" data-th="Saldo sc"><b>${nf0.format(Math.max(0,c.saldo)/60)}</b></td><td class="num" data-th="Faturado sc">${nfC.length?nf0.format(nfC.reduce((s,v)=>s+(+v.kg||0),0)/60):'—'}</td><td data-th="Status">${esc(c.status||'')}${c.liberado==='Sim'?' <span class="pill cm-ref">liberado</span>':''}<br><small class="mut">${cg.length} carga(s)</small></td></tr>`+sub; }).join('');
-  return st+kp+`<div class="panel"><div class="panel-head"><h2>🌾 Contratos de venda (balança)</h2><span class="sub">cadastrados no Pesagem v2 · toque no nº para ver as cargas · sacas de 60 kg</span></div>
-    ${P.contratos.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Contrato · comprador</th><th class="num">Preço</th><th class="num">Contratado sc</th><th class="num">Entregue sc</th><th class="num">Saldo sc</th><th class="num">Faturado sc</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 12px">Nenhum contrato na planilha da balança.</p>'}
-    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Os XML das NFAs emitidas pela balança entram sozinhos em <b>Compras</b> como "Venda do produtor" (a cada 15 min); ao conferir, a nota vira título a receber e o preço real em Resultados. Contratos e cargas são da balança: este app só lê.</p></div>`; }
+// v287: Vendas — só o controle FINANCEIRO e CONTÁBIL da receita (contratos e cargas ficam no app da balança):
+// faturado (aba VENDAS), títulos a receber, recebimentos (BAIXAS), adiantamentos a compensar, por comprador e por produtor
+function finVendasHtml(){ const F=FIN(), V=(DATA&&DATA.vendas)||[], hj=_hojeISO(); FIN_UI.vdOpen=FIN_UI.vdOpen||{};
+  const rec=F.titulos.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER'&&finSit(t)!=='cancelado'), tit={}; F.titulos.forEach(t=>tit[t.id]=t);
+  const adiT=rec.filter(t=>/adiantamento/i.test(t.categoria||'')), vendT=rec.filter(t=>!/adiantamento/i.test(t.categoria||''));
+  const recebido=F.baixas.filter(b=>b.compensacao!=='S'&&tit[b.titulo]&&rec.some(t=>t.id===b.titulo)).reduce((s,b)=>s+(+b.valorPago||0),0);
+  const aberto=vendT.reduce((s,t)=>s+finSaldo(t),0), vencido=vendT.filter(t=>finSit(t)==='vencido').reduce((s,t)=>s+finSaldo(t),0), nVenc=vendT.filter(t=>finSit(t)==='vencido').length;
+  const adi=finAdiantamentos(''), adiSaldo=adi.reduce((s,a)=>s+a.saldo,0), fat=V.reduce((s,v)=>s+(+v.valor||0),0), notas=new Set(V.map(v=>v.chave)).size;
+  const kp=`<div class="kpi-grid"><div class="kpi accent"><div class="k-label">Faturado (notas de venda)</div><div class="k-value">${brl0(fat)}</div><div class="k-sub">${notas} nota(s) · ${nf0.format(V.reduce((s,v)=>s+(+v.kg||0),0)/60)} sc</div></div>
+    <div class="kpi"><div class="k-label">Recebido</div><div class="k-value">${brl0(recebido)}</div><div class="k-sub">entrou na conta (baixas), sem compensações</div></div>
+    <div class="kpi${nVenc?' kpi-neg':''}"><div class="k-label">A receber</div><div class="k-value">${brl0(aberto)}</div><div class="k-sub">${nVenc?`<span style="color:var(--red)">${brl0(vencido)} vencido(s) · ${nVenc}</span>`:'nada vencido'}</div></div>
+    <div class="kpi"><div class="k-label">Adiantamentos a compensar</div><div class="k-value">${brl0(adiSaldo)}</div><div class="k-sub">${adi.length} adiantamento(s) recebido(s) ainda sem nota</div></div></div>`;
+  // por comprador
+  const g={}; const G=k=>g[k]||(g[k]={nome:'', fat:0, rec:0, ab:0, adi:0, n:0});
+  V.forEach(v=>{ const x=G(v.cnpj||v.comprador||'—'); x.nome=x.nome||v.comprador||''; x.fat+=+v.valor||0; });
+  vendT.forEach(t=>{ const x=G(t.participante||t.participanteNome||'—'); x.nome=x.nome||t.participanteNome||''; x.ab+=finSaldo(t); x.n++; x.rec+=finBaixasDe(t.id).filter(b=>b.compensacao!=='S').reduce((s,b)=>s+(+b.valorPago||0),0); });
+  adi.forEach(a=>{ const x=G(a.t.participante||a.t.participanteNome||'—'); x.nome=x.nome||a.t.participanteNome||''; x.adi+=a.saldo; });
+  const comp=Object.keys(g).map(k=>Object.assign({k},g[k])).sort((a,b)=>(b.fat+b.ab)-(a.fat+a.ab));
+  const rowsC=comp.map(x=>`<tr><td class="c-full"><b>${esc(x.nome||x.k)}</b><br><small class="mut">${esc(/^\d{11,14}$/.test(x.k)?nfeCnpjFmt(x.k):'')}</small></td><td class="num" data-th="Faturado">${brl0(x.fat)}</td><td class="num" data-th="Recebido">${brl0(x.rec)}</td><td class="num" data-th="A receber"><b>${brl0(x.ab)}</b></td><td class="num" data-th="Adiantamento">${x.adi?brl0(x.adi):'—'}</td></tr>`).join('');
+  // por produtor (contábil: cada produtor tem o seu Livro Caixa)
+  const pp={}; V.forEach(v=>{ const k=v.produtor||'—'; pp[k]=pp[k]||{fat:0,rec:0,ab:0}; pp[k].fat+=+v.valor||0; });
+  rec.forEach(t=>{ const k=t.produtor||'—'; pp[k]=pp[k]||{fat:0,rec:0,ab:0}; pp[k].ab+=/adiantamento/i.test(t.categoria||'')?0:finSaldo(t); pp[k].rec+=finBaixasDe(t.id).filter(b=>b.compensacao!=='S').reduce((s,b)=>s+(+b.valorPago||0),0); });
+  const rowsP=Object.keys(pp).map(k=>`<tr><td class="c-full"><b>${esc(finProdNome(k))}</b></td><td class="num" data-th="Faturado">${brl0(pp[k].fat)}</td><td class="num" data-th="Recebido">${brl0(pp[k].rec)}</td><td class="num" data-th="A receber"><b>${brl0(pp[k].ab)}</b></td><td class="num" data-th="Livro Caixa"><a class="link" data-act="finLivroDe" data-cpf="${esc(k)}">📒 abrir</a></td></tr>`).join('');
+  // títulos a receber em aberto (ordem de vencimento) com Baixar
+  const abertos=vendT.filter(t=>_finAberto(finSit(t))).sort((a,b)=>String(a.vencimento||'').localeCompare(String(b.vencimento||'')));
+  const rowsT=abertos.map(t=>{ const sit=finSit(t), d=finDias(t), v=(DATA.vendas||[]).find(x=>x.chave===t.chave);
+    return `<tr class="fin-r"><td class="c-full"><b>${esc(t.participanteNome||'—')}</b><br><small class="mut">${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''}${v&&v.cultura?' · '+esc(v.cultura):''}</small></td><td data-th="Vencimento">${t.vencimento?_dtBRc(t.vencimento):'—'}<br><small class="${sit==='vencido'?'exp-warn':'mut'}">${sit==='vencido'?`${-d} d de atraso`:(d!=null?`em ${d} d`:'')}</small></td><td class="num" data-th="Valor">${brl(+t.valor||0)}</td><td class="num" data-th="Saldo"><b>${brl(finSaldo(t))}</b></td><td class="fin-acts"><button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Registrar o recebimento na conta do produtor">💳 Receber</button></td></tr>`; }).join('');
+  return kp+`<div class="panel"><div class="panel-head"><h2>🌾 Receita das vendas</h2><span class="sub">controle financeiro e contábil: notas conferidas em Compras viram títulos a receber; o recebimento é a baixa na conta do produtor e vai ao Livro Caixa. Contratos e cargas ficam no app da balança.</span></div>
+    <h3 class="fin-h3">Por comprador</h3>
+    ${comp.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Comprador</th><th class="num">Faturado</th><th class="num">Recebido</th><th class="num">A receber</th><th class="num">Adiantamento a compensar</th></tr></thead><tbody>${rowsC}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 10px">Nenhuma venda confirmada ainda. Confira as notas de venda em Compras → 🌾 Conferir venda.</p>'}
+    <h3 class="fin-h3">Por produtor</h3>
+    ${rowsP?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Produtor</th><th class="num">Faturado</th><th class="num">Recebido</th><th class="num">A receber</th><th class="num">Livro Caixa</th></tr></thead><tbody>${rowsP}</tbody></table></div>`:''}
+    <h3 class="fin-h3">Títulos a receber em aberto <span class="mut">${abertos.length}</span></h3>
+    ${abertos.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Comprador · documento</th><th>Vencimento</th><th class="num">Valor</th><th class="num">Saldo</th><th></th></tr></thead><tbody>${rowsT}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 12px">Nada a receber em aberto.</p>'}
+    <p class="mut" style="font-size:11.5px;padding:0 14px 12px">Adiantamento recebido antes da nota: lance como título <b>a receber</b> com categoria <b>Adiantamento</b> e dê a baixa na conta; ao conferir a nota de venda, marque a compensação (não é dinheiro novo). Receitas entram no Livro Caixa pela data da baixa (tipo 1).</p></div>`; }
 function finLivroHtml(){ const F=FIN(), prods=finProdutores(), anos=[...new Set(F.baixas.map(b=>String(b.data||'').slice(0,4)).filter(Boolean).concat([String(new Date().getFullYear())]))].sort().reverse();
   if(!LC_UI.cpf&&prods.length) LC_UI.cpf=prods[0].cpf; if(!anos.includes(LC_UI.ano)) LC_UI.ano=anos[0];
   const d=lcdprDados(LC_UI.cpf, LC_UI.ano), ger=F.lcdprGerado[LC_UI.cpf+'|'+LC_UI.ano]||'';
@@ -9602,7 +9617,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='finCancelar'){ if(ask('Cancelar este título? A nota continua como está; só o valor deixa de ser cobrado aqui.')) finPost([{id:a.id, status:'CANCELADO'}], 'Título cancelado'); }
     else if(a.act==='finDel'){ if(ask('Excluir este título?')) finPost([{id:a.id, del:true}], 'Título excluído'); }
     else if(a.act==='pesSalvar'){ pesSalvar(); }
-    else if(a.act==='pesToggle'){ FIN_UI.pesOpen=FIN_UI.pesOpen||{}; FIN_UI.pesOpen[a.id]=!FIN_UI.pesOpen[a.id]; route({keepScroll:true}); }
+    else if(a.act==='finLivroDe'){ if(/^\d{11,14}$/.test(a.cpf||'')) LC_UI.cpf=a.cpf; FIN_UI.view='livro'; route({toTop:true}); }
     else if(a.act==='cadNovo'){ const tipo=a.tipo; CAD_EDIT={tipo, novo:true, item:tipo==='produtor'?{cpf:'',nome:'',emailContador:'',imovelPadrao:'',ativo:'S'}:tipo==='imovel'?{codigo:'',nome:'',cadItr:'',municipio:'',uf:'',exploracao:FIN_EXPL[0],produtor:'',participacao:100,fazendaApp:'',ativo:'S'}:{codigo:'',produtor:'',banco:'',agencia:'',conta:'',tipo:FIN_CONTA_TIPOS[0],ativa:'S'}}; route({keepScroll:true}); }
     else if(a.act==='cadEditar'){ if(a.tipo==='contador'){ CAD_EDIT={tipo:'contador', novo:false, item:Object.assign({}, FIN().contador)}; route({keepScroll:true}); } else { const it=cadLista(a.tipo).find(x=>x[CAD_KEY[a.tipo]]===a.id); if(it){ CAD_EDIT={tipo:a.tipo, novo:false, item:Object.assign({}, it)}; route({keepScroll:true}); } } }
     else if(a.act==='cadNovoCp'){ CAD_EDIT={tipo:'contraparte', novo:true, item:{id:'', imovel:a.imovel||'', tipo:LCDPR_LEIAUTE.contraparte[0], doc:'', nome:'', participacao:''}}; route({keepScroll:true}); }

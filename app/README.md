@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Financeiro → Vendas só com o controle financeiro e contábil (v287)** — contratos e cargas saem do Financeiro
+  (ficam no app da balança). A aba passa a mostrar: **faturado** (notas de venda conferidas), **recebido** (baixas,
+  sem compensações), **a receber** (com vencidos) e **adiantamentos a compensar**; tabelas **por comprador** e **por
+  produtor** (com link para o Livro Caixa do produtor) e a lista de **títulos a receber em aberto** com o botão
+  💳 Receber. Resultados e Cadastros → Balança continuam iguais.
 - **Produtor da nota na lista e na conferência (v286)** — em Compras, cada nota a classificar mostra 👤 o produtor
   (destinatário) e a conferência ganha o cartão **Produtor (destinatário)** com o nome do cadastro (Cadastros →
   Produtores), ou o nome do XML quando o CPF/CNPJ não está cadastrado, destacado como "fora da lista de produtores".
