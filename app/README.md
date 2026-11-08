@@ -71,6 +71,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Fechamento mensal e envio ao contador (v292 — Fase C do Administrativo)** — Financeiro ganhou a aba
+  **📅 Fechamento** (produtor + mês). **Checklist** automático: notas sem classificar e em trânsito, títulos vencidos
+  sem baixa, pagos sem conta, extrato de cada conta conciliado até o fim do mês, pendências do LCDPR e se o mês
+  anterior foi fechado (⛔ impede o LCDPR, ⚠️ é aviso, cada item com link "resolver"). **Resumo** em regime de caixa:
+  entradas e saídas por categoria com o mês anterior e variação, resultado, a pagar/a receber em aberto, notas de
+  compra e vendas faturadas no mês, saldo de cada conta no último dia. **Gerar documentos** monta o relatório em
+  **PDF** (gerado no app), os lançamentos do mês em **CSV** e o **LCDPR do ano até o mês** (.txt; só sem pendências ⛔).
+  **📧 Enviar ao contador** manda os três pela planilha (Gmail da conta dela), com o resumo no corpo do e-mail, para o
+  e-mail do contador do produtor (ou o contador geral) com cópia ao produtor, e guarda tudo em
+  `Financeiro/Fechamentos/AAAA-MM` no Drive; "Só salvar no Drive" guarda sem enviar. O mês fica marcado "Enviado em …"
+  e pode ser reenviado (os arquivos são substituídos). `lcdprDados(cpf, ano, ate)` ganhou a data limite. Funções:
+  `fechChecklist`, `fechResumo`, `finFechamentoHtml`, `fechRelatorioHtml`, `fechCsv`, `fechGerar`, `fechEnviar`
+  (payload `__fechamento`).
 - **Conciliação bancária — Banco do Brasil e Sicoob (v291 — Fase B do Administrativo)** — Financeiro ganhou a aba
   **🔁 Banco**: importe o extrato em **OFX** (ou CSV) e o app reconhece a conta pelo número do banco (001 BB, 756
   Sicoob) + conta cadastrada. Cada lançamento vira um cartão: 🟢 *casou com um título* (mesmo valor, vencimento até

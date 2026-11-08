@@ -113,6 +113,16 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Fechamento mensal (v292 — Fase C)
+
+- Payload novo **`__fechamento`** `{ cpf, mes:'AAAA-MM', para, cc, assunto, corpo, anexos:[{nome,mime,b64}], resumo:{entradas,saidas,saldo,pendencias}, soSalvar }`
+  → `fechamentoEnviar_`: salva os anexos em **Financeiro/Fechamentos/AAAA-MM** (ao lado da planilha; arquivos de
+  mesmo nome são substituídos), envia por `GmailApp.sendEmail` (reserva `MailApp`) e grava uma linha na aba nova
+  **FECHAMENTOS** (ID produtor|mês, MÊS, PRODUTOR, ENVIADO EM, PARA, CC, QUEM, ENTRADAS, SAÍDAS, SALDO, PENDÊNCIAS,
+  PASTA). `soSalvar` guarda no Drive sem e-mail e não apaga um envio anterior do mesmo mês. `readFinanceiro` devolve
+  `fechamentos`. Se o e-mail falhar, o erro pede para rodar **`autorizarPermissoes`** (permissão do Gmail).
+- `nfeResumo_` passou a contar `emTransito` (notas EM TRÂNSITO) para o checklist.
+
 ## Conciliação bancária (v291 — Fase B)
 
 - Payload novo **`__concilia`** `{ conta, produtor, itens:[{ fitid, data, valor, historico, doc, titulo? | novo?:{tipo,categoria,participanteNome,imovel} | ignorar?, refazer? }], regras:[{contem,tipo,categoria,participanteNome}] }`

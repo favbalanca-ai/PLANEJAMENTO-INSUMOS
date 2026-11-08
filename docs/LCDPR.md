@@ -57,3 +57,9 @@ Produtor sem endereço/município/CEP · contador sem nome ou CPF/CNPJ · nenhum
 - **CSV de conferência**: mesmas linhas do Q100 em colunas legíveis, para o contador.
 - A tela mostra o resumo mensal (Q200) e os lançamentos (Q100) com filtro por mês.
 - Ao gerar, o app grava "LCDPR GERADO `<CPF>` `<ano>`" na aba CONFIG APP com data/hora e quem gerou.
+
+## Arquivo parcial (fechamento mensal, v292)
+
+`lcdprDados(cpf, ano, ate)` aceita uma data limite: o fechamento mensal gera o LCDPR do ano **até o último dia do mês**
+(0000 com DT_FIN = essa data, Q100/Q200 só até ela). O arquivo anual continua igual quando `ate` não é informado.
+
