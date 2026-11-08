@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Venda por cultura, não por empreendimento (v289)** — a colheita de vários talhões vai para um armazém só, então na
+  conferência da venda escolhe-se a **cultura** (Soja, Milho, Feijão, Laranja…) e, se souber, a safra (1ª, 2ª ou "não
+  sei / as duas"). Em Resultados o preço médio da cultura vale para **todos os empreendimentos** dela (a tela diz
+  "vale para FA-SOJA SEQUEIRO, FA-SOJA IRRIGADO…"); o painel Vendas da safra e o estoque de grãos agrupam por cultura,
+  e o de-para da balança (Cadastros) passa a apontar para a cultura. Vendas antigas gravadas com o nome do
+  empreendimento continuam valendo (o app reconhece a cultura pelo nome). Culturas novas: laranja, arroz, girassol,
+  aveia, milheto.
 - **Nota de venda reconhecida pelo produto da fazenda (v288)** — uma nota cujos itens são só **soja, milho, feijão,
   laranja** (e sorgo, trigo, algodão, arroz, girassol) é tratada como **venda do produtor** quando é contranota de
   entrada do comprador (tpNF 0 ou CFOP 1xxx/2xxx) ou é emitida por um CPF — mesmo que o produtor ainda não esteja em
