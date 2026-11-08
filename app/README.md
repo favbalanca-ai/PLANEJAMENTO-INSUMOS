@@ -71,6 +71,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Caixa de entrada "Notas" com classificação automática por IA (v290 — Fase A do Administrativo)** — o menu
+  "Compras" virou **📥 Notas**: cada nota que chega na pasta do Drive aparece como um cartão já classificado pela
+  planilha (regras + IA, modelo Claude no Apps Script). Cartão **verde** = a IA reconheceu todos os itens (produto e
+  fator do estoque, peça → máquina, material de oficina, benfeitoria, palete/embalagem a ignorar) e o botão
+  **✅ Aprovar** confirma em um toque sem abrir a conferência (compra fica *em trânsito* e entra no estoque ao receber;
+  venda da produção vai para a aba VENDAS com a cultura que a IA indicou). Cartão **amarelo** = só os itens em dúvida
+  ficam para você (botão Conferir, item 🟡). Na conferência, os itens vindos da IA aparecem com a etiqueta **🤖 IA**
+  (`NFE_ST.ia`) e uma caixa mostra o motivo e a confiança, com **Refazer com a IA**; a memória do de-para do
+  fornecedor continua tendo prioridade sobre a IA, e cada aprovação alimenta essa memória. Notas sem classificação
+  têm o link "classificar agora"; com 2+ notas prontas aparece **Aprovar N prontas**. Contratos e Pendências saíram
+  do menu e abrem por links dentro de Notas. Funções: `nfeAprovar`, `nfeAprovarTodas`, `nfeIaPedir`, `nfeIaResumo`,
+  ramo IA em `nfeItemInicial` (confiança mínima `NFE_IA_MIN` = 0,75). Sem a chave na planilha a IA fica desligada e
+  tudo funciona como antes.
 - **Venda por cultura, não por empreendimento (v289)** — a colheita de vários talhões vai para um armazém só, então na
   conferência da venda escolhe-se a **cultura** (Soja, Milho, Feijão, Laranja…) e, se souber, a safra (1ª, 2ª ou "não
   sei / as duas"). Em Resultados o preço médio da cultura vale para **todos os empreendimentos** dela (a tela diz

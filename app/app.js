@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-289';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-290';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -435,7 +435,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas'];
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -1851,13 +1851,20 @@ function nfeItemInicial(nota,it){
   if(dp && (dp.ignorar || PROD[dp.produto])){ let fat=+dp.fator||1;
     if(!dp.ignorar && fat===1 && semPorUn((PROD[dp.produto]||{}).un)) fat=nfeFatorDe(it.xprod,it.ucom,PROD[dp.produto].un);   // semente gravada com fator 1 (antes contava embalagem de 200 mil como bag de 5 milhões)
     return Object.assign({},it,{fonte:'auto',produto:dp.ignorar?'':dp.produto,ignorar:!!dp.ignorar,fator:fat,ok:true}); }
+  const ia=(nota.ia&&Array.isArray(nota.ia.itens))?nota.ia.itens.find(x=>+x.n===+it.n):null;   // v290: sugestão da IA (quando não há memória do de-para)
+  if(ia && +ia.confianca>=NFE_IA_MIN){
+    if(ia.destino==='ignorar') return Object.assign({},it,{fonte:'ia',produto:'',ignorar:true,fator:1,ok:true,iaConf:+ia.confianca});
+    if(nfeDestManut(ia.destino)) return Object.assign({},it,{fonte:'ia',produto:'',ignorar:false,fator:1,ok:true,dest:ia.destino,maq:ia.destino==='oficina'?'Oficina':(ia.maquina||nfeMaqPadrao(ia.destino,nota.cnpj)),tipoMaq:ia.tipoGasto||nfeTipoGuess(ia.destino,it.xprod),iaConf:+ia.confianca});
+    if(ia.produto&&PROD[ia.produto]) return Object.assign({},it,{fonte:'ia',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:true,iaConf:+ia.confianca}); }
+  else if(ia && ia.produto && PROD[ia.produto]) return Object.assign({},it,{fonte:'sug',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:false,iaConf:+ia.confianca});
   const sug=sugP;
   if(sug && !pecaSug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
   if(pecaSug) return Object.assign({},it,{fonte:'sug',produto:'',fator:1,ignorar:false,ok:false,dest:pecaSug,maq:nfeMaqPadrao(pecaSug,nota.cnpj),tipoMaq:nfeTipoGuess(pecaSug,it.xprod)});   // v276: parece peça/serviço · v285: oficina/benfeitoria
   return Object.assign({},it,{fonte:'novo',produto:'',fator:nfeFatorDe(it.xprod,it.ucom,''),ignorar:false,ok:false}); }
-function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(nfeDestManut(it.dest)) return String(it.maq||'').trim()?'maq':'maqsug'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':'ok'; return it.fonte==='sug'?'sug':'novo'; }
-function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || s==='maq' || ((s==='auto'||s==='ok') && +it.fator>0); }
-const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫'],maq:['Apropriado','🔧'],maqsug:['Apropriar?','🔧']};
+function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(nfeDestManut(it.dest)) return String(it.maq||'').trim()?'maq':'maqsug'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':it.fonte==='ia'?'ia':'ok'; return it.fonte==='sug'?'sug':'novo'; }
+function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || s==='maq' || ((s==='auto'||s==='ok'||s==='ia') && +it.fator>0); }
+const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫'],maq:['Apropriado','🔧'],maqsug:['Apropriar?','🔧'],ia:['IA','🤖']};
+const NFE_IA_MIN=0.75;   // v290: confiança mínima para a sugestão da IA entrar sozinha
 // ===== v285: destinos de apropriação fora do estoque — máquina, material de oficina, benfeitoria =====
 const NFE_DEST={maquina:{lbl:'Máquina',ico:'🔧',sub:'peça ou serviço → máquina'}, oficina:{lbl:'Oficina',ico:'🧰',sub:'material de oficina'}, benfeitoria:{lbl:'Benfeitoria',ico:'🏗️',sub:'construção, cerca, galpão…'}};
 const OFIC_TIPOS=['Ferramenta','Consumível','EPI','Outro'], BENF_TIPOS=['Construção','Reforma','Elétrica','Hidráulica','Outro'];
@@ -1912,9 +1919,9 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     const ja=nfeJaEntrou(nota.chave);
     if(ja && !opts.reclass) throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)}) — para corrigir, use "Reclassificar" na lista de compras`);
     if(!nota.itens.length) throw new Error('a nota não tem itens');
-    nota.tipo=nfeTipoNota(nota.itens);
+    nota.tipo=nfeTipoNota(nota.itens); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
-    if(!opts.reclass && !opts.compra && nfeEhVenda(nota)){ nota.tipo='VENDA_PROD'; nfeVendaPrep(nfeImport); }   // v277: receita do produtor
+    if(!opts.reclass && !opts.compra && (nfeEhVenda(nota) || (nota.ia&&nota.ia.tipo==='venda'&&+nota.ia.confianca>=NFE_IA_MIN))){ nota.tipo='VENDA_PROD'; nfeVendaPrep(nfeImport); if(nota.ia&&nota.ia.cultura&&!nfeImport.venda.cultura){ nfeImport.venda.cultura=nota.ia.cultura; nfeImport.venda.safra=nfeVendaSafra(nota.ia.cultura); } }   // v277: receita do produtor · v290: IA
     nfeSugereCatalogo();   // itens sem parecido no portfólio: sugestão pelo catálogo MAPA (assíncrono)
     if(opts.reclass) nfeImport.reclass={data:ja||''};   // regrava a entrada desta nota (mesma chave = substitui, não duplica)
     // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
@@ -1948,7 +1955,7 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null};
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null, iaOn:!!(d&&d.iaOn)};   // v290: a planilha diz se a IA está ligada
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
@@ -2020,9 +2027,37 @@ async function nfeConferirServidor(chave){
   toast('Buscando o XML da nota…');
   try{ const d=await nfeGet({acao:'nfe', chave}); if(!d||!d.ok) throw new Error((d&&d.erro)||'falha');
     const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
-    nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha');
+    nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha', {ia:d.ia||nt.ia||null});
   }catch(e){ toast('NF-e: '+e.message); }
 }
+// v290: APROVAR em um toque — abre a nota com a classificação automática aplicada e, se tudo estiver resolvido, confirma sozinho
+async function nfeAprovar(chave){ if(!nfeServerOk()){ toast('Aprovar precisa da NF-e ligada (token + Code.gs)'); return; }
+  toast('Aprovando…');
+  try{ const d=await nfeGet({acao:'nfe', chave}); if(!d||!d.ok) throw new Error((d&&d.erro)||'falha');
+    const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
+    if(!nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha', {ia:d.ia||nt.ia||null})) return;
+    const imp=nfeImport; if(!imp) return;
+    if(imp.venda){ if(!imp.venda.cultura){ toast('Escolha a cultura da venda'); return; } nfeVendaOk(); return; }
+    const pend=imp.itens.filter(i=>!nfeResolvido(i)).length; if(pend){ toast(`${pend} item(ns) precisam da sua decisão (em amarelo)`); return; }
+    const n=imp.nota, itensP=nfeItensPayload(imp), soManut=itensP.every(i=>i.ignorar||nfeDestManut(i.dest));
+    nfeConfirmar(n.tipo==='FATURAMENTO'?'contrato':soManut?'entrada':'transito');   // compra: em trânsito (entra no estoque quando o caminhão chegar); peças/obra: direto
+  }catch(e){ toast('NF-e: '+e.message); } }
+// aprova em sequência todas as notas prontas (uma por vez, esperando cada gravação)
+async function nfeAprovarTodas(){ const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }); if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
+  for(const nt of L){ await nfeAprovar(nt.chave); await new Promise(r=>setTimeout(r,800)); if(nfeImport) break; }   // parou numa que precisa de decisão
+  await nfeListaCarregar(true); route(); }
+// pedir a classificação à IA para uma nota (ou refazer)
+async function nfeIaPedir(chave, forcar){ if(!nfeServerOk()) return; toast('🤖 Classificando com a IA…');
+  try{ const d=await nfeGet({acao:'nfe_ia', chave, forcar:forcar?'1':'0'}); if(!d||!d.ok){ toast(d&&d.semChave?'IA desligada: coloque a ANTHROPIC_KEY nas Propriedades do Script':'IA: '+((d&&d.erro)||'falha')); return; }
+    if(NFE_LISTA){ const nt=(NFE_LISTA.notas||[]).find(x=>x.chave===chave); if(nt) nt.ia=d.ia; }
+    if(nfeImport&&nfeImport.nota&&nfeImport.nota.chave===chave){ const imp=nfeImport; imp.nota.ia=d.ia; imp.itens=imp.nota.itens.map(it=>nfeItemInicial(imp.nota,it)); }
+    route({keepScroll:true}); toast(d.cache?'Já estava classificada':'🤖 Classificação pronta'); }
+  catch(e){ toast('IA: '+e.message); } }
+// resumo da classificação automática de uma nota da lista (para o cartão da caixa de entrada)
+const IA_TIPO_TXT={compra_insumo:'Compra de insumos', venda:'Venda da produção', pecas:'Peças/serviços → máquina', oficina:'Material de oficina', benfeitoria:'Benfeitoria', servico:'Serviço', outra:'Outra operação'};
+function nfeIaResumo(nt){ const ia=nt.ia; if(!ia||!Array.isArray(ia.itens)) return null; const its=ia.itens, okI=its.filter(x=>+x.confianca>=NFE_IA_MIN&&(x.destino==='ignorar'||x.destino==='oficina'||((x.destino==='maquina'||x.destino==='benfeitoria')&&x.maquina)||(x.destino==='estoque'&&(x.produto||ia.tipo==='venda')))).length;   // peça sem máquina e insumo sem produto ficam para a pessoa
+  const pronto=its.length>0&&okI===its.length&&+ia.confianca>=NFE_IA_MIN&&(ia.tipo!=='venda'||ia.cultura);
+  return {tipo:ia.tipo, tipoTxt:IA_TIPO_TXT[ia.tipo]||'Nota', cultura:ia.cultura, n:its.length, okI, pend:its.length-okI, pronto, conf:+ia.confianca||0, motivo:ia.motivo||'', categoria:ia.categoria||''}; }
 // nota JÁ RECEBIDA: abre a conferência de novo para corrigir produto/fator; ao confirmar, substitui a entrada (mesma chave)
 async function nfeReclassificar(chave){
   if(!nfeServerOk()){ toast('Reclassificar precisa da NF-e ligada (token + Code.gs)'); return; }
@@ -2084,11 +2119,16 @@ function nfeListaHtml(){
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>`<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque.</div>`).join('');
-  const rows=(L.notas||[]).map(nt=>`<div class="nfe-row">
-      <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span>
-        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
-      <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${nt.tipo==='VENDA PRODUTOR'?'🌾 Conferir venda':'Conferir'}</button>
-        <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`).join('');
+  const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
+    const cls=R?(R.pronto?' ia-pronto':' ia-pend'):'', tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
+    const ia=R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
+      :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:'');
+    return `<div class="nfe-row${cls}">
+      <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(tipoTxt)}</span>
+        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div>${ia}</div>
+      <div class="nfe-row-act">${R&&R.pronto?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
+        :`<button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${venda?'🌾 Conferir venda':'Conferir'}</button>`}
+        <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`; }).join('');
   const nN=(L.notas||[]).length, c=L.captura;
   let ult=''; if(c){ const d=new Date(String(c.em).replace(' ','T')); ult=isNaN(d)?esc(c.em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
   const ST_LBL={'A CLASSIFICAR':'A classificar','EM TRÂNSITO':'Em trânsito','A ENTREGAR':'A entregar','ENTREGUE':'Entregues','RECEBIDA':'Recebidas','RECEBIDA SEM XML':'Recebidas s/ XML','IGNORADA':'Ignoradas','CANCELADA':'Canceladas'};
@@ -2096,8 +2136,9 @@ function nfeListaHtml(){
   const chips=Object.keys(cont).filter(k=>cont[k]>0).sort((a,b)=>(ORD.indexOf(a)+99*(ORD.indexOf(a)<0))-(ORD.indexOf(b)+99*(ORD.indexOf(b)<0)))
     .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
   const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta <b>NFe/Entrada</b> do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
-  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span>
-      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
+  const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }).length;
+  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:'🤖 IA desligada: coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha'} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
+      <div class="spacer"></div>${prontas>1?`<button class="btn btn-primary btn-sm" data-act="nfeAprovarTodas" title="Aprova uma a uma as notas em que a IA reconheceu tudo">✅ Aprovar ${prontas} prontas</button>`:''}<button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
     <div class="nfe-stats">${c?`<span class="nfe-chip st-ult" title="${c.lidas} arquivo(s) lidos nessa leitura">🕒 Última leitura <b>${ult}</b></span>`:''}${chips}</div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(c)}
@@ -2217,6 +2258,7 @@ function nfeConferirHtml(){
       <div class="nfe-pecas-all"><input list="benflist" class="txt" id="nfe-benf-all" value="${esc(benfAll)}" placeholder="benfeitoria (galpão, cerca, curral…)"><button class="btn btn-outline btn-sm" data-act="nfeBenfTodos">🏗️ Tudo → benfeitoria</button>${nMaq?`<button class="btn btn-outline btn-sm" data-act="nfeMaqNenhum">Voltar tudo para insumo</button>`:''}</div>
       ${!nfeServerOk()?'<div class="mut" style="margin-top:4px">Apropriações precisam da NF-e ligada à planilha (token + Code.gs).</div>':''}</div>`:'';
   const maqList=`<datalist id="maqlist">${maqListaManut().map(m=>`<option value="${esc(m)}">`).join('')}</datalist><datalist id="benflist">${benfListaManut().map(m=>`<option value="${esc(m)}">`).join('')}</datalist>`;
+  const iaBox=(imp.origem==='planilha'&&nfeServerOk())?`<div class="nfe-aviso ${n.ia?'info':'warn'} nfe-iabox">🤖 ${n.ia?`<b>Classificação automática</b>${n.ia.motivo?': '+esc(n.ia.motivo):''} <span class="mut">(confiança ${Math.round((+n.ia.confianca||0)*100)}% · ${esc(n.ia.em||'')})</span> — itens marcados 🤖 vieram dela; os amarelos precisam de você.`:'Esta nota ainda não passou pela IA.'} <button class="btn btn-outline btn-sm" data-act="nfeIaPedir" data-chave="${esc(n.chave)}" data-forcar="${n.ia?'1':'0'}">${n.ia?'Refazer com a IA':'Classificar com a IA'}</button></div>`:'';
   const cards=imp.itens.map((it,i)=>{ const st=nfeItemStatus(it), D=nfeDestManut(it.dest)?NFE_DEST[it.dest]:null, [lbl,ico]=D?[D.lbl+(st==='maqsug'?'?':''),D.ico]:NFE_ST[st], q=(+it.qcom||0)*(+it.fator||0), c=nfeCustoItem(imp,it), ref=precoDe(it.produto);
     const dif=(ref>0&&c>0)?(c/ref-1)*100:null;
     const extras=[it.vdesc?`desc. −${brl(it.vdesc)}`:'', it.vfrete?`frete ${brl(it.vfrete)}`:'', it.voutro?`outras ${brl(it.voutro)}`:'', it.vipi?`IPI ${brl(it.vipi)}`:'', it.vst?`ICMS-ST ${brl(it.vst)}`:''].filter(Boolean).join(' · ');
@@ -2250,7 +2292,7 @@ function nfeConferirHtml(){
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
-    ${reclass}${aviso}${semSrv}${pecas}${maqList}
+    ${reclass}${aviso}${semSrv}${iaBox}${pecas}${maqList}
     <div class="nfe-itens">${cards}</div>
     <div class="nfe-foot">
       <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>
@@ -8780,7 +8822,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Compras — Entradas de Estoque',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -8868,7 +8910,7 @@ function _route(opts){
   applyModule();
   document.body.dataset.view=view;   // permite esconder a navegação na tela inicial
   $('#page-title').textContent=TITLES[view]||'Painel';
-  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view));
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('active',a.dataset.view===view || a.dataset.view===TELA_PAI[view]));   // v290: Contratos/Pendências acendem 'Notas'
   { const mais=document.querySelector('#nav .nav-mais'); if(mais) mais.classList.toggle('active', navMaisItens().some(a=>a.dataset.view===view)); }   // celular: tela que está dentro do ⋯ Mais
   try{ const html=(EMBED&&view!=='login'?embedBarHtml(view):'') + (fn?fn(decodeURIComponent(arg||'')):`<div class="empty">Página não encontrada.</div>`);
     if(!toTop && MORPH_VIEWS.has(view) && _lastView===view && _lastArg===(arg||'')) morphInto($('#content'), html);   // mesma tela: só o que mudou
@@ -9595,6 +9637,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='recSxDel'){ REC.itens.splice(+a.i,1); if(!REC.itens.length) REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
+    else if(a.act==='nfeAprovar'){ nfeAprovar(a.chave); } else if(a.act==='nfeIaPedir'){ nfeIaPedir(a.chave, a.forcar==='1'); }
+    else if(a.act==='nfeAprovarTodas'){ nfeAprovarTodas(); }
     else if(a.act==='nfeReabrir'){ nfeReabrir(a.chave); }
     else if(a.act==='nfeReclass'){ nfeReclassificar(a.chave); }
     else if(a.act==='nfeRecebToggle'){ nfeRecebAberto=!act.closest('details').open; if(nfeRecebAberto){ nfeRecebidasCarregar(true); } }
