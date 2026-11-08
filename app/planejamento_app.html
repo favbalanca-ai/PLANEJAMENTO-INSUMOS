@@ -2084,6 +2084,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 .fin-h3{font-size:14px;margin:10px 14px 6px}
 .nfe-ia{font-size:12px;margin-top:3px}.nfe-ia-ok{color:#2e7d32;font-weight:700}.nfe-ia-pend{color:#b26a00;font-weight:700}.nfe-row.ia-pronto{border-left:4px solid #43a047}.nfe-row.ia-pend{border-left:4px solid #fbc02d;background:#fffdf5}.nfe-iabox .btn{margin-left:6px}
+/* conciliação bancária (v291) */
+.bk-row{padding:10px 14px;border-top:1px solid var(--line);border-left:4px solid transparent}.bk-row.st-auto{border-left-color:#43a047}.bk-row.st-sug{border-left-color:#fbc02d;background:#fffdf5}.bk-row.st-novo{border-left-color:#90a4ae}.bk-row.st-novo.pronta{border-left-color:#43a047}.bk-row.st-ign{opacity:.75}.bk-row.st-ja{opacity:.55}
+.bk-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.bk-neg{color:#c62828}.bk-pos{color:#2e7d32}.bk-hist{font-size:13px;margin:3px 0 4px;word-break:break-word}.bk-tit{font-size:13px}.bk-tit .sel{max-width:100%;margin:4px 0}
+.bk-novo{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;font-size:12px}.bk-novo label{display:flex;flex-direction:column;gap:3px;min-width:140px;flex:1}.bk-novo .txt,.bk-novo .sel{width:100%}.bk-acts{flex-basis:100%;font-size:12px}.bk-chk{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:4px;min-width:0!important;flex:0 0 auto!important}
+.bk-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px}.bk-dif{color:#c62828;font-weight:700}
+@media (max-width:640px){ .bk-novo label{min-width:100%} }
 /* venda do produtor (v277) */
 .nfe-venda .panel-head h2{color:var(--green)}
 .nfe-comp{margin:6px 14px 10px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;font-size:13px}
@@ -2559,6 +2565,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .exp-row-tx .mut{font-size:9.5px}
   .fin-h3{font-size:11.5px}
   .nfe-ia{font-size:9.5px}
+  .bk-hist{font-size:10.5px}
+  .bk-tit{font-size:10.5px}
+  .bk-novo{font-size:9.5px}
+  .bk-acts{font-size:9.5px}
   .nfe-comp{font-size:10.5px}
   .faz-wrap{font-size:9.5px}
   .faz-camp span{font-size:9.5px}
@@ -2679,7 +2689,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-290';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-291';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5571,7 +5581,7 @@ const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Par
 const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
 const FIN_SIT={vencido:['Vencido','neg'], d7:['Vence em 7 dias','warn'], d30:['Vence em 30 dias',''], aberto:['Aberto',''], pago:['Pago','ok'], cancelado:['Cancelado','off']};
 let FIN_UI={st:'aberto', prod:'', q:'', mes:''}, finDraft=null, CAD_EDIT=null;
-function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}}; }
+function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}, extratoBanco:f.extratoBanco||[], regrasBanco:f.regrasBanco||[]}; }   // v291: conciliação bancária
 // ---- baixas (v274): abatido = valor pago − juros + desconto; saldo do título = valor − Σ abatidos ----
 function finBaixasDe(id){ return FIN().baixas.filter(b=>b.titulo===id).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))); }
 const finAbatido=b=>(+b.valorPago||0)-(+b.juros||0)+(+b.desconto||0);
@@ -5627,7 +5637,7 @@ V.financeiro=function(){
   if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button></div>`;
   const kpis=`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
     <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
@@ -5637,6 +5647,7 @@ V.financeiro=function(){
   if(FIN_UI.view==='extrato') return kpis+seg+finExtratoHtml();
   if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
   if(FIN_UI.view==='vendas') return kpis+seg+finVendasHtml();   // v279: contratos e cargas da balança
+  if(FIN_UI.view==='banco') return kpis+seg+finBancoHtml();   // v291: conciliação bancária
   const L=finLista(), hj=_hojeISO();
   const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
   const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
@@ -5737,6 +5748,169 @@ function exportFinExtratoCsv(){ const U=FIN_UI, movs=finMovimentos().filter(m=>(
   const cab=['Data','Conta','Produtor','Tipo','Fornecedor/Comprador','CPF/CNPJ','Documento','Nº','Parcela','Chave NF-e','Categoria','Imóvel','Valor pago','Juros','Desconto','Abatido do título','Observação','Comprovante'];
   const lin=[cab.map(_usoCsvEsc).join(';')]; movs.forEach(m=>lin.push([_dtBRc(m.data), finContaNome(m.b.conta), finProdNome(m.t.produtor), m.receber?'Recebimento':'Pagamento', m.t.participanteNome||'', m.t.participante||'', String(m.t.docTipo||'').replace(/^\d\s*-\s*/,''), m.t.docNum||'', m.t.parcela||'', m.t.chave||'', m.t.categoria||'', m.t.imovel||'', nf2.format(+m.b.valorPago||0), nf2.format(+m.b.juros||0), nf2.format(+m.b.desconto||0), nf2.format(finAbatido(m.b)), m.b.obs||'', m.b.comprovante||''].map(_usoCsvEsc).join(';')));
   download(`pagamentos_${(U.de||'inicio').replace(/-/g,'')}_${(U.ate||_hojeISO()).replace(/-/g,'')}.csv`, '\ufeff'+lin.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado — uma linha por baixa'); }
+// ===== v291 (Fase B): CONCILIAÇÃO BANCÁRIA — extrato OFX/CSV (Banco do Brasil, Sicoob) × títulos do Financeiro =====
+// Fluxo: importar arquivo → achar a conta → cada linha vira: já conciliada · automática (1 título casou) · sugestão (vários) ·
+// lançamento avulso (sem título: categoria por regra/IA) · ignorar (transferência entre contas). Confirmar manda __concilia.
+let BANCO=null;   // {arquivo, banco, agencia, acctid, conta, produtor, saldoBanco, dataSaldo, de, ate, linhas:[...]}
+const BANCO_NOMES={'001':'Banco do Brasil','756':'Sicoob','104':'Caixa','237':'Bradesco','341':'Itaú','033':'Santander','748':'Sicredi','077':'Inter','260':'Nubank','422':'Safra','136':'Unicred'};
+const _bkNorm=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+const _bkDig=s=>String(s||'').replace(/\D/g,'');
+function _bkHash(s){ let h=5381; s=String(s||''); for(let i=0;i<s.length;i++) h=((h*33)^s.charCodeAt(i))>>>0; return h.toString(36); }
+// regras prontas (histórico → categoria) — a planilha (DE-PARA BANCO) vem antes destas
+const BANCO_REGRAS_PADRAO=[
+  [/TARIFA|PACOTE|CESTA|MANUT\w* ?C(ON)?TA|\bIOF\b|ANUIDADE|TAR\b/, 'PAGAR','Outros','Tarifa bancária'],
+  [/ENERGIA|CEMIG|ENEL|EQUATORIAL|CPFL|COPEL|CELESC|NEOENERGIA|ENERGISA|COELBA|CELPE|COSERN|\bLIGHT\b/, 'PAGAR','Energia',''],
+  [/FOLHA|SALARIO|\bINSS\b|\bFGTS\b|FERIAS|RESCIS|13 ?SAL/, 'PAGAR','Mão de obra',''],
+  [/JUROS|FINANC|CUSTEIO|PRONAF|PRONAMP|MODERFROTA|AMORTIZ|\bCDC\b|BNDES|PARC\w* ?(EMPR|CRED)/, 'PAGAR','Financiamento',''],
+  [/\bDARF\b|\bGPS\b|\bITR\b|IPVA|IMPOSTO|TRIBUTO|FUNRURAL|\bICMS\b|\bISS\b|SIMPLES NAC/, 'PAGAR','Impostos',''],
+  [/COMBUST|\bPOSTO\b|DIESEL|GASOLINA|ETANOL/, 'PAGAR','Combustível',''],
+  [/ARREND/, 'PAGAR','Arrendamento',''],
+  [/FRETE|TRANSPORTADORA/, 'PAGAR','Frete',''],
+  [/SEMENTE/, 'PAGAR','Sementes',''],
+  [/FERTIL|ADUBO|UREIA|CALCARIO|\bKCL\b|\bMAP\b/, 'PAGAR','Fertilizantes',''],
+  [/COOPERATIVA|COAMO|COCAMAR|CEREAL|GRAOS|ARMAZ|BUNGE|CARGILL|AMAGGI|\bLDC\b|COFCO|\bADM\b/, 'RECEBER','Venda de grãos',''],
+];
+const BANCO_TRANSF=/APLICAC|RESGATE|POUPANCA|\bCDB\b|\bLCA\b|\bLCI\b|TRANSF\w* ?(ENTRE|MESMA|PROPRI|P\/ ?CONTA)/;
+// ---- leitura do OFX (SGML 1.x e XML 2.x) ----
+function ofxParse(txt){
+  const T=s=>{ const o={}; String(s||'').replace(/<([A-Za-z0-9_.]+)>([^<\r\n]*)/g,(m,k,v)=>{ k=k.toUpperCase(); if(o[k]==null) o[k]=v.trim(); }); return o; };
+  const partes=txt.split(/<STMTTRN>/i); if(partes.length<2 && !/<BANKACCTFROM>/i.test(txt)) return {ok:false, erro:'não parece um arquivo OFX (sem lançamentos)'};
+  const cab=T(partes[0]), bal=txt.match(/<LEDGERBAL>[\s\S]*?<BALAMT>([^<\r\n]*)[\s\S]*?(?:<DTASOF>([^<\r\n]*))?/i);
+  const data=s=>{ const d=String(s||'').replace(/\D/g,''); return d.length>=8?`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`:''; };
+  const val=s=>{ s=String(s||'').trim(); if(/,\d{1,2}$/.test(s)) s=s.replace(/\./g,'').replace(',','.'); return +parseFloat(s.replace(/[^\d.\-+]/g,''))||0; };
+  const vistos={}, linhas=[];
+  partes.slice(1).forEach(p=>{ const o=T(p.split(/<\/STMTTRN>/i)[0]); const d=data(o.DTPOSTED); if(!d) return;
+    const v=val(o.TRNAMT); let fit=(o.FITID||'').trim()||`${d}:${v}:${_bkHash((o.MEMO||'')+(o.NAME||'')+(o.CHECKNUM||''))}`; if(vistos[fit]) fit+='#'+(++vistos[fit]); else vistos[fit]=1;
+    const nome=(o.NAME||'').trim(), memo=(o.MEMO||'').trim(); const hist=memo&&nome&&!memo.includes(nome)?`${nome} · ${memo}`:(memo||nome||o.TRNTYPE||'');
+    linhas.push({fitid:fit, data:d, valor:v, historico:hist, doc:(o.CHECKNUM||o.REFNUM||'').trim(), tipoBanco:o.TRNTYPE||''}); });
+  linhas.sort((a,b)=>a.data.localeCompare(b.data));
+  return {ok:true, banco:_bkDig(cab.BANKID).padStart(3,'0'), agencia:cab.BRANCHID||'', acctid:cab.ACCTID||'', saldoBanco:bal?val(bal[1]):null, dataSaldo:bal&&bal[2]?data(bal[2]):(linhas.length?linhas[linhas.length-1].data:''), de:data(cab.DTSTART), ate:data(cab.DTEND), linhas}; }
+// ---- leitura do CSV (BB: Data;Dependencia Origem;Histórico;Data do Balancete;Número do documento;Valor · Sicoob: Data;Documento;Histórico;Valor (C/D)) ----
+function csvBancoParse(txt){
+  const linhas=txt.split(/\r?\n/).filter(l=>l.trim()); const split=(l,sep)=>{ const out=[]; let cur='', q=false; for(const ch of l){ if(ch==='"'){ q=!q; continue; } if(ch===sep&&!q){ out.push(cur); cur=''; } else cur+=ch; } out.push(cur); return out.map(s=>s.trim()); };
+  let hi=-1, sep=';'; for(let i=0;i<Math.min(linhas.length,30);i++){ for(const sp of [';','\t',',']){ const c=split(linhas[i],sp).map(_bkNorm); if(c.length>=3 && c.some(x=>/^DATA/.test(x)) && c.some(x=>/VALOR|MONTANTE/.test(x))){ hi=i; sep=sp; break; } } if(hi>=0) break; }
+  if(hi<0) return {ok:false, erro:'não achei o cabeçalho (Data / Histórico / Valor) no CSV'};
+  const cab=split(linhas[hi],sep).map(_bkNorm), ix=re=>cab.findIndex(x=>re.test(x));
+  const iD=ix(/^DATA(?! DO BALANCETE)/), iH=ix(/HIST|DESCRI|LANCAMENTO|MEMO|DETALHE/), iV=ix(/^VALOR|MONTANTE/), iDoc=ix(/DOCUMENTO|N[UÚ]MERO|^DOC|^N\.?$/), iTipo=ix(/^(TIPO|D\/C|C\/D|NATUREZA|OPERACAO)$/);
+  if(iD<0||iV<0) return {ok:false, erro:'CSV sem coluna de Data ou Valor'};
+  const data=s=>{ s=String(s||'').trim(); let m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m) return `${m[3]}-${m[2]}-${m[1]}`; m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); return m?m[0]:''; };
+  const vistos={}, out=[];
+  for(let i=hi+1;i<linhas.length;i++){ const c=split(linhas[i],sep); const d=data(c[iD]); if(!d) continue; const hist=(iH>=0?c[iH]:'')||''; if(/^\s*S\s*A\s*L\s*D\s*O|SALDO (ANTERIOR|DO DIA|FINAL|ATUAL|BLOQUEADO)|^SALDO$/i.test(_bkNorm(hist))) continue;
+    let vs=String(c[iV]||'').trim(), sinal=1; const dc=vs.match(/([CD])\s*$/i)||(iTipo>=0?String(c[iTipo]||'').match(/^\s*([CD])/i):null); if(dc && /D/i.test(dc[1])) sinal=-1; vs=vs.replace(/[CD]\s*$/i,'').trim();
+    if(/^-|-$/.test(vs)) sinal=-1; if(/,\d{1,2}$/.test(vs)) vs=vs.replace(/\./g,'').replace(',','.'); const v=Math.abs(parseFloat(vs.replace(/[^\d.]/g,''))||0)*sinal; if(!v) continue;
+    const doc=iDoc>=0?String(c[iDoc]||'').trim():''; let fit=`csv:${d}:${v}:${_bkHash(hist+'|'+doc)}`; if(vistos[fit]) fit+='#'+(++vistos[fit]); else vistos[fit]=1;
+    out.push({fitid:fit, data:d, valor:v, historico:hist, doc, tipoBanco:''}); }
+  if(!out.length) return {ok:false, erro:'nenhum lançamento no CSV'};
+  out.sort((a,b)=>a.data.localeCompare(b.data));
+  return {ok:true, banco:'', agencia:'', acctid:'', saldoBanco:null, dataSaldo:out[out.length-1].data, de:out[0].data, ate:out[out.length-1].data, linhas:out}; }
+// ---- conta do cadastro que corresponde ao arquivo (código do banco + número da conta) ----
+function bancoContaDe(banco, acctid){ const cs=finContasDe(), b=_bkDig(banco).replace(/^0+/,''), ac=_bkDig(acctid).replace(/^0+/,'');
+  const nomeRx={'1':/BRASIL|\bBB\b/i,'756':/SICOOB/i,'748':/SICREDI/i,'104':/CAIXA/i,'237':/BRADESCO/i,'341':/ITAU|ITAÚ/i,'33':/SANTANDER/i}[b];
+  const porBanco=cs.filter(c=>(b && _bkDig(c.numBanco).replace(/^0+/,'')===b) || (nomeRx && nomeRx.test(c.banco||'')));
+  const fim=(x,y)=>x&&y&&(x.endsWith(y)||y.endsWith(x)||x.slice(0,-1).endsWith(y)||y.slice(0,-1).endsWith(x));
+  const m=porBanco.filter(c=>fim(ac,_bkDig(c.conta).replace(/^0+/,'')));
+  return m[0]||(porBanco.length===1?porBanco[0]:null)||(ac?cs.find(c=>fim(ac,_bkDig(c.conta).replace(/^0+/,''))):null)||null; }
+// ---- casamento com os títulos ----
+const _BK_STOP=/^(PIX|TED|DOC|PAGAMENTO|PAGTO|PGTO|TRANSF|TRANSFERENCIA|ENVIAD[OA]|RECEBID[OA]|LTDA|EIRELI|S\/A|SA|ME|EPP|CIA|COMERCIO|INDUSTRIA|AGRO|AGRICOLA|AGROPECUARIA|BOLETO|TITULO|COBRANCA|DEBITO|CREDITO|CONTA|BANCO|BRASIL|SICOOB|COMPRA|CARTAO|DEB|CRED|AUTOMATICO|CONVENIO|REF|PARC|PARCELA)$/;
+function bancoTokens(s){ return _bkNorm(s).split(/[^A-Z0-9]+/).filter(t=>t.length>=4 && !/^\d+$/.test(t) && !_BK_STOP.test(t)); }
+function bancoJa(conta, fitid){ const id=conta+'|'+fitid, F=FIN(); const e=(F.extratoBanco||[]).find(x=>x.id===id); if(e && (e.status==='CONCILIADO'||e.status==='IGNORADO')) return e;
+  const b=F.baixas.find(b=>b.bancoId===id); return b?{status:'CONCILIADO', baixa:b.id, titulo:b.titulo, data:b.data}:null; }
+function bancoCands(l, prod, amplo){ const F=FIN(), tipo=l.valor<0?'PAGAR':'RECEBER', v=Math.abs(l.valor), hk=bancoTokens(l.historico), dl=new Date(l.data+'T12:00:00');
+  return F.titulos.filter(t=>{ if(!_finAberto(finSit(t))) return false; if(String(t.tipo||'PAGAR').toUpperCase()!==tipo) return false; if(prod && t.produtor && t.produtor!==prod) return false; if(amplo) return true;
+      if(Math.abs(finSaldo(t)-v)>0.011 && Math.abs((+t.valor||0)-v)>0.011) return false; const dv=String(t.vencimento||'').slice(0,10); if(_isISO(dv) && Math.abs((dl-new Date(dv+'T12:00:00'))/86400000)>10) return false; return true; })
+    .map(t=>{ const tk=bancoTokens(t.participanteNome); const hit=tk.filter(x=>hk.some(h=>h.startsWith(x)||x.startsWith(h))).length; const dv=String(t.vencimento||'').slice(0,10); const d=_isISO(dv)?Math.abs((dl-new Date(dv+'T12:00:00'))/86400000):99; return {t, hit, d, dv:Math.abs(finSaldo(t)-v)}; })
+    .sort((a,b)=>b.hit-a.hit||a.dv-b.dv||a.d-b.d).map(x=>x.t); }
+function bancoRegraDe(l){ const h=_bkNorm(l.historico), tipo=l.valor<0?'PAGAR':'RECEBER';
+  const r=(FIN().regrasBanco||[]).find(r=>r.contem && h.includes(_bkNorm(r.contem)) && (!r.tipo||String(r.tipo).toUpperCase()===tipo)); if(r) return {categoria:r.categoria||'Outros', nome:r.participanteNome||'', fonte:'regra'};
+  const p=BANCO_REGRAS_PADRAO.find(x=>x[0].test(h) && x[1]===tipo); if(p) return {categoria:p[2], nome:p[3], fonte:'padrao'}; return null; }
+function bancoEhTransf(l){ const h=_bkNorm(l.historico); if(BANCO_TRANSF.test(h)) return 'aplicação/transferência própria';
+  const F=FIN(); const par=(F.extratoBanco||[]).find(x=>x.conta!==BANCO.conta && String(x.data).slice(0,10)===l.data && Math.abs((+x.valor||0)+l.valor)<0.005); return par?`contrapartida na conta ${finContaNome(par.conta)}`:''; }
+// classifica (ou reclassifica) todas as linhas do arquivo carregado
+function bancoClassificar(){ const B=BANCO; if(!B) return; const usos={};
+  B.linhas.forEach(l=>{ if(l.manual) return; const ja=B.conta?bancoJa(B.conta,l.fitid):null; l.ja=ja; l.titulo=''; l.cands=[]; l.novo=l.novo||{}; l.motivo='';
+    if(ja){ l.st='ja'; return; }
+    const tr=bancoEhTransf(l); const cands=bancoCands(l, B.produtor, false); l.cands=cands;
+    if(cands.length===1){ l.st='auto'; l.titulo=cands[0].id; usos[l.titulo]=(usos[l.titulo]||0)+1; return; }
+    if(cands.length>1){ l.st='sug'; l.titulo=cands[0].participanteNome && bancoTokens(cands[0].participanteNome).some(x=>bancoTokens(l.historico).some(h=>h.startsWith(x)||x.startsWith(h)))?cands[0].id:''; return; }
+    if(tr){ l.st='ign'; l.motivo=tr; return; }
+    const rg=bancoRegraDe(l); l.st='novo'; l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', fonte:rg?rg.fonte:'', lembrar:false}; });
+  B.linhas.forEach(l=>{ if(l.st==='auto' && usos[l.titulo]>1){ l.st='sug'; l.titulo=''; l.motivo='o mesmo título casa com mais de uma linha'; } }); }
+function bancoPronta(l){ if(l.st==='ja') return false; if(l.st==='ign') return true; if(l.st==='auto'||l.st==='sug') return !!l.titulo; if(l.st==='novo') return !!(l.novo&&l.novo.categoria); return false; }
+function bancoSaldoApp(conta, data){ const c=FIN().contas.find(x=>x.codigo===conta); if(!c) return null; const d0=String(c.dataSaldo||'').slice(0,10); if(!_isISO(d0)) return null;
+  let s=+c.saldoInicial||0; finMovimentos().filter(m=>m.b.conta===conta && m.data>=d0 && (!data||m.data<=data)).forEach(m=>{ s+=m.ent-m.sai; }); return +s.toFixed(2); }
+// ---- importar arquivo ----
+function bancoImportarArquivo(f){ const fr=new FileReader(); fr.onload=()=>{ try{ const buf=fr.result; const asc=new TextDecoder('utf-8',{fatal:false}).decode(buf.slice(0,600));
+      let txt; if(/CHARSET:1252|ENCODING:USASCII|encoding="?(ISO-8859-1|windows-1252)/i.test(asc)) txt=new TextDecoder('windows-1252').decode(buf); else { txt=new TextDecoder('utf-8').decode(buf); if(txt.includes('�')) txt=new TextDecoder('windows-1252').decode(buf); }
+      const r=/<OFX>|<STMTTRN>|OFXHEADER/i.test(txt)?ofxParse(txt):csvBancoParse(txt); if(!r.ok){ toast('Extrato: '+r.erro); return; }
+      const c=bancoContaDe(r.banco, r.acctid); BANCO=Object.assign({arquivo:f.name, conta:c?c.codigo:'', produtor:c?c.produtor:''}, r);
+      BANCO.linhas.forEach(l=>{ l.st='novo'; l.novo={}; }); bancoClassificar(); FIN_UI.view='banco'; route(); rolarTopo();
+      const nJa=BANCO.linhas.filter(l=>l.st==='ja').length; toast(`${BANCO.linhas.length} lançamento(s) lido(s)${nJa?` · ${nJa} já conciliado(s)`:''}${c?'':' — escolha a conta'}`); }
+    catch(e){ toast('Não consegui ler o extrato: '+e.message); } }; fr.readAsArrayBuffer(f); }
+// ---- tela ----
+const BK_ST={ja:['Já conciliado','✔️'], auto:['Casou com um título','🟢'], sug:['Escolha o título','🟡'], novo:['Lançamento avulso','⚪'], ign:['Ignorar','⏭']};
+function finBancoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.ativa)), B=BANCO;
+  const sel=`<select class="sel" id="bk-conta"><option value="">— escolha a conta —</option>${contas.map(c=>`<option value="${esc(c.codigo)}"${B&&c.codigo===B.conta?' selected':''}>${esc(finContaNome(c.codigo))}${c.produtor?' · '+esc(finProdNome(c.produtor)):''}</option>`).join('')}</select>`;
+  const imp=`<label class="btn btn-primary btn-sm" style="cursor:pointer">📥 Importar extrato<input type="file" id="banco-file" accept=".ofx,.qfx,.csv,.txt,application/x-ofx,text/csv" hidden></label>`;
+  const ajuda=`<p class="mut" style="font-size:12px;margin:8px 0 0"><b>Banco do Brasil:</b> Extrato → período → Salvar/Exportar → <b>OFX</b> (ou CSV). <b>Sicoob:</b> Conta corrente → Extrato → Exportar → <b>OFX</b> (ou CSV). O arquivo é lido só neste aparelho; a planilha recebe apenas as baixas e os lançamentos que você confirmar.</p>`;
+  if(!B){ const pend=(F.extratoBanco||[]).filter(x=>x.status==='PENDENTE'), conc=(F.extratoBanco||[]).filter(x=>x.status==='CONCILIADO'), ult=conc.map(x=>String(x.data).slice(0,10)).sort().pop();
+    return `<div class="panel"><div class="panel-head"><h2>🔁 Conciliar extrato do banco</h2><span class="sub">o app casa cada lançamento do extrato com um título e dá a baixa; o que não tem título vira lançamento avulso</span><div class="spacer"></div>${imp}</div>
+      <div style="padding:0 14px 14px">${ajuda}<div class="rel-uso-kpis" style="margin-top:10px"><span><small>Conciliados (180 dias)</small>${conc.length}</span><span><small>Último lançamento conciliado</small>${ult?_dtBRc(ult):'—'}</span><span><small>Pendentes de outro aparelho</small>${pend.length}</span></div>
+      ${contas.length?'':'<p class="rel-ap-aviso" style="margin-top:10px">Nenhuma conta bancária cadastrada. Em <b>Cadastros → Contas</b> informe banco, agência, conta, <b>número do banco</b> (001 BB, 756 Sicoob) e o saldo inicial com data.</p>'}</div></div>`; }
+  const n={ja:0,auto:0,sug:0,novo:0,ign:0}; B.linhas.forEach(l=>n[l.st]++); const prontas=B.linhas.filter(bancoPronta).length, semCat=B.linhas.filter(l=>l.st==='novo'&&!(l.novo&&l.novo.categoria)).length;
+  const saldoApp=B.conta?bancoSaldoApp(B.conta, B.dataSaldo):null, dif=(saldoApp!=null&&B.saldoBanco!=null)?+(B.saldoBanco-saldoApp).toFixed(2):null;
+  const cards=B.linhas.map((l,i)=>{ const st=BK_ST[l.st]||BK_ST.novo, neg=l.valor<0, t=l.titulo?F.titulos.find(x=>x.id===l.titulo):null;
+    let corpo='';
+    if(l.st==='ja') corpo=`<div class="mut">conciliado${l.ja&&l.ja.data?' em '+_dtBRc(l.ja.data):''}${l.ja&&l.ja.status==='IGNORADO'?' (ignorado)':''}</div>`;
+    else if(l.st==='auto'&&t) corpo=`<div class="bk-tit">→ <b>${esc(t.participanteNome||'—')}</b> <span class="mut">${esc(String(t.docTipo||'').replace(/^\d\s*-\s*/,''))} ${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''} · venc. ${_dtBRc(t.vencimento)} · saldo ${brl(finSaldo(t))}</span> <a class="link" data-act="bkTrocar" data-i="${i}">trocar</a> · <a class="link" data-act="bkIgn" data-i="${i}">ignorar</a></div>`;
+    else if(l.st==='sug'||l.st==='auto'){ const cs=l.amplo?bancoCands(l,B.produtor,true):l.cands; corpo=`<div class="bk-tit">${l.motivo?`<span class="mut">${esc(l.motivo)} · </span>`:''}<select class="sel" data-bk="titulo" data-i="${i}"><option value="">— qual título? —</option>${cs.map(c=>`<option value="${esc(c.id)}"${c.id===l.titulo?' selected':''}>${esc(c.participanteNome||'—')} · ${brl(finSaldo(c))} · venc. ${_dtBRc(c.vencimento)}${c.docNum?' · nº '+esc(c.docNum):''}</option>`).join('')}<option value="__novo">(nenhum: lançamento avulso)</option></select>
+        ${l.amplo?'':`<a class="link" data-act="bkAmplo" data-i="${i}">ver todos em aberto</a> · `}<a class="link" data-act="bkIgn" data-i="${i}">ignorar</a></div>`; }
+    else if(l.st==='novo'){ const nv=l.novo||{}; corpo=`<div class="bk-novo"><label>Categoria<select class="sel" data-bk="cat" data-i="${i}"><option value="">— escolha —</option>${FIN_CATS.map(c=>`<option value="${esc(c)}"${c===nv.categoria?' selected':''}>${esc(c)}</option>`).join('')}</select></label>
+        <label>${neg?'Fornecedor':'Pagador'}<input class="txt" data-bk="nome" data-i="${i}" value="${esc(nv.nome||'')}" placeholder="nome (opcional)"></label>
+        <span class="bk-acts">${nv.fonte?`<span class="mut" title="categoria preenchida por regra">${nv.fonte==='regra'?'📌 regra da planilha':'📌 regra padrão'}</span>`:`<label class="bk-chk"><input type="checkbox" data-bk="lembrar" data-i="${i}"${nv.lembrar?' checked':''}> lembrar para este histórico</label>`}${l.cands&&l.cands.length?` · <a class="link" data-act="bkSug" data-i="${i}">casar com título</a>`:` · <a class="link" data-act="bkAmplo" data-i="${i}">casar com título</a>`} · <a class="link" data-act="bkIgn" data-i="${i}">ignorar</a></span></div>`; }
+    else if(l.st==='ign') corpo=`<div class="mut">não entra no Financeiro${l.motivo?' · '+esc(l.motivo):''} · <a class="link" data-act="bkDesfazer" data-i="${i}">desfazer</a></div>`;
+    return `<div class="bk-row st-${l.st}${bancoPronta(l)?' pronta':''}"><div class="bk-main"><div class="bk-top"><span class="nfe-chip st-${l.st==='auto'?'auto':l.st==='sug'?'sug':l.st==='novo'?'novo':l.st==='ign'?'ignorar':'ok'}">${st[1]} ${st[0]}</span><b class="${neg?'bk-neg':'bk-pos'}">${neg?'−':'+'} ${brl(Math.abs(l.valor))}</b><span class="mut">${_dtBRc(l.data)}${l.doc?' · doc '+esc(l.doc):''}</span></div>
+      <div class="bk-hist">${esc(l.historico||'—')}</div>${corpo}</div></div>`; }).join('');
+  return `<div class="panel bk-panel"><div class="panel-head"><h2>🔁 ${esc(B.arquivo||'extrato')}</h2><span class="sub">${esc(BANCO_NOMES[B.banco]||(B.banco?'banco '+B.banco:'CSV'))}${B.agencia?' · ag. '+esc(B.agencia):''}${B.acctid?' · conta '+esc(B.acctid):''} · ${B.de?_dtBRc(B.de):'?'} a ${B.ate?_dtBRc(B.ate):'?'} · ${B.linhas.length} lançamento(s)</span>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="bkLimpar">✕ Fechar</button>${imp}</div>
+    <div class="toolbar" style="padding:0 14px"><label class="faz-wrap"><span>Conta do app</span>${sel}</label>${B.conta&&!B.produtor?'<span class="mut">conta sem produtor: casa com títulos de todos</span>':''}</div>
+    ${B.conta?'':'<p class="rel-ap-aviso" style="margin:8px 14px 0">Não reconheci a conta pelo arquivo. Escolha acima (e, em Cadastros → Contas, preencha o <b>número do banco</b> para reconhecer da próxima vez).</p>'}
+    <div class="rel-uso-kpis" style="margin:10px 14px 0"><span><small>🟢 Automáticos</small>${n.auto}</span><span><small>🟡 Escolher</small>${n.sug}</span><span><small>⚪ Avulsos</small>${n.novo}${semCat?` <small class="mut" style="text-transform:none">(${semCat} sem categoria)</small>`:''}</span><span><small>⏭ Ignorar</small>${n.ign}</span><span><small>✔️ Já feitos</small>${n.ja}</span>
+      ${B.saldoBanco!=null?`<span><small>Saldo no banco${B.dataSaldo?' em '+_dtBRc(B.dataSaldo):''}</small>${brl0(B.saldoBanco)}</span>`:''}${saldoApp!=null?`<span><small>Saldo no app</small>${brl0(saldoApp)}</span>`:''}${dif!=null?`<span class="${Math.abs(dif)>0.5?'bk-dif':''}"><small>Diferença</small>${brl0(dif)}</span>`:''}</div>
+    ${B.conta&&saldoApp==null?'<p class="mut" style="font-size:11px;margin:6px 14px 0">Para comparar o saldo, informe o <b>saldo inicial com data</b> desta conta em Cadastros → Contas.</p>':''}
+    <div class="bk-bar"><button class="btn btn-primary" data-act="bkConfirmar"${prontas&&B.conta?'':' disabled'}>✅ Confirmar ${prontas} lançamento(s)</button>${semCat?`<button class="btn btn-outline btn-sm" data-act="bkIa" title="pede à IA da planilha uma categoria para os avulsos sem categoria">🤖 Sugerir categorias (${semCat})</button>`:''}<span class="mut">só o que está pronto entra; o resto fica aqui para você decidir</span></div>
+    <div class="bk-list">${cards}</div></div>`; }
+// ---- ações ----
+function bancoCampo(el){ const B=BANCO; if(!B) return; const i=+el.dataset.i, l=B.linhas[i]; if(!l) return; const f=el.dataset.bk; l.manual=true;
+  if(f==='titulo'){ if(el.value==='__novo'){ l.st='novo'; l.titulo=''; const rg=bancoRegraDe(l); l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', fonte:rg?rg.fonte:''}; } else { l.titulo=el.value; l.st=l.titulo?(l.st==='auto'?'auto':'sug'):'sug'; } route({keepScroll:true}); return; }
+  l.novo=l.novo||{}; if(f==='cat'){ l.novo.categoria=el.value; l.novo.fonte=''; if(l.novo.lembrar==null) l.novo.lembrar=true; route({keepScroll:true}); } else if(f==='nome'){ l.novo.nome=el.value; } else if(f==='lembrar'){ l.novo.lembrar=el.checked; } }
+function bancoAcao(act, i){ const B=BANCO; if(!B) return; const l=B.linhas[i]; if(!l) return; l.manual=true;
+  if(act==='bkIgn'){ l.prev=l.st; l.st='ign'; l.motivo='marcado por você'; }
+  else if(act==='bkDesfazer'){ l.manual=false; bancoClassificar(); }
+  else if(act==='bkTrocar'){ l.st='sug'; l.amplo=true; }
+  else if(act==='bkAmplo'){ l.st='sug'; l.amplo=true; l.titulo=''; }
+  else if(act==='bkSug'){ l.st='sug'; l.titulo=''; }
+  route({keepScroll:true}); }
+function bancoRegraContem(l){ const h=_bkNorm(l.historico), tk=bancoTokens(l.historico); if(!tk.length) return ''; const a=h.indexOf(tk[0]); let b=a+tk[0].length; if(tk[1]){ const j=h.indexOf(tk[1], b); if(j>=0 && j-b<=12) b=j+tk[1].length; } return h.slice(a,b).trim().slice(0,60); }   // trecho contíguo do histórico (ex.: "JOAO DA SILVA")
+async function bancoConfirmar(){ const B=BANCO; if(!B||!B.conta){ toast('Escolha a conta do app'); return; } const url=syncUrl(); if(!url){ toast('Configure a sincronização'); return; }
+  const L=B.linhas.filter(bancoPronta); if(!L.length) return;
+  const itens=L.map(l=>{ const it={fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}; if(l.st==='ign') it.ignorar=true; else if(l.titulo) it.titulo=l.titulo; else it.novo={tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||'', imovel:bancoImovelDe(B.produtor)}; return it; });
+  const regras=[]; L.forEach(l=>{ if(l.st==='novo'&&l.novo&&l.novo.lembrar&&l.novo.categoria){ const c=bancoRegraContem(l); if(c && !regras.some(r=>r.contem===c)) regras.push({contem:c, tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||''}); } });
+  const nNovos=itens.filter(i=>i.novo).length; if(!ask(`Confirmar ${L.length} lançamento(s)?\n• ${itens.filter(i=>i.titulo).length} baixa(s) em títulos\n• ${nNovos} lançamento(s) avulso(s)\n• ${itens.filter(i=>i.ignorar).length} ignorado(s)${regras.length?`\n• ${regras.length} regra(s) nova(s) de categoria`:''}`)) return;
+  toast('Gravando conciliação…');
+  try{ const r=await syncPost(url, JSON.stringify({__concilia:{conta:B.conta, produtor:B.produtor||'', itens, regras}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
+    const F=FIN(), hoje=_hojeISO(); DATA.financeiro.extratoBanco=F.extratoBanco||[];
+    L.forEach(l=>{ const id=B.conta+'|'+l.fitid; const st=l.st==='ign'?'IGNORADO':'CONCILIADO'; const e=DATA.financeiro.extratoBanco.find(x=>x.id===id); if(e) Object.assign(e,{status:st, titulo:l.titulo||''}); else DATA.financeiro.extratoBanco.push({id, conta:B.conta, produtor:B.produtor||'', data:l.data, valor:l.valor, historico:l.historico, doc:l.doc, titulo:l.titulo||'', status:st}); l.st='ja'; l.ja={status:st, data:hoje}; });
+    regras.forEach(r=>{ DATA.financeiro.regrasBanco=(F.regrasBanco||[]).filter(x=>x.contem!==r.contem).concat([r]); });
+    const c=r.concilia||{}; route({keepScroll:true}); toast(`Conciliado: ${c.baixas||0} baixa(s) · ${c.novos||0} avulso(s) · ${c.ignorados||0} ignorado(s)${c.pulados?` · ${c.pulados} já estavam`:''}`);
+    setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 800); }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
+function bancoImovelDe(cpf){ const ims=FIN().imoveis.filter(i=>_finAtivo(i.ativo)&&(!cpf||i.produtor===cpf)); if(ims.length===1) return ims[0].codigo; const p=FIN().produtores.find(x=>x.cpf===cpf); return (p&&p.imovelPadrao)||''; }
+async function bancoIa(){ const B=BANCO; if(!B) return; const url=syncUrl(); if(!url) return; const alvo=B.linhas.map((l,i)=>({l,i})).filter(x=>x.l.st==='novo'&&!(x.l.novo&&x.l.novo.categoria)); if(!alvo.length) return;
+  toast('🤖 Pedindo categorias à IA…');
+  try{ const r=await syncPost(url, JSON.stringify({__bancoIa:{itens:alvo.map(x=>({historico:x.l.historico, valor:x.l.valor}))}})); if(!r||r.semChave){ toast('IA desligada: coloque a ANTHROPIC_KEY nas Propriedades do Script'); return; }
+    let n=0; (r.sug||[]).forEach(s=>{ const x=alvo[s.i]; if(!x||!s.categoria) return; if(s.categoria==='Transferência'){ x.l.st='ign'; x.l.motivo='IA: transferência própria'; x.l.manual=true; n++; return; } x.l.novo={categoria:s.categoria, nome:s.nome||'', fonte:'', lembrar:true, ia:+s.confianca||0}; x.l.manual=true; n++; });
+    route({keepScroll:true}); toast(n?`🤖 ${n} categoria(s) sugerida(s) — confira antes de confirmar`:'IA: '+((r.msgs&&r.msgs[0])||'sem sugestões')); }
+  catch(e){ toast('IA: '+e.message); } }
 V.fluxocaixa=function(){ location.replace('#/financeiro'); return ''; };   // tela antiga (caderno local) aposentada na v273
 async function finPost(titulos, msgOk){ const url=syncUrl(); if(!url){ toast('Configure a sincronização primeiro'); return false; }
   try{ const r=await syncPost(url, JSON.stringify({__titulo:{titulos}}));
@@ -11921,6 +12095,9 @@ document.addEventListener('change',e=>{
   if(e.target.id==='rec-canhoto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ REC.canhoto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
   if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
+  if(e.target.id==='banco-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) bancoImportarArquivo(f); return; }   // v291
+  if(e.target.id==='bk-conta' && BANCO){ const c=FIN().contas.find(x=>x.codigo===e.target.value); BANCO.conta=c?c.codigo:''; BANCO.produtor=c?c.produtor:''; BANCO.linhas.forEach(l=>{ l.manual=false; }); bancoClassificar(); route({keepScroll:true}); return; }
+  if(e.target.dataset && e.target.dataset.bk!=null && BANCO){ bancoCampo(e.target); return; }
   if(e.target.dataset && e.target.dataset.nff!=null && nfeImport){ const f=e.target.dataset.nff; nfeImport[f]=(f==='lembrar')?e.target.checked:e.target.value; if(f==='lembrar'||f==='ref') recRerender(); return; }
   if(e.target.dataset && e.target.dataset.xf!=null && EXP_REC.form){ EXP_REC.form[e.target.dataset.xf]=e.target.value; return; }   // v278: formulário do experimento
   if(e.target.dataset && e.target.dataset.nfv!=null && nfeImport && nfeImport.venda){ const V=nfeImport.venda, f=e.target.dataset.nfv;   // v277: conferência de venda
@@ -12344,6 +12521,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='finSalvar'){ finSalvar(); }
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
+    else if(a.act==='bkConfirmar'){ bancoConfirmar(); } else if(a.act==='bkIa'){ bancoIa(); } else if(a.act==='bkLimpar'){ BANCO=null; route(); }
+    else if(/^bk(Ign|Desfazer|Trocar|Amplo|Sug)$/.test(a.act)){ bancoAcao(a.act, +a.i); }
     else if(a.act==='finBaixaSalvar'){ finBaixaSalvar(); }
     else if(a.act==='finBaixaCancelar'){ finBaixa=null; route({keepScroll:true}); }
     else if(a.act==='finBxToggle'){ FIN_UI.open=FIN_UI.open||{}; FIN_UI.open[a.id]=!FIN_UI.open[a.id]; route({keepScroll:true}); }

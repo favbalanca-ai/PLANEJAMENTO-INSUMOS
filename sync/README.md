@@ -113,6 +113,20 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Conciliação bancária (v291 — Fase B)
+
+- Payload novo **`__concilia`** `{ conta, produtor, itens:[{ fitid, data, valor, historico, doc, titulo? | novo?:{tipo,categoria,participanteNome,imovel} | ignorar?, refazer? }], regras:[{contem,tipo,categoria,participanteNome}] }`
+  → `conciliaGrava_`. Ids **determinísticos** (conta + id da linha no banco): título avulso `bk:<conta>|<fitid>`, baixa
+  `bb:<conta>|<fitid>`; reenviar o mesmo extrato não duplica (linha já CONCILIADA é pulada, salvo `refazer`). Títulos
+  avulsos nascem com ORIGEM `banco`, DOC TIPO "Extrato bancário", vencimento = data do lançamento, e a baixa vem junto
+  (ficam PAGO pelo `finRecalcTitulos_`). Nada muda nas baixas de hoje: só a coluna nova **BANCO ID** na aba BAIXAS.
+- Abas novas (criadas quando faltam): **EXTRATO BANCO** (ID, CONTA, PRODUTOR, DATA, VALOR, HISTÓRICO, DOC, TÍTULO,
+  STATUS CONCILIADO/IGNORADO/PENDENTE, BAIXA, IMPORTADO EM, QUEM) e **DE-PARA BANCO** (CONTÉM, TIPO, CATEGORIA,
+  PARTICIPANTE): regras "histórico contém X → categoria". `readFinanceiro` devolve `extratoBanco` (180 dias) e
+  `regrasBanco`.
+- `__bancoIa` `{itens:[{historico,valor}]}` → `bancoIa_`: uma chamada ao modelo (mesma `ANTHROPIC_KEY` da Fase A) com
+  categoria + nome da contraparte por item; sem chave devolve `semChave`. Não grava nada (só sugestão para o app).
+
 ## Classificação automática das notas com IA (v290 — Fase A)
 
 - **Ligar:** no editor do Apps Script → ⚙️ Configurações do projeto → **Propriedades do script** → adicionar

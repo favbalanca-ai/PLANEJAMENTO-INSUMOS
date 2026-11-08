@@ -71,6 +71,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Conciliação bancária — Banco do Brasil e Sicoob (v291 — Fase B do Administrativo)** — Financeiro ganhou a aba
+  **🔁 Banco**: importe o extrato em **OFX** (ou CSV) e o app reconhece a conta pelo número do banco (001 BB, 756
+  Sicoob) + conta cadastrada. Cada lançamento vira um cartão: 🟢 *casou com um título* (mesmo valor, vencimento até
+  10 dias, mesmo produtor; débito → a pagar, crédito → a receber), 🟡 *escolha o título* (mais de um candidato: nunca
+  grava sozinho), ⚪ *lançamento avulso* (sem título: categoria vem das regras da planilha, das regras padrão — tarifa,
+  energia, folha, impostos, combustível… — ou do botão 🤖 Sugerir categorias), ⏭ *ignorar* (aplicações e transferências
+  entre contas próprias) e ✔️ *já conciliado* (a linha já entrou antes: nunca duplica). **Confirmar** manda tudo de uma
+  vez: baixas nos títulos casados e título pago + baixa para os avulsos; o Extrato por conta, o Livro Caixa e o LCDPR
+  já enxergam. Mostra **saldo no banco × saldo no app** e a diferença (precisa do saldo inicial com data em Cadastros →
+  Contas). Funções: `ofxParse`, `csvBancoParse`, `bancoContaDe`, `bancoCands`, `bancoRegraDe`, `bancoClassificar`,
+  `finBancoHtml`, `bancoConfirmar` (payload `__concilia`), `bancoIa` (`__bancoIa`).
 - **Caixa de entrada "Notas" com classificação automática por IA (v290 — Fase A do Administrativo)** — o menu
   "Compras" virou **📥 Notas**: cada nota que chega na pasta do Drive aparece como um cartão já classificado pela
   planilha (regras + IA, modelo Claude no Apps Script). Cartão **verde** = a IA reconheceu todos os itens (produto e
