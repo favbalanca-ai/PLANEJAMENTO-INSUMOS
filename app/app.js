@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-291';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-292';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2894,7 +2894,7 @@ const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Par
 const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
 const FIN_SIT={vencido:['Vencido','neg'], d7:['Vence em 7 dias','warn'], d30:['Vence em 30 dias',''], aberto:['Aberto',''], pago:['Pago','ok'], cancelado:['Cancelado','off']};
 let FIN_UI={st:'aberto', prod:'', q:'', mes:''}, finDraft=null, CAD_EDIT=null;
-function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}, extratoBanco:f.extratoBanco||[], regrasBanco:f.regrasBanco||[]}; }   // v291: conciliação bancária
+function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}, extratoBanco:f.extratoBanco||[], regrasBanco:f.regrasBanco||[], fechamentos:f.fechamentos||[]}; }   // v291: conciliação bancária · v292: fechamentos
 // ---- baixas (v274): abatido = valor pago − juros + desconto; saldo do título = valor − Σ abatidos ----
 function finBaixasDe(id){ return FIN().baixas.filter(b=>b.titulo===id).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))); }
 const finAbatido=b=>(+b.valorPago||0)-(+b.juros||0)+(+b.desconto||0);
@@ -2950,7 +2950,7 @@ V.financeiro=function(){
   if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
   const kpis=`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
     <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
@@ -2961,6 +2961,7 @@ V.financeiro=function(){
   if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
   if(FIN_UI.view==='vendas') return kpis+seg+finVendasHtml();   // v279: contratos e cargas da balança
   if(FIN_UI.view==='banco') return kpis+seg+finBancoHtml();   // v291: conciliação bancária
+  if(FIN_UI.view==='fechamento') return kpis+seg+finFechamentoHtml();   // v292: fechamento mensal
   const L=finLista(), hj=_hojeISO();
   const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
   const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
@@ -3224,6 +3225,106 @@ async function bancoIa(){ const B=BANCO; if(!B) return; const url=syncUrl(); if(
     let n=0; (r.sug||[]).forEach(s=>{ const x=alvo[s.i]; if(!x||!s.categoria) return; if(s.categoria==='Transferência'){ x.l.st='ign'; x.l.motivo='IA: transferência própria'; x.l.manual=true; n++; return; } x.l.novo={categoria:s.categoria, nome:s.nome||'', fonte:'', lembrar:true, ia:+s.confianca||0}; x.l.manual=true; n++; });
     route({keepScroll:true}); toast(n?`🤖 ${n} categoria(s) sugerida(s) — confira antes de confirmar`:'IA: '+((r.msgs&&r.msgs[0])||'sem sugestões')); }
   catch(e){ toast('IA: '+e.message); } }
+// ===== v292 (Fase C): FECHAMENTO MENSAL — checklist, resumo do mês, documentos (PDF, CSV, LCDPR) e envio ao contador =====
+let FECH_UI={cpf:'', mes:'', docs:null, para:null, cc:null};
+function fechPeriodo(mes){ const [a,m]=mes.split('-').map(Number); const fim=new Date(a,m,0).getDate(); const pa=m===1?a-1:a, pm=m===1?12:m-1, pfim=new Date(pa,pm,0).getDate();
+  return {ano:String(a), mm:String(m).padStart(2,'0'), ini:`${a}-${String(m).padStart(2,'0')}-01`, fim:`${a}-${String(m).padStart(2,'0')}-${String(fim).padStart(2,'0')}`, antIni:`${pa}-${String(pm).padStart(2,'0')}-01`, antFim:`${pa}-${String(pm).padStart(2,'0')}-${String(pfim).padStart(2,'0')}`, ant:`${pa}-${String(pm).padStart(2,'0')}`, nome:`${_MESN[m-1]}/${a}`}; }
+const fechEnviado=f=>!!(f&&f.enviadoEm&&!/^só salvo/.test(String(f.enviadoEm)));   // 'só salvo' não conta como mês fechado
+function fechMesAtual(){ const d=new Date(); d.setDate(0); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }   // mês passado (o que se fecha)
+// checklist: cada item {ok, nivel:'erro'|'aviso', txt, go}
+function fechChecklist(cpf, mes){ const F=FIN(), P=fechPeriodo(mes), L=[], add=(ok,nivel,txt,go)=>L.push({ok,nivel,txt,go}); const R=(DATA&&DATA.nfe_resumo)||{};
+  add(!(R.aClassificar>0),'aviso',R.aClassificar>0?`${R.aClassificar} nota(s) na caixa de entrada sem classificar`:'Caixa de entrada de notas vazia','#/entradas');
+  add(!(R.emTransito>0),'aviso',R.emTransito>0?`${R.emTransito} nota(s) em trânsito ainda não recebida(s)`:'Nenhuma nota em trânsito','#/receber');
+  const meus=F.titulos.filter(t=>t.produtor===cpf&&finSit(t)!=='cancelado');
+  const venc=meus.filter(t=>_finAberto(finSit(t))&&String(t.vencimento||'').slice(0,10)<=P.fim), vp=venc.filter(t=>String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER'), vr=venc.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER');
+  add(!vp.length,'aviso',vp.length?`${vp.length} título(s) a pagar vencido(s) até ${_dtBRc(P.fim)} sem baixa (${brl0(vp.reduce((s,t)=>s+finSaldo(t),0))})`:'Nenhum título a pagar vencido sem baixa','#/financeiro');
+  add(!vr.length,'aviso',vr.length?`${vr.length} título(s) a receber vencido(s) até ${_dtBRc(P.fim)} sem recebimento (${brl0(vr.reduce((s,t)=>s+finSaldo(t),0))})`:'Nenhum recebimento vencido em aberto','#/financeiro');
+  const semConta=meus.filter(t=>finSemConta(t)&&String(t.dataPgto||'').slice(0,7)===mes);
+  add(!semConta.length,'erro',semConta.length?`${semConta.length} título(s) marcado(s) como pago(s) sem conta no mês — use "Completar baixa"`:'Todo pagamento do mês tem conta','#/financeiro');
+  const contas=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)&&!/caixa/i.test(c.tipo||''));
+  contas.forEach(c=>{ const linhas=(F.extratoBanco||[]).filter(x=>x.conta===c.codigo); const ult=linhas.filter(x=>x.status!=='PENDENTE').map(x=>String(x.data).slice(0,10)).sort().pop()||''; const pend=linhas.filter(x=>x.status==='PENDENTE'&&String(x.data).slice(0,7)===mes).length;
+    add(ult>=P.fim&&!pend,'aviso',ult>=P.fim?(pend?`${finContaNome(c.codigo)}: ${pend} lançamento(s) do extrato ainda pendente(s)`:`${finContaNome(c.codigo)}: extrato conciliado até ${_dtBRc(ult)}`):`${finContaNome(c.codigo)}: extrato ${ult?'conciliado só até '+_dtBRc(ult):'ainda não importado'} — importe até ${_dtBRc(P.fim)}`,'#/financeiro'); });
+  const d=lcdprDados(cpf, P.ano, P.fim); const erros=[...new Set(d.pend.filter(x=>x.nivel==='erro').map(x=>x.msg))];
+  if(erros.length) erros.slice(0,6).forEach(m=>add(false,'erro','LCDPR: '+m,'#/cadastros')); else add(true,'erro',`LCDPR de ${P.ano} até ${_dtBRc(P.fim)} sem pendências (${d.lanc.length} lançamento(s))`,'#/financeiro');
+  if(erros.length>6) add(false,'erro',`LCDPR: mais ${erros.length-6} pendência(s) — veja o Livro Caixa`,'#/financeiro');
+  const antTem=finMovimentos().some(m=>m.t.produtor===cpf&&m.data>=P.antIni&&m.data<=P.antFim), antFech=(F.fechamentos||[]).find(f=>f.produtor===cpf&&f.mes===P.ant);
+  if(antTem) add(fechEnviado(antFech),'aviso',fechEnviado(antFech)?`Mês anterior (${P.ant}) fechado em ${esc(String(antFech.enviadoEm).slice(0,16))}`:`Mês anterior (${P.ant}) ainda não foi fechado/enviado`,'');
+  return L; }
+// resumo do mês em regime de caixa (baixas), com comparação ao mês anterior
+function fechResumo(cpf, mes){ const F=FIN(), P=fechPeriodo(mes), movs=finMovimentos().filter(m=>m.t.produtor===cpf);
+  const soma=(ini,fim)=>{ const o={ent:{},sai:{},tEnt:0,tSai:0,n:0}; movs.filter(m=>m.data>=ini&&m.data<=fim).forEach(m=>{ const c=m.t.categoria||'Outros'; if(m.receber){ o.ent[c]=(o.ent[c]||0)+m.ent; o.tEnt+=m.ent; } else { o.sai[c]=(o.sai[c]||0)+m.sai; o.tSai+=m.sai; } o.n++; }); return o; };
+  const at=soma(P.ini,P.fim), an=soma(P.antIni,P.antFim);
+  const cats=k=>[...new Set(Object.keys(at[k]).concat(Object.keys(an[k])))].sort((a,b)=>(at[k][b]||0)-(at[k][a]||0)).map(c=>({c, v:at[k][c]||0, va:an[k][c]||0}));
+  const contas=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)).map(c=>({c, saldo:bancoSaldoApp(c.codigo,P.fim)}));
+  const abertos=F.titulos.filter(t=>t.produtor===cpf&&_finAberto(finSit(t))), aPagar=abertos.filter(t=>String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER').reduce((s,t)=>s+finSaldo(t),0), aReceber=abertos.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER').reduce((s,t)=>s+finSaldo(t),0);
+  const compras=F.titulos.filter(t=>t.produtor===cpf&&String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER'&&/NF-?e|^55/i.test(t.docTipo||'')&&String(t.emissao||'').slice(0,7)===mes&&finSit(t)!=='cancelado'), nfs=new Set(compras.map(t=>t.chave||t.docNum)).size, vCompras=compras.reduce((s,t)=>s+(+t.valor||0),0);
+  const vendas=((DATA&&DATA.vendas)||[]).filter(v=>(!v.produtor||v.produtor===cpf)&&String(v.data||'').slice(0,7)===mes), vVendas=vendas.reduce((s,v)=>s+(+v.valor||0),0);
+  return {P, at, an, entCats:cats('ent'), saiCats:cats('sai'), contas, aPagar, aReceber, nfs, vCompras, vendas:vendas.length, vVendas, movs:movs.filter(m=>m.data>=P.ini&&m.data<=P.fim).sort((a,b)=>a.data.localeCompare(b.data))}; }
+const _fechVar=(v,va)=>va?`${v>=va?'+':''}${Math.round((v-va)/va*100)}%`:(v?'novo':'—');
+function finFechamentoHtml(){ const F=FIN(), prods=finProdutores(); if(!FECH_UI.cpf&&prods.length) FECH_UI.cpf=prods[0].cpf; if(!FECH_UI.mes) FECH_UI.mes=fechMesAtual();
+  const cpf=FECH_UI.cpf, mes=FECH_UI.mes, Pd=F.produtores.find(p=>p.cpf===cpf), C=F.contador||{};
+  const top=`<div class="toolbar fin-ext-top"><label class="faz-wrap"><span>Produtor</span><select class="sel" id="fech-prod">${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===cpf?' selected':''}>${esc(p.nome)}</option>`).join('')||'<option value="">— cadastre —</option>'}</select></label>
+      <label class="faz-wrap"><span>Mês</span><input type="month" class="cell" id="fech-mes" value="${esc(mes)}"></label><div class="spacer"></div></div>`;
+  if(!Pd) return top+`<p class="mut" style="padding:14px">Cadastre o produtor em <a class="link" data-go="#/cadastros">Cadastros</a>.</p>`;
+  const P=fechPeriodo(mes), L=fechChecklist(cpf,mes), R=fechResumo(cpf,mes), fe=(F.fechamentos||[]).find(f=>f.produtor===cpf&&f.mes===mes), nErr=L.filter(x=>!x.ok&&x.nivel==='erro').length, nAv=L.filter(x=>!x.ok&&x.nivel==='aviso').length;
+  if(FECH_UI.para==null) FECH_UI.para=Pd.emailContador||C.email||''; if(FECH_UI.cc==null) FECH_UI.cc=Pd.email||'';
+  const st=fechEnviado(fe)?`<div class="nfe-aviso info">📨 <b>Mês enviado</b> em ${esc(String(fe.enviadoEm).slice(0,16))} por ${esc(fe.quem||'')} para ${esc(fe.para||'')}${fe.pasta?` · <a class="link" href="${esc(fe.pasta)}" target="_blank" rel="noopener">pasta no Drive</a>`:''}. Pode gerar e reenviar: os arquivos do mês são substituídos.</div>`:(fe&&fe.enviadoEm?`<div class="nfe-aviso warn">💾 Arquivos salvos no Drive (${esc(String(fe.enviadoEm).replace(/^só salvo /,'').slice(0,16))}) — <b>ainda não enviado</b> ao contador.${fe.pasta?` <a class="link" href="${esc(fe.pasta)}" target="_blank" rel="noopener">pasta no Drive</a>`:''}</div>`:'');
+  const check=`<div class="panel"><div class="panel-head"><h2>${nErr?'⛔':nAv?'⚠️':'✅'} Checklist de ${P.nome}</h2><span class="sub">${nErr?`${nErr} item(ns) impedem o LCDPR`:'nada impede o LCDPR'}${nAv?` · ${nAv} aviso(s)`:''}</span></div>
+    <ul class="fech-list">${L.map(x=>`<li class="${x.ok?'ok':x.nivel}">${x.ok?'✅':x.nivel==='erro'?'⛔':'⚠️'} ${esc(x.txt)}${!x.ok&&x.go?` <a class="link" data-go="${esc(x.go)}">resolver</a>`:''}</li>`).join('')}</ul></div>`;
+  const tr=(x)=>`<tr><td class="c-full">${esc(x.c)}</td><td class="num" data-th="Mês">${brl0(x.v)}</td><td class="num mut" data-th="Mês anterior">${brl0(x.va)}</td><td class="num" data-th="Variação">${_fechVar(x.v,x.va)}</td></tr>`;
+  const resumo=`<div class="panel"><div class="panel-head"><h2>Resumo de ${P.nome}</h2><span class="sub">regime de caixa: o que entrou e saiu das contas (baixas) · ${R.at.n} lançamento(s)</span></div>
+    <div class="kpi-grid" style="padding:0 14px"><div class="kpi"><div class="k-label">Entradas</div><div class="k-value" style="color:var(--green,#2e7d32)">${brl0(R.at.tEnt)}</div><div class="k-sub">mês anterior ${brl0(R.an.tEnt)} · ${_fechVar(R.at.tEnt,R.an.tEnt)}</div></div>
+      <div class="kpi"><div class="k-label">Saídas</div><div class="k-value" style="color:var(--red)">${brl0(R.at.tSai)}</div><div class="k-sub">mês anterior ${brl0(R.an.tSai)} · ${_fechVar(R.at.tSai,R.an.tSai)}</div></div>
+      <div class="kpi accent"><div class="k-label">Resultado do mês</div><div class="k-value">${brl0(R.at.tEnt-R.at.tSai)}</div><div class="k-sub">a pagar em aberto ${brl0(R.aPagar)} · a receber ${brl0(R.aReceber)}</div></div>
+      <div class="kpi"><div class="k-label">Notas do mês</div><div class="k-value">${brl0(R.vCompras)}</div><div class="k-sub">${R.nfs} nota(s) de compra · vendas faturadas ${brl0(R.vVendas)} (${R.vendas})</div></div></div>
+    <h3 class="fin-h3">Saídas por categoria</h3>${R.saiCats.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Categoria</th><th class="num">Mês</th><th class="num">Anterior</th><th class="num">Var.</th></tr></thead><tbody>${R.saiCats.map(tr).join('')}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 8px">Nenhuma saída no mês.</p>'}
+    <h3 class="fin-h3">Entradas por categoria</h3>${R.entCats.length?`<div class="table-wrap"><table class="fin-t cards-sm"><thead><tr><th>Categoria</th><th class="num">Mês</th><th class="num">Anterior</th><th class="num">Var.</th></tr></thead><tbody>${R.entCats.map(tr).join('')}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 8px">Nenhuma entrada no mês.</p>'}
+    <h3 class="fin-h3">Saldo das contas em ${_dtBRc(P.fim)}</h3><div class="rel-uso-kpis" style="margin:0 14px 12px">${R.contas.map(x=>`<span><small>${esc(finContaNome(x.c.codigo))}</small>${x.saldo==null?'<span class="mut">sem saldo inicial</span>':brl0(x.saldo)}</span>`).join('')||'<span class="mut">sem contas</span>'}</div></div>`;
+  const D=FECH_UI.docs&&FECH_UI.docs.cpf===cpf&&FECH_UI.docs.mes===mes?FECH_UI.docs:null;
+  const docs=`<div class="panel"><div class="panel-head"><h2>📎 Documentos e envio</h2><span class="sub">relatório em PDF, lançamentos do mês em CSV e LCDPR de ${P.ano} até ${_dtBRc(P.fim)}</span><div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="fechGerar">📄 ${D?'Gerar de novo':'Gerar documentos'}</button></div>
+    ${D?`<div class="fech-docs"><button class="btn btn-outline btn-sm" data-act="fechBaixar" data-doc="pdf">⬇ ${esc(D.pdf.nome)}</button><button class="btn btn-outline btn-sm" data-act="fechBaixar" data-doc="csv">⬇ ${esc(D.csv.nome)}</button>${D.txt?`<button class="btn btn-outline btn-sm" data-act="fechBaixar" data-doc="txt">⬇ ${esc(D.txt.nome)}</button>`:'<span class="mut">LCDPR não gerado: há pendências ⛔ no checklist</span>'}</div>
+      <div class="fech-envio"><label>Para (contador)<input class="txt" id="fech-para" value="${esc(FECH_UI.para)}" placeholder="email@contador.com"></label><label>Cópia<input class="txt" id="fech-cc" value="${esc(FECH_UI.cc)}" placeholder="opcional"></label>
+        <button class="btn btn-primary" data-act="fechEnviar"${syncUrl()?'':' disabled'}>📧 Enviar ao contador</button><button class="btn btn-outline btn-sm" data-act="fechSalvar" title="guarda os arquivos na pasta do Drive sem mandar e-mail">💾 Só salvar no Drive</button></div>
+      <details class="fech-corpo"><summary>Texto do e-mail</summary><pre>${esc(fechTextoEmail(Pd,R,L))}</pre></details>`:`<p class="mut" style="padding:0 14px 12px">Gere os documentos para baixar ou enviar. O envio sai pela planilha (Gmail da conta dela) e guarda cópia em <b>Financeiro/Fechamentos/${esc(mes)}</b> no Drive.</p>`}</div>`;
+  return top+st+check+resumo+docs; }
+function fechTextoEmail(Pd,R,L){ const P=R.P, pend=L.filter(x=>!x.ok); const cat=(a)=>a.slice(0,8).map(x=>`  - ${x.c}: ${brl(x.v)}`).join('\n');
+  return `Olá,\n\nSegue o fechamento de ${P.nome} do produtor ${Pd.nome} (CPF ${nfeCnpjFmt(Pd.cpf)}).\n\nEntradas: ${brl(R.at.tEnt)}\nSaídas: ${brl(R.at.tSai)}\nResultado do mês: ${brl(R.at.tEnt-R.at.tSai)}\nA pagar em aberto: ${brl(R.aPagar)} · A receber: ${brl(R.aReceber)}\nNotas de compra do mês: ${R.nfs} (${brl(R.vCompras)}) · Vendas faturadas: ${brl(R.vVendas)}\n\nSaídas por categoria:\n${cat(R.saiCats)||'  (nenhuma)'}\nEntradas por categoria:\n${cat(R.entCats)||'  (nenhuma)'}\n\nSaldo das contas em ${_dtBRc(P.fim)}:\n${R.contas.map(x=>`  - ${finContaNome(x.c.codigo)}: ${x.saldo==null?'sem saldo inicial cadastrado':brl(x.saldo)}`).join('\n')||'  (nenhuma)'}\n\n${pend.length?`Pendências abertas (${pend.length}):\n${pend.map(x=>`  - ${x.txt}`).join('\n')}`:'Sem pendências no checklist.'}\n\nAnexos: relatório (PDF), lançamentos do mês (CSV) e arquivo do LCDPR de ${P.ano} até ${_dtBRc(P.fim)} (quando sem pendências).\n\nGerado pelo app Planejamento da Fazenda.`; }
+function fechRelatorioHtml(Pd,R,L,d){ const P=R.P, tr=x=>`<tr><td>${esc(x.c)}</td><td style="text-align:right">${brl(x.v)}</td><td style="text-align:right">${brl(x.va)}</td><td style="text-align:right">${_fechVar(x.v,x.va)}</td></tr>`;
+  const tab=(cab,rows)=>`<table style="width:100%;border-collapse:collapse;font-size:11px;margin:4px 0 10px"><thead><tr>${cab.map((c,i)=>`<th style="text-align:${i?'right':'left'};border-bottom:1px solid #000;padding:3px">${c}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+  const lanc=R.movs.map(m=>`<tr><td style="padding:2px">${_dtBRc(m.data)}</td><td style="padding:2px">${esc(m.t.participanteNome||'—')} <span style="color:#555">${esc(String(m.t.docTipo||'').replace(/^\d\s*-\s*/,''))} ${esc(m.t.docNum||'')}${m.t.parcela?' p.'+esc(m.t.parcela):''}</span></td><td style="padding:2px">${esc(m.t.categoria||'')}</td><td style="padding:2px">${esc(finContaNome(m.b.conta))}</td><td style="text-align:right;padding:2px">${m.ent?brl(m.ent):''}</td><td style="text-align:right;padding:2px">${m.sai?brl(m.sai):''}</td></tr>`).join('');
+  return `<h1>Fechamento ${P.nome} — ${esc(Pd.nome)}</h1><div style="font-size:11px;color:#333">CPF ${esc(nfeCnpjFmt(Pd.cpf))} · período ${_dtBRc(P.ini)} a ${_dtBRc(P.fim)} · gerado em ${_dtBRc(_hojeISO())}${d&&d.lanc?` · LCDPR ${P.ano} até ${_dtBRc(P.fim)}: ${d.lanc.length} lançamento(s)${d.erros?' · <b>'+d.erros+' pendência(s)</b>':''}`:''}</div>
+    <h2 style="font-size:14px;margin:12px 0 4px">Resumo (regime de caixa)</h2>${tab(['','Mês','Mês anterior','Var.'],[{c:'Entradas',v:R.at.tEnt,va:R.an.tEnt},{c:'Saídas',v:R.at.tSai,va:R.an.tSai},{c:'Resultado',v:R.at.tEnt-R.at.tSai,va:R.an.tEnt-R.an.tSai}].map(tr).join(''))}
+    <div style="font-size:11px">A pagar em aberto: <b>${brl(R.aPagar)}</b> · A receber: <b>${brl(R.aReceber)}</b> · Notas de compra do mês: ${R.nfs} (${brl(R.vCompras)}) · Vendas faturadas: ${brl(R.vVendas)}</div>
+    <h2 style="font-size:14px;margin:12px 0 4px">Saídas por categoria</h2>${tab(['Categoria','Mês','Anterior','Var.'],R.saiCats.map(tr).join('')||'<tr><td colspan="4">nenhuma</td></tr>')}
+    <h2 style="font-size:14px;margin:12px 0 4px">Entradas por categoria</h2>${tab(['Categoria','Mês','Anterior','Var.'],R.entCats.map(tr).join('')||'<tr><td colspan="4">nenhuma</td></tr>')}
+    <h2 style="font-size:14px;margin:12px 0 4px">Saldo das contas em ${_dtBRc(P.fim)}</h2>${tab(['Conta','Saldo'],R.contas.map(x=>`<tr><td>${esc(finContaNome(x.c.codigo))}</td><td style="text-align:right">${x.saldo==null?'sem saldo inicial':brl(x.saldo)}</td></tr>`).join('')||'<tr><td colspan="2">nenhuma</td></tr>')}
+    <h2 style="font-size:14px;margin:12px 0 4px">Checklist</h2><ul style="font-size:11px;margin:0;padding-left:16px">${L.map(x=>`<li>${x.ok?'✔':x.nivel==='erro'?'✖':'!'} ${esc(x.txt)}</li>`).join('')}</ul>
+    <h2 style="font-size:14px;margin:12px 0 4px">Lançamentos do mês (${R.movs.length})</h2>${tab(['Data','Participante · documento','Categoria','Conta','Entrada','Saída'],lanc||'<tr><td colspan="6">nenhum</td></tr>')}`; }
+function fechCsv(R){ const cab=['Data','Tipo','Participante','CPF/CNPJ','Documento','Nº','Parcela','Categoria','Conta','Valor pago','Juros','Desconto','Observação'];
+  const lin=[cab.map(_usoCsvEsc).join(';')]; R.movs.forEach(m=>lin.push([_dtBRc(m.data), m.receber?'Recebimento':'Pagamento', m.t.participanteNome||'', m.t.participante||'', String(m.t.docTipo||'').replace(/^\d\s*-\s*/,''), m.t.docNum||'', m.t.parcela||'', m.t.categoria||'', finContaNome(m.b.conta), nf2.format(m.valor), nf2.format(+m.b.juros||0), nf2.format(+m.b.desconto||0), m.b.obs||''].map(_usoCsvEsc).join(';')));
+  return '﻿'+lin.join('\r\n'); }
+async function fechGerar(){ const F=FIN(), cpf=FECH_UI.cpf, mes=FECH_UI.mes, Pd=F.produtores.find(p=>p.cpf===cpf); if(!Pd||!mes) return; const P=fechPeriodo(mes), L=fechChecklist(cpf,mes), R=fechResumo(cpf,mes), d=lcdprDados(cpf,P.ano,P.fim), tag=`${lcN(cpf)}_${mes}`;
+  toast('Gerando documentos…');
+  try{ const pdfBlob=await pdfArquivo(fechRelatorioHtml(Pd,R,L,d), '');
+    FECH_UI.docs={cpf, mes, pdf:{nome:`Fechamento_${tag}.pdf`, mime:'application/pdf', blob:pdfBlob}, csv:{nome:`Lancamentos_${tag}.csv`, mime:'text/csv;charset=utf-8', texto:fechCsv(R)},
+      txt:(!d.erros&&d.lanc.length)?{nome:`LCDPR_${lcN(cpf)}_${P.ano}_ate_${P.mm}.txt`, mime:'text/plain;charset=utf-8', texto:lcdprTxt(d)}:null, resumo:{entradas:R.at.tEnt, saidas:R.at.tSai, saldo:R.at.tEnt-R.at.tSai, pendencias:L.filter(x=>!x.ok).length}};
+    route({keepScroll:true}); toast(`Documentos prontos${FECH_UI.docs.txt?'':' (LCDPR não gerado: pendências)'}`); }
+  catch(e){ toast('Não consegui gerar o PDF: '+e.message); } }
+function fechBaixar(doc){ const D=FECH_UI.docs, x=D&&D[doc]; if(!x) return; if(x.blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(x.blob); a.download=x.nome; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); } else download(x.nome, x.texto, x.mime); }
+const _b64=async x=>x.blob?await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(x.blob); }):btoa(unescape(encodeURIComponent(x.texto)));
+async function fechEnviar(soSalvar){ const D=FECH_UI.docs; if(!D){ toast('Gere os documentos primeiro'); return; } const url=syncUrl(); if(!url){ toast('Configure a sincronização'); return; }
+  const F=FIN(), Pd=F.produtores.find(p=>p.cpf===D.cpf), para=(document.getElementById('fech-para')||{}).value||FECH_UI.para||'', cc=(document.getElementById('fech-cc')||{}).value||FECH_UI.cc||''; FECH_UI.para=para; FECH_UI.cc=cc;
+  if(!soSalvar && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(para.trim())){ toast('Informe o e-mail do contador'); return; }
+  const R=fechResumo(D.cpf,D.mes), L=fechChecklist(D.cpf,D.mes), P=R.P;
+  if(!ask(soSalvar?`Salvar os documentos de ${P.nome} na pasta do Drive?`:`Enviar o fechamento de ${P.nome} para ${para}?${cc?`\nCópia: ${cc}`:''}${L.some(x=>!x.ok&&x.nivel==='erro')?'\n\nAtenção: há pendências ⛔ — o LCDPR não vai junto.':''}`)) return;
+  toast(soSalvar?'Salvando no Drive…':'Enviando…');
+  try{ const anexos=[]; for(const k of ['pdf','csv','txt']){ if(D[k]) anexos.push({nome:D[k].nome, mime:D[k].mime.split(';')[0], b64:await _b64(D[k])}); }
+    const r=await syncPost(url, JSON.stringify({__fechamento:{cpf:D.cpf, mes:D.mes, para, cc, soSalvar:!!soSalvar, assunto:`Fechamento ${P.nome} — ${Pd?Pd.nome:''}`, corpo:fechTextoEmail(Pd,R,L), anexos, resumo:D.resumo}}));
+    if(!postOk(r)){ toast('Não enviou'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
+    const fe=r.fechamento||{}, ant=(F.fechamentos||[]).find(f=>f.produtor===D.cpf&&f.mes===D.mes), jaEnv=fechEnviado(ant);
+    DATA.financeiro.fechamentos=(F.fechamentos||[]).filter(f=>!(f.produtor===D.cpf&&f.mes===D.mes)).concat([{id:D.cpf+'|'+D.mes, mes:D.mes, produtor:D.cpf, enviadoEm:fe.enviado?(fe.enviadoEm||_hojeISO()):(jaEnv?ant.enviadoEm:(soSalvar?'só salvo '+(fe.enviadoEm||''):'')), para:fe.enviado?para:(jaEnv?ant.para:para), cc:fe.enviado?cc:(jaEnv?ant.cc:cc), quem:(sessUsuario()||{}).nome||'app', pasta:fe.pasta||''}]);
+    route({keepScroll:true}); toast(fe.enviado?`📨 Enviado para ${para}`:'Arquivos salvos no Drive'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 800); }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
 V.fluxocaixa=function(){ location.replace('#/financeiro'); return ''; };   // tela antiga (caderno local) aposentada na v273
 async function finPost(titulos, msgOk){ const url=syncUrl(); if(!url){ toast('Configure a sincronização primeiro'); return false; }
   try{ const r=await syncPost(url, JSON.stringify({__titulo:{titulos}}));
@@ -3261,7 +3362,7 @@ const lcN=s=>String(s==null?'':s).replace(/\D/g,'');
 let LC_UI={cpf:'', ano:String(new Date().getFullYear()), mes:'', todos:false};
 function lcContaCod(c){ if(!c) return ''; if(/caixa/i.test(c.tipo||'')) return LCDPR_LEIAUTE.contaTransito; return lcN(c.codigo); }
 // monta tudo o que o arquivo precisa + pendências que travam a geração
-function lcdprDados(cpf, ano){
+function lcdprDados(cpf, ano, ate){   // v292: ate = 'AAAA-MM-DD' opcional (LCDPR do ano até uma data, p/ o fechamento mensal)
   const F=FIN(), P=F.produtores.find(p=>p.cpf===cpf)||null, pend=[], add=(nivel,msg,go)=>pend.push({nivel,msg,go});
   if(!P){ add('erro','Escolha o produtor.'); return {P:null,pend,lanc:[],meses:[],linhas:[]}; }
   const im=F.imoveis.filter(x=>_finAtivo(x.ativo)&&(!x.produtor||x.produtor===cpf)), ct=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)), C=F.contador||{};
@@ -3271,7 +3372,7 @@ function lcdprDados(cpf, ano){
   im.forEach(x=>{ if(!x.cadItr||!x.codMunicipio||!x.uf||!x.cep||!x.endereco) add('erro',`Imóvel ${x.nome||x.codigo}: falta CAD ITR, endereço, município (código IBGE), UF ou CEP.`,'#/cadastros'); if(!/^\d+$/.test(lcN(x.codigo))||!lcN(x.codigo)) add('erro',`Imóvel ${x.nome||x.codigo}: o código precisa ser só números (ex.: 001).`,'#/cadastros'); });
   ct.forEach(c=>{ if(lcContaCod(c)!==LCDPR_LEIAUTE.contaTransito && (!lcN(c.codigo)||!c.numBanco||!c.agencia||!c.conta)) add('erro',`Conta ${c.banco||c.codigo}: código numérico, número do banco, agência e conta são obrigatórios (registro 0050).`,'#/cadastros'); });
   // lançamentos: baixas do ano, do produtor
-  const ini=`${ano}-01-01`, fim=`${ano}-12-31`, tit={}; F.titulos.forEach(t=>tit[t.id]=t);
+  const ini=`${ano}-01-01`, fim=(_isISO(ate)&&String(ate).slice(0,4)===String(ano)&&ate<`${ano}-12-31`)?String(ate).slice(0,10):`${ano}-12-31`, tit={}; F.titulos.forEach(t=>tit[t.id]=t);
   const semBaixa=F.titulos.filter(t=>t.produtor===cpf&&finSemConta(t)&&String(t.dataPgto||'').slice(0,4)===String(ano));
   if(semBaixa.length) add('erro',`${semBaixa.length} título(s) marcados como pagos sem conta em ${ano} — use "Completar baixa" para entrarem no livro.`,'#/financeiro');
   const bx=F.baixas.filter(b=>{ const t=tit[b.titulo]; return b.compensacao!=='S'&&t&&t.produtor===cpf&&String(t.status||'').toUpperCase()!=='CANCELADO'&&b.data>=ini&&b.data<=fim; })   // compensação de adiantamento fica fora (v277)
@@ -9408,6 +9509,8 @@ document.addEventListener('change',e=>{
   if(e.target.id==='rec-canhoto'){ const fl=e.target.files&&e.target.files[0]; e.target.value=''; if(fl) recFotoReduzir(fl).then(u=>{ REC.canhoto=u; recRerender(); }).catch(er=>toast(er.message)); return; }
   if(e.target.dataset && e.target.dataset.pend!=null){ pendSalvar(e.target.dataset.id, e.target.dataset.pend, e.target.value); return; }
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
+  if(e.target.id==='fech-prod'||e.target.id==='fech-mes'){ FECH_UI[e.target.id==='fech-prod'?'cpf':'mes']=e.target.value; FECH_UI.para=null; FECH_UI.cc=null; route({keepScroll:true}); return; }   // v292
+  if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
   if(e.target.id==='banco-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) bancoImportarArquivo(f); return; }   // v291
   if(e.target.id==='bk-conta' && BANCO){ const c=FIN().contas.find(x=>x.codigo===e.target.value); BANCO.conta=c?c.codigo:''; BANCO.produtor=c?c.produtor:''; BANCO.linhas.forEach(l=>{ l.manual=false; }); bancoClassificar(); route({keepScroll:true}); return; }
   if(e.target.dataset && e.target.dataset.bk!=null && BANCO){ bancoCampo(e.target); return; }
@@ -9834,6 +9937,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='finSalvar'){ finSalvar(); }
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
+    else if(a.act==='fechGerar'){ fechGerar(); } else if(a.act==='fechBaixar'){ fechBaixar(a.doc); } else if(a.act==='fechEnviar'){ fechEnviar(false); } else if(a.act==='fechSalvar'){ fechEnviar(true); }
     else if(a.act==='bkConfirmar'){ bancoConfirmar(); } else if(a.act==='bkIa'){ bancoIa(); } else if(a.act==='bkLimpar'){ BANCO=null; route(); }
     else if(/^bk(Ign|Desfazer|Trocar|Amplo|Sug)$/.test(a.act)){ bancoAcao(a.act, +a.i); }
     else if(a.act==='finBaixaSalvar'){ finBaixaSalvar(); }

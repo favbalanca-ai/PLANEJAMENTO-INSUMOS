@@ -428,3 +428,9 @@ Todos os endpoints de NF-e exigem o **token** da aba `CONFIG NFE`.
   (FITID) + conta.
 - Próxima: **Fase C** — fechamento mensal (checklist, LCDPR, relatório) e envio ao contador.
 
+## 16. Fase C do Administrativo (08/11/2026): fechamento mensal
+- Decisões assumidas: destinatário = e-mail do contador do produtor (ou o contador geral do cadastro), cópia para o
+  e-mail do produtor; LCDPR acumulado do ano até o mês; relatório em PDF + lançamentos em CSV.
+- O checklist não bloqueia o envio (a dona decide); só o LCDPR deixa de ser gerado quando há pendência ⛔.
+- O e-mail sai da conta Google dona da planilha (Apps Script); nada de senha ou servidor de e-mail no app.
+
