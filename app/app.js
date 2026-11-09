@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-293';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-294';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6139,6 +6139,17 @@ function bulaApplyPulled(map){
 function bulaReentradaMax(itens){ let m=0; (itens||[]).forEach(it=>{ const b=bulaDe(it&&it.produto), v=b?bulaNum(b.reentrada):null; if(v!=null&&v>m) m=v; }); return m; }
 function bulaDoseAviso(it){ const b=bulaDe(it&&it.produto); if(!b) return ''; const d=+it.dose||0, mn=bulaNum(b.doseMin), mx=bulaNum(b.doseMax); if(!d||(mn==null&&mx==null)) return '';
   if((mn!=null&&d<mn-1e-9)||(mx!=null&&d>mx+1e-9)) return `fora da bula (${mn!=null?fmtDose(mn):'?'} a ${mx!=null?fmtDose(mx):'?'}${b.doseUn?' '+b.doseUn:''})`; return ''; }
+// v294: referência de dose da bula para a recomendação — {mn,mx,un,txt,st:'acima'|'abaixo'|'ok'|'sem'|'semBula',pct}
+function bulaDoseRef(it){ const b=bulaDe(it&&it.produto); if(!b) return {st:'semBula'}; const mn=bulaNum(b.doseMin), mx=bulaNum(b.doseMax); if((mn==null||mn<=0)&&(mx==null||mx<=0)) return {st:'sem'};
+  const un=String(b.doseUn||'').trim()||((it&&it.un)?it.un+'/ha':''), M=mx>0?mx:null, m=mn>0?mn:null;
+  const faixa=(m!=null&&M!=null)?(Math.abs(m-M)<1e-9?fmtDose(M):`${fmtDose(m)} a ${fmtDose(M)}`):(M!=null?`até ${fmtDose(M)}`:`a partir de ${fmtDose(m)}`);
+  const d=+(it&&it.dose)||0; let st='ok'; if(d>0){ if(M!=null&&d>M+1e-9) st='acima'; else if(m!=null&&d<m-1e-9) st='abaixo'; }
+  return {mn:m, mx:M, un, txt:`${faixa}${un?' '+un:''}`, st, pct:(st==='acima'&&M)?Math.round((d/M-1)*100):(st==='abaixo'&&m)?Math.round((d/m-1)*100):0}; }
+const bulaDoseCls=st=>st==='acima'?' dose-acima':(st==='abaixo'?' dose-abaixo':'');
+function bulaRefHtml(it, editable){ const bR=bulaDoseRef(it); if(!it||!it.produto) return '';
+  if(bR.st==='semBula') return `<div class="rc-bula sem" title="Sem bula cadastrada: a dose fica sem referência">📖 sem bula${editable?` · <a class="link" data-act="bulaAbrir" data-prod="${esc(it.produto)}">cadastrar</a>`:''}</div>`;
+  if(bR.st==='sem') return `<div class="rc-bula sem" title="A bula está cadastrada, mas sem dose mínima/máxima">📖 bula sem dose${editable?` · <a class="link" data-act="bulaAbrir" data-prod="${esc(it.produto)}">informar</a>`:''}</div>`;
+  return `<div class="rc-bula ${bR.st}" title="Faixa de dose da bula (módulo Preços → Bulas)">📖 bula: ${esc(bR.txt)}${bR.st==='acima'?` · <b>ACIMA ${bR.pct>0?'+'+bR.pct+'%':''}</b>`:bR.st==='abaixo'?` · abaixo ${bR.pct}%`:''}</div>`; }
 function bulaPhTxt(itens){ const a=[]; (itens||[]).forEach(it=>{ const b=bulaDe(it&&it.produto); if(b&&String(b.ph||'').trim()) a.push(`${it.produto}: pH ${b.ph}`); }); return a.join(' · '); }
 // ---- ficha (janela) ----
 function bulaAbrir(prod){ if(!prod) return; bulaEditProd=prod; bulaRender(); }
@@ -6823,7 +6834,7 @@ function recomSetField(el){
     if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(r.area>0 && t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } }   // e leva para o Campo
   else if(f==='exp'){ r.exp=v; const x=v?expById(v):null; rerender=true;   // v278: experimento → área a aplicar = área da faixa
     if(x){ r.area=+expHa(x).toFixed(2); if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; const t=findTalhao(r.talhao); if(t && Math.abs(r.area-areaDe(t))>=0.005) rl.app.area=r.area; else delete rl.app.area; stampReal(r.opKey); } } }
-  else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; }
+  else if(f==='itDose'){ r.itens[+i].dose=_mmC(v); rerender=true; const bR=bulaDoseRef(r.itens[+i]); if(bR.st==='acima') toast(`⛔ ${r.itens[+i].produto}: ${fmtDose(r.itens[+i].dose)} acima da bula (${bR.txt})`); }   // v294
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
   else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true;
     if(!r.maquina){ const sg=sugereMaquina((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); if(sg) r.maquina=sg; } }   // v265: sugere o conjunto pela classe dos insumos (recomendação direta)
@@ -6969,10 +6980,10 @@ function recomCard(r,t){
     const prodCell=editable
       ? `<span class="agp-row"><input list="prodlist" class="txt prod-in" ${F('itProd')} data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo"><button type="button" class="btn btn-outline btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}" data-i="${i}" title="Buscar insumo (portfólio + catálogo MAPA)">🔍</button></span><br><input class="txt" ${F('itAtivo')} data-reci="${i}" value="${esc(it.ativo||'')}" placeholder="ingrediente ativo" style="font-size:11px;margin-top:3px;max-width:240px">`
       : `<b>${esc(it.produto||'—')}</b>${it.ativo?`<br><small class="mut">${esc(it.ativo)}</small>`:''}`;
-    const dAv=bulaDoseAviso(it), dAvHtml=dAv?`<div class="bula-warn" title="Faixa de dose cadastrada na bula do produto (módulo Preços)">⚠ ${esc(dAv)}</div>`:'';
+    const dCls=bulaDoseCls(bulaDoseRef(it).st), dAvHtml=bulaRefHtml(it, editable);   // v294: referência da bula por insumo; dose acima da bula em vermelho
     const doseCell=(editable
-      ? `<input class="cell" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
-      : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`)+dAvHtml
+      ? `<input class="cell${dCls}" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
+      : `<span class="rc-dose${dCls}">${fmtDose(it.dose)}</span><small> ${esc(it.un||'')}/ha</small>`)+dAvHtml
       +((it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.05)?`<div class="bula-warn rc-plan" title="A dose veio ajustada no Campo (volume por tanque ou dose realizada). O planejamento diz outra coisa.">📅 planejado ${fmtDose(it.plan)} ${esc(it.un||'')}/ha (${(+it.dose||0)>it.plan?'+':''}${Math.round(((+it.dose||0)/it.plan-1)*100)}%)${editable?` · <a class="link" data-act="recomDosePlano" data-id="${esc(r.id)}" data-i="${i}">usar o plano</a>`:''}</div>`:'')
       +(ehSem?(editable?`<div class="rc-ha"><input class="cell" inputmode="decimal" ${F('itHa')} data-reci="${i}" value="${haIt?num(haIt):''}" placeholder="${num(area)}" title="Área deste material (ha) — vazio = talhão inteiro"><small> ha</small></div>`:(haIt?`<div class="rc-ha mut">× ${num(haIt)} ha</div>`:'')):'');
     const carCell=editable
@@ -7090,7 +7101,7 @@ function recomCard(r,t){
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
       <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
+      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${(()=>{ const ac=its.filter(it=>bulaDoseRef(it).st==='acima'); return ac.length?`<div class="rc-obs rc-acima">⛔ ${ac.length} dose(s) acima da bula: ${ac.map(it=>`<b>${esc(it.produto)}</b> ${fmtDose(it.dose)} ${esc(it.un||'')}/ha (bula ${esc(bulaDoseRef(it).txt)})`).join(' · ')}. Reveja antes de aprovar.</div>`:''; })()}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
     ${tail}
     ${(!editable&&r.exp&&expById(r.exp))?`<div class="rc-obs">🧪 Área de referência: <b>${esc(expById(r.exp).nome||'')}</b> · ${nf2.format(expHa(expById(r.exp)))} ha</div>`:''}
@@ -7263,7 +7274,7 @@ function exportRecomPDF_(r){
   <div class="rx-sec"><h2>3. Produtos — na ordem de mistura no tanque</h2>
     <table class="rx pdf-ops"><colgroup><col style="width:4%"><col style="width:24%"><col style="width:22%"><col style="width:10%"><col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:8%"></colgroup>
     <thead><tr><th>#</th><th>Produto</th><th>Ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (${num(area)} ha)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th></tr></thead><tbody>`;
-  its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num">${fmtDose(it.dose)} ${esc(it.un||'')}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}${(()=>{ const e=embDe(it.produto); return e?`<br><span class="mut2">${esc(embTxt(it.dose*cd.haTk,e))}</span>`:''; })()}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
+  its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num"><span class="${bulaDoseCls(bulaDoseRef(it).st).trim()}">${fmtDose(it.dose)} ${esc(it.un||'')}</span>${(()=>{ const bR=bulaDoseRef(it); return (bR.st==='sem'||bR.st==='semBula')?'':`<br><span class="mut2${bR.st==='acima'?' dose-acima':''}">bula: ${esc(bR.txt)}${bR.st==='acima'?' — ACIMA':''}</span>`; })()}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}${(()=>{ const e=embDe(it.produto); return e?`<br><span class="mut2">${esc(embTxt(it.dose*cd.haTk,e))}</span>`:''; })()}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
   if(!its.length) h+=`<tr><td colspan="8">— sem produtos —</td></tr>`;
   h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}${bulaPhTxt(its)?`<div class="rx-note">pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}</div>
   <div class="rx-sec"><h2>4. Calda</h2><div class="rx-kv">
