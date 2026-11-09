@@ -113,6 +113,15 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Módulo Máquinas (v295)
+
+- Três abas novas no padrão KEY|JSON (como EXPERIMENTOS APP), criadas quando faltam: **MÁQUINAS APP** (cadastro e
+  plano de preventivas), **ABASTECIMENTOS APP** (abastecimentos e entradas no tanque; `tipo:'entrada'`) e
+  **OS MÁQUINAS APP** (ordens de serviço). Payloads `__maqCad`, `__abastecimento` e `__osMaq` → `writeMapApp`
+  (merge por `_u`, reenviar não duplica). Pacotes de leitura `maquinas_app`, `abast_app`, `os_app`; módulo
+  `maquinas` em `MOD_DADOS` lê também `manutencao` (peças das notas) e `realizado_app` (horas do Campo).
+- Gravação permitida aos módulos `maquinas` (tudo), `planejamento` (cadastro) e `campo` (abastecimento).
+
 ## Fechamento mensal (v292 — Fase C)
 
 - Payload novo **`__fechamento`** `{ cpf, mes:'AAAA-MM', para, cc, assunto, corpo, anexos:[{nome,mime,b64}], resumo:{entradas,saidas,saldo,pendencias}, soSalvar }`
