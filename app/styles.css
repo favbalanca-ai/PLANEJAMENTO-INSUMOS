@@ -656,6 +656,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .op-blk h3{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0 3px;font-size:12px}
   #print-area .op-n{display:inline-block;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;background:#222;color:#fff;font-size:10.5px;font-weight:700}
   #print-area .mut2{color:#555;font-weight:400}
+  #print-area .dose-acima{color:#b00020!important;font-weight:700}
   #print-area tfoot tr.tot th{background:#d5d5d5}
   #print-area .pdf-seq+.pdf-seq{page-break-before:always}
   #print-area .pdf-foot{margin-top:10px;font-size:10px;color:#555;border-top:1px solid #bbb;padding-top:4px}
@@ -2067,6 +2068,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 .fin-h3{font-size:14px;margin:10px 14px 6px}
 .nfe-ia{font-size:12px;margin-top:3px}.nfe-ia-ok{color:#2e7d32;font-weight:700}.nfe-ia-pend{color:#b26a00;font-weight:700}.nfe-row.ia-pronto{border-left:4px solid #43a047}.nfe-row.ia-pend{border-left:4px solid #fbc02d;background:#fffdf5}.nfe-iabox .btn{margin-left:6px}
+/* referência de dose da bula na recomendação (v294) */
+.rc-bula{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}.rc-bula.acima{color:var(--red);font-weight:700}.rc-bula.abaixo{color:var(--amber);font-weight:700}.rc-bula.sem{font-weight:400}
+.rc-tbl input.cell.dose-acima,.rc-dose.dose-acima{color:var(--red);font-weight:700}.rc-tbl input.cell.dose-acima{border-color:var(--red);background:var(--red-soft)}
+.rc-tbl input.cell.dose-abaixo,.rc-dose.dose-abaixo{color:var(--amber);font-weight:700}.rc-obs.rc-acima{color:var(--red)}
 /* fechamento mensal (v292) */
 .fech-list{list-style:none;margin:0;padding:4px 14px 12px}.fech-list li{padding:6px 0;border-top:1px solid var(--line);font-size:13px}.fech-list li.erro{color:#b71c1c}.fech-list li.aviso{color:#8d6e00}.fech-list li.ok{color:var(--text)}
 .fech-docs{display:flex;gap:8px;flex-wrap:wrap;padding:0 14px 10px}.fech-envio{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;padding:0 14px 10px}.fech-envio label{display:flex;flex-direction:column;gap:3px;font-size:12px;flex:1;min-width:180px}.fech-envio .txt{width:100%}

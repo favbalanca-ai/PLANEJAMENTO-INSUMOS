@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Referência de dose da bula na recomendação (v294)** — embaixo da dose de cada insumo aparece **"📖 bula:
+  0,03 a 0,05 L/ha"** (faixa cadastrada em Preços → Bulas; "até X" quando só há máxima). Dose **acima da bula** fica
+  em **vermelho** (campo e número), com "ACIMA +N%" na linha da bula, aviso no rodapé da tabela ("⛔ 1 dose(s) acima
+  da bula …") e toast ao digitar; abaixo da mínima fica âmbar. Produto sem bula mostra "sem bula · cadastrar" e bula
+  sem dose mostra "bula sem dose · informar", com link para a ficha. O PDF leva a linha "bula: …" e pinta a dose
+  acima de vermelho. Funções: `bulaDoseRef`, `bulaRefHtml`, `bulaDoseCls`.
 - **Campo: arredondar por tanque não multiplica mais a dose (v293)** — caso real: dessecação da Roncador, PREMIO a
   0,04 L/ha, 25 ha por tanque = 1 L; com embalagem de 20 L cadastrada na bula, "Arredondar por tanque" subia para meia
   embalagem (10 L) e a dose realizada virava 0,4 L/ha; a recomendação criada do planejamento herdava o 0,4. Agora
