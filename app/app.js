@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-292';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-293';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4831,7 +4831,12 @@ function vaiNoTanque(it){ if(!it) return false; if(isLiquido(it.un)) return true
 function embDe(produto){ const b=bulaDe(produto), tam=b?bulaNum(b.emb):null; if(!(tam>0)) return null; return {tam, un:String(b.embUn||'').trim()||((PROD[produto]||{}).un||'')}; }
 function embTxt(qtd, e){ if(!e||!e.tam) return ''; const k=qtd/e.tam; return `${(Math.abs(k-Math.round(k))<1e-6?nf0.format(k):nf1.format(k))} emb. de ${fmtDose(e.tam)} ${e.un}`.trim(); }
 // volume por tanque arredondado: com embalagem cadastrada, para a MEIA embalagem mais próxima (19,5 L c/ 5 L → 20 L; 31 kg c/ 15 kg → 30 kg); senão, o passo "de balde"
-function tankRedondo(produto, porT){ const e=embDe(produto); const p=e?e.tam/2:tankPasso(porT); const r=Math.round(porT/p)*p; return Math.max(p, Math.round(r*1e6)/1e6); }
+const TANK_MAX_DIF=0.10;   // v293: arredondar por tanque nunca pode mexer mais que 10% na dose (0,04 L/ha virava 0,4 com embalagem de 20 L)
+function tankRedondo(produto, porT){ if(!(porT>0)) return porT; const e=embDe(produto); let p=e?e.tam/2:tankPasso(porT);
+  if(e && porT<p*0.75) p=tankPasso(porT);   // volume menor que meia embalagem: arredonda "de balde", não pela embalagem
+  let r=Math.round(porT/p)*p; if(!(r>0)) r=p;
+  if(Math.abs(r-porT)/porT>TANK_MAX_DIF){ p=tankPasso(porT); r=Math.round(porT/p)*p; if(!(r>0)) r=porT; }   // a embalagem mudaria demais a dose: fica no passo de balde
+  return Math.round(r*1e6)/1e6; }
 function tankSetDose(key, it, dose){ const r=realEnsure(key); dose=Math.round(dose*1e6)/1e6;
   if(it.ei!=null){ const ex=r.extras[it.ei]||(r.extras[it.ei]={}); ex.dose=dose; }
   else { if(it.plan!=null && Math.abs(dose-it.plan)<1e-9) delete r.doses[it.iid]; else r.doses[it.iid]=dose; }
@@ -6749,7 +6754,7 @@ function recomItensFromOp(t, opKey){
   const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
   const out=effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
     .map(it=>{ const iid=it.kind==='base'?String(it.ii):'a'+it.ai, aj=(rl&&rl.doses&&(iid in rl.doses))?+rl.doses[iid]:null;   // dose ajustada no Campo (por tanque / realizado) manda
-      return {produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null}; })
+      const o={produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null}; if(aj!=null && +it.dose>0 && Math.abs(aj-(+it.dose))>1e-9) o.plan=+it.dose; return o; })   // v293: plan = dose do planejamento, para a tela mostrar a diferença
     .concat(((rl&&rl.extras)||[]).filter(e=>e.produto).map(e=>({produto:e.produto, un:(PROD[e.produto]&&PROD[e.produto].un)||'', dose:+e.dose||0, real:null, extra:true})));   // extras do Campo entram
   const pc=plantioCalc(opKey, rl||{});   // v266: plantio com vários materiais → uma linha de semente por material, com a área de cada um
   if(pc&&pc.multi){ const si=out.findIndex(it=>_isSemente(it)), base=si>=0?out[si]:null;
@@ -6968,6 +6973,7 @@ function recomCard(r,t){
     const doseCell=(editable
       ? `<input class="cell" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
       : `${fmtDose(it.dose)}<small> ${esc(it.un||'')}/ha</small>`)+dAvHtml
+      +((it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.05)?`<div class="bula-warn rc-plan" title="A dose veio ajustada no Campo (volume por tanque ou dose realizada). O planejamento diz outra coisa.">📅 planejado ${fmtDose(it.plan)} ${esc(it.un||'')}/ha (${(+it.dose||0)>it.plan?'+':''}${Math.round(((+it.dose||0)/it.plan-1)*100)}%)${editable?` · <a class="link" data-act="recomDosePlano" data-id="${esc(r.id)}" data-i="${i}">usar o plano</a>`:''}</div>`:'')
       +(ehSem?(editable?`<div class="rc-ha"><input class="cell" inputmode="decimal" ${F('itHa')} data-reci="${i}" value="${haIt?num(haIt):''}" placeholder="${num(area)}" title="Área deste material (ha) — vazio = talhão inteiro"><small> ha</small></div>`:(haIt?`<div class="rc-ha mut">× ${num(haIt)} ha</div>`:'')):'');
     const carCell=editable
       ? `<input class="cell" inputmode="numeric" ${F('itCar')} data-reci="${i}" value="${esc(it.car||'')}" placeholder="dias" style="width:56px">`
@@ -7084,7 +7090,7 @@ function recomCard(r,t){
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
       <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}</div>
+      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
     ${tail}
     ${(!editable&&r.exp&&expById(r.exp))?`<div class="rc-obs">🧪 Área de referência: <b>${esc(expById(r.exp).nome||'')}</b> · ${nf2.format(expHa(expById(r.exp)))} ha</div>`:''}
@@ -9350,6 +9356,7 @@ function applyEdit(el){
     const fk=opFromKey(key), it=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r).find(x=>el.dataset.ei!=null?String(x.ei)===el.dataset.ei:x.iid===el.dataset.iid);
     if(!it) return; if(!(q>0)){ tankRefresh(key); return; }
     tankSetDose(key,it,q/ha); setTimeout(()=>tankRefresh(key),0);   // redesenha depois do evento (a caixa está dentro do quadro)
+    if(it.plan>0){ const d=(q/ha)/it.plan-1; if(Math.abs(d)>=0.5) toast(`⚠️ ${it.produto}: ${fmtDose(q/ha)} ${it.un||''}/ha fica ${d>0?'+':''}${Math.round(d*100)}% do planejado (${fmtDose(it.plan)}) — confira o volume digitado`); }   // v293
     return;
   }
   if(kind==='realDose'||kind==='realExtraDose'){   // modo Campo: dose realizada (número) — local
@@ -9798,6 +9805,7 @@ document.addEventListener('click',e=>{
       c.aparelho=on; if(on){ delete c.ultimoDia; } notifCfgSave(c); _notifSig=''; notifAtualiza(); return; }
     else if(a.act==='recomToggle'){ const c=act.closest('.recom-card'); if(!c) return; const r=recomById(a.id); const ab=!c.classList.contains('rc-fech'); if(r&&(r.status==='rascunho'||r.status==='retorno')&&ab) return;   // rascunho e retorno ficam abertos
       RECOM_UI.aberto[a.id]=!ab; c.classList.toggle('rc-fech', ab); c.querySelector('.rc-head').title=ab?'Expandir':'Encolher'; return; }
+    else if(a.act==='recomDosePlano'){ const r=recomById(a.id); const it=r&&r.itens&&r.itens[+a.i]; if(it&&it.plan>0){ it.dose=it.plan; saveRecom(); route({keepScroll:true}); toast(`${it.produto}: dose do planejamento (${fmtDose(it.plan)} ${it.un||''}/ha)`); } }   // v293
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura

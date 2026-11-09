@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Campo: arredondar por tanque não multiplica mais a dose (v293)** — caso real: dessecação da Roncador, PREMIO a
+  0,04 L/ha, 25 ha por tanque = 1 L; com embalagem de 20 L cadastrada na bula, "Arredondar por tanque" subia para meia
+  embalagem (10 L) e a dose realizada virava 0,4 L/ha; a recomendação criada do planejamento herdava o 0,4. Agora
+  `tankRedondo` só usa a embalagem quando o volume é pelo menos meia embalagem e **nunca mexe mais que 10 % na dose**
+  (`TANK_MAX_DIF`); fora disso vale o passo "de balde" (0,5 · 0,1 · 0,01). Volume por tanque digitado que mude a dose
+  50 % ou mais avisa na hora ("+900 % do planejado — confira"). Na recomendação, item cuja dose veio ajustada do Campo
+  mostra **"📅 planejado 0,04 L/ha (+900 %) · usar o plano"** (`it.plan`, ação `recomDosePlano`) e, se a diferença
+  passar de 50 %, um aviso no rodapé da tabela pede conferência antes de aprovar.
 - **Fechamento mensal e envio ao contador (v292 — Fase C do Administrativo)** — Financeiro ganhou a aba
   **📅 Fechamento** (produtor + mês). **Checklist** automático: notas sem classificar e em trânsito, títulos vencidos
   sem baixa, pagos sem conta, extrato de cada conta conciliado até o fim do mês, pendências do LCDPR e se o mês
