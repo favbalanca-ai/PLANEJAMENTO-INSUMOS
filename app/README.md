@@ -71,6 +71,21 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Módulo 🚜 Máquinas: abastecimento, manutenção e custo-hora real (v295)** — módulo novo (permissão por usuário
+  como os outros) com quatro telas. **Painel da frota** (`#/frota`): um cartão por máquina com horímetro, horas na
+  safra, combustível (L e R$), consumo real L/h × planejado da CUSTO OPERAÇÃO, peças e serviços (notas apropriadas +
+  ordens de serviço), **custo-hora real × planejado** e a próxima preventiva; alertas de preventiva vencida, OS
+  aberta há mais de 7 dias e consumo 20 % acima; KPIs da frota e saldo do tanque da fazenda. **Abastecimento**
+  (`#/abastecimento`): máquina pelo nome ou **📷 QR Code** colado nela (`MAQ:<id>`, lido pelo leitor do aparelho ou
+  pelo zxing-wasm), horímetro obrigatório (avisa se voltou), litros, combustível, origem tanque/posto com valor,
+  operador; ao registrar mostra o L/h desde o último abastecimento e **avisa as preventivas** (faltam X h / vencida);
+  entradas no tanque da fazenda e saldo. **Manutenção** (`#/manutencao`): plano de preventivas por horas (a cada
+  250 h…) e ordens de serviço **preventiva, corretiva ou reforma** com horímetro, peças, mão de obra e status; OS
+  preventiva concluída reinicia o contador do plano. **Cadastro** (`#/maqcad`): máquinas e implementos da CUSTO
+  OPERAÇÃO + das notas + novas; horímetro inicial, consumo e custo-hora planejados, tanque, ativa; etiquetas QR em
+  PDF. Dados em `OV.maqApp`, `OV.abast`, `OV.osMaq`, sobem pelo lote (`__maqCad`, `__abastecimento`, `__osMaq`) e
+  funcionam sem internet. Funções: `maqTodas`, `maqHorimetro`, `abastGravar`, `abastConsumo`, `tanqueSaldo`,
+  `planoStatus`, `maqAlertas`, `osGravar`, `maqCustos`, `maqLerQr`, `maqEtiquetas`.
 - **Referência de dose da bula na recomendação (v294)** — embaixo da dose de cada insumo aparece **"📖 bula:
   0,03 a 0,05 L/ha"** (faixa cadastrada em Preços → Bulas; "até X" quando só há máxima). Dose **acima da bula** fica
   em **vermelho** (campo e número), com "ACIMA +N%" na linha da bula, aviso no rodapé da tabela ("⛔ 1 dose(s) acima

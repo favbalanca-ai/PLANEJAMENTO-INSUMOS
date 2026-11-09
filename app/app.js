@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-294';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-295';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -425,7 +425,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
-  login:'both', conta:'both', usuarios:'both' };
+  login:'both', conta:'both', usuarios:'both', frota:'maquinas', abastecimento:'maquinas', manutencao:'maquinas', maqcad:'maquinas' };   // v295
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
    A planilha é quem filtra os dados e recusa gravações fora da permissão — aqui só escondemos o que não é seu. */
@@ -434,7 +434,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 // Sem menus; só Receber nota / Pendências (+ entrar, conta e configurar). Não mexe no módulo salvo do app normal.
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
-const MODULOS=['planejamento','campo','precos','admin','tarefas'];
+const MODULOS=['planejamento','campo','precos','admin','tarefas','maquinas'];   // v295: 🚜 Máquinas
 const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
@@ -460,10 +460,10 @@ function podeTela(v){
 function acessoItensCard(m, itens){ const u=sessUsuario(); if(!u||u.perfil==='ADMIN') return itens;
   const tl=navTelas(m), lib=tl.filter(x=>podeTela(x.v)); return lib.length && lib.length<tl.length ? lib.map(x=>x.nome) : itens; }
 function homeDoModulo(m){ const h=moduleHome(m); if(podeTela(h.replace('#/',''))) return h; const t=navTelas(m).find(x=>podeTela(x.v)); return t?'#/'+t.v:'#/inicio'; }
-function currentModule(){ let m=localStorage.getItem(MOD_KEY); m=(m==='campo'||m==='precos'||m==='admin'||m==='tarefas')?m:'planejamento';
+function currentModule(){ let m=localStorage.getItem(MOD_KEY); m=(m==='campo'||m==='precos'||m==='admin'||m==='tarefas'||m==='maquinas')?m:'planejamento';
   if(!podeModulo(m)){ const x=MODULOS.find(podeModulo); if(x) m=x; } return m; }
-function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/calendario':'#/dashboard'))); }
-const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'} };
+function moduleHome(m){ return m==='campo'?'#/campopainel':(m==='precos'?'#/precos':(m==='admin'?'#/entradas':(m==='tarefas'?'#/calendario':(m==='maquinas'?'#/frota':'#/dashboard')))); }
+const MOD_INFO = { planejamento:{ico:'📋',nome:'Planejamento'}, campo:{ico:'🧑‍🌾',nome:'Campo'}, precos:{ico:'💲',nome:'Preços'}, admin:{ico:'🗂️',nome:'Administrativo'}, tarefas:{ico:'👷',nome:'Tarefas'}, maquinas:{ico:'🚜',nome:'Máquinas'} };
 function applyModule(){
   const m=currentModule();
   document.querySelectorAll('#nav a[data-view]').forEach(a=>{ const mods=(a.dataset.mod||'').split(' '); a.hidden=!mods.includes(m) || !podeTela(a.dataset.view||'');
@@ -504,6 +504,7 @@ function loadOverrides(){
   OV.talhaoAdd     = OV.talhaoAdd     || []; // talhões criados: [{id,nome,empreendimento,produtividade,area,plano}]
   OV.talhaoRemoved = OV.talhaoRemoved || {}; // idBase -> true (talhão base ocultado)
   OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
+  OV.maqApp        = OV.maqApp        || {}; OV.abast = OV.abast || {}; OV.osMaq = OV.osMaq || {};   // v295: módulo Máquinas (cadastro, abastecimentos, OS)
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
   OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
@@ -4205,6 +4206,170 @@ function exportManutCsv(){ const L=manutLista(); if(!L.length){ toast('Nenhuma m
   const cab=['Data','Destino','Máquina / benfeitoria','Tipo','Item','Qtd','Un','Valor (R$)','Fornecedor','CNPJ','NF','Chave NF-e','Produtor','Obs'];
   const lin=[cab.map(_usoCsvEsc).join(';')]; L.forEach(r=>lin.push([r.data?_dtBRc(r.data):'', r.destino||'maquina', r.maquina, r.tipo, r.item, nf2.format(+r.qtd||0), r.un, nf2.format(+r.valor||0), r.fornecedor, r.cnpj, r.nNF, r.chave, r.produtor, r.obs].map(_usoCsvEsc).join(';')));
   download('manutencao_maquinas.csv', '\ufeff'+lin.join('\r\n'), 'text/csv;charset=utf-8'); toast('CSV exportado'); }
+// ===== v295: MÓDULO 🚜 MÁQUINAS — cadastro (QR Code), abastecimento com horímetro, preventivas, ordens de serviço, custo-hora real =====
+// Dados: OV.maqApp (cadastro + plano de preventivas), OV.abast (abastecimentos e entradas no tanque), OV.osMaq (ordens de serviço).
+// Sobem como mapas KEY|JSON (MÁQUINAS APP, ABASTECIMENTOS APP, OS MÁQUINAS APP) pelo lote; merge por _u como os experimentos.
+let lastMaqSig='', lastAbastSig='', lastOsSig='';
+const _nfH=new Intl.NumberFormat('pt-BR',{maximumFractionDigits:1}), numH=v=>_nfH.format(+v||0);   // horas e litros: até 1 casa, sem zero à toa
+function maqSig(){ return sigHash(JSON.stringify((OV&&OV.maqApp)||{})); } function abastSig(){ return sigHash(JSON.stringify((OV&&OV.abast)||{})); } function osSig(){ return sigHash(JSON.stringify((OV&&OV.osMaq)||{})); }
+function maqServerOk(){ return !!(DATA && DATA.maquinas_app && typeof DATA.maquinas_app==='object'); }
+function _mapApplyPulled(campo, map, sigFn, getLast, setLast, tipo){ if(!map||typeof map!=='object'||!OV) return false; OV[campo]=OV[campo]||{}; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc||typeof inc!=='object') continue; const loc=OV[campo][k], iu=+inc._u||0, lu=+(loc&&loc._u)||0; if(!loc||iu>lu){ OV[campo][k]=inc; changed=true; } }
+  const pend=sigFn()!==getLast() && !!getLast(); if(changed){ saveOverrides(); if(!pend) setLast(sigFn()); } if(pend) loteAgendar(tipo); return changed; }
+function maqApplyPulled(m){ return _mapApplyPulled('maqApp', m, maqSig, ()=>lastMaqSig, v=>{ lastMaqSig=v; }, '__maqCad'); }
+function abastApplyPulled(m){ return _mapApplyPulled('abast', m, abastSig, ()=>lastAbastSig, v=>{ lastAbastSig=v; }, '__abastecimento'); }
+function osApplyPulled(m){ return _mapApplyPulled('osMaq', m, osSig, ()=>lastOsSig, v=>{ lastOsSig=v; }, '__osMaq'); }
+const MAQ_COMB=['Diesel S10','Diesel S500','Arla 32','Gasolina','Etanol'], OS_TIPOS={preventiva:'Preventiva',corretiva:'Corretiva',reforma:'Reforma'};
+function maqGrupoGuess(n,padrao){ n=_bkNorm(n); return /AVIAO|AIR TRA/.test(n)?'Avião agrícola':/^TRATOR|\bTRATOR\b/.test(n)&&!/AIR/.test(n)?'Trator':/COLHE/.test(n)?'Colheitadeira':/PULVER/.test(n)?'Pulverizador':/PLANTAD/.test(n)?'Plantadeira':/CAMINH/.test(n)?'Caminhão':(padrao||'Máquina'); }
+const maqId=nome=>'m:'+_bkNorm(nome).replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60);
+// todas as máquinas conhecidas: cadastro do módulo + CUSTO OPERAÇÃO (máquina e implemento) + nomes vindos das notas
+function maqTodas(){ const by={}; const add=(nome,extra)=>{ nome=String(nome||'').trim(); if(!nome) return; const id=maqId(nome); by[id]=Object.assign(by[id]||{id, nome, ativa:true, plano:[]}, extra||{}); };
+  maquinasAll().forEach(m=>{ if(m.maquina) add(m.maquina,{lh:+m.l_h||0, rsHm:+m.rs_hm||0, grupo:maqGrupoGuess(m.maquina), conjunto:m.conjunto}); if(m.implemento) add(m.implemento,{grupo:maqGrupoGuess(m.implemento,'Implemento')}); });
+  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina&&r.destino!=='oficina'&&r.destino!=='benfeitoria') add(r.maquina,{}); });
+  Object.values((OV&&OV.maqApp)||{}).forEach(c=>{ if(c&&!c.del&&c.nome){ const id=c.id||maqId(c.nome); by[id]=Object.assign(by[id]||{id, nome:c.nome, plano:[]}, c); } });
+  return Object.values(by).filter(m=>m.ativa!==false&&!m.del).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')); }
+function maqDe(id){ return maqTodas().find(m=>m.id===id)||Object.values((OV&&OV.maqApp)||{}).find(c=>c.id===id)||null; }
+function maqCadSalvar(id, patch){ OV.maqApp=OV.maqApp||{}; const base=maqDe(id)||{id, nome:patch.nome||id}; const c=Object.assign({}, OV.maqApp[id]||{}, {id, nome:base.nome, plano:base.plano||[]}, patch, {_u:tsAgora()}); OV.maqApp[id]=c; saveOverrides(); loteAgendar('__maqCad'); return c; }
+// ---- abastecimentos ----
+function abastLista(maqId_){ return Object.values((OV&&OV.abast)||{}).filter(a=>a&&!a.del&&(!maqId_||a.maq===maqId_)).sort((a,b)=>String(a.data+(a.hora||'')).localeCompare(String(b.data+(b.hora||'')))||(+a._u-+b._u)); }
+function abastUltimo(maqId_){ const L=abastLista(maqId_).filter(a=>a.tipo!=='entrada'&&+a.hor>0); return L.length?L[L.length-1]:null; }
+function maqHorimetro(m){ const u=abastUltimo(m.id); const osH=Math.max(0,...Object.values((OV&&OV.osMaq)||{}).filter(o=>o&&!o.del&&o.maq===m.id).map(o=>+o.hor||0)); return Math.max(+m.horIni||0, u?+u.hor:0, osH); }
+function abastGravar(a){ OV.abast=OV.abast||{}; a.id=a.id||('ab'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)); a._u=tsAgora(); OV.abast[a.id]=a; saveOverrides(); loteAgendar('__abastecimento'); return a; }
+function abastConsumo(a){ const L=abastLista(a.maq).filter(x=>x.tipo!=='entrada'&&+x.hor>0), i=L.findIndex(x=>x.id===a.id); if(i<=0) return null; const ant=L[i-1], dh=(+a.hor)-(+ant.hor); if(!(dh>0)) return null; return {dh, lh:(+a.litros||0)/dh}; }
+// tanque da fazenda: entradas (nota/compra) − abastecimentos tirados do tanque
+function tanqueSaldo(){ const L=Object.values((OV&&OV.abast)||{}).filter(a=>a&&!a.del); let ent=0, sai=0, custo=0, lEnt=0; L.forEach(a=>{ if(a.tipo==='entrada'){ ent+=+a.litros||0; if(+a.valor>0){ custo+=+a.valor; lEnt+=+a.litros||0; } } else if(a.origem!=='posto') sai+=+a.litros||0; }); return {ent, sai, saldo:+(ent-sai).toFixed(1), precoMedio:lEnt?custo/lEnt:(+OV.diesel||0)}; }
+function abastCusto(a){ if(a.tipo==='entrada') return 0; if(a.origem==='posto') return +a.valor||((+a.precoL||0)*(+a.litros||0)); const p=(+a.precoL>0)?+a.precoL:tanqueSaldo().precoMedio; return (+a.litros||0)*p; }
+// ---- plano de preventivas: itens {id, nome, cadaH, ultH, ultData}; situação pelo horímetro atual ----
+function planoStatus(m){ const hor=maqHorimetro(m); return (m.plano||[]).filter(p=>p&&!p.del&&+p.cadaH>0).map(p=>{ const prox=(+p.ultH||+m.horIni||0)+(+p.cadaH); const falta=prox-hor; return {p, prox, falta, st:falta<0?'vencida':(falta<=Math.max(10,+p.cadaH*0.1)?'perto':'ok')}; }).sort((a,b)=>a.falta-b.falta); }
+function maqAlertas(m){ const out=[]; planoStatus(m).forEach(x=>{ if(x.st==='vencida') out.push({nivel:'erro', txt:`${x.p.nome}: vencida há ${numH(-x.falta)} h (prevista em ${numH(x.prox)} h)`}); else if(x.st==='perto') out.push({nivel:'aviso', txt:`${x.p.nome}: faltam ${numH(x.falta)} h`}); });
+  const abertas=osLista(m.id).filter(o=>o.status!=='concluida'); abertas.forEach(o=>{ const dias=Math.round((Date.now()-new Date((o.dataAb||_hojeISO())+'T12:00:00'))/86400000); if(dias>7) out.push({nivel:'aviso', txt:`OS ${OS_TIPOS[o.tipo]||o.tipo} aberta há ${dias} dias: ${o.desc||''}`}); });
+  const c=maqCustos(m); if(c.lhReal&&m.lh&&c.lhReal>m.lh*1.2) out.push({nivel:'aviso', txt:`consumo ${numH(c.lhReal)} L/h, ${Math.round((c.lhReal/m.lh-1)*100)}% acima do planejado (${numH(m.lh)} L/h)`});
+  return out; }
+// ---- ordens de serviço ----
+function osLista(maqId_){ return Object.values((OV&&OV.osMaq)||{}).filter(o=>o&&!o.del&&(!maqId_||o.maq===maqId_)).sort((a,b)=>String(b.dataAb||'').localeCompare(String(a.dataAb||''))||(+b._u-+a._u)); }
+function osGravar(o){ OV.osMaq=OV.osMaq||{}; o.id=o.id||('os'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)); o._u=tsAgora(); OV.osMaq[o.id]=o; saveOverrides(); loteAgendar('__osMaq');
+  if(o.status==='concluida'&&o.planoId){ const m=maqDe(o.maq); if(m){ const pl=(m.plano||[]).map(p=>p.id===o.planoId?Object.assign({},p,{ultH:+o.hor||p.ultH, ultData:o.dataFim||o.dataAb}):p); maqCadSalvar(m.id,{plano:pl}); } }   // preventiva concluída zera o contador do plano
+  return o; }
+const osValor=o=>(+o.moValor||0)+((o.pecas||[]).reduce((s,p)=>s+(+p.valor||0),0));
+// ---- custos e horas por máquina (safra) ----
+function maqHorasCampo(m){ let h=0; const R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mq=_bkNorm(r.app.maq); if(!(mq.includes(_bkNorm(m.nome))||(m.conjunto&&mq===_bkNorm(m.conjunto)))) continue; const d=durHoras(r.app.hIni,r.app.hFim); if(d>0) h+=d; } return h; }
+function maqCustos(m){ const ab=abastLista(m.id).filter(a=>a.tipo!=='entrada'); const litros=ab.reduce((s,a)=>s+(+a.litros||0),0), comb=ab.reduce((s,a)=>s+abastCusto(a),0);
+  const hs=ab.filter(a=>+a.hor>0).map(a=>+a.hor); const horasHor=hs.length>1?Math.max(...hs)-Math.min(...hs):0; const horas=horasHor||maqHorasCampo(m);
+  const pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.maquina&&maqId(r.maquina)===m.id).reduce((s,r)=>s+(+r.valor||0),0);
+  const os=osLista(m.id).reduce((s,o)=>s+osValor(o),0), total=comb+pecas+os;
+  return {litros, comb, pecas, os, total, horas, horasHor, horasCampo:maqHorasCampo(m), lhReal:horasHor>0?litros/horasHor:0, custoH:horas>0?total/horas:0}; }
+// ---- QR Code: conteúdo "MAQ:<id>"; leitura pela câmera (BarcodeDetector ou zxing-wasm) ----
+async function maqQrSvg(m){ const q=await loadQR(); const qr=q(0,'M'); qr.addData('MAQ:'+m.id); qr.make(); return qr.createSvgTag({cellSize:4, margin:2, scalable:true}); }
+async function maqEtiquetas(){ const ms=maqTodas(); if(!ms.length){ toast('Nenhuma máquina'); return; } toast('Montando etiquetas…');
+  try{ const svgs=await Promise.all(ms.map(maqQrSvg)); const html=`<h1>Etiquetas QR — máquinas</h1><p style="font-size:11px">Cole na máquina. No app: Máquinas → Abastecimento → 📷 Ler QR.</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${ms.map((m,i)=>`<div style="border:1px solid #000;border-radius:6px;padding:8px;text-align:center;break-inside:avoid"><div style="width:120px;height:120px;margin:0 auto">${svgs[i].replace('<svg','<svg style="width:120px;height:120px"')}</div><div style="font-weight:700;font-size:12px;margin-top:6px">${esc(m.nome)}</div><div style="font-size:10px;color:#555">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</div></div>`).join('')}</div>`;
+    const blob=await pdfArquivo(html,''); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='etiquetas_maquinas.pdf'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); toast('PDF das etiquetas pronto'); }
+  catch(e){ toast('Etiquetas: '+e.message); } }
+async function maqLerQr(file){ toast('Lendo QR…'); try{ const url=URL.createObjectURL(file); const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); const esc_=Math.min(1,1600/Math.max(img.width,img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*esc_); cv.height=Math.round(img.height*esc_); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
+    let txt=''; try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('qr_code')){ const r=await new BarcodeDetector({formats:['qr_code']}).detect(cv); if(r&&r[0]) txt=r[0].rawValue||''; } } }catch(e){}
+    if(!txt){ const Z=await loadZXingWasm(); const im=cv.getContext('2d').getImageData(0,0,cv.width,cv.height); const r=await Z.readBarcodes(im,{formats:['QRCode'], tryHarder:true, tryRotate:true, tryDownscale:true, maxNumberOfSymbols:1}); if(r&&r[0]) txt=r[0].text||''; }
+    return maqDoQr(txt); }catch(e){ toast('Não li o QR: '+e.message); return null; } }
+function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Code na foto'); return null; } const id=txt.replace(/^MAQ:/i,''); let m=maqDe(id)||maqTodas().find(x=>_bkNorm(x.nome)===_bkNorm(id)); if(!m){ toast(`QR lido (${txt.slice(0,30)}) não é de uma máquina cadastrada`); return null; } return m; }
+// ---- telas ----
+let MQ_UI={maq:'', osAberta:'', mostrarTodos:false, cadAberto:''};
+function maqSelectHtml(id, sel, ph){ return `<select class="sel" id="${id}"><option value="">${ph||'— máquina —'}</option>${maqTodas().map(m=>`<option value="${esc(m.id)}"${m.id===sel?' selected':''}>${esc(m.nome)}</option>`).join('')}</select>`; }
+const _alertHtml=(al)=>al.length?`<ul class="mq-alertas">${al.map(a=>`<li class="${a.nivel}">${a.nivel==='erro'?'⛔':'⚠️'} ${esc(a.txt)}</li>`).join('')}</ul>`:'';
+V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
+  const temDado=m=>abastLista(m.id).length||osLista(m.id).length||(m.plano||[]).length||maqHorimetro(m)>0; ms.sort((a,b)=>(temDado(b)?1:0)-(temDado(a)?1:0)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));   // quem tem registro aparece primeiro
+  const rows=ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0];
+    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a></div>
+      <div class="rel-uso-kpis mq-kpis"><span><small>Horímetro</small>${hor?numH(hor)+' h':'—'}</span><span><small>Horas na safra</small>${c.horas?numH(c.horas)+' h':'—'}${!c.horasHor&&c.horasCampo?'<small class="mut" style="text-transform:none"> (Campo)</small>':''}</span><span><small>Combustível</small>${c.litros?`${numH(c.litros)} L · ${brl0(c.comb)}`:'—'}</span><span><small>Consumo</small>${c.lhReal?`${numH(c.lhReal)} L/h`:'—'}${m.lh?`<small class="mut" style="text-transform:none"> plan. ${numH(m.lh)}</small>`:''}</span><span><small>Peças · serviços</small>${brl0(c.pecas+c.os)}</span><span class="${c.custoH&&m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}"><small>Custo-hora real</small>${c.custoH?brl(c.custoH)+'/h':'—'}${m.rsHm?`<small class="mut" style="text-transform:none"> plan. ${brl0(m.rsHm)}</small>`:''}</span><span><small>Próxima preventiva</small>${prox?`${esc(prox.p.nome)} · ${prox.falta<0?'<b style="color:var(--red)">vencida</b>':'faltam '+numH(prox.falta)+' h'}`:'<span class="mut">sem plano</span>'}</span></div>
+      ${_alertHtml(al)}</div>`; }).join('');
+  const tot=ms.reduce((s,m)=>{ const c=maqCustos(m); s.comb+=c.comb; s.pecas+=c.pecas+c.os; s.horas+=c.horas; s.litros+=c.litros; return s; },{comb:0,pecas:0,horas:0,litros:0}), nAl=ms.reduce((s,m)=>s+maqAlertas(m).length,0);
+  return `<div class="kpi-grid"><div class="kpi accent"><div class="k-label">Custo da frota na safra</div><div class="k-value">${brl0(tot.comb+tot.pecas)}</div><div class="k-sub">combustível ${brl0(tot.comb)} · peças e serviços ${brl0(tot.pecas)}</div></div>
+    <div class="kpi"><div class="k-label">Horas trabalhadas</div><div class="k-value">${numH(tot.horas)} h</div><div class="k-sub">${tot.horas?brl(( tot.comb+tot.pecas)/tot.horas)+'/h médio':'horímetro nos abastecimentos'}</div></div>
+    <div class="kpi"><div class="k-label">Tanque da fazenda</div><div class="k-value">${numH(T.saldo)} L</div><div class="k-sub">${numH(T.ent)} L entraram · ${numH(T.sai)} L abastecidos${T.precoMedio?' · '+brl(T.precoMedio)+'/L':''}</div></div>
+    <div class="kpi${nAl?' kpi-neg':''}"><div class="k-label">Alertas</div><div class="k-value">${nAl}</div><div class="k-sub">preventivas, OS abertas, consumo</div></div></div>
+    <div class="toolbar" style="margin:0 0 10px"><a class="btn btn-primary btn-sm" data-go="#/abastecimento">⛽ Registrar abastecimento</a><a class="btn btn-outline btn-sm" data-go="#/manutencao">🔧 Ordens de serviço</a><a class="btn btn-outline btn-sm" data-go="#/maqcad">🗂️ Cadastro</a><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqEtiquetas" title="PDF com um QR Code por máquina para colar nela">🏷️ Etiquetas QR</button></div>
+    <div class="mq-list">${rows}</div>
+    <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Custo-hora real = (combustível + peças e serviços das notas + ordens de serviço) ÷ horas do horímetro (ou horas do Campo quando não há horímetro). Planejado vem da aba CUSTO OPERAÇÃO.</p>`; };
+V.abastecimento=function(arg){ const ms=maqTodas(); if(arg) MQ_UI.maq=decodeURIComponent(arg); const m=MQ_UI.maq?maqDe(MQ_UI.maq):null, u=m?abastUltimo(m.id):null, hor=m?maqHorimetro(m):0, T=tanqueSaldo(), hoje=_hojeISO(), hh=new Date().toTimeString().slice(0,5);
+  const topo=`<div class="panel"><div class="panel-head"><h2>⛽ Abastecimento</h2><span class="sub">escolha a máquina pelo nome ou leia o QR Code colado nela</span></div>
+    <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('ab-maq', m?m.id:'', '— escolha —')}</label><label class="btn btn-primary" style="cursor:pointer">📷 Ler QR<input type="file" id="ab-qr" accept="image/*" capture="environment" hidden></label></div>
+    ${ms.length?'':'<p class="rel-ap-aviso" style="margin:0 14px 12px">Nenhuma máquina. Cadastre em <a class="link" data-go="#/maqcad">Cadastro</a>.</p>'}</div>`;
+  if(!m) return topo+abastListaHtml('')+tanqueHtml(T);
+  const al=maqAlertas(m), pl=planoStatus(m);
+  const form=`<div class="panel"><div class="panel-head"><h2>🚜 ${esc(m.nome)}</h2><span class="sub">horímetro ${hor?numH(hor)+' h':'—'}${u?` · último abastecimento ${_dtBRc(u.data)} (${numH(u.litros)} L)`:''}</span></div>
+    ${_alertHtml(al)}${pl.length?`<div class="mq-plano">${pl.map(x=>`<span class="pill ${x.st}">${esc(x.p.nome)}: ${x.falta<0?'vencida':'faltam '+numH(x.falta)+' h'}</span>`).join('')}</div>`:`<p class="mut" style="margin:0 14px 8px;font-size:12px">Sem plano de preventivas. <a class="link" data-go="#/manutencao/${encodeURIComponent(m.id)}">Cadastrar</a> (ex.: troca de óleo a cada 250 h) para o app avisar aqui.</p>`}
+    <div class="mq-form"><label>Data<input type="date" class="cell" id="ab-data" value="${hoje}"></label><label>Hora<input type="time" class="cell" id="ab-hora" value="${hh}"></label>
+      <label>Horímetro (h)<input class="cell" inputmode="decimal" id="ab-hor" placeholder="${hor?numH(hor):'ex.: 1250,5'}" title="Leitura do horímetro no momento do abastecimento"></label>
+      <label>Litros<input class="cell" inputmode="decimal" id="ab-litros" placeholder="0"></label>
+      <label>Combustível<select class="sel" id="ab-comb">${MAQ_COMB.map(c=>`<option>${c}</option>`).join('')}</select></label>
+      <label>Origem<select class="sel" id="ab-origem"><option value="tanque">Tanque da fazenda (${numH(T.saldo)} L)</option><option value="posto">Posto (com valor)</option></select></label>
+      <label>Valor (R$)<input class="cell" inputmode="decimal" id="ab-valor" placeholder="só no posto"></label>
+      <label>Operador<input class="txt" id="ab-oper" value="${esc((sessUsuario()||{}).nome||'')}" placeholder="quem abasteceu"></label>
+      <label style="flex-basis:100%">Observação<input class="txt" id="ab-obs" placeholder="opcional"></label></div>
+    <div class="bk-bar"><button class="btn btn-primary" data-act="abastSalvar" data-maq="${esc(m.id)}">💾 Registrar abastecimento</button><span class="mut">${syncUrl()?'sobe para a planilha sozinho; sem internet fica guardado e sobe depois':'sem planilha configurada: fica só neste aparelho'}</span></div></div>`;
+  return topo+form+abastListaHtml(m.id)+tanqueHtml(T); };
+function abastListaHtml(maqId_){ const L=abastLista(maqId_).slice().reverse().filter(a=>a.tipo!=='entrada'), lim=MQ_UI.mostrarTodos?L:L.slice(0,15); if(!L.length) return '';
+  return `<div class="panel"><div class="panel-head"><h2>Últimos abastecimentos${maqId_?'':' (todas)'}</h2><span class="sub">${L.length} registro(s)</span></div>
+    <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Data</th>${maqId_?'':'<th>Máquina</th>'}<th class="num">Horímetro</th><th class="num">Litros</th><th class="num">L/h</th><th>Origem</th><th class="num">Custo</th><th></th></tr></thead><tbody>
+    ${lim.map(a=>{ const c=abastConsumo(a), mq=maqDe(a.maq); return `<tr><td data-th="Data">${_dtBRc(a.data)}${a.hora?' '+esc(a.hora):''}<br><small class="mut">${esc(a.operador||'')}</small></td>${maqId_?'':`<td data-th="Máquina">${esc(mq?mq.nome:a.maq)}</td>`}<td class="num" data-th="Horímetro">${a.hor?numH(a.hor)+' h':'—'}</td><td class="num" data-th="Litros">${numH(a.litros)} L<br><small class="mut">${esc(a.comb||'')}</small></td><td class="num" data-th="L/h">${c?numH(c.lh)+`<br><small class="mut">${numH(c.dh)} h</small>`:'—'}</td><td data-th="Origem">${a.origem==='posto'?'Posto':'Tanque'}</td><td class="num" data-th="Custo">${brl0(abastCusto(a))}</td><td><button class="icon-btn" data-act="abastExcluir" data-id="${esc(a.id)}" title="Excluir">🗑</button></td></tr>`; }).join('')}</tbody></table></div>
+    ${L.length>lim.length?`<div class="bulk-add" style="padding:8px 14px"><button class="btn btn-outline btn-sm" data-act="abastTodos">Mostrar todos (${L.length})</button></div>`:''}</div>`; }
+function tanqueHtml(T){ const E=Object.values((OV&&OV.abast)||{}).filter(a=>a&&!a.del&&a.tipo==='entrada').sort((a,b)=>String(b.data).localeCompare(String(a.data))).slice(0,8);
+  return `<div class="panel"><div class="panel-head"><h2>🛢️ Tanque da fazenda</h2><span class="sub">saldo ${numH(T.saldo)} L · entradas ${numH(T.ent)} L · abastecido ${numH(T.sai)} L${T.precoMedio?' · preço médio '+brl(T.precoMedio)+'/L':''}</span></div>
+    <div class="mq-form"><label>Data<input type="date" class="cell" id="tq-data" value="${_hojeISO()}"></label><label>Litros que entraram<input class="cell" inputmode="decimal" id="tq-litros" placeholder="ex.: 5000"></label><label>Valor da compra (R$)<input class="cell" inputmode="decimal" id="tq-valor" placeholder="opcional"></label><label>Nota / fornecedor<input class="txt" id="tq-obs" placeholder="opcional"></label></div>
+    <div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="tanqueEntrada">➕ Registrar entrada no tanque</button><span class="mut">a nota de diesel também pode entrar pelo Administrativo → Notas (destino Combustível)</span></div>
+    ${E.length?`<div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Data</th><th class="num">Litros</th><th class="num">Valor</th><th>Obs.</th><th></th></tr></thead><tbody>${E.map(a=>`<tr><td data-th="Data">${_dtBRc(a.data)}</td><td class="num" data-th="Litros">${numH(a.litros)} L</td><td class="num" data-th="Valor">${+a.valor?brl0(a.valor):'—'}</td><td>${esc(a.obs||'')}</td><td><button class="icon-btn" data-act="abastExcluir" data-id="${esc(a.id)}" title="Excluir">🗑</button></td></tr>`).join('')}</tbody></table></div>`:''}</div>`; }
+function abastSalvar(mid){ const m=maqDe(mid); if(!m) return; const g=id=>(document.getElementById(id)||{}).value||''; const hor=numBR(g('ab-hor')), litros=numBR(g('ab-litros')), origem=g('ab-origem')||'tanque', valor=numBR(g('ab-valor'));
+  if(!(litros>0)){ toast('Informe os litros'); return; } if(!(hor>0)){ toast('Informe o horímetro'); return; }
+  const atual=maqHorimetro(m); if(hor<atual-0.001 && !ask(`O horímetro informado (${numH(hor)} h) é menor que o último registrado (${numH(atual)} h). Confirma mesmo assim?`)) return;
+  if(origem==='posto'&&!(valor>0)&&!ask('Abastecimento no posto sem valor. Continuar?')) return;
+  const T=tanqueSaldo(); if(origem==='tanque'&&T.ent>0&&litros>T.saldo+0.5&&!ask(`O tanque tem ${numH(T.saldo)} L registrados e você está tirando ${numH(litros)} L. Continuar? (depois registre a entrada que faltou)`)) return;
+  const a=abastGravar({maq:m.id, data:g('ab-data')||_hojeISO(), hora:g('ab-hora'), hor, litros, comb:g('ab-comb'), origem, valor:origem==='posto'?valor:0, precoL:origem==='posto'&&litros?+(valor/litros).toFixed(3):0, operador:g('ab-oper'), obs:g('ab-obs')});
+  const c=abastConsumo(a), al=maqAlertas(m); let msg=`Abastecimento registrado${c?` · ${numH(c.lh)} L/h nas últimas ${numH(c.dh)} h`:''}`; if(c&&m.lh&&c.lh>m.lh*1.2) msg+=` ⚠️ acima do planejado (${numH(m.lh)} L/h)`;
+  const venc=al.filter(x=>x.nivel==='erro'); if(venc.length) msg+=` · ⛔ ${venc[0].txt}`; else { const perto=planoStatus(m).find(x=>x.st==='perto'); if(perto) msg+=` · ⚠️ ${perto.p.nome}: faltam ${numH(perto.falta)} h`; }
+  route(); toast(msg); }
+function tanqueEntrada(){ const g=id=>(document.getElementById(id)||{}).value||''; const litros=numBR(g('tq-litros')); if(!(litros>0)){ toast('Informe os litros'); return; } abastGravar({tipo:'entrada', maq:'', data:g('tq-data')||_hojeISO(), litros, valor:numBR(g('tq-valor')), obs:g('tq-obs'), operador:(sessUsuario()||{}).nome||''}); route({keepScroll:true}); toast(`Entrada de ${numH(litros)} L registrada no tanque`); }
+V.manutencao=function(arg){ if(arg) MQ_UI.maq=decodeURIComponent(arg); const m=MQ_UI.maq?maqDe(MQ_UI.maq):null;
+  const topo=`<div class="panel"><div class="panel-head"><h2>🔧 Manutenção</h2><span class="sub">plano de preventivas (por horas) e ordens de serviço: preventiva, corretiva e reforma</span></div>
+    <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('os-maq', m?m.id:'', '— todas —')}</label></div></div>`;
+  if(!m) return topo+osListaHtml('');
+  const hor=maqHorimetro(m), pl=planoStatus(m);
+  const plano=`<div class="panel"><div class="panel-head"><h2>📅 Plano de preventivas · ${esc(m.nome)}</h2><span class="sub">horímetro atual ${numH(hor)} h · o app avisa em cada abastecimento quando chega perto</span></div>
+    ${pl.length?`<div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Item</th><th class="num">A cada</th><th class="num">Última</th><th class="num">Próxima</th><th>Situação</th><th></th></tr></thead><tbody>${pl.map(x=>`<tr class="${x.st==='vencida'?'mq-tr-erro':x.st==='perto'?'mq-tr-aviso':''}"><td>${esc(x.p.nome)}</td><td class="num" data-th="A cada">${numH(x.p.cadaH)} h</td><td class="num" data-th="Última">${x.p.ultH?numH(x.p.ultH)+' h':'—'}${x.p.ultData?`<br><small class="mut">${_dtBRc(x.p.ultData)}</small>`:''}</td><td class="num" data-th="Próxima">${numH(x.prox)} h</td><td data-th="Situação">${x.st==='vencida'?'<b style="color:var(--red)">vencida há '+numH(-x.falta)+' h</b>':x.st==='perto'?'<b style="color:var(--amber)">faltam '+numH(x.falta)+' h</b>':'faltam '+numH(x.falta)+' h'}</td><td><button class="btn btn-outline btn-sm" data-act="osNovaPlano" data-maq="${esc(m.id)}" data-plano="${esc(x.p.id)}" title="Abrir OS preventiva deste item">Fazer</button> <button class="icon-btn" data-act="planoExcluir" data-maq="${esc(m.id)}" data-plano="${esc(x.p.id)}" title="Remover do plano">🗑</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="mut" style="margin:0 14px 8px">Nenhum item no plano.</p>'}
+    <div class="mq-form"><label>Item<input class="txt" id="pl-nome" placeholder="ex.: Troca de óleo do motor" list="pl-sug"><datalist id="pl-sug"><option value="Troca de óleo do motor"><option value="Filtros (óleo, diesel, ar)"><option value="Óleo da transmissão"><option value="Óleo hidráulico"><option value="Lubrificação geral (graxa)"><option value="Revisão geral"><option value="Correias"><option value="Pneus / rodado"></datalist></label><label>A cada (h)<input class="cell" inputmode="decimal" id="pl-cada" placeholder="250"></label><label>Última vez (horímetro)<input class="cell" inputmode="decimal" id="pl-ult" placeholder="${numH(hor)}"></label></div>
+    <div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="planoAdd" data-maq="${esc(m.id)}">➕ Adicionar ao plano</button></div></div>`;
+  return topo+plano+osFormHtml(m)+osListaHtml(m.id); };
+function osFormHtml(m){ const o=MQ_UI.osAberta?(OV.osMaq||{})[MQ_UI.osAberta]:null, e=o&&o.maq===m.id?o:null, pl=(m.plano||[]).filter(p=>!p.del), hor=maqHorimetro(m);
+  return `<div class="panel" id="os-form"><div class="panel-head"><h2>${e?'✏️ Editar OS':'➕ Nova ordem de serviço'}</h2><span class="sub">${esc(m.nome)}</span>${e?`<div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="osCancelarEd">cancelar edição</button>`:''}</div>
+    <div class="mq-form"><label>Tipo<select class="sel" id="os-tipo">${Object.keys(OS_TIPOS).map(k=>`<option value="${k}"${(e?e.tipo:MQ_UI.osTipo||'preventiva')===k?' selected':''}>${OS_TIPOS[k]}</option>`).join('')}</select></label>
+      ${pl.length?`<label>Item do plano<select class="sel" id="os-plano"><option value="">—</option>${pl.map(p=>`<option value="${esc(p.id)}"${(e?e.planoId:MQ_UI.osPlano||'')===p.id?' selected':''}>${esc(p.nome)}</option>`).join('')}</select></label>`:''}
+      <label>Data de abertura<input type="date" class="cell" id="os-data" value="${esc(e?e.dataAb:_hojeISO())}"></label><label>Horímetro (h)<input class="cell" inputmode="decimal" id="os-hor" value="${e&&e.hor?numH(e.hor):''}" placeholder="${numH(hor)}"></label>
+      <label style="flex-basis:100%">Descrição<input class="txt" id="os-desc" value="${esc(e?e.desc||'':'')}" placeholder="o que foi feito / o problema"></label>
+      <label>Peças (descrição)<input class="txt" id="os-pecas" value="${esc(e?(e.pecas||[]).map(p=>p.item).join('; '):'')}" placeholder="ex.: filtro de óleo; 2 correias"></label><label>Valor das peças (R$)<input class="cell" inputmode="decimal" id="os-pecasV" value="${e?numH((e.pecas||[]).reduce((s,p)=>s+(+p.valor||0),0))||'':''}" placeholder="0 se vieram da nota"></label>
+      <label>Mão de obra (h)<input class="cell" inputmode="decimal" id="os-moH" value="${e&&e.moH?numH(e.moH):''}"></label><label>Mão de obra (R$)<input class="cell" inputmode="decimal" id="os-moV" value="${e&&e.moValor?numH(e.moValor):''}" placeholder="oficina / terceiro"></label>
+      <label>Responsável<input class="txt" id="os-resp" value="${esc(e?e.resp||'':(sessUsuario()||{}).nome||'')}"></label>
+      <label>Status<select class="sel" id="os-status"><option value="aberta"${e&&e.status==='aberta'?' selected':''}>Aberta</option><option value="concluida"${!e||e.status==='concluida'?' selected':''}>Concluída</option></select></label>
+      <label>Data de conclusão<input type="date" class="cell" id="os-fim" value="${esc(e?e.dataFim||'':_hojeISO())}"></label>
+      <label style="flex-basis:100%">Observação<input class="txt" id="os-obs" value="${esc(e?e.obs||'':'')}"></label></div>
+    <div class="bk-bar"><button class="btn btn-primary" data-act="osSalvar" data-maq="${esc(m.id)}"${e?` data-id="${esc(e.id)}"`:''}>💾 ${e?'Salvar alterações':'Registrar OS'}</button><span class="mut">peças já apropriadas pela nota (Administrativo → Notas) já contam no custo da máquina; aqui lance só o que não veio por nota</span></div></div>`; }
+function osListaHtml(maqId_){ const L=osLista(maqId_); if(!L.length) return `<p class="mut" style="padding:0 14px">Nenhuma ordem de serviço${maqId_?' nesta máquina':''}.</p>`;
+  return `<div class="panel"><div class="panel-head"><h2>Ordens de serviço${maqId_?'':' (todas)'}</h2><span class="sub">${L.filter(o=>o.status!=='concluida').length} aberta(s) · ${brl0(L.reduce((s,o)=>s+osValor(o),0))}</span></div>
+    <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Data</th>${maqId_?'':'<th>Máquina</th>'}<th>Tipo</th><th class="num">Horímetro</th><th>Descrição</th><th class="num">Valor</th><th>Status</th><th></th></tr></thead><tbody>
+    ${L.map(o=>{ const mq=maqDe(o.maq); return `<tr class="${o.status!=='concluida'?'mq-tr-aviso':''}"><td data-th="Data">${_dtBRc(o.dataAb)}${o.dataFim&&o.status==='concluida'?`<br><small class="mut">até ${_dtBRc(o.dataFim)}</small>`:''}</td>${maqId_?'':`<td data-th="Máquina">${esc(mq?mq.nome:o.maq)}</td>`}<td data-th="Tipo">${esc(OS_TIPOS[o.tipo]||o.tipo)}</td><td class="num" data-th="Horímetro">${o.hor?numH(o.hor)+' h':'—'}</td><td class="c-full" data-th="Descrição">${esc(o.desc||'')}${(o.pecas||[]).length?`<br><small class="mut">${esc(o.pecas.map(p=>p.item).join('; '))}</small>`:''}${o.resp?`<br><small class="mut">${esc(o.resp)}</small>`:''}</td><td class="num" data-th="Valor">${brl0(osValor(o))}</td><td data-th="Status">${o.status==='concluida'?'✅ concluída':'🟡 aberta'}</td><td><button class="icon-btn" data-act="osEditar" data-id="${esc(o.id)}" title="Editar">✏️</button><button class="icon-btn" data-act="osExcluir" data-id="${esc(o.id)}" title="Excluir">🗑</button></td></tr>`; }).join('')}</tbody></table></div></div>`; }
+function osSalvar(mid, id){ const m=maqDe(mid); if(!m) return; const g=k=>(document.getElementById(k)||{}).value||''; const desc=g('os-desc').trim(); if(!desc){ toast('Descreva o serviço'); return; }
+  const pecasTxt=g('os-pecas').trim(), pecasV=numBR(g('os-pecasV')); const pecas=pecasTxt?pecasTxt.split(/;|\n/).map(s=>s.trim()).filter(Boolean).map((item,i,arr)=>({item, valor:i===0?pecasV:0})):(pecasV>0?[{item:'peças', valor:pecasV}]:[]);
+  const prev=id?(OV.osMaq||{})[id]:null; const o=Object.assign({}, prev||{}, {id:id||undefined, maq:m.id, tipo:g('os-tipo')||'corretiva', planoId:g('os-plano')||'', dataAb:g('os-data')||_hojeISO(), hor:numBR(g('os-hor')), desc, pecas, moH:numBR(g('os-moH')), moValor:numBR(g('os-moV')), resp:g('os-resp'), status:g('os-status')||'concluida', dataFim:g('os-status')==='concluida'?(g('os-fim')||_hojeISO()):'', obs:g('os-obs')});
+  osGravar(o); MQ_UI.osAberta=''; MQ_UI.osPlano=''; route(); toast(o.status==='concluida'?`OS ${OS_TIPOS[o.tipo]} registrada${o.planoId?' · plano atualizado':''}`:'OS aberta registrada'); }
+V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)||{}).filter(c=>c&&!c.del&&c.ativa===false);
+  const rows=ms.map(m=>{ const ab=MQ_UI.cadAberto===m.id; return `<div class="mq-card"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.conjunto?' · conjunto da CUSTO OPERAÇÃO':''}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqCadAbrir" data-maq="${esc(m.id)}">${ab?'fechar':'editar'}</button></div>
+    ${ab?`<div class="mq-form"><label>Grupo<input class="txt" id="mc-grupo" value="${esc(m.grupo||'')}" list="mc-grupos"><datalist id="mc-grupos"><option value="Trator"><option value="Colheitadeira"><option value="Pulverizador"><option value="Plantadeira"><option value="Caminhão"><option value="Caminhonete"><option value="Implemento"><option value="Gerador / irrigação"></datalist></label><label>Ano<input class="cell" inputmode="numeric" id="mc-ano" value="${esc(m.ano||'')}"></label><label>Identificação (placa, chassi, frota)<input class="txt" id="mc-ident" value="${esc(m.ident||'')}"></label>
+      <label>Horímetro inicial (h)<input class="cell" inputmode="decimal" id="mc-horIni" value="${m.horIni?numH(m.horIni):''}" title="Leitura na data em que começou a registrar no app"></label><label>Consumo esperado (L/h)<input class="cell" inputmode="decimal" id="mc-lh" value="${m.lh?numH(m.lh):''}"></label><label>Custo-hora planejado (R$/h)<input class="cell" inputmode="decimal" id="mc-rsHm" value="${m.rsHm?numH(m.rsHm):''}"></label>
+      <label>Tanque da máquina (L)<input class="cell" inputmode="decimal" id="mc-tanque" value="${m.tanqueL?numH(m.tanqueL):''}"></label><label>Ativa<select class="sel" id="mc-ativa"><option value="1">Sim</option><option value="0">Não (sai das listas)</option></select></label><label style="flex-basis:100%">Observação<input class="txt" id="mc-obs" value="${esc(m.obs||'')}"></label></div>
+      <div class="bk-bar"><button class="btn btn-primary btn-sm" data-act="maqCadSalvar" data-maq="${esc(m.id)}">💾 Salvar</button><span class="mut">QR Code desta máquina: <code>MAQ:${esc(m.id)}</code> · <a class="link" data-act="maqEtiquetas">etiquetas em PDF</a></span></div>`:''}</div>`; }).join('');
+  return `<div class="panel"><div class="panel-head"><h2>🗂️ Cadastro de máquinas</h2><span class="sub">máquinas e implementos da CUSTO OPERAÇÃO, das notas e as cadastradas aqui</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqEtiquetas">🏷️ Etiquetas QR</button></div>
+    <div class="mq-form"><label style="flex:1">Nova máquina<input class="txt" id="mc-nova" placeholder="ex.: Caminhão VW 24.280"></label><label>Grupo<input class="txt" id="mc-novaGrupo" placeholder="Trator, Caminhão…"></label></div><div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="maqCadNova">➕ Cadastrar</button></div></div>
+    <div class="mq-list">${rows||'<p class="mut" style="padding:14px">Nenhuma máquina.</p>'}</div>
+    ${inativas.length?`<p class="mut" style="font-size:12px;padding:0 14px">Inativas: ${inativas.map(c=>`${esc(c.nome)} <a class="link" data-act="maqCadReativar" data-maq="${esc(c.id)}">reativar</a>`).join(' · ')}</p>`:''}`; };
+function maqCadSalvarForm(mid){ const g=k=>(document.getElementById(k)||{}).value||''; maqCadSalvar(mid,{grupo:g('mc-grupo'), ano:g('mc-ano'), ident:g('mc-ident'), horIni:numBR(g('mc-horIni')), lh:numBR(g('mc-lh')), rsHm:numBR(g('mc-rsHm')), tanqueL:numBR(g('mc-tanque')), ativa:g('mc-ativa')!=='0', obs:g('mc-obs')}); MQ_UI.cadAberto=''; route({keepScroll:true}); toast('Máquina salva'); }
+function maqCadNova(){ const nome=((document.getElementById('mc-nova')||{}).value||'').trim(); if(!nome){ toast('Informe o nome'); return; } const id=maqId(nome); if(maqDe(id)){ toast('Essa máquina já existe'); return; } maqCadSalvar(id,{nome, grupo:((document.getElementById('mc-novaGrupo')||{}).value||'').trim(), ativa:true, plano:[]}); MQ_UI.cadAberto=id; route({keepScroll:true}); toast(`${nome} cadastrada`); }
+function planoAdd(mid){ const m=maqDe(mid); if(!m) return; const g=k=>(document.getElementById(k)||{}).value||''; const nome=g('pl-nome').trim(), cada=numBR(g('pl-cada')), ult=numBR(g('pl-ult')); if(!nome||!(cada>0)){ toast('Informe o item e o intervalo em horas'); return; }
+  const pl=(m.plano||[]).concat([{id:'p'+Date.now().toString(36), nome, cadaH:cada, ultH:ult>0?ult:(+m.horIni||0), ultData:ult>0?'':''}]); maqCadSalvar(m.id,{plano:pl}); route({keepScroll:true}); toast(`${nome} a cada ${numH(cada)} h`); }
 V.maquinas = function(){
   const ms=maquinasAll(), medio=custoMedioPassada();
   const attrEd=(m,k)=>(OV.maqAttr[m.conjunto]&&OV.maqAttr[m.conjunto][k]!=null)?'edited':'';
@@ -4628,6 +4793,8 @@ V.inicio = function(){
         ['Compras (entradas de estoque)','Financeiro (títulos a pagar)','Cadastros (produtores, imóveis, contas)'],'ec-admin')}
       ${card('tarefas','👷','Tarefas','Organize a equipe e as tarefas da safra.',
         ['Quadro (estilo Trello)','Cronograma (Gantt)','Equipe / operadores'],'ec-tarefas')}
+      ${card('maquinas','🚜','Máquinas','Abastecimento, manutenção e custo-hora da frota.',
+        ['Abastecimento com horímetro (QR Code)','Plano de preventivas que avisa','Ordens de serviço','Custo-hora real × planejado'],'ec-maquinas')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
     ${sessUsuario()?`<p class="entry-foot">👤 <b>${esc(sessUsuario().nome)}</b> · <a class="link" data-go="#/conta">minha conta / sair</a>${ehAdmin()?' · <a class="link" data-go="#/usuarios">👥 usuários</a>':''}</p>`:(syncUrl()?`<p class="entry-foot"><a class="link" data-go="#/login">🔐 Entrar com login</a></p>`:'')}
@@ -9104,7 +9271,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -9529,6 +9696,9 @@ document.addEventListener('change',e=>{
   if(e.target.id==='nfe-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) nfeImportarArquivo(f); return; }
   if(e.target.id==='fech-prod'||e.target.id==='fech-mes'){ FECH_UI[e.target.id==='fech-prod'?'cpf':'mes']=e.target.value; FECH_UI.para=null; FECH_UI.cc=null; route({keepScroll:true}); return; }   // v292
   if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
+  if(e.target.id==='ab-maq'){ MQ_UI.maq=e.target.value; location.hash=e.target.value?'#/abastecimento/'+encodeURIComponent(e.target.value):'#/abastecimento'; return; }   // v295
+  if(e.target.id==='os-maq'){ MQ_UI.maq=e.target.value; MQ_UI.osAberta=''; location.hash=e.target.value?'#/manutencao/'+encodeURIComponent(e.target.value):'#/manutencao'; return; }
+  if(e.target.id==='ab-qr'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) maqLerQr(f).then(m=>{ if(m){ MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); } }); return; }
   if(e.target.id==='banco-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) bancoImportarArquivo(f); return; }   // v291
   if(e.target.id==='bk-conta' && BANCO){ const c=FIN().contas.find(x=>x.codigo===e.target.value); BANCO.conta=c?c.codigo:''; BANCO.produtor=c?c.produtor:''; BANCO.linhas.forEach(l=>{ l.manual=false; }); bancoClassificar(); route({keepScroll:true}); return; }
   if(e.target.dataset && e.target.dataset.bk!=null && BANCO){ bancoCampo(e.target); return; }
@@ -9956,6 +10126,13 @@ document.addEventListener('click',e=>{
     else if(a.act==='finSalvar'){ finSalvar(); }
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
+    else if(a.act==='maqEtiquetas'){ maqEtiquetas(); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
+    else if(a.act==='abastExcluir'){ const x=(OV.abast||{})[a.id]; if(x&&ask('Excluir este registro?')){ x.del=1; x._u=tsAgora(); saveOverrides(); loteAgendar('__abastecimento'); route({keepScroll:true}); } }
+    else if(a.act==='osSalvar'){ osSalvar(a.maq, a.id||''); } else if(a.act==='osEditar'){ const o=(OV.osMaq||{})[a.id]; if(o){ MQ_UI.maq=o.maq; MQ_UI.osAberta=o.id; route(); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); } } else if(a.act==='osCancelarEd'){ MQ_UI.osAberta=''; route({keepScroll:true}); }
+    else if(a.act==='osExcluir'){ const o=(OV.osMaq||{})[a.id]; if(o&&ask('Excluir esta ordem de serviço?')){ o.del=1; o._u=tsAgora(); saveOverrides(); loteAgendar('__osMaq'); route({keepScroll:true}); } }
+    else if(a.act==='osNovaPlano'){ MQ_UI.maq=a.maq; MQ_UI.osAberta=''; MQ_UI.osTipo='preventiva'; MQ_UI.osPlano=a.plano; route({keepScroll:true}); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); }
+    else if(a.act==='planoAdd'){ planoAdd(a.maq); } else if(a.act==='planoExcluir'){ const m=maqDe(a.maq); if(m&&ask('Remover este item do plano?')){ maqCadSalvar(m.id,{plano:(m.plano||[]).filter(p=>p.id!==a.plano)}); route({keepScroll:true}); } }
+    else if(a.act==='maqCadAbrir'){ MQ_UI.cadAberto=MQ_UI.cadAberto===a.maq?'':a.maq; route({keepScroll:true}); } else if(a.act==='maqCadSalvar'){ maqCadSalvarForm(a.maq); } else if(a.act==='maqCadNova'){ maqCadNova(); } else if(a.act==='maqCadReativar'){ maqCadSalvar(a.maq,{ativa:true}); route({keepScroll:true}); }
     else if(a.act==='fechGerar'){ fechGerar(); } else if(a.act==='fechBaixar'){ fechBaixar(a.doc); } else if(a.act==='fechEnviar'){ fechEnviar(false); } else if(a.act==='fechSalvar'){ fechEnviar(true); }
     else if(a.act==='bkConfirmar'){ bancoConfirmar(); } else if(a.act==='bkIa'){ bancoIa(); } else if(a.act==='bkLimpar'){ BANCO=null; route(); }
     else if(/^bk(Ign|Desfazer|Trocar|Amplo|Sug)$/.test(a.act)){ bancoAcao(a.act, +a.i); }
@@ -10527,6 +10704,9 @@ const LOTE_TIPOS={
   __result:      { lbl:'Resultados',    ok:()=>true,              dados:()=>(OV.result||{}),     sig:()=>resultSig(),    last:()=>lastResultSig,    set:v=>{ lastResultSig=v; } },
   __limites:     { lbl:'Limites',       ok:()=>limitesServerOk(), dados:()=>(OV.limites||{}),    sig:()=>limitesSig(),   last:()=>lastLimitesSig,   set:v=>{ lastLimitesSig=v; } },
   __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
+  __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
+  __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
+  __osMaq:       { lbl:'Ordens de serviço', ok:()=>maqServerOk(), dados:()=>(OV.osMaq||{}),      sig:()=>osSig(),        last:()=>lastOsSig,        set:v=>{ lastOsSig=v; } },
   __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
   __stand:       { lbl:'Stand',         ok:()=>standServerOk(),   dados:()=>standMapa(),         sig:()=>standSig(),     last:()=>lastStandSig,     set:v=>{ lastStandSig=v; } },
   __ocorrencia:  { lbl:'Ocorrências',   ok:()=>ocorServerOk(),    dados:()=>(OCOR.reg||{}),      sig:()=>ocorSig(),      last:()=>lastOcorSig,      set:v=>{ lastOcorSig=v; },  antes:()=>ocorFotosEnviar() },
@@ -10584,7 +10764,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -10776,6 +10956,7 @@ function applyPulledData(d, raw){
   try{ resultApplyPulled(d.result_app); }catch(e){}         // Resultados (colhido/preço por talhão)
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
+  try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
