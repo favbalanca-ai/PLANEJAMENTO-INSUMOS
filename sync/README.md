@@ -113,6 +113,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Máquinas, parte B (v296)
+
+- `_manutDest_` aceita o destino **tanque** (diesel/Arla a granel): a linha vai para MANUTENÇÃO MÁQUINAS com
+  DESTINO `tanque` e MÁQUINA "Tanque da fazenda"; a IA (`IA_DESTINOS`) também pode sugerir `tanque`. Os litros
+  entram no tanque pelo app (ABASTECIMENTOS APP, `tipo:'entrada'`, id `abnf:<chave>:<item>`).
+
 ## Módulo Máquinas (v295)
 
 - Três abas novas no padrão KEY|JSON (como EXPERIMENTOS APP), criadas quando faltam: **MÁQUINAS APP** (cadastro e

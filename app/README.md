@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Máquinas, parte B (v296)** — **📷 Ler QR pela câmera ao vivo**: abre a câmera e reconhece o QR Code da
+  máquina no vídeo (leitor do aparelho ou zxing-wasm; sem câmera ou negada, cai na foto). **Nota de diesel no tanque**:
+  na apropriação da NF-e há o destino **🛢️ Tanque de combustível**; ao confirmar, os litros entram no tanque da
+  fazenda (entrada com id da nota, reenviar não duplica), o título fica na categoria Combustível e a IA já sugere o
+  destino. **Relatórios em PDF**: por máquina (resumo, plano de preventivas, abastecimentos, OS, peças das notas) e da
+  frota (custo por máquina, R$/h real × planejado). Funções: `qrScanAbrir`, `qrScanTick`, `maqRelHtml`,
+  `frotaRelHtml`, `maqPdf`; `nfeDestManut` aceita `tanque`, `nfeCategoriaManut` → Combustível.
 - **Módulo 🚜 Máquinas: abastecimento, manutenção e custo-hora real (v295)** — módulo novo (permissão por usuário
   como os outros) com quatro telas. **Painel da frota** (`#/frota`): um cartão por máquina com horímetro, horas na
   safra, combustível (L e R$), consumo real L/h × planejado da CUSTO OPERAÇÃO, peças e serviços (notas apropriadas +

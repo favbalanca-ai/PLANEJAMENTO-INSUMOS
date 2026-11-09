@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-295';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-296';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1867,16 +1867,17 @@ function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || s=
 const NFE_ST={auto:['Automático','🟢'],ok:['Confirmado','✅'],sug:['Sugerido','🟡'],novo:['Novo','⚪'],ignorar:['Ignorar','🚫'],maq:['Apropriado','🔧'],maqsug:['Apropriar?','🔧'],ia:['IA','🤖']};
 const NFE_IA_MIN=0.75;   // v290: confiança mínima para a sugestão da IA entrar sozinha
 // ===== v285: destinos de apropriação fora do estoque — máquina, material de oficina, benfeitoria =====
-const NFE_DEST={maquina:{lbl:'Máquina',ico:'🔧',sub:'peça ou serviço → máquina'}, oficina:{lbl:'Oficina',ico:'🧰',sub:'material de oficina'}, benfeitoria:{lbl:'Benfeitoria',ico:'🏗️',sub:'construção, cerca, galpão…'}};
+const NFE_DEST={maquina:{lbl:'Máquina',ico:'🔧',sub:'peça ou serviço → máquina'}, oficina:{lbl:'Oficina',ico:'🧰',sub:'material de oficina'}, benfeitoria:{lbl:'Benfeitoria',ico:'🏗️',sub:'construção, cerca, galpão…'}, tanque:{lbl:'Tanque de combustível',ico:'🛢️',sub:'diesel a granel → tanque da fazenda'}};   // v296: tanque
 const OFIC_TIPOS=['Ferramenta','Consumível','EPI','Outro'], BENF_TIPOS=['Construção','Reforma','Elétrica','Hidráulica','Outro'];
-function nfeDestManut(d){ return d==='maquina'||d==='oficina'||d==='benfeitoria'; }
+function nfeDestManut(d){ return d==='maquina'||d==='oficina'||d==='benfeitoria'||d==='tanque'; }
+const TANQ_TIPOS=['Combustível','Arla 32','Outro'];
 const _RX_ITEM_OFIC=/\b(ferramenta|chave (?:de )?(?:fenda|boca|combinada|philips|allen|inglesa|estrela|grifo)|jogo de chaves|alicate|martelo|marreta|eletrodo|disco de (?:corte|desbaste)|lixa|serra|broca|soldador|m[aá]quina de solda|esmeril|furadeira|parafusadeira|compressor|macaco|talha|luva|[oó]culos de prote|protetor auricular|bota|capacete|\bepi\b|estopa|desengraxante|silicone|fita isolante|abra[cç]adeira|rebite|graxeira|bancada|morsa|paqu[ií]metro|tri?ncha|pincel|rolo de pintura)\b/i;
 const _RX_ITEM_BENF=/\b(cimento|tijolo|telha|areia|brita|arame|cerca|mour[aã]o|palanque|estaca|tinta|madeira|t[aá]bua|caibro|ripa|viga|vergalh|ferro (?:ca|cm|\d)|eletroduto|fio (?:el[eé]trico|flex|r[ií]gido|\d)|cabo (?:el[eé]trico|flex|\d)|disjuntor|tomada|interruptor|cano|tubo pvc|conex[aã]o|caixa d.?[aá]gua|torneira|registro (?:de )?(?:gaveta|press|esfera)|piso|argamassa|reboco|bloco|laje|calha|port[aã]o|dobradi[cç]a|cadeado|fechadura|grade|tela (?:soldada|galv|arame)|alambrado|concreto|massa corrida|verniz|gesso|prego|cal hidrat|manilha|bebedouro|cocho)\b/i;
 function nfeTipoGuess(dest, xprod){ const x=String(xprod||''); if(dest==='oficina'){ if(/luva|[oó]culos|bota|capacete|\bepi\b|protetor|m[aá]scara/i.test(x)) return 'EPI'; if(/ferramenta|chave|alicate|martelo|marreta|serra|furadeira|parafusadeira|esmeril|compressor|macaco|talha|morsa|bancada|paqu[ií]metro|soldador|m[aá]quina/i.test(x)) return 'Ferramenta'; return 'Consumível'; }
   if(dest==='benfeitoria'){ if(/fio|cabo|disjuntor|tomada|interruptor|eletroduto|l[aâ]mpada|lumin/i.test(x)) return 'Elétrica'; if(/cano|tubo|conex|torneira|registro|caixa d|bebedouro|hidr/i.test(x)) return 'Hidráulica'; if(/tinta|massa corrida|verniz|lixa|selador/i.test(x)) return 'Reforma'; return 'Construção'; }
   return nfeTipoMaqGuess(x); }
-function nfeMaqPadrao(dest, cnpj){ return dest==='oficina'?'Oficina':dest==='benfeitoria'?nfeBenfUltima(cnpj):nfeMaqUltima(cnpj); }
-function nfeTiposDe(dest){ return dest==='oficina'?OFIC_TIPOS:dest==='benfeitoria'?BENF_TIPOS:MANUT_TIPOS; }
+function nfeMaqPadrao(dest, cnpj){ return dest==='oficina'?'Oficina':dest==='tanque'?'Tanque da fazenda':dest==='benfeitoria'?nfeBenfUltima(cnpj):nfeMaqUltima(cnpj); }
+function nfeTiposDe(dest){ return dest==='oficina'?OFIC_TIPOS:dest==='tanque'?TANQ_TIPOS:dest==='benfeitoria'?BENF_TIPOS:MANUT_TIPOS; }
 function _deparaTodos(){ return Object.values(Object.assign({}, (DATA&&DATA.depara_nfe)||{}, deparaLocal())); }
 function nfeBenfUltima(cnpj){ const L=_deparaTodos().filter(d=>d.cnpj===cnpj&&d.destino==='benfeitoria'&&d.maquina).sort((a,b)=>(+b._u||0)-(+a._u||0)); return L.length?L[0].maquina:''; }
 // benfeitorias já usadas (manutenção + memória do de-para) para a lista de sugestões
@@ -2163,7 +2164,7 @@ function nfeSalvarDePara(imp){ if(!imp.lembrar) return; const n=imp.nota, L=depa
   saveDeParaLocal(); }
 // modo: 'entrada' (já chegou: entrada direta, RECEBIDA) · 'transito' (venda/remessa: EM TRÂNSITO, entra ao receber na fazenda)
 //       'contrato' (faturamento de entrega futura: A ENTREGAR)
-function nfeCategoriaManut(manut){ const vB=manut.filter(i=>i.dest==='benfeitoria').reduce((s,i)=>s+(+i.valor||0),0), vO=manut.filter(i=>i.dest!=='benfeitoria').reduce((s,i)=>s+(+i.valor||0),0); return vB>vO?'Benfeitorias':'Manutenção'; }   // v285: categoria do título pelo maior valor
+function nfeCategoriaManut(manut){ const vB=manut.filter(i=>i.dest==='benfeitoria').reduce((s,i)=>s+(+i.valor||0),0), vT=manut.filter(i=>i.dest==='tanque').reduce((s,i)=>s+(+i.valor||0),0), vO=manut.filter(i=>i.dest!=='benfeitoria'&&i.dest!=='tanque').reduce((s,i)=>s+(+i.valor||0),0); return vT>vB&&vT>vO?'Combustível':vB>vO?'Benfeitorias':'Manutenção'; }   // v296: tanque → Combustível   // v285: categoria do título pelo maior valor
 function nfeConfirmar(modo){
   const imp=nfeImport; if(!imp) return; const n=imp.nota, srv=nfeServerOk();
   modo = modo || 'entrada';
@@ -2203,6 +2204,7 @@ function nfeConfirmar(modo){
     const cl={chave:n.chave, status:modo==='entrada'?'RECEBIDA':(modo==='contrato'?'A ENTREGAR':'EM TRÂNSITO'), data:imp.data||_hojeISO(), por:'app',
       xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP, dups:n.dups||[], pag:n.pag||[], categoria:(manut.length&&!usados.length)?nfeCategoriaManut(manut):''};   // dups/pag: reserva p/ os títulos (v273) · categoria Manutenção/Benfeitorias quando só apropriações (v276/v285)
     if(n.tipo==='REMESSA') cl.ref=imp.ref||'';
+    itensP.filter(i=>i.dest==='tanque'&&!i.ignorar).forEach(i=>{ const L=/^M3|^M³/i.test(String(i.ucom||''))?(+i.qcom||0)*1000:(+i.qcom||0); if(!(L>0)) return; abastGravar({id:'abnf:'+n.chave+':'+i.n, tipo:'entrada', maq:'', data:imp.data||_hojeISO(), litros:+L.toFixed(1), valor:+i.valor||0, comb:/arla/i.test(i.xprod||'')?'Arla 32':'Diesel S10', obs:`NF-e ${n.nNF||''} · ${n.fornecedor||''} · ${i.xprod||''}`.trim(), operador:(sessUsuario()||{}).nome||'app', nf:n.chave}); });   // v296: diesel da nota entra no tanque da fazenda
     (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
     if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
     NFE_CONTRATOS=null;
@@ -2270,9 +2272,10 @@ function nfeConferirHtml(){
       ${it.ignorar?'':nfeDestManut(it.dest)?`<div class="nfe-it-map nfe-it-maq">
         ${it.dest==='maquina'?`<label class="nfe-prod">Máquina ou bem<input list="maqlist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="trator, pulverizador, caminhonete, outro bem…"></label>`
           :it.dest==='benfeitoria'?`<label class="nfe-prod">Benfeitoria<input list="benflist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="galpão, cerca, curral, casa, estrada…"></label>`
+          :it.dest==='tanque'?`<div class="nfe-kv"><small>Destino</small><b>🛢️ Tanque da fazenda</b><span>${fmtDose(+it.qcom||0)} ${esc(it.ucom||'')} entram como litros no tanque (módulo Máquinas)</span></div>`
           :`<div class="nfe-kv"><small>Destino</small><b>🧰 Oficina</b><span>material de uso geral, sem máquina específica</span></div>`}
         <label>Tipo do gasto<select class="sel" data-nfi="tipoMaq" data-i="${i}">${nfeTiposDe(it.dest).map(x=>`<option${x===(it.tipoMaq||nfeTiposDe(it.dest)[0])?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
-        <div class="nfe-kv"><small>Custo apropriado</small><b>${brl(nfeItemValor(it))}</b><span>não entra no estoque · ${it.dest==='benfeitoria'?'categoria Benfeitorias':'vai para Máquinas'}</span></div>
+        <div class="nfe-kv"><small>Custo apropriado</small><b>${brl(nfeItemValor(it))}</b><span>não entra no estoque · ${it.dest==='benfeitoria'?'categoria Benfeitorias':it.dest==='tanque'?'categoria Combustível · saldo do tanque':'vai para Máquinas'}</span></div>
       </div>`:`<div class="nfe-it-map">
         <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button><button type="button" class="btn btn-outline btn-sm" data-act="nfiNovo" data-i="${i}" title="Cadastrar este item como produto novo no portfólio">➕</button></span></label>
         <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
@@ -4191,7 +4194,7 @@ V.precos = function(){
 // ---- v276: manutenção (peças/serviços das notas) por máquina — só informação; o R$/ha das operações continua pelo R$/HM ----
 function manutLista(){ return ((DATA&&DATA.manutencao)||[]).slice().sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))); }
 function manutPainelHtml(){ const L=manutLista(); if(!L.length) return '';
-  const grupo=r=>r.destino==='oficina'?'🧰 Oficina':r.destino==='benfeitoria'?'🏗️ '+(r.maquina||'Benfeitoria'):(r.maquina||'—');   // v285
+  const grupo=r=>r.destino==='oficina'?'🧰 Oficina':r.destino==='tanque'?'🛢️ Tanque de combustível':r.destino==='benfeitoria'?'🏗️ '+(r.maquina||'Benfeitoria'):(r.maquina||'—');   // v285 · v296
   const porMaq={}, porTipo={}; let tot=0; L.forEach(r=>{ const v=+r.valor||0; tot+=v; const g=grupo(r); porMaq[g]=(porMaq[g]||0)+v; porTipo[r.tipo||'Outro']=(porTipo[r.tipo||'Outro']||0)+v; });
   const maqs=Object.keys(porMaq).sort((a,b)=>porMaq[b]-porMaq[a]), tipos=Object.keys(porTipo).sort((a,b)=>porTipo[b]-porTipo[a]);
   const ult=L.slice(0,40);
@@ -4225,7 +4228,7 @@ const maqId=nome=>'m:'+_bkNorm(nome).replace(/[^A-Z0-9]+/g,'-').replace(/^-|-$/g
 // todas as máquinas conhecidas: cadastro do módulo + CUSTO OPERAÇÃO (máquina e implemento) + nomes vindos das notas
 function maqTodas(){ const by={}; const add=(nome,extra)=>{ nome=String(nome||'').trim(); if(!nome) return; const id=maqId(nome); by[id]=Object.assign(by[id]||{id, nome, ativa:true, plano:[]}, extra||{}); };
   maquinasAll().forEach(m=>{ if(m.maquina) add(m.maquina,{lh:+m.l_h||0, rsHm:+m.rs_hm||0, grupo:maqGrupoGuess(m.maquina), conjunto:m.conjunto}); if(m.implemento) add(m.implemento,{grupo:maqGrupoGuess(m.implemento,'Implemento')}); });
-  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina&&r.destino!=='oficina'&&r.destino!=='benfeitoria') add(r.maquina,{}); });
+  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina&&r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.destino!=='tanque') add(r.maquina,{}); });
   Object.values((OV&&OV.maqApp)||{}).forEach(c=>{ if(c&&!c.del&&c.nome){ const id=c.id||maqId(c.nome); by[id]=Object.assign(by[id]||{id, nome:c.nome, plano:[]}, c); } });
   return Object.values(by).filter(m=>m.ativa!==false&&!m.del).sort((a,b)=>String(a.nome).localeCompare(String(b.nome),'pt-BR')); }
 function maqDe(id){ return maqTodas().find(m=>m.id===id)||Object.values((OV&&OV.maqApp)||{}).find(c=>c.id===id)||null; }
@@ -4255,7 +4258,7 @@ const osValor=o=>(+o.moValor||0)+((o.pecas||[]).reduce((s,p)=>s+(+p.valor||0),0)
 function maqHorasCampo(m){ let h=0; const R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mq=_bkNorm(r.app.maq); if(!(mq.includes(_bkNorm(m.nome))||(m.conjunto&&mq===_bkNorm(m.conjunto)))) continue; const d=durHoras(r.app.hIni,r.app.hFim); if(d>0) h+=d; } return h; }
 function maqCustos(m){ const ab=abastLista(m.id).filter(a=>a.tipo!=='entrada'); const litros=ab.reduce((s,a)=>s+(+a.litros||0),0), comb=ab.reduce((s,a)=>s+abastCusto(a),0);
   const hs=ab.filter(a=>+a.hor>0).map(a=>+a.hor); const horasHor=hs.length>1?Math.max(...hs)-Math.min(...hs):0; const horas=horasHor||maqHorasCampo(m);
-  const pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.maquina&&maqId(r.maquina)===m.id).reduce((s,r)=>s+(+r.valor||0),0);
+  const pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.destino!=='tanque'&&r.maquina&&maqId(r.maquina)===m.id).reduce((s,r)=>s+(+r.valor||0),0);
   const os=osLista(m.id).reduce((s,o)=>s+osValor(o),0), total=comb+pecas+os;
   return {litros, comb, pecas, os, total, horas, horasHor, horasCampo:maqHorasCampo(m), lhReal:horasHor>0?litros/horasHor:0, custoH:horas>0?total/horas:0}; }
 // ---- QR Code: conteúdo "MAQ:<id>"; leitura pela câmera (BarcodeDetector ou zxing-wasm) ----
@@ -4269,6 +4272,38 @@ async function maqLerQr(file){ toast('Lendo QR…'); try{ const url=URL.createOb
     if(!txt){ const Z=await loadZXingWasm(); const im=cv.getContext('2d').getImageData(0,0,cv.width,cv.height); const r=await Z.readBarcodes(im,{formats:['QRCode'], tryHarder:true, tryRotate:true, tryDownscale:true, maxNumberOfSymbols:1}); if(r&&r[0]) txt=r[0].text||''; }
     return maqDoQr(txt); }catch(e){ toast('Não li o QR: '+e.message); return null; } }
 function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Code na foto'); return null; } const id=txt.replace(/^MAQ:/i,''); let m=maqDe(id)||maqTodas().find(x=>_bkNorm(x.nome)===_bkNorm(id)); if(!m){ toast(`QR lido (${txt.slice(0,30)}) não é de uma máquina cadastrada`); return null; } return m; }
+// ---- leitura do QR pela câmera ao vivo (v296): BarcodeDetector do aparelho ou zxing-wasm nos quadros do vídeo; sem câmera cai na foto ----
+let QR_SCAN=null;
+async function qrScanAbrir(){ if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ const f=document.getElementById('ab-qr'); if(f) f.click(); else toast('Este aparelho não tem câmera acessível'); return; }
+  qrScanFechar(); const ov=document.createElement('div'); ov.id='qr-ov'; ov.className='qr-ov'; ov.innerHTML=`<div class="qr-box"><video id="qr-video" autoplay playsinline muted></video><div class="qr-mira"></div><div class="qr-msg" id="qr-msg">Aponte para o QR Code colado na máquina</div><div class="qr-acts"><label class="btn btn-outline btn-sm" style="cursor:pointer">📷 Tirar foto<input type="file" id="qr-foto" accept="image/*" capture="environment" hidden></label><button class="btn btn-outline btn-sm" data-act="qrScanFechar">✕ Fechar</button></div></div>`; document.body.appendChild(ov);
+  try{ const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720}}, audio:false}); const v=ov.querySelector('#qr-video'); v.srcObject=stream; QR_SCAN={ov, stream, timer:null, det:null, zw:null, busy:false};
+    try{ if('BarcodeDetector' in window){ const f=await BarcodeDetector.getSupportedFormats(); if(f.includes('qr_code')) QR_SCAN.det=new BarcodeDetector({formats:['qr_code']}); } }catch(e){}
+    if(!QR_SCAN.det){ try{ QR_SCAN.zw=await loadZXingWasm(); }catch(e){ const m=ov.querySelector('#qr-msg'); if(m) m.textContent='Sem leitor ao vivo neste aparelho: toque em "Tirar foto"'; } }
+    if(!QR_SCAN) return; const cv=document.createElement('canvas'); QR_SCAN.timer=setInterval(()=>qrScanTick(cv), 350); }
+  catch(e){ qrScanFechar(); ov.remove(); toast('Câmera indisponível ('+(e&&(e.name||e.message)||'')+') — use a foto'); const f=document.getElementById('ab-qr'); if(f) f.click(); } }
+async function qrScanTick(cv){ const Q=QR_SCAN; if(!Q||Q.busy) return; const v=Q.ov.querySelector('#qr-video'); if(!v||v.readyState<2||!v.videoWidth) return; Q.busy=true;
+  try{ let txt=''; if(Q.det){ const r=await Q.det.detect(v); if(r&&r[0]) txt=r[0].rawValue||''; }
+    else if(Q.zw){ const sc=Math.min(1,800/v.videoWidth); cv.width=Math.round(v.videoWidth*sc); cv.height=Math.round(v.videoHeight*sc); const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(v,0,0,cv.width,cv.height); const r=await Q.zw.readBarcodes(cx.getImageData(0,0,cv.width,cv.height),{formats:['QRCode'], tryHarder:false, maxNumberOfSymbols:1}); if(r&&r[0]) txt=r[0].text||''; }
+    if(txt){ const m=maqDoQr(txt); if(m){ qrScanFechar(); MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); try{ if(navigator.vibrate) navigator.vibrate(80); }catch(e){} } } }
+  catch(e){} finally{ if(QR_SCAN) QR_SCAN.busy=false; } }
+function qrScanFechar(){ const Q=QR_SCAN; QR_SCAN=null; if(!Q) return; clearInterval(Q.timer); try{ Q.stream.getTracks().forEach(t=>t.stop()); }catch(e){} Q.ov.remove(); }
+// ---- relatórios em PDF (v296): uma máquina ou a frota inteira ----
+const _rTab=(cab,rows,nums)=>`<table style="width:100%;border-collapse:collapse;font-size:10.5px;margin:4px 0 10px"><thead><tr>${cab.map((h,i)=>`<th style="text-align:${(nums||[]).includes(i)?'right':'left'};border-bottom:1px solid #000;padding:3px">${h}</th>`).join('')}</tr></thead><tbody>${rows.length?rows.map(r=>`<tr>${r.map((c,i)=>`<td style="padding:2px 3px;${(nums||[]).includes(i)?'text-align:right':''}">${c}</td>`).join('')}</tr>`).join(''):`<tr><td colspan="${cab.length}" style="padding:4px;color:#555">nenhum</td></tr>`}</tbody></table>`;
+const _rH2=t=>`<h2 style="font-size:14px;margin:12px 0 4px">${t}</h2>`;
+function maqRelHtml(m){ const c=maqCustos(m), ab=abastLista(m.id).filter(a=>a.tipo!=='entrada'), os=osLista(m.id), pl=planoStatus(m), pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.maquina&&maqId(r.maquina)===m.id&&!['oficina','benfeitoria','tanque'].includes(r.destino));
+  return `<h1>🚜 ${esc(m.nome)}</h1><div style="font-size:11px;color:#333">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''} · safra ${esc(String((DATA&&DATA.safra)||''))} · gerado em ${_dtBRc(_hojeISO())}</div>
+  ${_rH2('Resumo')}${_rTab(['','Valor'],[['Horímetro atual',numH(maqHorimetro(m))+' h'],['Horas na safra',numH(c.horas)+' h'+(c.horasHor?'':(c.horas?' (horas do Campo)':''))],['Combustível',numH(c.litros)+' L · '+brl(c.comb)],['Consumo real',c.lhReal?numH(c.lhReal)+' L/h':'—'],['Consumo planejado',m.lh?numH(m.lh)+' L/h':'—'],['Peças e serviços (notas)',brl(c.pecas)],['Ordens de serviço',brl(c.os)],['Custo total',brl(c.total)],['<b>Custo-hora real</b>',c.custoH?'<b>'+brl(c.custoH)+'/h</b>':'—'],['Custo-hora planejado',m.rsHm?brl(m.rsHm)+'/h':'—']],[1])}
+  ${_rH2('Plano de preventivas')}${_rTab(['Item','A cada','Última','Próxima','Situação'], pl.map(x=>[esc(x.p.nome), numH(x.p.cadaH)+' h', x.p.ultH?numH(x.p.ultH)+' h':'—', numH(x.prox)+' h', x.st==='vencida'?'<b>vencida há '+numH(-x.falta)+' h</b>':'faltam '+numH(x.falta)+' h']),[1,2,3])}
+  ${_rH2('Abastecimentos ('+ab.length+')')}${_rTab(['Data','Horímetro','Litros','L/h','Origem','Custo'], ab.slice().reverse().map(a=>{ const k=abastConsumo(a); return [_dtBRc(a.data)+(a.operador?' · '+esc(a.operador):''), a.hor?numH(a.hor)+' h':'—', numH(a.litros)+' L', k?numH(k.lh):'—', a.origem==='posto'?'Posto':'Tanque', brl(abastCusto(a))]; }),[1,2,3,5])}
+  ${_rH2('Ordens de serviço ('+os.length+')')}${_rTab(['Data','Tipo','Descrição','Horímetro','Valor','Status'], os.map(o=>[_dtBRc(o.dataAb), OS_TIPOS[o.tipo]||o.tipo, esc(o.desc||'')+((o.pecas||[]).length?' · '+esc(o.pecas.map(p=>p.item).join('; ')):''), o.hor?numH(o.hor)+' h':'—', brl(osValor(o)), o.status==='concluida'?'concluída':'aberta']),[3,4])}
+  ${_rH2('Peças e serviços das notas ('+pecas.length+')')}${_rTab(['Data','Item','Tipo','Fornecedor','Valor'], pecas.map(r=>[_dtBRc(r.data), esc(r.item||''), esc(r.tipo||''), esc(r.fornecedor||''), brl(r.valor)]),[4])}`; }
+function frotaRelHtml(){ const ms=maqTodas(), T=tanqueSaldo(); let tot={h:0,l:0,c:0,p:0,o:0};
+  const rows=ms.map(m=>{ const c=maqCustos(m); tot.h+=c.horas; tot.l+=c.litros; tot.c+=c.comb; tot.p+=c.pecas; tot.o+=c.os; if(!(c.total||c.horas||maqHorimetro(m))) return null; return [esc(m.nome), maqHorimetro(m)?numH(maqHorimetro(m))+' h':'—', c.horas?numH(c.horas)+' h':'—', c.litros?numH(c.litros)+' L':'—', c.lhReal?numH(c.lhReal):'—', brl(c.comb), brl(c.pecas+c.os), brl(c.total), c.custoH?brl(c.custoH):'—', m.rsHm?brl(m.rsHm):'—']; }).filter(Boolean);
+  return `<h1>🚜 Frota — custo por máquina</h1><div style="font-size:11px;color:#333">safra ${esc(String((DATA&&DATA.safra)||''))} · ${ms.length} máquina(s) · gerado em ${_dtBRc(_hojeISO())}</div>
+  ${_rH2('Resumo')}${_rTab(['','Valor'],[['Combustível',numH(tot.l)+' L · '+brl(tot.c)],['Peças, serviços e OS',brl(tot.p+tot.o)],['Custo total',brl(tot.c+tot.p+tot.o)],['Horas trabalhadas',numH(tot.h)+' h'],['Custo-hora médio',tot.h?brl((tot.c+tot.p+tot.o)/tot.h)+'/h':'—'],['Tanque da fazenda',numH(T.saldo)+' L (entradas '+numH(T.ent)+' L · abastecido '+numH(T.sai)+' L)']],[1])}
+  ${_rH2('Por máquina (só as que têm registro)')}${_rTab(['Máquina','Horímetro','Horas','Litros','L/h','Combustível','Peças · OS','Total','R$/h real','R$/h plan.'], rows,[1,2,3,4,5,6,7,8,9])}
+  <p style="font-size:10px;color:#555;margin-top:10px">Custo-hora real = (combustível + peças e serviços das notas + ordens de serviço) ÷ horas do horímetro (ou do Campo). Planejado = CUSTO OPERAÇÃO / cadastro.</p>`; }
+async function maqPdf(mid){ const html=mid?maqRelHtml(maqDe(mid)):frotaRelHtml(); if(!html) return; toast('Gerando PDF…'); try{ const blob=await pdfArquivo(html,''); const nome=mid?`maquina_${mid.replace(/^m:/,'').toLowerCase()}.pdf`:'frota_custo_por_maquina.pdf'; const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nome; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); toast('PDF pronto'); }catch(e){ toast('PDF: '+e.message); } }
 // ---- telas ----
 let MQ_UI={maq:'', osAberta:'', mostrarTodos:false, cadAberto:''};
 function maqSelectHtml(id, sel, ph){ return `<select class="sel" id="${id}"><option value="">${ph||'— máquina —'}</option>${maqTodas().map(m=>`<option value="${esc(m.id)}"${m.id===sel?' selected':''}>${esc(m.nome)}</option>`).join('')}</select>`; }
@@ -4276,7 +4311,7 @@ const _alertHtml=(al)=>al.length?`<ul class="mq-alertas">${al.map(a=>`<li class=
 V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
   const temDado=m=>abastLista(m.id).length||osLista(m.id).length||(m.plano||[]).length||maqHorimetro(m)>0; ms.sort((a,b)=>(temDado(b)?1:0)-(temDado(a)?1:0)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));   // quem tem registro aparece primeiro
   const rows=ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0];
-    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a></div>
+    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
       <div class="rel-uso-kpis mq-kpis"><span><small>Horímetro</small>${hor?numH(hor)+' h':'—'}</span><span><small>Horas na safra</small>${c.horas?numH(c.horas)+' h':'—'}${!c.horasHor&&c.horasCampo?'<small class="mut" style="text-transform:none"> (Campo)</small>':''}</span><span><small>Combustível</small>${c.litros?`${numH(c.litros)} L · ${brl0(c.comb)}`:'—'}</span><span><small>Consumo</small>${c.lhReal?`${numH(c.lhReal)} L/h`:'—'}${m.lh?`<small class="mut" style="text-transform:none"> plan. ${numH(m.lh)}</small>`:''}</span><span><small>Peças · serviços</small>${brl0(c.pecas+c.os)}</span><span class="${c.custoH&&m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}"><small>Custo-hora real</small>${c.custoH?brl(c.custoH)+'/h':'—'}${m.rsHm?`<small class="mut" style="text-transform:none"> plan. ${brl0(m.rsHm)}</small>`:''}</span><span><small>Próxima preventiva</small>${prox?`${esc(prox.p.nome)} · ${prox.falta<0?'<b style="color:var(--red)">vencida</b>':'faltam '+numH(prox.falta)+' h'}`:'<span class="mut">sem plano</span>'}</span></div>
       ${_alertHtml(al)}</div>`; }).join('');
   const tot=ms.reduce((s,m)=>{ const c=maqCustos(m); s.comb+=c.comb; s.pecas+=c.pecas+c.os; s.horas+=c.horas; s.litros+=c.litros; return s; },{comb:0,pecas:0,horas:0,litros:0}), nAl=ms.reduce((s,m)=>s+maqAlertas(m).length,0);
@@ -4284,12 +4319,12 @@ V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return 
     <div class="kpi"><div class="k-label">Horas trabalhadas</div><div class="k-value">${numH(tot.horas)} h</div><div class="k-sub">${tot.horas?brl(( tot.comb+tot.pecas)/tot.horas)+'/h médio':'horímetro nos abastecimentos'}</div></div>
     <div class="kpi"><div class="k-label">Tanque da fazenda</div><div class="k-value">${numH(T.saldo)} L</div><div class="k-sub">${numH(T.ent)} L entraram · ${numH(T.sai)} L abastecidos${T.precoMedio?' · '+brl(T.precoMedio)+'/L':''}</div></div>
     <div class="kpi${nAl?' kpi-neg':''}"><div class="k-label">Alertas</div><div class="k-value">${nAl}</div><div class="k-sub">preventivas, OS abertas, consumo</div></div></div>
-    <div class="toolbar" style="margin:0 0 10px"><a class="btn btn-primary btn-sm" data-go="#/abastecimento">⛽ Registrar abastecimento</a><a class="btn btn-outline btn-sm" data-go="#/manutencao">🔧 Ordens de serviço</a><a class="btn btn-outline btn-sm" data-go="#/maqcad">🗂️ Cadastro</a><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqEtiquetas" title="PDF com um QR Code por máquina para colar nela">🏷️ Etiquetas QR</button></div>
+    <div class="toolbar" style="margin:0 0 10px"><a class="btn btn-primary btn-sm" data-go="#/abastecimento">⛽ Registrar abastecimento</a><a class="btn btn-outline btn-sm" data-go="#/manutencao">🔧 Ordens de serviço</a><a class="btn btn-outline btn-sm" data-go="#/maqcad">🗂️ Cadastro</a><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqPdf" title="PDF com o custo de todas as máquinas">📄 Relatório da frota</button><button class="btn btn-outline btn-sm" data-act="maqEtiquetas" title="PDF com um QR Code por máquina para colar nela">🏷️ Etiquetas QR</button></div>
     <div class="mq-list">${rows}</div>
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Custo-hora real = (combustível + peças e serviços das notas + ordens de serviço) ÷ horas do horímetro (ou horas do Campo quando não há horímetro). Planejado vem da aba CUSTO OPERAÇÃO.</p>`; };
 V.abastecimento=function(arg){ const ms=maqTodas(); if(arg) MQ_UI.maq=decodeURIComponent(arg); const m=MQ_UI.maq?maqDe(MQ_UI.maq):null, u=m?abastUltimo(m.id):null, hor=m?maqHorimetro(m):0, T=tanqueSaldo(), hoje=_hojeISO(), hh=new Date().toTimeString().slice(0,5);
   const topo=`<div class="panel"><div class="panel-head"><h2>⛽ Abastecimento</h2><span class="sub">escolha a máquina pelo nome ou leia o QR Code colado nela</span></div>
-    <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('ab-maq', m?m.id:'', '— escolha —')}</label><label class="btn btn-primary" style="cursor:pointer">📷 Ler QR<input type="file" id="ab-qr" accept="image/*" capture="environment" hidden></label></div>
+    <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('ab-maq', m?m.id:'', '— escolha —')}</label><button class="btn btn-primary" data-act="qrScan" title="Abre a câmera e lê o QR Code colado na máquina">📷 Ler QR</button><label hidden><input type="file" id="ab-qr" accept="image/*" capture="environment"></label></div>
     ${ms.length?'':'<p class="rel-ap-aviso" style="margin:0 14px 12px">Nenhuma máquina. Cadastre em <a class="link" data-go="#/maqcad">Cadastro</a>.</p>'}</div>`;
   if(!m) return topo+abastListaHtml('')+tanqueHtml(T);
   const al=maqAlertas(m), pl=planoStatus(m);
@@ -9698,6 +9733,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
   if(e.target.id==='ab-maq'){ MQ_UI.maq=e.target.value; location.hash=e.target.value?'#/abastecimento/'+encodeURIComponent(e.target.value):'#/abastecimento'; return; }   // v295
   if(e.target.id==='os-maq'){ MQ_UI.maq=e.target.value; MQ_UI.osAberta=''; location.hash=e.target.value?'#/manutencao/'+encodeURIComponent(e.target.value):'#/manutencao'; return; }
+  if(e.target.id==='qr-foto'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) maqLerQr(f).then(m=>{ if(m){ qrScanFechar(); MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); } }); return; }
   if(e.target.id==='ab-qr'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) maqLerQr(f).then(m=>{ if(m){ MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); } }); return; }
   if(e.target.id==='banco-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) bancoImportarArquivo(f); return; }   // v291
   if(e.target.id==='bk-conta' && BANCO){ const c=FIN().contas.find(x=>x.codigo===e.target.value); BANCO.conta=c?c.codigo:''; BANCO.produtor=c?c.produtor:''; BANCO.linhas.forEach(l=>{ l.manual=false; }); bancoClassificar(); route({keepScroll:true}); return; }
@@ -9713,7 +9749,7 @@ document.addEventListener('change',e=>{
     recRerender(); return; }
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
-    else if(f==='dest'){ const d=e.target.value; it.dest=nfeDestManut(d)?d:'estoque'; if(nfeDestManut(d)){ it.maq=d==='oficina'?'Oficina':(d==='maquina'?(nfeMaqUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-maq-all')||{}).value||''):(nfeBenfUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-benf-all')||{}).value||'')); it.tipoMaq=nfeTipoGuess(d,it.xprod); } }   // v276/v285
+    else if(f==='dest'){ const d=e.target.value; it.dest=nfeDestManut(d)?d:'estoque'; if(nfeDestManut(d)){ it.maq=d==='oficina'?'Oficina':d==='tanque'?'Tanque da fazenda':(d==='maquina'?(nfeMaqUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-maq-all')||{}).value||''):(nfeBenfUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-benf-all')||{}).value||'')); it.tipoMaq=nfeTipoGuess(d,it.xprod); } }   // v276/v285
     else if(f==='maq'){ it.maq=e.target.value.trim(); return; }
     else if(f==='tipoMaq'){ it.tipoMaq=e.target.value; return; }
     else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
@@ -10126,7 +10162,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='finSalvar'){ finSalvar(); }
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
-    else if(a.act==='maqEtiquetas'){ maqEtiquetas(); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
+    else if(a.act==='maqEtiquetas'){ maqEtiquetas(); } else if(a.act==='qrScan'){ qrScanAbrir(); } else if(a.act==='qrScanFechar'){ qrScanFechar(); } else if(a.act==='maqPdf'){ maqPdf(a.maq||''); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
     else if(a.act==='abastExcluir'){ const x=(OV.abast||{})[a.id]; if(x&&ask('Excluir este registro?')){ x.del=1; x._u=tsAgora(); saveOverrides(); loteAgendar('__abastecimento'); route({keepScroll:true}); } }
     else if(a.act==='osSalvar'){ osSalvar(a.maq, a.id||''); } else if(a.act==='osEditar'){ const o=(OV.osMaq||{})[a.id]; if(o){ MQ_UI.maq=o.maq; MQ_UI.osAberta=o.id; route(); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); } } else if(a.act==='osCancelarEd'){ MQ_UI.osAberta=''; route({keepScroll:true}); }
     else if(a.act==='osExcluir'){ const o=(OV.osMaq||{})[a.id]; if(o&&ask('Excluir esta ordem de serviço?')){ o.del=1; o._u=tsAgora(); saveOverrides(); loteAgendar('__osMaq'); route({keepScroll:true}); } }
