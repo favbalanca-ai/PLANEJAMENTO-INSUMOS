@@ -113,6 +113,12 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## WhatsApp nas etiquetas (v299)
+
+- `__cadFin` tipo **maquinas** `{whats}` → `configAppGravar_('WHATSAPP MAQUINAS', …)`; `readConfigApp` devolve
+  `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
+  sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
+
 ## Máquinas, parte B (v296)
 
 - `_manutDest_` aceita o destino **tanque** (diesel/Arla a granel): a linha vai para MANUTENÇÃO MÁQUINAS com
