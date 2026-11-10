@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Etiquetas separadas (v300)** — dois botões: **Etiquetas WhatsApp** (um QR do WhatsApp por máquina, só aparece com
+  o número salvo) e **Etiquetas App** (um QR `MAQ:<id>` por máquina). Cada PDF tem um QR grande por máquina, três por
+  linha. `maqEtiquetas(modo)`.
 - **Abastecimento pelo WhatsApp, sem app (v299)** — em Cadastro de máquinas informa-se o **número de WhatsApp**
   que recebe os abastecimentos (vai para a aba CONFIG APP, chave WHATSAPP MAQUINAS, e fica no aparelho; nunca no
   código). As etiquetas ganham um **QR do WhatsApp**: a câmera comum do celular abre a conversa com a mensagem pronta
