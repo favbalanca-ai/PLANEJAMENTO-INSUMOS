@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-298';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-299';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3509,6 +3509,7 @@ async function cadPost(tipo, item, msgOk){ const url=syncUrl(); if(!url) return 
     if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
     if(tipo==='contador'){ DATA.financeiro.contador=Object.assign({}, FIN().contador, item); }
     else if(tipo==='pesagem'){ if(DATA.pesagem) DATA.pesagem.cfg=Object.assign({}, DATA.pesagem.cfg||{}, item); }
+    else if(tipo==='maquinas'){ DATA.config_app=DATA.config_app||{}; DATA.config_app.maquinas=Object.assign({}, DATA.config_app.maquinas||{}, {whats:String(item.whats||'').replace(/\D/g,'')}); }   // v299
     else if(tipo!=='lcdpr'){ const k=CAD_KEY[tipo], L=cadLista(tipo), i=L.findIndex(x=>x[k]===item[k]); if(item.del){ if(i>=0) L.splice(i,1); } else if(i>=0) Object.assign(L[i], item); else L.push(item); }
     if(msgOk) toast(msgOk); CAD_EDIT=null; route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
   catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
@@ -4238,7 +4239,7 @@ function abastLista(maqId_){ return Object.values((OV&&OV.abast)||{}).filter(a=>
 function abastUltimo(maqId_){ const L=abastLista(maqId_).filter(a=>a.tipo!=='entrada'&&+a.hor>0); return L.length?L[L.length-1]:null; }
 function maqHorimetro(m){ const u=abastUltimo(m.id); const osH=Math.max(0,...Object.values((OV&&OV.osMaq)||{}).filter(o=>o&&!o.del&&o.maq===m.id).map(o=>+o.hor||0)); return Math.max(+m.horIni||0, u?+u.hor:0, osH); }
 function abastGravar(a){ OV.abast=OV.abast||{}; a.id=a.id||('ab'+Date.now().toString(36)+Math.random().toString(36).slice(2,5)); a._u=tsAgora(); OV.abast[a.id]=a; saveOverrides(); loteAgendar('__abastecimento'); return a; }
-function abastConsumo(a){ const L=abastLista(a.maq).filter(x=>x.tipo!=='entrada'&&+x.hor>0), i=L.findIndex(x=>x.id===a.id); if(i<=0) return null; const ant=L[i-1], dh=(+a.hor)-(+ant.hor); if(!(dh>0)) return null; return {dh, lh:(+a.litros||0)/dh}; }
+function abastConsumo(a){ if(a.tipo==='leitura') return null; const L=abastLista(a.maq).filter(x=>x.tipo!=='entrada'&&x.tipo!=='leitura'&&+x.hor>0&&+x.litros>0), i=L.findIndex(x=>x.id===a.id); if(i<=0) return null; const ant=L[i-1], dh=(+a.hor)-(+ant.hor); if(!(dh>0)) return null; return {dh, lh:(+a.litros||0)/dh}; }
 // tanque da fazenda: entradas (nota/compra) − abastecimentos tirados do tanque
 function tanqueSaldo(){ const L=Object.values((OV&&OV.abast)||{}).filter(a=>a&&!a.del); let ent=0, sai=0, custo=0, lEnt=0; L.forEach(a=>{ if(a.tipo==='entrada'){ ent+=+a.litros||0; if(+a.valor>0){ custo+=+a.valor; lEnt+=+a.litros||0; } } else if(a.origem!=='posto') sai+=+a.litros||0; }); return {ent, sai, saldo:+(ent-sai).toFixed(1), precoMedio:lEnt?custo/lEnt:(+OV.diesel||0)}; }
 function abastCusto(a){ if(a.tipo==='entrada') return 0; if(a.origem==='posto') return +a.valor||((+a.precoL||0)*(+a.litros||0)); const p=(+a.precoL>0)?+a.precoL:tanqueSaldo().precoMedio; return (+a.litros||0)*p; }
@@ -4266,16 +4267,18 @@ function opMaqReal(t, tagoi, op){ const r=realOf(`${t.id}|${tagoi}`), plan=custo
 function custoMaqRealSeq(t, seq){ const tag=seq==='safrinha'?'S':'P'; const o={total:0, plan:0, nReal:0, n:0, h:0}; opsOf(t.id,seq).forEach((op,oi)=>{ const x=opMaqReal(t, `${tag}${oi}`, op); o.total+=x.valor; o.plan+=x.plan; o.n++; if(x.real){ o.nReal++; o.h+=x.h; } }); return o; }
 function custoMaqRealTalhao(t){ const a=custoMaqRealSeq(t,'principal'), b=custoMaqRealSeq(t,'safrinha'); return {total:a.total+b.total, plan:a.plan+b.plan, nReal:a.nReal+b.nReal, n:a.n+b.n, h:a.h+b.h}; }
 function maqCustos(m){ const ab=abastLista(m.id).filter(a=>a.tipo!=='entrada'); const litros=ab.reduce((s,a)=>s+(+a.litros||0),0), comb=ab.reduce((s,a)=>s+abastCusto(a),0);
-  const comH=ab.filter(a=>+a.hor>0), hs=comH.map(a=>+a.hor); const horasHor=hs.length>1?Math.max(...hs)-Math.min(...hs):0; const horas=horasHor||maqHorasCampo(m);
-  // método do tanque cheio: o que entrou DEPOIS da primeira leitura é o que foi consumido entre a primeira e a última leitura do horímetro
-  const dep=horasHor>0?comH.slice(1):[], litrosMed=dep.reduce((s,a)=>s+(+a.litros||0),0), combMed=dep.reduce((s,a)=>s+abastCusto(a),0);
+  const comH=ab.filter(a=>+a.hor>0), hs=comH.map(a=>+a.hor), i0=comH.findIndex(a=>a.tipo!=='leitura'&&+a.litros>0); const horasHor=(hs.length>1&&i0>=0)?Math.max(0,Math.max(...hs)-(+comH[i0].hor)):0; const horas=horasHor||maqHorasCampo(m);
+  // método do tanque cheio: o que entrou DEPOIS do primeiro enchimento é o que foi consumido até a última leitura do horímetro (leituras sem litros só marcam horas)
+  const dep=horasHor>0?comH.slice(i0+1):[], litrosMed=dep.reduce((s,a)=>s+(+a.litros||0),0), combMed=dep.reduce((s,a)=>s+abastCusto(a),0);
   const pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.destino!=='tanque'&&r.maquina&&maqId(r.maquina)===m.id).reduce((s,r)=>s+(+r.valor||0),0);
   const os=osLista(m.id).reduce((s,o)=>s+osValor(o),0), total=comb+pecas+os;
   return {litros, comb, pecas, os, total, horas, horasHor, horasCampo:maqHorasCampo(m), litrosMed, lhReal:horasHor>0?litrosMed/horasHor:0, custoH:horasHor>0?(combMed+pecas+os)/horasHor:(horas>0?total/horas:0)}; }
 // ---- QR Code: conteúdo "MAQ:<id>"; leitura pela câmera (BarcodeDetector ou zxing-wasm) ----
 async function maqQrSvg(m){ const q=await loadQR(); const qr=q(0,'M'); qr.addData('MAQ:'+m.id); qr.make(); return qr.createSvgTag({cellSize:4, margin:2, scalable:true}); }
-async function maqEtiquetas(){ const ms=maqTodas(); if(!ms.length){ toast('Nenhuma máquina'); return; } toast('Montando etiquetas…');
-  try{ const svgs=await Promise.all(ms.map(maqQrSvg)); const html=`<h1>Etiquetas QR — máquinas</h1><p style="font-size:11px">Cole na máquina. No app: Máquinas → Abastecimento → 📷 Ler QR.</p><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${ms.map((m,i)=>`<div style="border:1px solid #000;border-radius:6px;padding:8px;text-align:center;break-inside:avoid"><div style="width:120px;height:120px;margin:0 auto">${svgs[i].replace('<svg','<svg style="width:120px;height:120px"')}</div><div style="font-weight:700;font-size:12px;margin-top:6px">${esc(m.nome)}</div><div style="font-size:10px;color:#555">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</div></div>`).join('')}</div>`;
+async function maqQrWaSvg(m){ const q=await loadQR(); const qr=q(0,'L'); qr.addData(maqWaLink(m)); qr.make(); return qr.createSvgTag({cellSize:3, margin:2, scalable:true}); }
+async function maqEtiquetas(){ const ms=maqTodas(); if(!ms.length){ toast('Nenhuma máquina'); return; } toast('Montando etiquetas…'); const wa=!!maqWhats();
+  try{ const svgs=await Promise.all(ms.map(maqQrSvg)), was=wa?await Promise.all(ms.map(maqQrWaSvg)):[];
+    const html=`<h1>Etiquetas QR — máquinas</h1><p style="font-size:11px">Cole na máquina.${wa?' <b>WhatsApp</b>: a câmera do celular abre a mensagem pronta; preencha horímetro e litros e envie.':''} <b>App</b>: Máquinas → Abastecimento → 📷 Ler QR.</p><div style="display:grid;grid-template-columns:repeat(${wa?2:3},1fr);gap:10px">${ms.map((m,i)=>`<div style="border:1px solid #000;border-radius:6px;padding:8px;text-align:center;break-inside:avoid"><div style="font-weight:700;font-size:13px">${esc(m.nome)}</div><div style="font-size:10px;color:#555;margin-bottom:6px">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</div><div style="display:flex;gap:8px;justify-content:center">${wa?`<div><div style="width:130px;height:130px">${was[i].replace('<svg','<svg style="width:130px;height:130px"')}</div><div style="font-size:10px;font-weight:700">📱 WhatsApp</div></div>`:''}<div><div style="width:${wa?110:120}px;height:${wa?110:120}px">${svgs[i].replace('<svg',`<svg style="width:${wa?110:120}px;height:${wa?110:120}px"`)}</div><div style="font-size:10px;font-weight:700">App</div></div></div></div>`).join('')}</div>`;
     const blob=await pdfArquivo(html,''); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='etiquetas_maquinas.pdf'; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); toast('PDF das etiquetas pronto'); }
   catch(e){ toast('Etiquetas: '+e.message); } }
 async function maqLerQr(file){ toast('Lendo QR…'); try{ const url=URL.createObjectURL(file); const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; }); const esc_=Math.min(1,1600/Math.max(img.width,img.height)); const cv=document.createElement('canvas'); cv.width=Math.round(img.width*esc_); cv.height=Math.round(img.height*esc_); cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height); URL.revokeObjectURL(url);
@@ -4283,6 +4286,48 @@ async function maqLerQr(file){ toast('Lendo QR…'); try{ const url=URL.createOb
     if(!txt){ const Z=await loadZXingWasm(); const im=cv.getContext('2d').getImageData(0,0,cv.width,cv.height); const r=await Z.readBarcodes(im,{formats:['QRCode'], tryHarder:true, tryRotate:true, tryDownscale:true, maxNumberOfSymbols:1}); if(r&&r[0]) txt=r[0].text||''; }
     return maqDoQr(txt); }catch(e){ toast('Não li o QR: '+e.message); return null; } }
 function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Code na foto'); return null; } const id=txt.replace(/^MAQ:/i,''); let m=maqDe(id)||maqTodas().find(x=>_bkNorm(x.nome)===_bkNorm(id)); if(!m){ toast(`QR lido (${txt.slice(0,30)}) não é de uma máquina cadastrada`); return null; } return m; }
+// ---- v299: WhatsApp sem app — QR com mensagem pronta e importação da conversa exportada ----
+// O número fica na planilha (CONFIG APP → WHATSAPP MAQUINAS) ou neste aparelho; nunca no código (repositório público).
+function maqWhats(){ const c=DATA&&DATA.config_app&&DATA.config_app.maquinas; return String((c&&c.whats)||(OV&&OV.maqWa)||'').replace(/\D/g,''); }
+function maqWaTexto(m){ return `ABASTECIMENTO · ${m.nome} [${m.id}]\nHorímetro: \nLitros: \nOrigem: tanque`; }
+function maqWaLink(m){ const n=maqWhats(); if(!n) return ''; return `https://wa.me/${n.startsWith('55')?n:'55'+n}?text=${encodeURIComponent(maqWaTexto(m))}`; }
+// conversa exportada (Android: "dd/mm/aaaa hh:mm - Nome: msg" · iPhone: "[dd/mm/aaaa, hh:mm:ss] Nome: msg"); mensagens de várias linhas continuam até o próximo cabeçalho
+function waParse(txt){ const out=[]; let cur=null; const rx=/^‎?\[?(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\]?\s*(?:-\s*)?([^:]{1,60}?):\s(.*)$/;
+  String(txt||'').replace(/\r/g,'').split('\n').forEach(l=>{ const m=l.match(rx); if(m){ const a=m[3].length===2?'20'+m[3]:m[3]; cur={data:`${a}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`, hora:`${m[4].padStart(2,'0')}:${m[5]}`, quem:m[6].trim(), texto:m[7]}; out.push(cur); } else if(cur&&l.trim()) cur.texto+='\n'+l; });
+  return out; }
+// entende uma mensagem: ABASTECIMENTO / HORÍMETRO / MANUTENÇÃO (ou texto livre com os campos)
+function waInterpreta(msg){ const T=msg.texto||'', N=_bkNorm(T); const campo=rx=>{ const m=T.match(rx); return m?m[1].trim():''; };
+  const tipo=/^\s*ABASTEC/.test(N)?'abast':/^\s*HORIMETRO/.test(N)?'leitura':/^\s*MANUTEN|^\s*OS\b|^\s*DEFEITO|^\s*QUEBR/.test(N)?'os':(/HORIMETRO|LITROS/.test(N)?'abast':null);
+  if(!tipo) return null;
+  let m=null; const tag=T.match(/\[(m:[A-Z0-9-]+)\]/i); if(tag) m=maqDe(tag[1]);
+  if(!m){ const prim=_bkNorm(T.split('\n')[0]).replace(/^(ABASTECIMENTO|HORIMETRO|MANUTENCAO|OS|DEFEITO|QUEBROU)\s*[·:\-–]?\s*/,'').replace(/\[.*$/,'').trim(); const ms=maqTodas(); m=ms.find(x=>_bkNorm(x.nome)===prim)||ms.find(x=>prim&&prim.includes(_bkNorm(x.nome)))||ms.find(x=>prim&&prim.length>=4&&_bkNorm(x.nome).includes(prim))||null; }
+  const hor=numBR(campo(/hor[ií]metro\s*[:=]?\s*([\d.,]+)/i)), litros=numBR(campo(/litros?\s*[:=]?\s*([\d.,]+)/i)), valor=numBR(campo(/valor\s*[:=]?\s*R?\$?\s*([\d.,]+)/i)), origem=/posto/i.test(campo(/origem\s*[:=]?\s*(\w+)/i)||'')?'posto':'tanque';
+  const desc=tipo==='os'?(T.split('\n').slice(1).join(' ').trim()||T.replace(/^\s*\S+\s*[·:\-–]?\s*/,'').trim()):'';
+  const id='wa:'+sigHash(`${msg.data} ${msg.hora} ${msg.quem} ${T}`);
+  const ok=!!m && (tipo==='abast'?(litros>0&&hor>0):tipo==='leitura'?hor>0:!!desc);
+  const ja=tipo==='os'?!!((OV.osMaq||{})[id]):!!((OV.abast||{})[id]);
+  return {id, tipo, maq:m?m.id:'', hor, litros, valor, origem, desc, ok, ja, msg}; }
+let WA_IMP=null;
+function waImportLer(txt){ const msgs=waParse(txt); const itens=msgs.map(waInterpreta).filter(Boolean); WA_IMP={n:msgs.length, itens}; route({keepScroll:true}); toast(itens.length?`${itens.length} registro(s) encontrado(s) em ${msgs.length} mensagem(ns)`:'Nenhuma mensagem de abastecimento, horímetro ou manutenção'); }
+function waImportHtml(){ const W=WA_IMP, num=maqWhats();
+  const rows=W?W.itens.map((x,i)=>{ const st=x.ja?'ja':x.ok?'ok':'duvida'; return `<tr class="${st==='duvida'?'mq-tr-aviso':''}"><td data-th="Mensagem">${_dtBRc(x.msg.data)} ${esc(x.msg.hora)}<br><small class="mut">${esc(x.msg.quem)}</small><br><small class="mut">${esc(x.msg.texto.split('\n')[0].slice(0,50))}</small></td>
+      <td data-th="Tipo">${x.tipo==='abast'?'⛽ Abastecimento':x.tipo==='leitura'?'🕒 Horímetro':'🔧 OS'}</td>
+      <td data-th="Máquina"><select class="sel" data-wa="maq" data-i="${i}"><option value="">— qual máquina? —</option>${maqTodas().map(m=>`<option value="${esc(m.id)}"${m.id===x.maq?' selected':''}>${esc(m.nome)}</option>`).join('')}</select></td>
+      <td class="num" data-th="Horímetro">${x.tipo==='os'?'—':`<input class="cell" inputmode="decimal" data-wa="hor" data-i="${i}" value="${x.hor||''}">`}</td>
+      <td class="num" data-th="Litros">${x.tipo==='abast'?`<input class="cell" inputmode="decimal" data-wa="litros" data-i="${i}" value="${x.litros||''}">`:x.tipo==='os'?esc(x.desc.slice(0,60)):'—'}</td>
+      <td data-th="Situação">${x.ja?'✔️ já importado':x.ok?'🟢 pronto':'🟡 falta dado'}</td></tr>`; }).join(''):'';
+  return `<div class="panel" id="wa-imp"><div class="panel-head"><h2>📥 Importar do WhatsApp</h2><span class="sub">o operador manda pelo QR da etiqueta; aqui você lê a conversa exportada (ou cola as mensagens) e grava tudo de uma vez</span></div>
+    <div style="padding:0 14px 10px">${num?`<p class="mut" style="font-size:12px;margin:0 0 8px">Mensagens chegam no WhatsApp <b>${esc(num.replace(/^55/,'').replace(/^(\d{2})(\d{4,5})(\d{4})$/,'($1) $2-$3'))}</b>. No celular: abrir a conversa → ⋮ → Mais → <b>Exportar conversa</b> (sem mídia) → escolher o arquivo .txt aqui.</p>`:`<p class="rel-ap-aviso" style="margin:0 0 8px">Informe o número de WhatsApp que recebe as mensagens em <a class="link" data-go="#/maqcad">Cadastro</a> para gerar as etiquetas com o QR do WhatsApp.</p>`}
+      <div class="mq-escolha" style="padding:0"><label class="btn btn-primary btn-sm" style="cursor:pointer">📄 Escolher conversa exportada (.txt)<input type="file" id="wa-file" accept=".txt,text/plain" hidden></label><span class="mut">ou cole abaixo</span></div>
+      <textarea class="txt" id="wa-txt" rows="4" placeholder="Cole aqui as mensagens copiadas do WhatsApp…" style="width:100%;margin-top:8px"></textarea>
+      <div class="bk-bar" style="padding:8px 0 0"><button class="btn btn-outline btn-sm" data-act="waLerTexto">🔎 Ler o texto colado</button>${W?`<button class="btn btn-primary btn-sm" data-act="waGravar">💾 Gravar ${W.itens.filter(x=>x.ok&&!x.ja).length} registro(s)</button><button class="btn btn-outline btn-sm" data-act="waLimpar">✕</button>`:''}</div></div>
+    ${W?`<div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Mensagem</th><th>Tipo</th><th>Máquina</th><th class="num">Horímetro</th><th class="num">Litros / descrição</th><th>Situação</th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="mut" style="padding:10px">Nenhum registro reconhecido.</td></tr>'}</tbody></table></div>`:''}</div>`; }
+function waCampo(el){ const W=WA_IMP; if(!W) return; const x=W.itens[+el.dataset.i]; if(!x) return; const f=el.dataset.wa; if(f==='maq') x.maq=el.value; else x[f]=numBR(el.value);
+  x.ok=!!x.maq && (x.tipo==='abast'?(x.litros>0&&x.hor>0):x.tipo==='leitura'?x.hor>0:!!x.desc); route({keepScroll:true}); }
+function waGravar(){ const W=WA_IMP; if(!W) return; const L=W.itens.filter(x=>x.ok&&!x.ja); if(!L.length){ toast('Nada pronto para gravar'); return; } let nA=0, nO=0;
+  L.forEach(x=>{ if(x.tipo==='os'){ osGravar({id:x.id, maq:x.maq, tipo:'corretiva', dataAb:x.msg.data, hor:x.hor||0, desc:x.desc, pecas:[], moH:0, moValor:0, resp:x.msg.quem, status:'aberta', obs:'via WhatsApp'}); nO++; }
+    else { const a={id:x.id, maq:x.maq, data:x.msg.data, hora:x.msg.hora, hor:x.hor, litros:x.tipo==='leitura'?0:x.litros, comb:'Diesel S10', origem:x.origem, valor:x.origem==='posto'?x.valor:0, precoL:(x.origem==='posto'&&x.litros)?+(x.valor/x.litros).toFixed(3):0, operador:x.msg.quem, obs:'via WhatsApp'}; if(x.tipo==='leitura') a.tipo='leitura'; abastGravar(a); nA++; } x.ja=true; });
+  route({keepScroll:true}); toast(`Gravado: ${nA} abastecimento(s)/leitura(s) e ${nO} OS — sobem para a planilha`); }
 // ---- leitura do QR pela câmera ao vivo (v296): BarcodeDetector do aparelho ou zxing-wasm nos quadros do vídeo; sem câmera cai na foto ----
 let QR_SCAN=null;
 async function qrScanAbrir(){ if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ const f=document.getElementById('ab-qr'); if(f) f.click(); else toast('Este aparelho não tem câmera acessível'); return; }
@@ -4338,7 +4383,7 @@ V.abastecimento=function(arg){ const ms=maqTodas(); if(arg) MQ_UI.maq=decodeURIC
   const topo=`<div class="panel"><div class="panel-head"><h2>⛽ Abastecimento</h2><span class="sub">escolha a máquina pelo nome ou leia o QR Code colado nela</span></div>
     <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('ab-maq', m?m.id:'', '— escolha —')}</label><button class="btn btn-primary" data-act="qrScan" title="Abre a câmera e lê o QR Code colado na máquina">📷 Ler QR</button><label hidden><input type="file" id="ab-qr" accept="image/*" capture="environment"></label></div>
     ${ms.length?'':'<p class="rel-ap-aviso" style="margin:0 14px 12px">Nenhuma máquina. Cadastre em <a class="link" data-go="#/maqcad">Cadastro</a>.</p>'}</div>`;
-  if(!m) return topo+abastListaHtml('')+tanqueHtml(T);
+  if(!m) return topo+abastListaHtml('')+tanqueHtml(T)+waImportHtml();
   const al=maqAlertas(m), pl=planoStatus(m);
   const form=`<div class="panel"><div class="panel-head"><h2>🚜 ${esc(m.nome)}</h2><span class="sub">horímetro ${hor?numH(hor)+' h':'—'}${u?` · último abastecimento ${_dtBRc(u.data)} (${numH(u.litros)} L)`:''}</span></div>
     ${_alertHtml(al)}${pl.length?`<div class="mq-plano">${pl.map(x=>`<span class="pill ${x.st}">${esc(x.p.nome)}: ${x.falta<0?'vencida':'faltam '+numH(x.falta)+' h'}</span>`).join('')}</div>`:`<p class="mut" style="margin:0 14px 8px;font-size:12px">Sem plano de preventivas. <a class="link" data-go="#/manutencao/${encodeURIComponent(m.id)}">Cadastrar</a> (ex.: troca de óleo a cada 250 h) para o app avisar aqui.</p>`}
@@ -4351,11 +4396,11 @@ V.abastecimento=function(arg){ const ms=maqTodas(); if(arg) MQ_UI.maq=decodeURIC
       <label>Operador<input class="txt" id="ab-oper" value="${esc((sessUsuario()||{}).nome||'')}" placeholder="quem abasteceu"></label>
       <label style="flex-basis:100%">Observação<input class="txt" id="ab-obs" placeholder="opcional"></label></div>
     <div class="bk-bar"><button class="btn btn-primary" data-act="abastSalvar" data-maq="${esc(m.id)}">💾 Registrar abastecimento</button><span class="mut">${syncUrl()?'sobe para a planilha sozinho; sem internet fica guardado e sobe depois':'sem planilha configurada: fica só neste aparelho'}</span></div></div>`;
-  return topo+form+abastListaHtml(m.id)+tanqueHtml(T); };
+  return topo+form+abastListaHtml(m.id)+tanqueHtml(T)+waImportHtml(); };
 function abastListaHtml(maqId_){ const L=abastLista(maqId_).slice().reverse().filter(a=>a.tipo!=='entrada'), lim=MQ_UI.mostrarTodos?L:L.slice(0,15); if(!L.length) return '';
   return `<div class="panel"><div class="panel-head"><h2>Últimos abastecimentos${maqId_?'':' (todas)'}</h2><span class="sub">${L.length} registro(s)</span></div>
     <div class="table-wrap"><table class="cards-sm fin-t"><thead><tr><th>Data</th>${maqId_?'':'<th>Máquina</th>'}<th class="num">Horímetro</th><th class="num">Litros</th><th class="num">L/h</th><th>Origem</th><th class="num">Custo</th><th></th></tr></thead><tbody>
-    ${lim.map(a=>{ const c=abastConsumo(a), mq=maqDe(a.maq); return `<tr><td data-th="Data">${_dtBRc(a.data)}${a.hora?' '+esc(a.hora):''}<br><small class="mut">${esc(a.operador||'')}</small></td>${maqId_?'':`<td data-th="Máquina">${esc(mq?mq.nome:a.maq)}</td>`}<td class="num" data-th="Horímetro">${a.hor?numH(a.hor)+' h':'—'}</td><td class="num" data-th="Litros">${numH(a.litros)} L<br><small class="mut">${esc(a.comb||'')}</small></td><td class="num" data-th="L/h">${c?numH(c.lh)+`<br><small class="mut">${numH(c.dh)} h</small>`:'—'}</td><td data-th="Origem">${a.origem==='posto'?'Posto':'Tanque'}</td><td class="num" data-th="Custo">${brl0(abastCusto(a))}</td><td><button class="icon-btn" data-act="abastExcluir" data-id="${esc(a.id)}" title="Excluir">🗑</button></td></tr>`; }).join('')}</tbody></table></div>
+    ${lim.map(a=>{ const c=abastConsumo(a), mq=maqDe(a.maq); return `<tr><td data-th="Data">${_dtBRc(a.data)}${a.hora?' '+esc(a.hora):''}<br><small class="mut">${esc(a.operador||'')}</small></td>${maqId_?'':`<td data-th="Máquina">${esc(mq?mq.nome:a.maq)}</td>`}<td class="num" data-th="Horímetro">${a.hor?numH(a.hor)+' h':'—'}</td><td class="num" data-th="Litros">${a.tipo==='leitura'?'<span class="mut">só leitura</span>':numH(a.litros)+' L'}<br><small class="mut">${esc(a.tipo==='leitura'?'':(a.comb||''))}</small></td><td class="num" data-th="L/h">${c?numH(c.lh)+`<br><small class="mut">${numH(c.dh)} h</small>`:'—'}</td><td data-th="Origem">${a.origem==='posto'?'Posto':'Tanque'}</td><td class="num" data-th="Custo">${brl0(abastCusto(a))}</td><td><button class="icon-btn" data-act="abastExcluir" data-id="${esc(a.id)}" title="Excluir">🗑</button></td></tr>`; }).join('')}</tbody></table></div>
     ${L.length>lim.length?`<div class="bulk-add" style="padding:8px 14px"><button class="btn btn-outline btn-sm" data-act="abastTodos">Mostrar todos (${L.length})</button></div>`:''}</div>`; }
 function tanqueHtml(T){ const E=Object.values((OV&&OV.abast)||{}).filter(a=>a&&!a.del&&a.tipo==='entrada').sort((a,b)=>String(b.data).localeCompare(String(a.data))).slice(0,8);
   return `<div class="panel"><div class="panel-head"><h2>🛢️ Tanque da fazenda</h2><span class="sub">saldo ${numH(T.saldo)} L · entradas ${numH(T.ent)} L · abastecido ${numH(T.sai)} L${T.precoMedio?' · preço médio '+brl(T.precoMedio)+'/L':''}</span></div>
@@ -4410,6 +4455,8 @@ V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)
       <label>Tanque da máquina (L)<input class="cell" inputmode="decimal" id="mc-tanque" value="${m.tanqueL?numH(m.tanqueL):''}"></label><label>Ativa<select class="sel" id="mc-ativa"><option value="1">Sim</option><option value="0">Não (sai das listas)</option></select></label><label style="flex-basis:100%">Observação<input class="txt" id="mc-obs" value="${esc(m.obs||'')}"></label></div>
       <div class="bk-bar"><button class="btn btn-primary btn-sm" data-act="maqCadSalvar" data-maq="${esc(m.id)}">💾 Salvar</button><span class="mut">QR Code desta máquina: <code>MAQ:${esc(m.id)}</code> · <a class="link" data-act="maqEtiquetas">etiquetas em PDF</a></span></div>`:''}</div>`; }).join('');
   return `<div class="panel"><div class="panel-head"><h2>🗂️ Cadastro de máquinas</h2><span class="sub">máquinas e implementos da CUSTO OPERAÇÃO, das notas e as cadastradas aqui</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqEtiquetas">🏷️ Etiquetas QR</button></div>
+    <div class="mq-form"><label style="flex:1">WhatsApp que recebe os abastecimentos (DDD + número)<input class="txt" inputmode="tel" id="mc-whats" value="${esc(maqWhats())}" placeholder="ex.: 62999990000"></label><label><span>&nbsp;</span><button class="btn btn-outline btn-sm" data-act="maqWhatsSalvar">💾 Salvar número</button></label></div>
+    <p class="mut" style="font-size:12px;margin:0 14px 8px">Com o número salvo, as etiquetas ganham um QR do WhatsApp: a câmera comum do celular abre a mensagem pronta ("ABASTECIMENTO · máquina · Horímetro · Litros") e o operador só preenche e envia. Depois importe a conversa em Abastecimento → Importar do WhatsApp.</p>
     <div class="mq-form"><label style="flex:1">Nova máquina<input class="txt" id="mc-nova" placeholder="ex.: Caminhão VW 24.280"></label><label>Grupo<input class="txt" id="mc-novaGrupo" placeholder="Trator, Caminhão…"></label></div><div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="maqCadNova">➕ Cadastrar</button></div></div>
     <div class="mq-list">${rows||'<p class="mut" style="padding:14px">Nenhuma máquina.</p>'}</div>
     ${inativas.length?`<p class="mut" style="font-size:12px;padding:0 14px">Inativas: ${inativas.map(c=>`${esc(c.nome)} <a class="link" data-act="maqCadReativar" data-maq="${esc(c.id)}">reativar</a>`).join(' · ')}</p>`:''}`; };
@@ -9748,6 +9795,8 @@ document.addEventListener('change',e=>{
   if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
   if(e.target.id==='ab-maq'){ MQ_UI.maq=e.target.value; location.hash=e.target.value?'#/abastecimento/'+encodeURIComponent(e.target.value):'#/abastecimento'; return; }   // v295
   if(e.target.id==='os-maq'){ MQ_UI.maq=e.target.value; MQ_UI.osAberta=''; location.hash=e.target.value?'#/manutencao/'+encodeURIComponent(e.target.value):'#/manutencao'; return; }
+  if(e.target.id==='wa-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f){ const fr=new FileReader(); fr.onload=()=>waImportLer(String(fr.result||'')); fr.readAsText(f,'utf-8'); } return; }   // v299
+  if(e.target.dataset && e.target.dataset.wa!=null && WA_IMP){ waCampo(e.target); return; }
   if(e.target.id==='qr-foto'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) maqLerQr(f).then(m=>{ if(m){ qrScanFechar(); MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); } }); return; }
   if(e.target.id==='ab-qr'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) maqLerQr(f).then(m=>{ if(m){ MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); } }); return; }
   if(e.target.id==='banco-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) bancoImportarArquivo(f); return; }   // v291
@@ -10177,7 +10226,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='finSalvar'){ finSalvar(); }
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
-    else if(a.act==='maqEtiquetas'){ maqEtiquetas(); } else if(a.act==='qrScan'){ qrScanAbrir(); } else if(a.act==='qrScanFechar'){ qrScanFechar(); } else if(a.act==='maqPdf'){ maqPdf(a.maq||''); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
+    else if(a.act==='maqEtiquetas'){ maqEtiquetas(); } else if(a.act==='waLerTexto'){ waImportLer((document.getElementById('wa-txt')||{}).value||''); } else if(a.act==='waGravar'){ waGravar(); } else if(a.act==='waLimpar'){ WA_IMP=null; route({keepScroll:true}); }
+    else if(a.act==='maqWhatsSalvar'){ const n=((document.getElementById('mc-whats')||{}).value||'').replace(/\D/g,''); if(n&&!/^\d{10,13}$/.test(n)){ toast('Número inválido: DDD + número, só dígitos'); return; } OV.maqWa=n; saveOverrides(); cadPost('maquinas',{whats:n},'').then(ok=>{ if(!ok&&syncUrl()) toast('Número guardado neste aparelho; não gravou na planilha'); }); route({keepScroll:true}); toast(n?'Número salvo':'Número removido'); } else if(a.act==='qrScan'){ qrScanAbrir(); } else if(a.act==='qrScanFechar'){ qrScanFechar(); } else if(a.act==='maqPdf'){ maqPdf(a.maq||''); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
     else if(a.act==='abastExcluir'){ const x=(OV.abast||{})[a.id]; if(x&&ask('Excluir este registro?')){ x.del=1; x._u=tsAgora(); saveOverrides(); loteAgendar('__abastecimento'); route({keepScroll:true}); } }
     else if(a.act==='osSalvar'){ osSalvar(a.maq, a.id||''); } else if(a.act==='osEditar'){ const o=(OV.osMaq||{})[a.id]; if(o){ MQ_UI.maq=o.maq; MQ_UI.osAberta=o.id; route(); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); } } else if(a.act==='osCancelarEd'){ MQ_UI.osAberta=''; route({keepScroll:true}); }
     else if(a.act==='osExcluir'){ const o=(OV.osMaq||{})[a.id]; if(o&&ask('Excluir esta ordem de serviço?')){ o.del=1; o._u=tsAgora(); saveOverrides(); loteAgendar('__osMaq'); route({keepScroll:true}); } }

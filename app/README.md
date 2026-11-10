@@ -71,6 +71,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Abastecimento pelo WhatsApp, sem app (v299)** — em Cadastro de máquinas informa-se o **número de WhatsApp**
+  que recebe os abastecimentos (vai para a aba CONFIG APP, chave WHATSAPP MAQUINAS, e fica no aparelho; nunca no
+  código). As etiquetas ganham um **QR do WhatsApp**: a câmera comum do celular abre a conversa com a mensagem pronta
+  "ABASTECIMENTO · máquina [m:id] / Horímetro / Litros / Origem"; o operador preenche e envia. No escritório,
+  Abastecimento → **📥 Importar do WhatsApp**: escolhe a conversa exportada (.txt, Android ou iPhone) ou cola as
+  mensagens; o app entende ABASTECIMENTO, HORÍMETRO (só leitura) e MANUTENÇÃO (vira OS corretiva aberta), reconhece a
+  máquina pela etiqueta `[m:id]` ou pelo nome, mostra a prévia (🟢 pronto, 🟡 falta dado com campos para corrigir,
+  ✔️ já importado) e grava tudo de uma vez; cada mensagem vira um id `wa:` e reimportar não duplica. Consumo passa a
+  contar entre **enchimentos** (leitura de horímetro só marca horas). Funções: `maqWhats`, `maqWaLink`, `waParse`,
+  `waInterpreta`, `waImportHtml`, `waGravar`.
 - **Custo-hora real no custo do talhão (v298)** — em **Resultados**, cada operação que tem início e fim registrados
   no Campo e uma máquina com custo-hora real (módulo Máquinas) passa a custar **horas × R$/h real**; as outras seguem
   pelo planejado da CUSTO OPERAÇÃO. Coluna nova **Máquinas** (com "real N/M op." e o planejado no título), KPI de

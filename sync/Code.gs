@@ -168,7 +168,8 @@ function readConfigApp(){
   var m = configAppMapa_();
   var lim = function(x){ return S(x).replace(/[^A-Za-z0-9_-]/g, ''); };   // tira aspas, tab, espaço (a célula pode vir com "\t…")
   return { copernicus: { instancia: lim(m['COPERNICUS INSTANCE ID']), camadas: { ndvi: lim(m['COPERNICUS CAMADA NDVI']) || 'VEGETATION_INDEX', ndmi: lim(m['COPERNICUS CAMADA NDMI']) || 'MOISTURE_INDEX',
-    cir: lim(m['COPERNICUS CAMADA INFRAVERMELHO']) || 'COLOR_INFRARED', cor: lim(m['COPERNICUS CAMADA COR NATURAL']) || 'TRUE_COLOR' } } };
+    cir: lim(m['COPERNICUS CAMADA INFRAVERMELHO']) || 'COLOR_INFRARED', cor: lim(m['COPERNICUS CAMADA COR NATURAL']) || 'TRUE_COLOR' } },
+    maquinas: { whats: S(m['WHATSAPP MAQUINAS']).replace(/\D/g, '') } };   // v299: QR do WhatsApp nas etiquetas
 }
 // ---- Chuva da estação meteorológica (planilha do app Monitor de Irrigação) ----
 // CONFIG APP → PLANILHA IRRIGACAO = link da planilha. Lê a aba CLIMA (1 linha por dia e fazenda: chuva da estação Ecowitt,
@@ -1336,6 +1337,7 @@ function _finUpsert_(name, cols, keys, itens, extra){
 function cadFinGrava_(p){
   var tipo = S(p && p.tipo);
   if (tipo === 'contador'){ var it0 = (p.itens || [])[0] || {}; Object.keys(FIN_CONTADOR_).forEach(function(k){ if (it0[k] !== undefined) configAppGravar_(FIN_CONTADOR_[k], S(it0[k]), 'contador do Livro Caixa (LCDPR, registro 9999)'); }); return { rows:1 }; }
+  if (tipo === 'maquinas'){ var mq = (p.itens || [])[0] || {}; if (mq.whats !== undefined) configAppGravar_('WHATSAPP MAQUINAS', S(mq.whats).replace(/\D/g, ''), 'número que recebe os abastecimentos por WhatsApp (QR das etiquetas)'); return { rows:1 }; }   // v299
   if (tipo === 'pesagem'){ var ps = (p.itens || [])[0] || {}; if (ps.link !== undefined) configAppGravar_('PLANILHA PESAGEM', S(ps.link), 'planilha do app Pesagem v2 (balança): contratos de venda, cargas e NFAs');
     if (ps.depara !== undefined) configAppGravar_('PESAGEM DEPARA', JSON.stringify(ps.depara || {}), 'de-para produto da balança → cultura do app');
     try { CacheService.getScriptCache().remove('pes_busca'); } catch (e) {} return { rows:1 }; }
