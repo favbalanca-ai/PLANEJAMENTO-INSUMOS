@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-297';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-298';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1349,7 +1349,7 @@ V.talhao = function(id){
     <div class="di"><div class="l">Talhão</div><div class="v">${esc(tNome(t))} <span class="mut" style="font-size:12px">(aba ${esc(t.id)})</span></div></div>
     <div class="di"><div class="l">Área</div><div class="v">${num(area)} ha</div></div>
     <div class="di"><div class="l">Insumos/ha</div><div class="v">${brl(c.ha)}</div></div>
-    <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}</div></div>
+    <div class="di"><div class="l">Máquinas/ha</div><div class="v">${brl(maqHa)}${(()=>{ const mr=custoMaqRealTalhao(t); return (mr.nReal&&area)?`<br><small class="mut" title="${mr.nReal} de ${mr.n} operação(ões) com horas do Campo × custo-hora real">real ${brl(mr.total/area)}</small>`:''; })()}</div></div>
     <div class="di"><div class="l">Custo total/ha</div><div class="v" style="color:var(--ink2)">${brl(totHa)}</div></div>
     <div class="di"><div class="l">Custo total</div><div class="v">${brl0(totHa*area)}</div></div>
     ${(()=>{ const cr=custoRealTalhao(t); return cr.n?`<div class="di" title="insumos que já saíram do estoque para este talhão, valorados pelo custo médio pago nas notas (a preço de referência: ${brl(cr.refHa)}/ha)"><div class="l">Realizado · custo real</div><div class="v" style="color:var(--green)">${brl(cr.ha)}/ha <small class="mut">· ${brl0(cr.total)}</small></div></div>`:''; })()}
@@ -4255,12 +4255,23 @@ function osGravar(o){ OV.osMaq=OV.osMaq||{}; o.id=o.id||('os'+Date.now().toStrin
   return o; }
 const osValor=o=>(+o.moValor||0)+((o.pecas||[]).reduce((s,p)=>s+(+p.valor||0),0));
 // ---- custos e horas por máquina (safra) ----
-function maqHorasCampo(m){ let h=0; const R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mq=_bkNorm(r.app.maq); if(!(mq.includes(_bkNorm(m.nome))||(m.conjunto&&mq===_bkNorm(m.conjunto)))) continue; const d=durHoras(r.app.hIni,r.app.hFim); if(d>0) h+=d; } return h; }
+function maqDeConjunto(conj){ conj=_bkNorm(conj||''); if(!conj) return null; const ms=maqTodas(); return ms.find(m=>m.conjunto&&_bkNorm(m.conjunto)===conj) || ms.find(m=>m.grupo!=='Implemento'&&conj.includes(_bkNorm(m.nome))) || null; }
+function maqHorasPorTalhao(m){ const out={}, R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mm=maqDeConjunto(r.app.maq); if(!mm||mm.id!==m.id) continue; const h=durHoras(r.app.hIni,r.app.hFim); if(!(h>0)) continue; const t=findTalhao(k.split('|')[0]); const nome=t?tNome(t):k.split('|')[0]; out[nome]=(out[nome]||0)+h; } return Object.keys(out).map(k=>({talhao:k, h:out[k]})).sort((a,b)=>b.h-a.h); }
+function maqHorasCampo(m){ return maqHorasPorTalhao(m).reduce((s,x)=>s+x.h,0); }
+// ---- v298: custo de máquina REAL de uma operação = horas do Campo (início/fim) × custo-hora real da máquina usada; sem isso, vale o planejado ----
+function opMaqReal(t, tagoi, op){ const r=realOf(`${t.id}|${tagoi}`), plan=custoOpHa(t.id, tagoi[0], +tagoi.slice(1), op)*(areaDe(t)||0);
+  if(!r||!r.app||!['concluido','parcial','andamento'].includes(r.status)) return {valor:plan, plan, real:false, h:0};
+  const h=durHoras(r.app.hIni, r.app.hFim)||0, mq=r.app.maq||opMaqDe(t.id, tagoi[0], +tagoi.slice(1), op), m=mq?maqDeConjunto(mq):null, ch=m?maqCustos(m).custoH:0;
+  if(!(h>0)||!(ch>0)) return {valor:plan, plan, real:false, h, m}; return {valor:h*ch, plan, real:true, h, m, custoH:ch}; }
+function custoMaqRealSeq(t, seq){ const tag=seq==='safrinha'?'S':'P'; const o={total:0, plan:0, nReal:0, n:0, h:0}; opsOf(t.id,seq).forEach((op,oi)=>{ const x=opMaqReal(t, `${tag}${oi}`, op); o.total+=x.valor; o.plan+=x.plan; o.n++; if(x.real){ o.nReal++; o.h+=x.h; } }); return o; }
+function custoMaqRealTalhao(t){ const a=custoMaqRealSeq(t,'principal'), b=custoMaqRealSeq(t,'safrinha'); return {total:a.total+b.total, plan:a.plan+b.plan, nReal:a.nReal+b.nReal, n:a.n+b.n, h:a.h+b.h}; }
 function maqCustos(m){ const ab=abastLista(m.id).filter(a=>a.tipo!=='entrada'); const litros=ab.reduce((s,a)=>s+(+a.litros||0),0), comb=ab.reduce((s,a)=>s+abastCusto(a),0);
-  const hs=ab.filter(a=>+a.hor>0).map(a=>+a.hor); const horasHor=hs.length>1?Math.max(...hs)-Math.min(...hs):0; const horas=horasHor||maqHorasCampo(m);
+  const comH=ab.filter(a=>+a.hor>0), hs=comH.map(a=>+a.hor); const horasHor=hs.length>1?Math.max(...hs)-Math.min(...hs):0; const horas=horasHor||maqHorasCampo(m);
+  // método do tanque cheio: o que entrou DEPOIS da primeira leitura é o que foi consumido entre a primeira e a última leitura do horímetro
+  const dep=horasHor>0?comH.slice(1):[], litrosMed=dep.reduce((s,a)=>s+(+a.litros||0),0), combMed=dep.reduce((s,a)=>s+abastCusto(a),0);
   const pecas=((DATA&&DATA.manutencao)||[]).filter(r=>r.destino!=='oficina'&&r.destino!=='benfeitoria'&&r.destino!=='tanque'&&r.maquina&&maqId(r.maquina)===m.id).reduce((s,r)=>s+(+r.valor||0),0);
   const os=osLista(m.id).reduce((s,o)=>s+osValor(o),0), total=comb+pecas+os;
-  return {litros, comb, pecas, os, total, horas, horasHor, horasCampo:maqHorasCampo(m), lhReal:horasHor>0?litros/horasHor:0, custoH:horas>0?total/horas:0}; }
+  return {litros, comb, pecas, os, total, horas, horasHor, horasCampo:maqHorasCampo(m), litrosMed, lhReal:horasHor>0?litrosMed/horasHor:0, custoH:horasHor>0?(combMed+pecas+os)/horasHor:(horas>0?total/horas:0)}; }
 // ---- QR Code: conteúdo "MAQ:<id>"; leitura pela câmera (BarcodeDetector ou zxing-wasm) ----
 async function maqQrSvg(m){ const q=await loadQR(); const qr=q(0,'M'); qr.addData('MAQ:'+m.id); qr.make(); return qr.createSvgTag({cellSize:4, margin:2, scalable:true}); }
 async function maqEtiquetas(){ const ms=maqTodas(); if(!ms.length){ toast('Nenhuma máquina'); return; } toast('Montando etiquetas…');
@@ -4294,6 +4305,7 @@ function maqRelHtml(m){ const c=maqCustos(m), ab=abastLista(m.id).filter(a=>a.ti
   return `<h1>🚜 ${esc(m.nome)}</h1><div style="font-size:11px;color:#333">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''} · safra ${esc(String((DATA&&DATA.safra)||''))} · gerado em ${_dtBRc(_hojeISO())}</div>
   ${_rH2('Resumo')}${_rTab(['','Valor'],[['Horímetro atual',numH(maqHorimetro(m))+' h'],['Horas na safra',numH(c.horas)+' h'+(c.horasHor?'':(c.horas?' (horas do Campo)':''))],['Combustível',numH(c.litros)+' L · '+brl(c.comb)],['Consumo real',c.lhReal?numH(c.lhReal)+' L/h':'—'],['Consumo planejado',m.lh?numH(m.lh)+' L/h':'—'],['Peças e serviços (notas)',brl(c.pecas)],['Ordens de serviço',brl(c.os)],['Custo total',brl(c.total)],['<b>Custo-hora real</b>',c.custoH?'<b>'+brl(c.custoH)+'/h</b>':'—'],['Custo-hora planejado',m.rsHm?brl(m.rsHm)+'/h':'—']],[1])}
   ${_rH2('Plano de preventivas')}${_rTab(['Item','A cada','Última','Próxima','Situação'], pl.map(x=>[esc(x.p.nome), numH(x.p.cadaH)+' h', x.p.ultH?numH(x.p.ultH)+' h':'—', numH(x.prox)+' h', x.st==='vencida'?'<b>vencida há '+numH(-x.falta)+' h</b>':'faltam '+numH(x.falta)+' h']),[1,2,3])}
+  ${(()=>{ const ht=maqHorasPorTalhao(m); return ht.length?_rH2('Horas por talhão (Campo)')+_rTab(['Talhão','Horas','Custo (R$/h real)'], ht.map(x=>[esc(x.talhao), numH(x.h)+' h', c.custoH?brl(x.h*c.custoH):'—']),[1,2]):''; })()}
   ${_rH2('Abastecimentos ('+ab.length+')')}${_rTab(['Data','Horímetro','Litros','L/h','Origem','Custo'], ab.slice().reverse().map(a=>{ const k=abastConsumo(a); return [_dtBRc(a.data)+(a.operador?' · '+esc(a.operador):''), a.hor?numH(a.hor)+' h':'—', numH(a.litros)+' L', k?numH(k.lh):'—', a.origem==='posto'?'Posto':'Tanque', brl(abastCusto(a))]; }),[1,2,3,5])}
   ${_rH2('Ordens de serviço ('+os.length+')')}${_rTab(['Data','Tipo','Descrição','Horímetro','Valor','Status'], os.map(o=>[_dtBRc(o.dataAb), OS_TIPOS[o.tipo]||o.tipo, esc(o.desc||'')+((o.pecas||[]).length?' · '+esc(o.pecas.map(p=>p.item).join('; ')):''), o.hor?numH(o.hor)+' h':'—', brl(osValor(o)), o.status==='concluida'?'concluída':'aberta']),[3,4])}
   ${_rH2('Peças e serviços das notas ('+pecas.length+')')}${_rTab(['Data','Item','Tipo','Fornecedor','Valor'], pecas.map(r=>[_dtBRc(r.data), esc(r.item||''), esc(r.tipo||''), esc(r.fornecedor||''), brl(r.valor)]),[4])}`; }
@@ -4313,7 +4325,7 @@ V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return 
   const rows=ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0];
     return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
       <div class="rel-uso-kpis mq-kpis"><span><small>Horímetro</small>${hor?numH(hor)+' h':'—'}</span><span><small>Horas na safra</small>${c.horas?numH(c.horas)+' h':'—'}${!c.horasHor&&c.horasCampo?'<small class="mut" style="text-transform:none"> (Campo)</small>':''}</span><span><small>Combustível</small>${c.litros?`${numH(c.litros)} L · ${brl0(c.comb)}`:'—'}</span><span><small>Consumo</small>${c.lhReal?`${numH(c.lhReal)} L/h`:'—'}${m.lh?`<small class="mut" style="text-transform:none"> plan. ${numH(m.lh)}</small>`:''}</span><span><small>Peças · serviços</small>${brl0(c.pecas+c.os)}</span><span class="${c.custoH&&m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}"><small>Custo-hora real</small>${c.custoH?brl(c.custoH)+'/h':'—'}${m.rsHm?`<small class="mut" style="text-transform:none"> plan. ${brl0(m.rsHm)}</small>`:''}</span><span><small>Próxima preventiva</small>${prox?`${esc(prox.p.nome)} · ${prox.falta<0?'<b style="color:var(--red)">vencida</b>':'faltam '+numH(prox.falta)+' h'}`:'<span class="mut">sem plano</span>'}</span></div>
-      ${_alertHtml(al)}</div>`; }).join('');
+      ${(()=>{ const ht=maqHorasPorTalhao(m); return ht.length?`<div class="mq-talhoes mut">🌱 horas no Campo: ${ht.slice(0,5).map(x=>`${esc(x.talhao)} (${numH(x.h)} h)`).join(' · ')}${ht.length>5?' · …':''}</div>`:''; })()}${_alertHtml(al)}</div>`; }).join('');
   const tot=ms.reduce((s,m)=>{ const c=maqCustos(m); s.comb+=c.comb; s.pecas+=c.pecas+c.os; s.horas+=c.horas; s.litros+=c.litros; return s; },{comb:0,pecas:0,horas:0,litros:0}), nAl=ms.reduce((s,m)=>s+maqAlertas(m).length,0);
   return `<div class="kpi-grid"><div class="kpi accent"><div class="k-label">Custo da frota na safra</div><div class="k-value">${brl0(tot.comb+tot.pecas)}</div><div class="k-sub">combustível ${brl0(tot.comb)} · peças e serviços ${brl0(tot.pecas)}</div></div>
     <div class="kpi"><div class="k-label">Horas trabalhadas</div><div class="k-value">${numH(tot.horas)} h</div><div class="k-sub">${tot.horas?brl(( tot.comb+tot.pecas)/tot.horas)+'/h médio':'horímetro nos abastecimentos'}</div></div>
@@ -4479,17 +4491,18 @@ V.resultados = function(){
     const receitaOrc=prodHaOrc*area*precoOrc, receitaReal=prodHaReal*area*precoReal;
     const insOrc=cv.ins, insReal=custoInsumoRealSeq(t,cv.seq);
     const maq=cv.maqHa*area, arr=((emp in OV.arrend)?+OV.arrend[emp]:0)*area, estr=estruturaHa*area;
+    const maqRS=custoMaqRealSeq(t,cv.seq), maqR=maqRS.nReal?maqRS.total:maq;   // v298: horas do Campo × custo-hora real; sem registro, planejado
     const impOrc=receitaOrc*impostoPct/100, impReal=receitaReal*impostoPct/100;
     const finOrc=receitaOrc*financeiroPct/100, finReal=receitaReal*financeiroPct/100;
     const margOrc=receitaOrc-impOrc-insOrc-maq-arr-estr-finOrc;
-    const margReal=receitaReal-impReal-insReal-maq-arr-estr-finReal;
+    const margReal=receitaReal-impReal-insReal-maqR-arr-estr-finReal;
     const temReal=(res.prodHa!=null&&res.prodHa!=='');
-    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,precoVenda,receitaOrc,receitaReal,insOrc,insReal,maq,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
+    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,precoVenda,receitaOrc,receitaReal,insOrc,insReal,maq,maqR,maqRS,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
   });
   const T=f=>rows.reduce((s,r)=>s+f(r),0);
   const tArea=T(r=>r.area), tRecR=T(r=>r.receitaReal), tRecO=T(r=>r.receitaOrc);
   const tInsR=T(r=>r.insReal), tMargR=T(r=>r.margReal), tMargO=T(r=>r.margOrc);
-  const tCustoR=T(r=>r.insReal+r.maq+r.arr+r.estr+r.receitaReal*(impostoPct+financeiroPct)/100);
+  const tCustoR=T(r=>r.insReal+r.maqR+r.arr+r.estr+r.receitaReal*(impostoPct+financeiroPct)/100), tMaqR=T(r=>r.maqR), tMaqO=T(r=>r.maq), nOpsReal=T(r=>r.maqRS.nReal);
   const sgn=v=>`<b style="color:${v>=0?'var(--green)':'var(--red)'}">${brl0(v)}</b>`;
   const nColhidos=rows.filter(r=>r.temReal).length;
   const body=rows.map(r=>`<tr data-search="${esc((r.t.id+' '+r.emp).toLowerCase())}">
@@ -4499,6 +4512,7 @@ V.resultados = function(){
       <td class="num c-more" data-th="Preço"><input class="cell ${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'edited':''}" inputmode="decimal" data-edit="resPreco" data-key="${esc(r.key)}" value="${(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?esc(String(OV.result[r.key].preco)):''}" placeholder="${nf2.format(r.precoReal)}" title="${r.precoVenda?'preço médio das vendas registradas (aba VENDAS)':'preço orçado'}">${r.precoVenda&&!(OV.result[r.key]&&OV.result[r.key].preco!=null&&OV.result[r.key].preco!=='')?'<small class="mut" title="preço médio das vendas"> venda</small>':''}</td>
       <td class="num c-more" data-th="Receita">${brl0(r.receitaReal)}</td>
       <td class="num c-more" data-th="Insumos (real)" title="Orçado: ${brl0(r.insOrc)}">${brl0(r.insReal)}</td>
+      <td class="num c-more" data-th="Máquinas" title="Planejado: ${brl0(r.maq)}${r.maqRS.nReal?` · ${r.maqRS.nReal} de ${r.maqRS.n} operação(ões) com horas reais (${numH(r.maqRS.h)} h)`:' · sem horas do Campo: planejado'}">${brl0(r.maqR)}${r.maqRS.nReal?`<br><small class="mut">real ${r.maqRS.nReal}/${r.maqRS.n} op.</small>`:''}</td>
       <td class="num c-more" data-th="Margem orçada">${sgn(r.margOrc)}</td>
       <td class="num" data-th="Margem real">${sgn(r.margReal)}</td>
       <td class="num c-more" data-th="Desvio"><b style="color:${r.desvio>=0?'var(--green)':'var(--red)'}">${r.desvio>=0?'+':''}${brl0(r.desvio)}</b></td></tr>`).join('');
@@ -4506,17 +4520,17 @@ V.resultados = function(){
   <div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">Margem realizada</div><div class="k-value" style="color:${tMargR>=0?'var(--green)':'var(--red)'}">${brl0(tMargR)}</div><div class="k-sub">orçada ${brl0(tMargO)} · desvio ${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</div></div>
     <div class="kpi"><div class="k-label">Receita realizada</div><div class="k-value">${brl0(tRecR)}</div><div class="k-sub">orçada ${brl0(tRecO)}</div></div>
-    <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${brl0(tCustoR)}</div><div class="k-sub">insumos ${brl0(tInsR)}</div></div>
+    <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${brl0(tCustoR)}</div><div class="k-sub">insumos ${brl0(tInsR)} · máquinas ${brl0(tMaqR)}${nOpsReal?` (${nOpsReal} op. com custo-hora real)`:''}</div></div>
     <div class="kpi"><div class="k-label">Margem / receita</div><div class="k-value">${tRecR>0?nf1.format(tMargR/tRecR*100)+'%':'—'}</div><div class="k-sub">${nColhidos}/${rows.length} talhões colhidos</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-res" placeholder="Buscar talhão ou cultura…" autocomplete="off"></div>
     <div class="spacer"></div><span class="badge badge-muted">Informe <b>Colhido/ha</b> e <b>Preço</b> de cada talhão. Impostos, estrutura, financeiro e máquina usam as premissas da <a class="link" data-go="#/dre">DRE</a>.</span></div>
   ${vendasPainelHtml()}
   <div class="panel"><div class="panel-head"><h2>Resultado por talhão — Planejado × Realizado</h2><span class="sub">receita − custos = margem</span></div>
-    <div class="table-wrap"><table id="res-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Colhido/ha</th><th class="num c-more">Preço</th><th class="num c-more">Receita</th><th class="num c-more">Insumos</th><th class="num c-more">Margem orç.</th><th class="num">Margem real</th><th class="num c-more">Desvio</th></tr></thead>
+    <div class="table-wrap"><table id="res-tbl"><thead><tr><th>Talhão</th><th class="num">Área</th><th class="num">Colhido/ha</th><th class="num c-more">Preço</th><th class="num c-more">Receita</th><th class="num c-more">Insumos</th><th class="num c-more">Máquinas</th><th class="num c-more">Margem orç.</th><th class="num">Margem real</th><th class="num c-more">Desvio</th></tr></thead>
       <tbody>${body}</tbody>
-      <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tArea)}</td><td></td><td class="c-more"></td><td class="num c-more">${brl0(tRecR)}</td><td class="num c-more">${brl0(tInsR)}</td><td class="num c-more">${sgn(tMargO)}</td><td class="num">${sgn(tMargR)}</td><td class="num c-more"><b style="color:${tMargR-tMargO>=0?'var(--green)':'var(--red)'}">${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</b></td></tr></tfoot></table></div></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Margem = Receita − impostos − insumos − máquina − arrendamento − estrutura − financeiro. Insumos <b>realizados</b> vêm das operações concluídas (baixa por volume real); as não concluídas contam pelo planejado. Enquanto não informar o colhido, usa a produtividade orçada.</p>`;
+      <tfoot class="tfoot"><tr><td>TOTAL</td><td class="num">${num(tArea)}</td><td></td><td class="c-more"></td><td class="num c-more">${brl0(tRecR)}</td><td class="num c-more">${brl0(tInsR)}</td><td class="num c-more" title="Planejado: ${brl0(tMaqO)}">${brl0(tMaqR)}</td><td class="num c-more">${sgn(tMargO)}</td><td class="num">${sgn(tMargR)}</td><td class="num c-more"><b style="color:${tMargR-tMargO>=0?'var(--green)':'var(--red)'}">${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</b></td></tr></tfoot></table></div></div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Margem = Receita − impostos − insumos − máquina − arrendamento − estrutura − financeiro. Insumos <b>realizados</b> vêm das operações concluídas (baixa por volume real); as não concluídas contam pelo planejado. <b>Máquinas</b>: operação com início/fim no Campo e máquina com custo-hora real (módulo Máquinas) conta horas × custo-hora real; as outras, o planejado. Enquanto não informar o colhido, usa a produtividade orçada.</p>`;
 };
 function filterResultados(){
   const q=(($('#q-res')&&$('#q-res').value)||'').toLowerCase().trim();

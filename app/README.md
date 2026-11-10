@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Custo-hora real no custo do talhão (v298)** — em **Resultados**, cada operação que tem início e fim registrados
+  no Campo e uma máquina com custo-hora real (módulo Máquinas) passa a custar **horas × R$/h real**; as outras seguem
+  pelo planejado da CUSTO OPERAÇÃO. Coluna nova **Máquinas** (com "real N/M op." e o planejado no título), KPI de
+  custo com a contagem, ficha do talhão com "Máquinas/ha … real …". No Painel da frota e no PDF da máquina, as
+  **horas por talhão** vindas do Campo. O consumo e o custo-hora passam a usar o **método do tanque cheio**: o que
+  entrou depois da primeira leitura do horímetro é o consumido no período (o primeiro enchimento não conta como
+  consumo). Funções: `maqDeConjunto`, `maqHorasPorTalhao`, `opMaqReal`, `custoMaqRealSeq`, `custoMaqRealTalhao`.
 - **Conjuntos planejados também no módulo Máquinas (v297)** — a tela Máquinas do Planejamento (conjuntos, rendimento,
   L/h, R$/hora e custo por passada) aparece também no módulo Máquinas como **⚙️ Conjuntos e custo**, sem trocar de
   módulo (`VIEW_MOD.maquinas='both'`, `TELA_MODS`), com um aviso ligando ao Painel da frota (o real).
