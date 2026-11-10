@@ -2069,6 +2069,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .nfe-head>div.nfe-fora{border-color:var(--amber);background:#fff8e6}
 .fin-h3{font-size:14px;margin:10px 14px 6px}
 .nfe-ia{font-size:12px;margin-top:3px}.nfe-ia-ok{color:#2e7d32;font-weight:700}.nfe-ia-pend{color:#b26a00;font-weight:700}.nfe-row.ia-pronto{border-left:4px solid #43a047}.nfe-row.ia-pend{border-left:4px solid #fbc02d;background:#fffdf5}.nfe-iabox .btn{margin-left:6px}
+.mq-talhoes{font-size:12px;margin-top:6px}
 /* leitor de QR ao vivo (v296) */
 .qr-ov{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:1200;display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-left,0px))}.qr-box{position:relative;width:min(92vw,520px)}.qr-box video{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:14px;background:#000}
 .qr-mira{position:absolute;left:50%;top:40%;width:62%;aspect-ratio:1;transform:translate(-50%,-50%);border:3px solid #fff;border-radius:14px;box-shadow:0 0 0 2000px rgba(0,0,0,.25);pointer-events:none}.qr-msg{color:#fff;text-align:center;font-size:14px;margin:10px 0}.qr-acts{display:flex;gap:10px;justify-content:center}.qr-acts .btn{background:#fff}
@@ -2569,6 +2570,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .exp-row-tx .mut{font-size:9.5px}
   .fin-h3{font-size:11.5px}
   .nfe-ia{font-size:9.5px}
+  .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
   .mq-alertas{font-size:10px}
