@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-296';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-297';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -424,7 +424,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
-  maquinas:'planejamento', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
+  maquinas:'both', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
   login:'both', conta:'both', usuarios:'both', frota:'maquinas', abastecimento:'maquinas', manutencao:'maquinas', maqcad:'maquinas' };   // v295
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
@@ -435,7 +435,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas','maquinas'];   // v295: 🚜 Máquinas
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo']};   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo'], maquinas:['planejamento','maquinas']};   // v297: Máquinas (conjuntos) também no módulo Máquinas   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -4416,6 +4416,7 @@ V.maquinas = function(){
       <div class="k-value"><input class="cell ${OV.diesel!==6?'edited':''}" data-edit="diesel" value="${OV.diesel}" style="width:110px;font-size:20px;font-weight:700"> <span style="font-size:13px;color:var(--muted)">R$/L</span></div>
       <div class="k-sub">aplicado ao consumo (L/ha)</div></div>
   </div>
+  ${currentModule()==='maquinas'?`<div class="nfe-aviso info" style="margin:0 0 10px">⚙️ Aqui ficam os <b>conjuntos planejados</b> (rendimento, L/h e R$/hora que entram no custo do talhão). O que aconteceu de verdade está no <a class="link" data-go="#/frota">Painel da frota</a>: horímetro, abastecimentos, manutenção e custo-hora real.</div>`:''}
   ${manutPainelHtml()}
   <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento — largura e velocidade definem o rendimento</span></div>
     <div class="bulk-add">
@@ -4829,7 +4830,7 @@ V.inicio = function(){
       ${card('tarefas','👷','Tarefas','Organize a equipe e as tarefas da safra.',
         ['Quadro (estilo Trello)','Cronograma (Gantt)','Equipe / operadores'],'ec-tarefas')}
       ${card('maquinas','🚜','Máquinas','Abastecimento, manutenção e custo-hora da frota.',
-        ['Abastecimento com horímetro (QR Code)','Plano de preventivas que avisa','Ordens de serviço','Custo-hora real × planejado'],'ec-maquinas')}
+        ['Abastecimento com horímetro (QR Code)','Plano de preventivas que avisa','Ordens de serviço','Custo-hora real × planejado','Conjuntos e custo por passada'],'ec-maquinas')}
     </div>
     <p class="entry-foot">Depois é só usar o botão <b>⇄ Trocar módulo</b> no topo. <span class="mut">v${APP_VERSION}</span></p>
     ${sessUsuario()?`<p class="entry-foot">👤 <b>${esc(sessUsuario().nome)}</b> · <a class="link" data-go="#/conta">minha conta / sair</a>${ehAdmin()?' · <a class="link" data-go="#/usuarios">👥 usuários</a>':''}</p>`:(syncUrl()?`<p class="entry-foot"><a class="link" data-go="#/login">🔐 Entrar com login</a></p>`:'')}
