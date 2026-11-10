@@ -113,6 +113,14 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
   operações que mudaram (envio delta), e a planilha grava só essas linhas. Cai no caminho completo (merge por `_u`)
   nos mesmos casos dos outros mapas.
 
+## Permissões (appsscript.json)
+
+O manifesto `sync/appsscript.json` lista **todas** as permissões que o `Code.gs` usa (planilha, Drive, internet para
+a IA e a planilha da balança, Gmail/e-mail para capturar notas e enviar o fechamento, gatilhos). Se o projeto do Apps
+Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Google **não pede** as permissões novas e
+`autorizarPermissoes` mostra `internet: Exception…` / `gmail: Exception…`. Nesse caso: ⚙️ Configurações do projeto →
+"Mostrar o arquivo de manifesto" → colar este arquivo por cima → salvar → executar `autorizarPermissoes` e aceitar.
+
 ## WhatsApp nas etiquetas (v299)
 
 - `__cadFin` tipo **maquinas** `{whats}` → `configAppGravar_('WHATSAPP MAQUINAS', …)`; `readConfigApp` devolve
