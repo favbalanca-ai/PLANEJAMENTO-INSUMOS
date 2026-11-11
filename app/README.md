@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **"Venda do produtor" só com NF-e de entrada de verdade (v312)** — uma nota de fornecedor emitida com CFOP 1xxx
+  (erro comum de ERP, como o 1662 da v307) e destinatário produtor era marcada "Venda do produtor" na captura e no app.
+  Agora a contranota do comprador precisa ser NF-e de **entrada** (`tpNF = 0`); CFOP 1xxx numa nota de saída é compra.
+  Itens com nome de grão mas que são insumo (SEMENTE DE MILHO, FARELO DE SOJA, ÓLEO…) não contam como produção
+  (`_RX_NAO_GRAO`). A captura reavalia as notas ainda "a classificar" marcadas pela regra antiga e as devolve para compra
+  com fornecedor/CNPJ do XML (`nfeReavaliarVendas_`). Para uma nota já marcada, "Conferir venda → Não é venda" também
+  conserta na planilha (v309).
 - **Revisão do Administrativo, fase 4 — segurança (v311)** — (1) com usuários cadastrados na planilha, o
   **Financeiro e os cadastros só chegam a quem entrou com login** (o Code.gs tira `financeiro`/`vendas` do pacote e
   recusa gravações do Financeiro sem sessão, mesmo com EXIGIR LOGIN = NÃO); as telas explicam e oferecem "Entrar";

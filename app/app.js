@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-311';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-312';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1832,12 +1832,12 @@ function nfeProdutorTxt(doc, nomeXml){ doc=String(doc||'').replace(/\D/g,''); if
 function nfeProdutoresDocs(){ return FIN().produtores.map(p=>String(p.cpf||'').replace(/\D/g,'')).filter(Boolean); }
 // v288: produtos que a fazenda PRODUZ — nota com só esses itens é venda (contranota de entrada do comprador ou nota
 // emitida pelo produtor), mesmo que o CPF do produtor ainda não esteja em Cadastros → Produtores
-const _RX_GRAOS=/\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i;
-function nfeItensProducao(n){ const its=n.itens||[]; return !!its.length && its.every(i=>_RX_GRAOS.test(i.xprod||'')); }
+const _RX_GRAOS=/\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i, _RX_NAO_GRAO=/SEMENTE|SEM\.|FARELO|RA[CÇ][AÃ]O|[OÓ]LEO|ADUBO|FERTIL|INOCUL|TRATAD|FUNGIC|HERBIC|INSETIC|DEFENS|CALC[AÁ]RIO|GESSO|SUBSTRATO|MUDA|H[IÍ]BRIDO|\bHIB\b|\bTS\b|KIT|VACINA|SUPLEMENTO/i;   // v312: "SEMENTE DE MILHO" é insumo
+function nfeItensProducao(n){ const its=n.itens||[]; return !!its.length && its.every(i=>_RX_GRAOS.test(i.xprod||'')&&!_RX_NAO_GRAO.test(i.xprod||'')); }
 function nfeNotaEntrada(n){ const its=n.itens||[]; return n.tpNF==='0' || (!!its.length && its.every(i=>/^[12]/.test(String(i.cfop||'')))); }   // contranota: tpNF 0 ou CFOP 1xxx/2xxx
 function nfeEhVenda(n){ const prods=nfeProdutoresDocs(), pf=String(n.cnpj||'').length===11;
-  if(prods.includes(n.cnpj)) return true; if(nfeNotaEntrada(n) && prods.includes(n.dest)) return true;
-  if(nfeItensProducao(n) && (nfeNotaEntrada(n) || pf)) return true;   // soja, milho, feijão, laranja… entrando no comprador ou saindo de um CPF
+  if(prods.includes(n.cnpj)) return true; if(n.tpNF==='0' && prods.includes(n.dest)) return true;   // v312: contranota = NF-e de ENTRADA (tpNF 0); CFOP 1xxx numa nota de saída é erro do fornecedor, não venda
+  if(nfeItensProducao(n) && (n.tpNF==='0' || pf)) return true;   // soja, milho, feijão, laranja… entrando no comprador ou saindo de um CPF
   if(!prods.length) return n.tpNF==='0' || (pf && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
   return false; }
 const VENDA_CULT=[['SOJA',/\bSOJA\b/i],['MILHO',/\bMILHO\b/i],['SORGO',/\bSORGO\b/i],['TRIGO',/\bTRIGO\b/i],['FEIJ',/FEIJ/i],['LARANJA',/LARANJA|CITR/i],['BRAQ',/BRAQ|BRACH/i],['ALGOD',/ALGOD/i],['ARROZ',/\bARROZ\b/i],['GIRASSOL',/GIRASSOL/i],['AVEIA',/\bAVEIA\b/i],['MILHETO',/MILHETO/i]];

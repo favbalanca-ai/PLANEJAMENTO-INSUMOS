@@ -774,6 +774,16 @@ function nfeTipoOutro_(root){ var rn = S(root.getName()), tem = function(n){ ret
   if (/^(NFe|nfeProc)$/i.test(rn)) return 'NF-e sem o bloco infNFe (arquivo incompleto)';
   return 'não é XML de NF-e (raiz <' + rn + '>)'; }
 function nfeEventoNome_(tp){ return { '110110':'carta de correção', '110111':'cancelamento', '110140':'EPEC (contingência)', '210200':'confirmação da operação (manifesto do destinatário)', '210210':'ciência da operação (manifesto)', '210220':'desconhecimento da operação (manifesto)', '210240':'operação não realizada (manifesto)' }[S(tp)] || ('evento ' + S(tp)); }
+// v312: o item é PRODUÇÃO da fazenda (grão/fruta a granel)? "SEMENTE DE MILHO", "FARELO DE SOJA", "ÓLEO" etc. são insumos
+var RX_GRAO_ = /\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i, RX_NAO_GRAO_ = /SEMENTE|SEM\.|FARELO|RA[CÇ][AÃ]O|[OÓ]LEO|ADUBO|FERTIL|INOCUL|TRATAD|FUNGIC|HERBIC|INSETIC|DEFENS|CALC[AÁ]RIO|GESSO|SUBSTRATO|MUDA|H[IÍ]BRIDO|\bHIB\b|\bTS\b|KIT|VACINA|SUPLEMENTO/i;
+function nfeEhGrao_(x){ x = S(x); return RX_GRAO_.test(x) && !RX_NAO_GRAO_.test(x); }
+// v312: a decisão "venda do produtor" numa função só (testável). Contranota do comprador = NF-e de ENTRADA (tpNF 0);
+// CFOP 1xxx numa nota de SAÍDA (tpNF 1) é erro do ERP do fornecedor (ex.: 1662 numa venda de lubrificante) — é compra.
+function nfeEhVendaProd_(n, cfg, origem){
+  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança' || (n.producao && n.tpNF !== '0' && !n.entrada && /^\d{11}$/.test(n.cnpj));   // produtor emitindo · balança · CPF vendendo grão
+  var entradaReal = n.tpNF === '0';
+  return !!(emitProd || (entradaReal && (cfg.produtores.indexOf(n.dest) >= 0 || n.producao)));
+}
 function nfeLerGs_(txt){
   var root = XmlService.parse(txt).getRootElement();
   var ev = _xfirst(root, 'infEvento') || (root.getName() === 'infEvento' ? root : null);
@@ -793,7 +803,7 @@ function nfeLerGs_(txt){
     dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
     ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length,
     entrada:_xt(ide,'tpNF') === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
-    producao:xprods.length > 0 && xprods.every(function(x){ return /\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|GIRASSOL)\b/i.test(x); }) };   // v288: só produtos que a fazenda produz
+    producao:xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); }) };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
 }
 // texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
 function _blobTxt(b){ var t = b.getDataAsString('UTF-8'); if (/encoding=["']ISO-8859-1["']/i.test(t.slice(0,120))) t = b.getDataAsString('ISO-8859-1'); return t.replace(/^﻿/,''); }
@@ -888,6 +898,17 @@ function nfeAddProdutor_(p){
   return { rows:nfeReavaliarIgnoradas_() };
 }
 // notas IGNORADAS só por "destinatário fora da lista" cujo CPF/CNPJ JÁ está na lista PRODUTOR → voltam para A CLASSIFICAR
+// v312: notas marcadas "VENDA PRODUTOR" pela regra antiga (CFOP 1xxx numa nota de saída) voltam a ser compra — só as ainda A CLASSIFICAR
+function nfeReavaliarVendas_(){
+  var s = sh(NFE_IDX_SHEET); if (!s || s.getLastRow() < 2) return 0;
+  var cfg = nfeConfig_(), t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), n = 0, lidas = 0;
+  s.getRange(2, 1, s.getLastRow() - 1, t.ncol).getValues().forEach(function(r, i){
+    if (lidas >= 15 || S(r[t.col('STATUS')]).toUpperCase() !== 'A CLASSIFICAR' || S(r[t.col('TIPO')]).toUpperCase() !== 'VENDA PRODUTOR' || S(r[t.col('ORIGEM')]) === 'balança') return;
+    var fid = S(r[t.col('FILE ID')]); if (!fid) return; lidas++;
+    try { var nx = nfeLerGs_(_blobTxt(DriveApp.getFileById(fid).getBlob())); if (!nx || nx.erro || nfeEhVendaProd_(nx, cfg, S(r[t.col('ORIGEM')]))) return;
+      _setCells_(t, i + 2, { 'TIPO':nx.tipo || 'OUTRA', 'PRODUTOR':nx.dest, 'CNPJ EMITENTE':nx.cnpj, 'FORNECEDOR':nx.fornecedor, 'OBS':'era "venda do produtor" pela regra antiga — é compra (nota de saída do fornecedor)' }); n++; } catch (e) {} });
+  return n;
+}
 function nfeReavaliarIgnoradas_(){
   var s = sh(NFE_IDX_SHEET); if (!s || s.getLastRow() < 2) return 0;
   var prod = nfeConfig_().produtores; if (!prod.length) return 0;
@@ -930,9 +951,9 @@ function processarXmlNfe(txt, origem){
   if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()))   // mesma nota 2× não duplica
     return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' };
   // v277: VENDA DO PRODUTOR — nota emitida por um produtor cadastrado, ou contranota de ENTRADA (tpNF 0) do comprador com o produtor como destinatário
-  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança' || (n.producao && !n.entrada && n.tpNF !== '0' && /^\d{11}$/.test(n.cnpj));   // v279: NFA da balança é sempre venda · v288: CPF vendendo produção
-  var entradaN = !!n.entrada || n.tpNF === '0';
-  var vendaProd = emitProd || (entradaN && (cfg.produtores.indexOf(n.dest) >= 0 || n.producao));   // contranota do comprador: produtor cadastrado OU só produtos da fazenda (soja, milho, feijão, laranja…)
+  var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança';
+  var vendaProd = nfeEhVendaProd_(n, cfg, origem);   // v312: só NF-e de ENTRADA (tpNF 0) vale como contranota — CFOP 1xxx numa nota de saída do fornecedor é compra
+  if (vendaProd && !emitProd && n.tpNF !== '0') emitProd = true;   // CPF vendendo grão (emitente é o produtor, mesmo sem cadastro)
   var fora = !vendaProd && cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
@@ -972,7 +993,7 @@ function capturarNfe(maxMs){
   _NFE_MEMO_ = {};
   try {
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
-    var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
+    var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0) + (nfeReavaliarVendas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
     // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
     var p = nfePastas_(cfg), it = p.entrada.getFiles(), permFalta = false, feitos = _nfeFeitos_(), feitosMudou = false;
     while (it.hasNext() && !fimTempo()){ var f = it.next(), fid = '', fnome = '';
