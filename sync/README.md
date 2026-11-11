@@ -127,6 +127,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Conjuntos (aba `CONJUNTOS APP`, v302)
+
+- Aba nova no padrão KEY|JSON, criada quando falta. Payload `__conjunto` → `writeMapApp(CONJ_SHEET, …)` (merge por
+  chave, `_u` maior vence, `del:true` apaga). Pacote `conjuntos_app` entra nos módulos planejamento, campo, tarefas e
+  máquinas; gravam planejamento, máquinas e campo (o select de máquina da execução muda o planejamento).
+- Registros: `c:<CONJUNTO>` conjunto montado no app (máquina, implemento, operação, largura, velocidade, eficiência,
+  L/h, R$/HM); `ov:<CONJUNTO>` edições de um conjunto da aba CUSTO OPERAÇÃO (`attr` com só o que mudou + `rs_hm`);
+  `op:<TL>|<P3>` conjunto escolhido para a operação. A CUSTO OPERAÇÃO continua sendo a base dos conjuntos.
+
 ## Máquinas, parte B (v296)
 
 - `_manutDest_` aceita o destino **tanque** (diesel/Arla a granel): a linha vai para MANUTENÇÃO MÁQUINAS com

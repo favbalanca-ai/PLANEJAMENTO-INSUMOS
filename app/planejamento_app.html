@@ -2099,7 +2099,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fin-t tr.mq-tr-erro td{background:var(--red-soft)}.fin-t tr.mq-tr-aviso td{background:#fffdf5}
 @media (max-width:640px){ .mq-form label{min-width:46%} }
 /* referência de dose da bula na recomendação (v294) */
-.rc-bula{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}.rc-bula.acima{color:var(--red);font-weight:700}.rc-bula.abaixo{color:var(--amber);font-weight:700}.rc-bula.sem{font-weight:400}
+.rc-bula{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}
+.rc-conj{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}   /* v302: rendimento do conjunto */.rc-bula.acima{color:var(--red);font-weight:700}.rc-bula.abaixo{color:var(--amber);font-weight:700}.rc-bula.sem{font-weight:400}
 .rc-tbl input.cell.dose-acima,.rc-dose.dose-acima{color:var(--red);font-weight:700}.rc-tbl input.cell.dose-acima{border-color:var(--red);background:var(--red-soft)}
 .rc-tbl input.cell.dose-abaixo,.rc-dose.dose-abaixo{color:var(--amber);font-weight:700}.rc-obs.rc-acima{color:var(--red)}
 /* fechamento mensal (v292) */
@@ -2724,7 +2725,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-301';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-302';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3397,6 +3398,56 @@ function eachOp(t, cb){
 function unidadePadrao(emp){ return /BRAQ|BRACH/i.test(String(emp||''))?'%':'sc'; }
 function unidadeCultura(emp){ return (OV.dreUnit&&OV.dreUnit[emp])||unidadePadrao(emp); }
 function precoCultura(emp){ return (emp in OV.cultura)?+OV.cultura[emp]:(DATA.precos_cultura[emp]||0); }
+// ===== v302: conjuntos como modelo da operação (aba CONJUNTOS APP) =====
+// OV.conjApp é o espelho sincronizado: 'c:<CONJ>' conjunto montado · 'ov:<CONJ>' edições de um conjunto da planilha
+// (largura, velocidade, efic., L/h, R$/HM, operação) · 'op:TL|P3' conjunto escolhido para a operação.
+// Os mapas que o resto do app lê (OV.maqAdd, OV.maqAttr, OV.maquina, OV.opMaq) são DERIVADOS dele (conjAplicar).
+const CONJ_OPS=['Pulverização','Plantio','Adubação/Correção','Colheita','Preparo de solo','Outra'];
+const conjSlug=c=>String(c||'').trim().toUpperCase().replace(/\s+/g,' ');
+let lastConjSig='';
+function conjSig(){ return sigHash(JSON.stringify((OV&&OV.conjApp)||{})); }
+function conjServerOk(){ return !!(DATA && DATA.conjuntos_app && typeof DATA.conjuntos_app==='object'); }
+function conjRecs(){ return Object.values((OV&&OV.conjApp)||{}).filter(r=>r&&!r.del); }
+function conjMontado(conj){ const r=OV.conjApp&&OV.conjApp['c:'+conjSlug(conj)]; return (r&&!r.del)?r:null; }
+function conjAplicar(){ if(!OV) return; OV.maqAdd=[]; OV.maqAttr={}; OV.maquina={}; OV.opMaq={};
+  conjRecs().forEach(r=>{ const id=String(r.id||'');
+    if(id.startsWith('c:')) OV.maqAdd.push({conjunto:r.conjunto, maquina:r.maquina||'', implemento:r.implemento||'', operacao:r.operacao||'', largura:+r.largura||0, velocidade:+r.velocidade||0, eficiencia:+r.eficiencia||85, l_h:+r.l_h||0, rs_hm:+r.rs_hm||0});
+    else if(id.startsWith('ov:')){ const a=r.attr||{}; if(Object.keys(a).length) OV.maqAttr[r.conjunto]=Object.assign({},a); if(r.rs_hm!=null) OV.maquina[r.conjunto]=+r.rs_hm; }
+    else if(id.startsWith('op:')) OV.opMaq[id.slice(3)]=r.conj==null?'':String(r.conj); });
+  if(DATA) buildMaqIndex(); }
+function conjGravar(id, rec){ OV.conjApp=OV.conjApp||{}; OV.conjApp[id]=Object.assign({}, OV.conjApp[id]||{}, rec, {id, _u:tsAgora()}); conjAplicar(); saveOverrides(); loteAgendar('__conjunto'); return OV.conjApp[id]; }
+function conjGravarOp(tid, tagoi, conj){ return conjGravar('op:'+tid+'|'+tagoi, {conj:conj==null?'':String(conj)}); }
+// edição de um conjunto da planilha (CUSTO OPERAÇÃO): guarda só o que mudou; sem nada → registro sai
+function conjGravarOv(conjunto, patch){ const id='ov:'+conjSlug(conjunto), cur=(OV.conjApp&&OV.conjApp[id])||{}; const attr=Object.assign({}, cur.attr||{}); let rs=(cur.rs_hm!=null&&!cur.del)?cur.rs_hm:null;
+  if(cur.del){ for(const k in attr) delete attr[k]; }
+  if(patch.attr){ for(const k in patch.attr){ if(patch.attr[k]==null||patch.attr[k]==='') delete attr[k]; else attr[k]=patch.attr[k]; } }
+  if('rs_hm' in patch) rs=patch.rs_hm;
+  const vazio=!Object.keys(attr).length && rs==null; return conjGravar(id, {conjunto, attr, rs_hm:rs, del:vazio}); }
+// primeira vez com a v302: o que estava só no aparelho vira registro e sobe para a planilha
+function conjMigrar(){ OV.conjApp=OV.conjApp||{}; if(Object.keys(OV.conjApp).length){ conjAplicar(); return; }
+  const tem=(OV.maqAdd||[]).length||Object.keys(OV.maqAttr||{}).length||Object.keys(OV.maquina||{}).length||Object.keys(OV.opMaq||{}).length; if(!tem) return;
+  const u=tsAgora(), mont={};
+  (OV.maqAdd||[]).forEach(m=>{ const id='c:'+conjSlug(m.conjunto); mont[m.conjunto]=1; OV.conjApp[id]=Object.assign({}, m, OV.maqAttr&&OV.maqAttr[m.conjunto]||{}, (OV.maquina&&OV.maquina[m.conjunto]!=null)?{rs_hm:+OV.maquina[m.conjunto]}:{}, {id, _u:u}); });
+  const ovs={}; for(const c in (OV.maqAttr||{})){ if(mont[c]) continue; ovs[c]=ovs[c]||{conjunto:c, attr:{}, rs_hm:null}; Object.assign(ovs[c].attr, OV.maqAttr[c]); }
+  for(const c in (OV.maquina||{})){ if(mont[c]) continue; ovs[c]=ovs[c]||{conjunto:c, attr:{}, rs_hm:null}; ovs[c].rs_hm=+OV.maquina[c]; }
+  for(const c in ovs){ const id='ov:'+conjSlug(c); OV.conjApp[id]=Object.assign(ovs[c], {id, _u:u}); }
+  for(const k in (OV.opMaq||{})){ OV.conjApp['op:'+k]={id:'op:'+k, conj:OV.opMaq[k]||'', _u:u}; }
+  conjAplicar(); saveOverrides(); try{ loteAgendar('__conjunto'); }catch(e){} }
+function conjApplyPulled(m){ const ch=_mapApplyPulled('conjApp', m, conjSig, ()=>lastConjSig, v=>{ lastConjSig=v; }, '__conjunto'); if(m&&typeof m==='object') conjAplicar(); return ch; }
+// tipo de operação do conjunto: escolhido (montado ou edição) > adivinhado pelo nome
+function conjOpGuess(nome){ const n=_bkNorm(nome); return /PULVER|JACTO|UNIPORT|AIR TRA|AVIAO|DRONE/.test(n)?'Pulverização':/PLANTAD|HORSCH|ASM|SEMEAD|MAESTRO/.test(n)?'Plantio':/BRUTUS|DISTRIBUID|ADUBAD|JAN /.test(n)?'Adubação/Correção':/COLHE|PLATAFORMA/.test(n)?'Colheita':/GRADE|ARADO|SUBSOL|ESCARIF|NIVELAD|ROLO/.test(n)?'Preparo de solo':''; }
+function conjOpExplicita(m){ const o=OV.maqAttr[m.conjunto]; return (o&&o.operacao)||m.operacao||''; }
+function conjOpDe(m){ return conjOpExplicita(m)||conjOpGuess(m.conjunto); }
+// tipo de operação pelas classes dos insumos (o que a operação vai fazer)
+function conjTipoDeClasses(clsArr){ const cls=(clsArr||[]).map(c=>(c||'').toUpperCase()); const has=re=>cls.some(c=>re.test(c));
+  return has(/CORRETIVO|FERTILIZANTE|NUTRI/)?'Adubação/Correção':has(/SEMENTE|^TS$|^TS /)?'Plantio':has(/HERBICIDA|FUNGICIDA|INSETICIDA|ADJUVANTE|BIOL|NEMATIC/)?'Pulverização':''; }
+// opções do select de conjunto: primeiro os do tipo da operação, depois os outros
+function conjOptsHtml(sel, tipo, extra){ const ms=maquinasAll(); const o=m=>`<option value="${esc(m.conjunto)}"${sel===m.conjunto?' selected':''}>${esc(m.conjunto)}</option>`;
+  const a=tipo?ms.filter(m=>conjOpDe(m)===tipo):[], b=tipo?ms.filter(m=>conjOpDe(m)!==tipo):ms;
+  return (a.length?`<optgroup label="${esc(tipo)}">${a.map(o).join('')}</optgroup>`:'')+(a.length&&b.length?`<optgroup label="Outros conjuntos">${b.map(o).join('')}</optgroup>`:b.map(o).join(''))+(extra||''); }
+// rendimento do conjunto para a área: "≈ 12,2 ha/h · ~6,5 h para 80 ha"
+function conjRendTxt(conj, area){ const m=conj&&maqByConj[conj]; if(!m) return ''; const e=effMaq(m); if(!(e.ha_h>0)) return '';
+  return `≈ ${num(e.ha_h)} ha/h`+((+area>0)?` · ~${numH(area/e.ha_h)} h para ${num(area)} ha`:''); }
 function maquinasAll(){ return (DATA.maquinas||[]).concat(OV.maqAdd); }
 function maqAttr(m,k){ const o=OV.maqAttr[m.conjunto]; return (o&&o[k]!=null)?+o[k]:(+m[k]||0); }
 function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:(+m.rs_hm||0); }
@@ -3425,11 +3476,15 @@ function sugereMaquina(clsArr){
   const cls = (clsArr||[]).map(c=>(c||'').toUpperCase());
   const has = re => cls.some(c=>re.test(c));
   const find = re => maquinasAll().find(m=>re.test((m.conjunto||'').toUpperCase()));
-  let m=null;
-  if(has(/CORRETIVO/))            m=find(/BRUTUS|DISTRIBUID/);
-  else if(has(/FERTILIZANTE|NUTRI/)) m=find(/ADUBAD|JAN 20000/);
-  else if(has(/SEMENTE|^TS$|^TS /)) m=find(/PLANTADEIRA|HORSCH|ASM|JD2122|CASE 2213/);
-  else if(has(/HERBICIDA|FUNGICIDA|INSETICIDA|ADJUVANTE|BIOL|NEMATIC/)) m=find(/PULVERIZADOR|JACTO|UNIPORT/);
+  const tipo=conjTipoDeClasses(cls);   // v302: conjunto marcado com o tipo da operação vem primeiro
+  let m=tipo?maquinasAll().find(x=>conjOpExplicita(x)===tipo):null;
+  if(!m){
+    if(has(/CORRETIVO/))            m=find(/BRUTUS|DISTRIBUID/);
+    else if(has(/FERTILIZANTE|NUTRI/)) m=find(/ADUBAD|JAN 20000/);
+    else if(has(/SEMENTE|^TS$|^TS /)) m=find(/PLANTADEIRA|HORSCH|ASM|JD2122|CASE 2213/);
+    else if(has(/HERBICIDA|FUNGICIDA|INSETICIDA|ADJUVANTE|BIOL|NEMATIC/)) m=find(/PULVERIZADOR|JACTO|UNIPORT/);
+  }
+  if(!m&&tipo) m=maquinasAll().find(x=>conjOpDe(x)===tipo);
   return m?m.conjunto:null;
 }
 const opMaqKey=(tid,opref)=>`${tid}|${opref}`;
@@ -3696,6 +3751,8 @@ function reconcileReorder(e){
   const novo=k=>{ const oi=oiOf(k); if(oi==null) return k; return (oi in oldToNew)?`${pref}${oldToNew[oi]}`:null; };   // null = operação saiu
   // máquina planejada: acompanha a operação; posição que ficou vaga perde a máquina
   if(OV.opMaq){ const nm={}; for(const k in OV.opMaq){ const nk=novo(k); if(nk) nm[nk]=OV.opMaq[k]; } OV.opMaq=nm; }
+  if(OV.conjApp){ const u=tsAgora(); for(const id of Object.keys(OV.conjApp)){ if(id.indexOf('op:')!==0) continue; const k=id.slice(3), nk=novo(k); if(nk===k) continue;   // v302: espelho sincronizado acompanha
+      const r=OV.conjApp[id]; OV.conjApp[id]=Object.assign({},r,{del:true,_u:u}); if(nk) OV.conjApp['op:'+nk]=Object.assign({},r,{id:'op:'+nk,del:false,_u:u}); } try{ loteAgendar('__conjunto'); }catch(e){} }
   // execução do Campo (status, doses, máquina, horários…): acompanha a operação. Posição vaga ganha um registro
   // "limpo" carimbado agora, para o dado antigo que está na planilha não voltar no próximo puxar.
   if(OV.realizado){ const R=OV.realizado, moved={}, old=[];
@@ -3722,7 +3779,9 @@ function limparMaqPendentes(){ const R=(OV&&OV.realizado)||{}, now=Date.now(); l
   return n; }
 // máquina mostrada no Campo: a do PLANEJAMENTO (fonte única). Depois de concluída, vale a registrada na execução.
 function opMaqCampo(t,o,r){ const plan=opMaqDe(t.id,o.tag,o.oi,o.op)||'';
-  return (r && r.status==='concluido' && r.app && r.app.maq) ? r.app.maq : plan; }
+  if(r && r.status==='concluido' && r.app && r.app.maq) return r.app.maq;
+  const rc=((RECOM&&RECOM.registros)||[]).filter(x=>x.opKey===o.key&&x.tipo!=='ts'&&x.maquina&&x.status!=='rascunho').sort((a,b)=>(b.ts||0)-(a.ts||0))[0];   // v302: recomendação enviada manda
+  return (rc&&rc.maquina)||plan; }
 // quantas operações mostrar num talhão/safra: até a última com insumo + as reveladas manualmente
 const revealOps = {};   // "tid|tag" -> nº de operações a exibir (sessão)
 function opsShownCount(tid, tag){
@@ -4031,7 +4090,7 @@ V.talhao = function(id){
       let sub=0; items.forEach(it=>sub+=it.dose*precoDe(it.produto));
       const conj=opMaqDe(t.id,tag,oi,op), mHa=custoOpHa(t.id,tag,oi,op);
       const isOv=(opMaqKey(t.id,tagoi) in OV.opMaq);
-      const selHtml=opts.replace(`value="${esc(conj||'')}"`,`value="${esc(conj||'')}" selected`);
+      const selHtml=`<option value="">— sem máquina —</option>`+conjOptsHtml(conj||'', conjTipoDeClasses(items.map(i=>i.classe)));   // v302: os do tipo da operação primeiro
       const totOp=sub+mHa;
       const okey=`${t.id}|${tagoi}`, collapsed=collapsedOps.has(okey);
       return `<div class="op-block${collapsed?' op-collapsed':''}">
@@ -7202,10 +7261,14 @@ V.maquinas = function(){
   </div>
   ${currentModule()==='maquinas'?`<div class="nfe-aviso info" style="margin:0 0 10px">⚙️ Aqui ficam os <b>conjuntos planejados</b> (rendimento, L/h e R$/hora que entram no custo do talhão). O que aconteceu de verdade está no <a class="link" data-go="#/frota">Painel da frota</a>: horímetro, abastecimentos, manutenção e custo-hora real.</div>`:''}
   ${manutPainelHtml()}
-  <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento — largura e velocidade definem o rendimento</span></div>
+  <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento do cadastro — largura e velocidade definem o rendimento · o conjunto vai para a planilha (CONJUNTOS APP) e vale no planejamento, na recomendação e no Campo</span></div>
     <div class="bulk-add">
-      <input class="txt" id="mq-maq" placeholder="máquina (ex.: Trator JD 7500)" style="min-width:170px">
-      <input class="txt" id="mq-imp" placeholder="implemento (ex.: Pulverizador)" style="min-width:170px">
+      ${(()=>{ const ms=maqTodas(), mq=ms.filter(m=>m.grupo!=='Implemento'), im=ms.filter(m=>m.grupo==='Implemento');
+        return `<select class="sel" id="mq-maq" data-edit="mqSel" style="min-width:170px"><option value="">— máquina —</option>${mq.map(m=>`<option value="${esc(m.nome)}" data-lh="${+m.lh||0}" data-rs="${+m.rsHm||0}">${esc(m.nome)}</option>`).join('')}<option value="__outra">✏️ outra (digitar)…</option></select>
+      <input class="txt" id="mq-maq-txt" placeholder="nome da máquina" style="min-width:170px;display:none">
+      <select class="sel" id="mq-imp" data-edit="mqSel" style="min-width:170px"><option value="">— implemento (nenhum) —</option>${im.map(m=>`<option value="${esc(m.nome)}">${esc(m.nome)}</option>`).join('')}<option value="__outro">✏️ outro (digitar)…</option></select>
+      <input class="txt" id="mq-imp-txt" placeholder="nome do implemento" style="min-width:170px;display:none">
+      <select class="sel" id="mq-op" title="Tipo de operação que este conjunto faz"><option value="">— operação —</option>${CONJ_OPS.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join('')}</select>`; })()}
       <input class="cell" id="mq-larg" placeholder="largura (m)" style="width:96px">
       <input class="cell" id="mq-vel" placeholder="vel. (km/h)" style="width:96px">
       <input class="cell" id="mq-efic" value="85" placeholder="efic. %" style="width:80px">
@@ -7217,13 +7280,15 @@ V.maquinas = function(){
   <div class="toolbar"><div class="search"><input id="q-maq" placeholder="Buscar conjunto, máquina ou implemento…"></div>
     <div class="spacer"></div><span class="badge badge-muted">Edite <b>largura</b>, <b>velocidade</b>, <b>eficiência</b>, <b>L/h</b> e <b>R$/HM</b> — ha/h e custos recalculam.</span></div>
   <div class="panel"><div class="table-wrap"><table id="tbl-maq">
-    <thead><tr><th>Conjunto</th><th class="num">Largura (m)</th><th class="num">Vel. (km/h)</th>
+    <thead><tr><th>Conjunto</th><th>Operação</th><th class="num">Largura (m)</th><th class="num">Vel. (km/h)</th>
       <th class="num">Efic. %</th><th class="num">ha/h</th><th class="num">HM/ha</th><th class="num">L/h</th><th class="num">R$/HM</th>
       <th class="num">Custo máq/ha</th><th class="num">L/ha</th><th class="num">Diesel/ha</th><th class="num">Custo total/ha</th><th></th></tr></thead>
     <tbody>${ms.map(m=>{
       const e=effMaq(m), novo=OV.maqAdd.some(x=>x.conjunto===m.conjunto);
       const inp=(k,v,w)=>`<input class="cell ${attrEd(m,k)}" data-edit="maqAttr" data-conj="${esc(m.conjunto)}" data-attr="${k}" value="${v}" style="width:${w||70}px">`;
-      return `<tr data-search="${esc((m.conjunto+' '+(m.maquina||'')+' '+(m.implemento||'')).toLowerCase())}"><td><b>${esc(m.conjunto)}</b>${novo?' <span class="pill pill-buy">novo</span>':''}</td>
+      const opEx=conjOpExplicita(m), opG=opEx||conjOpGuess(m.conjunto);
+      return `<tr data-search="${esc((m.conjunto+' '+(m.maquina||'')+' '+(m.implemento||'')+' '+opG).toLowerCase())}"><td><b>${esc(m.conjunto)}</b>${novo?' <span class="pill pill-buy">montado</span>':''}</td>
+        <td><select class="sel ${opEx?'edited':''}" data-edit="conjOp" data-conj="${esc(m.conjunto)}" title="${opEx?'tipo de operação deste conjunto':(opG?'sugerido pelo nome — escolha para confirmar':'escolha o tipo de operação')}"><option value="">${opG&&!opEx?esc(opG)+' ?':'—'}</option>${CONJ_OPS.map(o=>`<option value="${esc(o)}"${opEx===o?' selected':''}>${esc(o)}</option>`).join('')}</select></td>
         <td class="num">${inp('largura',m.largura!=null?maqAttr(m,'largura'):'',72)}</td>
         <td class="num">${inp('velocidade',maqAttr(m,'velocidade'),72)}</td>
         <td class="num">${inp('eficiencia',maqAttr(m,'eficiencia'),64)}</td>
@@ -7235,7 +7300,7 @@ V.maquinas = function(){
         <td class="num">${novo?`<button class="icon-btn del" title="Excluir conjunto" data-act="delmaq" data-conj="${esc(m.conjunto)}">🗑</button>`:''}</td></tr>`;
     }).join('')}</tbody>
   </table></div></div>
-  <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão.</p>`;
+  <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão; a <b>operação</b> do conjunto é o que o app usa para sugerir o conjunto certo (herbicida → Pulverização, semente → Plantio…). Conjuntos montados, edições e a escolha por operação ficam na aba <b>CONJUNTOS APP</b> e aparecem em todos os aparelhos.</p>`;
 };
 
 // v277: vendas da safra por cultura (aba VENDAS) — kg padrão, sacas de 60 kg e toneladas para leitura
@@ -8029,8 +8094,8 @@ function plantioSec(t,o,r,pc){
             ${pc.bl==='kg'?'':`<label>População (sementes/ha)<input class="cell" inputmode="numeric" data-edit="realTs" data-field="pop" data-key="${K}" value="${(r.ts&&r.ts.pop!=null)?nf0.format(r.ts.pop):''}" placeholder="${pc.popPlan?nf0.format(pc.popPlan):'ex.: 200.000'}"></label>`}
             <label>Plantadeira<select class="sel" data-edit="realApp" data-field="maq" data-key="${K}">
               <option value="">— máquina —</option>
-              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${(opMaqCampo(t,o,r)===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
-            </select></label>
+              ${conjOptsHtml(opMaqCampo(t,o,r), 'Plantio')}
+            </select>${conjRendTxt(opMaqCampo(t,o,r),areaDe(t))?`<small class="rc-conj">🚜 ${esc(conjRendTxt(opMaqCampo(t,o,r),areaDe(t)))}</small>`:''}</label>
             <label>Início<input type="time" data-edit="realApp" data-field="hIni" data-key="${K}" value="${esc(va('hIni'))}"></label>
             <label>Fim<input type="time" data-edit="realApp" data-field="hFim" data-key="${K}" value="${esc(va('hFim'))}"></label>
           </div>
@@ -9669,6 +9734,7 @@ const RECOM_ST={
   aprovada:{lbl:'Aplicação aprovada',cls:'rc-apr',ico:'✅'}
 };
 function recomById(id){ return RECOM.registros.find(x=>x.id===id)||null; }
+function recomTipoConj(r){ return conjTipoDeClasses((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); }   // v302
 function recomNovoId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 // normaliza registros legados (texto livre, sem status/itens) para o novo modelo estruturado
 function recomNorm(r){
@@ -9827,7 +9893,8 @@ function recomSetField(el){
   else if(f==='itReal'){ r.itens[+i].real=(String(v).trim()===''?null:_mmC(v)); rerender=true; }
   else if(f==='itProd'){ const p=v.trim(); r.itens[+i].produto=p; if(PROD[p]){ r.itens[+i].un=PROD[p].un||r.itens[+i].un; r.itens[+i].ativo=PROD[p].ativos||r.itens[+i].ativo||''; } rerender=true;
     if(!r.maquina){ const sg=sugereMaquina((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); if(sg) r.maquina=sg; } }   // v265: sugere o conjunto pela classe dos insumos (recomendação direta)
-  else if(f==='maquina'){ if(v==='__outra'){ const nv=prompt('Máquina / conjunto (ex.: drone, avião, terceiro):', r.maquina||''); if(nv!=null) r.maquina=nv.trim(); rerender=true; } else r.maquina=v; }
+  else if(f==='maquina'){ if(v==='__outra'){ const nv=prompt('Máquina / conjunto (ex.: drone, avião, terceiro):', r.maquina||''); if(nv!=null) r.maquina=nv.trim(); } else r.maquina=v; rerender=true;
+    if(r.opKey && r.status!=='aprovada' && maqByConj[r.maquina||'']){ const j=r.opKey.indexOf('|'); if(opMaqDe(r.talhao, r.opKey[j+1], +r.opKey.slice(j+2), (opsDoTalhao(findTalhao(r.talhao)||{id:r.talhao}).find(x=>x.key===r.opKey)||{}).op||{itens:[]})!==r.maquina) conjGravarOp(r.talhao, r.opKey.slice(j+1), r.maquina); } }   // v302: planejamento e recomendação usam o mesmo conjunto
   else if(f==='itHa'){ const h=_mmC(v); if(h>0) r.itens[+i].ha=h; else delete r.itens[+i].ha; rerender=true; }
   else if(f==='itAtivo'){ r.itens[+i].ativo=v; }
   else if(f==='itCar'){ r.itens[+i].car=v; }
@@ -9920,7 +9987,7 @@ function recomWhats(id){
   }).join('\n')+'\n'; }
   if(cd.calda) x+=`\n*Calda:* ${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L (${num(cd.haTk)} ha/tanque)`:''}${cd.nTk?` · ${cd.nTk} tanque(s)${cd.ultimo&&cd.ultimo<cd.haTk-0.01?`, último com ${num(cd.ultimo)} ha`:''}`:''}${cd.total?` · total ${num(cd.total)} L`:''}\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
-  const apl=[r.tipoApl, r.maquina, r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
+  const apl=[r.tipoApl, r.maquina, conjRendTxt(r.maquina,+r.area||0), r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
   if(apl) x+=`Aplicação: ${apl}\n`;
   const cond=recomCondTxt(r); if(cond) x+=`Condições: ${cond}\n`;
   const seg=[r.epi?`EPI: ${r.epi}`:'', r.reentrada?`reentrada ${r.reentrada} h`:''].filter(Boolean).join(' · ');
@@ -10026,7 +10093,7 @@ function recomCard(r,t){
       <label>Adjuvante / pH<input class="txt" ${F('adjuvante')} value="${esc(r.adjuvante||'')}" placeholder="ex.: óleo mineral 0,5% · pH 5,5"></label></div>
       ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}${bulaPhTxt(its)?`<div class="rc-obs">📘 pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}`)}
     ${sec('Aplicação',`<div class="app-grid" style="padding:6px 12px 10px">
-      <label>Máquina / conjunto<select class="sel" ${F('maquina')}><option value="">— escolher —</option>${maquinasAll().map(m=>`<option value="${esc(m.conjunto)}"${r.maquina===m.conjunto?' selected':''}>${esc(m.conjunto)}</option>`).join('')}${(r.maquina&&!maquinasAll().some(m=>m.conjunto===r.maquina))?`<option value="${esc(r.maquina)}" selected>${esc(r.maquina)}</option>`:''}<option value="__outra">✏️ Outra (digitar)…</option></select></label>
+      <label>Máquina / conjunto<select class="sel" ${F('maquina')}><option value="">— escolher —</option>${conjOptsHtml(r.maquina||'', recomTipoConj(r), (r.maquina&&!maquinasAll().some(m=>m.conjunto===r.maquina))?`<option value="${esc(r.maquina)}" selected>${esc(r.maquina)}</option>`:'')}<option value="__outra">✏️ Outra (digitar)…</option></select>${conjRendTxt(r.maquina,area)?`<small class="rc-conj">🚜 ${esc(conjRendTxt(r.maquina,area))}</small>`:''}</label>
       <label>Ponta / bico<input class="txt" ${F('ponta')} value="${esc(r.ponta||'')}" placeholder="ex.: leque 110-02 · cone vazio"></label>
       <label>Pressão (bar)<input class="cell" inputmode="decimal" ${F('pressao')} value="${esc(r.pressao||'')}"></label>
       <label>Velocidade (km/h)<input class="cell" inputmode="decimal" ${F('velocidade')} value="${esc(r.velocidade||'')}"></label>
@@ -10043,7 +10110,7 @@ function recomCard(r,t){
       <label>CREA / registro<input class="txt" ${F('crea')} value="${esc(r.crea||'')}"></label></div>`)}` : `
     <div class="rc-meta">
       ${caldaTxt?`<span>💧 ${caldaTxt}</span>`:''}${r.adjuvante?`<span>🧪 ${esc(r.adjuvante)}</span>`:''}${bulaPhTxt(its)?`<span title="pH ideal da calda, pela bula de cada produto">📘 ${esc(bulaPhTxt(its))}</span>`:''}
-      ${(r.tipoApl||r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.tipoApl,r.maquina,r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
+      ${(r.tipoApl||r.maquina||r.ponta||r.pressao||r.velocidade)?`<span>🚜 ${[r.tipoApl,r.maquina,conjRendTxt(r.maquina,area),r.ponta?`ponta ${r.ponta}`:'',r.pressao?`${r.pressao} bar`:'',r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).map(esc).join(' · ')}</span>`:''}
       ${recomCondTxt(r)?`<span>🌤 ${esc(recomCondTxt(r))}</span>`:''}
       ${(r.epi||r.reentrada)?`<span>⚠️ ${esc(r.epi||'')}${r.reentrada?` · reentrada ${esc(r.reentrada)} h`:''}</span>`:''}
       ${r.resp?`<span>👤 ${esc(r.resp)}${r.crea?` · ${esc(r.crea)}`:''}</span>`:''}
@@ -10270,7 +10337,7 @@ function exportRecomPDF_(r){
     ${kv('Volume de calda',cd.calda?`${num(cd.calda)} L/ha`:'')}${kv('Tanque',cd.tk?`${num(cd.tk)} L`:'')}${kv('Área por tanque',cd.haTk?`${num(cd.haTk)} ha`:'')}${kv('Nº de tanques',cd.nTk?`${cd.nTk}${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último: ${num(cd.ultimo)} ha)`:''}`:'')}
     ${kv('Volume total de calda',cd.total?`${num(cd.total)} L`:'')}</div></div>
   <div class="rx-sec"><h2>5. Aplicação</h2><div class="rx-kv">
-    ${kv('Máquina / conjunto',esc(r.maquina||''),'w2')}${kv('Ponta / bico',esc(r.ponta||''))}${kv('Pressão',r.pressao?`${esc(r.pressao)} bar`:'')}
+    ${kv('Máquina / conjunto',esc(r.maquina||'')+(conjRendTxt(r.maquina,+r.area||0)?` <small>(${esc(conjRendTxt(r.maquina,+r.area||0))})</small>`:''),'w2')}${kv('Ponta / bico',esc(r.ponta||''))}${kv('Pressão',r.pressao?`${esc(r.pressao)} bar`:'')}
     ${kv('Velocidade',r.velocidade?`${esc(r.velocidade)} km/h`:'')}${kv('Horário',esc(r.horario||''))}${kv('Temperatura',+r.tmax?`≤ ${esc(String(r.tmax))} °C`:'')}${kv('Umidade relativa',+r.urmin?`≥ ${esc(String(r.urmin))} %`:'')}
     ${kv('Vento',+r.vmax?`≤ ${esc(String(r.vmax))} km/h`:'')}${kv('Outras condições',esc(r.cond||''),'w2')}</div></div>
   <div class="rx-sec"><h2>6. Segurança</h2><div class="rx-kv">
@@ -11998,8 +12065,8 @@ V.campo = function(arg){
             </select></label>
             <label>Máquina/aeronave<select class="sel" data-edit="realApp" data-field="maq" data-key="${esc(o.key)}">
               <option value="">— máquina —</option>
-              ${maquinasAll().map(mm=>`<option value="${esc(mm.conjunto)}"${(opMaqCampo(t,o,r)===mm.conjunto)?' selected':''}>${esc(mm.conjunto)}</option>`).join('')}
-            </select></label>
+              ${conjOptsHtml(opMaqCampo(t,o,r), conjTipoDeClasses(effItems(t.id,o.tagoi,o.op.itens).map(i=>i.classe)))}
+            </select>${conjRendTxt(opMaqCampo(t,o,r),areaDe(t))?`<small class="rc-conj">🚜 ${esc(conjRendTxt(opMaqCampo(t,o,r),areaDe(t)))}</small>`:''}</label>
             <label>Área a aplicar (ha)<input class="cell" inputmode="decimal" data-edit="realApp" data-field="area" data-key="${esc(o.key)}" value="${r.app&&r.app.area!=null&&r.app.area!==''?r.app.area:''}" placeholder="${num(areaDe(t))}" title="Maior que o talhão = transpasse (ex.: 100 ha → 105). Menor = aplicação parcial: ao finalizar fica Parcial e dá para aplicar o restante depois."></label>
             <label>Tanque (L) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="tanque" data-key="${esc(o.key)}" value="${r.app&&r.app.tanque!=null?r.app.tanque:''}" placeholder="ex.: 2000"></label>
             <label>Vazão (L/ha) — líquidos<input class="cell" inputmode="decimal" data-edit="realApp" data-field="vazao" data-key="${esc(o.key)}" value="${r.app&&r.app.vazao!=null?r.app.vazao:''}" placeholder="ex.: 100"></label>
@@ -12115,7 +12182,7 @@ function morphNode(o, nw){
     return; }
   for(const at of [...o.attributes]) if(!nw.hasAttribute(at.name)) o.removeAttribute(at.name);
   for(const at of [...nw.attributes]) if(o.getAttribute(at.name)!==at.value) o.setAttribute(at.name, at.value);
-  if(o.tagName==='SELECT'){ morphChildren(o,nw); morphSyncField(o,nw); return; }
+  if(o.tagName==='SELECT'){ const v=nw.value; morphChildren(o,nw); if(o!==document.activeElement && o.value!==v) o.value=v; return; }   // v302: lê o valor ANTES de mover as opções (optgroup novo deixava o select vazio)
   if(o.tagName==='TEXTAREA'||o.tagName==='INPUT'){ morphSyncField(o,nw); return; }
   morphChildren(o,nw);
 }
@@ -12216,9 +12283,18 @@ function applyEdit(el){
   const kind=el.dataset.edit;
   if(!kind) return;
   if(kind==='autoSync'){ setAutoOn(el.checked); syncLog(el.checked?'Sincronização automática ligada.':'Sincronização automática desligada.'); if(el.checked) toast('Sincronização automática ligada'); else{ clearInterval(pollTimer); toast('Sincronização automática desligada'); } return; }
-  if(kind==='opMaq'){   // valor é o conjunto (string); "" = sem máquina
-    const k=opMaqKey(el.dataset.id, el.dataset.op);
-    OV.opMaq[k]=el.value; saveOverrides(); route(); return;
+  if(kind==='opMaq'){   // valor é o conjunto (string); "" = sem máquina · v302: vai para a planilha (CONJUNTOS APP)
+    conjGravarOp(el.dataset.id, el.dataset.op, el.value); route(); return;
+  }
+  if(kind==='mqSel'){   // v302: montar conjunto — "outra…" abre o texto; máquina do cadastro preenche L/h e R$/HM
+    const txt=document.getElementById(el.id+'-txt'); if(txt){ txt.style.display=(el.value==='__outra'||el.value==='__outro')?'':'none'; if(txt.style.display==='') txt.focus(); }
+    const o=el.selectedOptions&&el.selectedOptions[0]; if(el.id==='mq-maq'&&o&&o.dataset.lh!=null){ const f=(id,v)=>{ const i=document.getElementById(id); if(i&&+v>0) i.value=String(+v).replace('.',','); }; f('mq-lh',o.dataset.lh); f('mq-rs',o.dataset.rs); }
+    return;
+  }
+  if(kind==='conjOp'){   // v302: tipo de operação do conjunto
+    const c=el.dataset.conj, v=el.value||'', mont=conjMontado(c);
+    if(mont) conjGravar(mont.id,{operacao:v}); else conjGravarOv(c,{attr:{operacao:v||null}});
+    route({keepScroll:true}); toast(v?`${c}: ${v}`:'Operação do conjunto limpa'); return;
   }
   if(kind==='opDae'){   // DAE (dias) da operação — grava override e vai p/ a coluna DAP da planilha
     const k=`${el.dataset.id}|${el.dataset.op}`, v=el.value.trim();
@@ -12306,7 +12382,7 @@ function applyEdit(el){
   }
   if(kind==='realApp' && el.dataset.field==='maq'){   // máquina: não concluída = muda o PLANEJAMENTO (fonte única)
     const key=el.dataset.key, r0=OV.realizado[key];
-    if(!(r0 && r0.status==='concluido')){ const i=key.indexOf('|'); OV.opMaq[opMaqKey(key.slice(0,i), key.slice(i+1))]=el.value;
+    if(!(r0 && r0.status==='concluido')){ const i=key.indexOf('|'); conjGravarOp(key.slice(0,i), key.slice(i+1), el.value);
       if(r0 && r0.app && r0.app.maq!=null){ delete r0.app.maq; stampReal(key); }
       saveOverrides(); toast('Máquina da operação atualizada no planejamento'); route({keepScroll:true}); return; }
   }
@@ -12374,8 +12450,10 @@ function applyEdit(el){
   else if(kind==='pedido'){ const pr=el.dataset.prod, base=PROD[pr]?(+PROD[pr].pedido||0):0; if(n==null||n===base) delete OV.pedido[pr]; else OV.pedido[pr]=n; }   // 0 com 115 na planilha = edição (zera lá também)
   else if(kind==='custoIni'){ const pr=el.dataset.prod, base=PROD[pr]?(+PROD[pr].custoIni||0):0; OV.custoIni=OV.custoIni||{}; if(n==null||n===base) delete OV.custoIni[pr]; else OV.custoIni[pr]=n; _cmCache=null; }   // v272
   else if(kind==='cultura'){ const e=el.dataset.emp; if(n==null||n===(DATA.precos_cultura[e]||0)) delete OV.cultura[e]; else OV.cultura[e]=n; }
-  else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c]; if(n==null||(m&&n===m.rs_hm&&!OV.maqAdd.some(x=>x.conjunto===c))) delete OV.maquina[c]; else OV.maquina[c]=n; }
-  else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr; OV.maqAttr[c]=OV.maqAttr[c]||{}; if(n==null) delete OV.maqAttr[c][k]; else OV.maqAttr[c][k]=n; if(!Object.keys(OV.maqAttr[c]).length) delete OV.maqAttr[c]; }
+  else if(kind==='maquina'){ const c=el.dataset.conj, m=maqByConj[c], mont=conjMontado(c);   // v302: sobe para CONJUNTOS APP
+    if(mont) conjGravar(mont.id,{rs_hm:n==null?0:n}); else conjGravarOv(c,{rs_hm:(n==null||(m&&n===+m.rs_hm))?null:n}); }
+  else if(kind==='maqAttr'){ const c=el.dataset.conj, k=el.dataset.attr, mont=conjMontado(c);
+    if(mont){ const p={}; p[k]=n==null?0:n; conjGravar(mont.id,p); } else { const a={}; a[k]=n; conjGravarOv(c,{attr:a}); } }
   else if(kind==='diesel'){ OV.diesel = (n==null?6.00:n); }
   else if(kind==='dreOp'){ const e=el.dataset.emp, def=parseFloat(el.dataset.def);   // igual ao calculado = não fixa (continua acompanhando o planejamento)
     if(n==null || (isFinite(def) && Math.abs(n-def)<0.005)) delete OV.dreOp[e]; else OV.dreOp[e]=n; }
@@ -12454,7 +12532,7 @@ function copiaMaquinas(srcId,dstId,plano){
   ['P','S'].forEach(tag=>{
     (plano[tag==='S'?'safrinha':'principal']||[]).forEach((op,oi)=>{
       const k=opMaqKey(srcId,`${tag}${oi}`);
-      if(k in OV.opMaq) OV.opMaq[opMaqKey(dstId,`${tag}${oi}`)]=OV.opMaq[k];
+      if(k in OV.opMaq) conjGravarOp(dstId,`${tag}${oi}`,OV.opMaq[k]);
     });
   });
 }
@@ -12649,18 +12727,18 @@ document.addEventListener('click',e=>{
       saveOverrides(); toast(`Talhão ${a.id} excluído`);
       if(location.hash.startsWith('#/talhao/')) location.hash='#/talhoes'; else route();
     }
-    else if(a.act==='addmaq'){
-      const maq=($('#mq-maq').value||'').trim(), imp=($('#mq-imp').value||'').trim();
+    else if(a.act==='addmaq'){   // v302: máquina/implemento do cadastro (ou digitados) + operação → registro na aba CONJUNTOS APP
+      const sv=(id,outra)=>{ const s=$('#'+id); if(!s) return ''; if(s.value===outra) return ($('#'+id+'-txt').value||'').trim(); return (s.value||'').trim(); };
+      const maq=sv('mq-maq','__outra'), imp=sv('mq-imp','__outro');
       const nn=id=>numBR($('#'+id).value)||0;
       if(!maq&&!imp){ toast('Informe máquina e/ou implemento'); return; }
       let conj=(maq+(imp?' + '+imp:'')).trim(), base=conj, i=2; while(maqByConj[conj]){ conj=base+' ('+i+')'; i++; }
-      OV.maqAdd.push({conjunto:conj,maquina:maq,implemento:imp,largura:nn('mq-larg'),velocidade:nn('mq-vel'),
-        eficiencia:nn('mq-efic')||85,l_h:nn('mq-lh'),rs_hm:nn('mq-rs')});
-      saveOverrides(); route(); toast('Conjunto montado: '+conj);
+      conjGravar('c:'+conjSlug(conj),{conjunto:conj,maquina:maq,implemento:imp,operacao:($('#mq-op')||{}).value||'',largura:nn('mq-larg'),velocidade:nn('mq-vel'),
+        eficiencia:nn('mq-efic')||85,l_h:nn('mq-lh'),rs_hm:nn('mq-rs'),del:false});
+      route(); toast('Conjunto montado: '+conj);
     }
     else if(a.act==='delmaq'){
-      const c=a.conj, i=OV.maqAdd.findIndex(x=>x.conjunto===c); if(i>=0) OV.maqAdd.splice(i,1);
-      delete OV.maqAttr[c]; delete OV.maquina[c]; saveOverrides(); route(); toast('Conjunto excluído');
+      const c=a.conj, mont=conjMontado(c); if(mont) conjGravar(mont.id,{del:true}); route(); toast('Conjunto excluído');
     }
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
@@ -13532,6 +13610,7 @@ const LOTE_TIPOS={
   __limites:     { lbl:'Limites',       ok:()=>limitesServerOk(), dados:()=>(OV.limites||{}),    sig:()=>limitesSig(),   last:()=>lastLimitesSig,   set:v=>{ lastLimitesSig=v; } },
   __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
   __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
+  __conjunto:    { lbl:'Conjuntos',     ok:()=>conjServerOk(),    dados:()=>(OV.conjApp||{}),    sig:()=>conjSig(),      last:()=>lastConjSig,      set:v=>{ lastConjSig=v; } },   // v302
   __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
   __osMaq:       { lbl:'Ordens de serviço', ok:()=>maqServerOk(), dados:()=>(OV.osMaq||{}),      sig:()=>osSig(),        last:()=>lastOsSig,        set:v=>{ lastOsSig=v; } },
   __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
@@ -13591,7 +13670,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -13784,6 +13863,7 @@ function applyPulledData(d, raw){
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
+  try{ conjApplyPulled(d.conjuntos_app); }catch(e){}         // v302: conjuntos (montados, edições, conjunto por operação)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
@@ -14424,7 +14504,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} try{ conjMigrar(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
