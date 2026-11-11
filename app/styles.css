@@ -1255,6 +1255,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:#eef2f4;color:var(--muted,#667);font-size:12px;font-weight:800;margin-left:8px}
 .nfe-badge.tem{background:#2e7d8a;color:#fff}
 .nfe-stats{display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px 4px}
+.nfe-busca{display:flex;align-items:center;gap:10px;padding:8px 14px 2px}.nfe-busca input{flex:1;min-width:0}.nfe-busca .mut{font-size:12px;white-space:nowrap}   /* v306 */
 .nfe-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;background:#f1f4f6;color:#46545c;border:1px solid #e3e8eb;white-space:nowrap}
 .nfe-chip b{font-weight:800}
 .nfe-chip.st-ult{background:#fff;color:var(--muted,#667)}
@@ -2396,6 +2397,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rec-zoom{font-size:10.5px}
   .rec-alt-d summary{font-size:10.5px}
   .nfe-badge{font-size:9.5px}
+  .nfe-busca .mut{font-size:9.5px}
   .nfe-chip{font-size:9.5px}
   .nfe-vazio{font-size:10.5px}
   .nfe-vazio .nv-ico{font-size:21px}

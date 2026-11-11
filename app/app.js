@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-305';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-306';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2090,8 +2090,9 @@ function nfeErrosHtml(c){ const L=c.erros||[]; if(!L.length) return ''; const is
   if(perm.length){ const m=String(perm[0]).match(/\((\d+) arquivo\(s\) esperando/); const n=m?+m[1]:perm.length;
     h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">🔒 <b>A planilha está sem permissão para gravar no Drive.</b> ${n} arquivo(s) esperando na <b>NFe/Entrada</b> — eles entram sozinhos assim que a autorização for dada.<br>
       <b>Como resolver:</b> abra o Apps Script da planilha, escolha a função <b>autorizarPermissoes</b> no menu de cima, clique em ▶ Executar e aceite tudo (Drive, internet, Gmail). Depois toque em <b>Atualizar</b> aqui.</div>`; }
-  if(outros.length){ const g=_nfeAgrupa(outros,/^arquivo "(.+?)": (.*)$/s), tot=+c.totErr||L.length;
-    h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">⚠️ Erro na busca${tot>L.length?` (mostrando ${L.length} de ${tot})`:''} — o arquivo continua na NFe/Entrada e é tentado de novo:${_nfeGrupoHtml(g)}</div>`; }
+  if(outros.length){ const g=_nfeAgrupa(outros,/^arquivo "(.+?)": (.*)$/s), tot=+c.totErr||L.length, acesso=outros.some(s=>/Access denied|outra conta/i.test(String(s)));
+    h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">⚠️ Erro na busca${tot>L.length?` (mostrando ${L.length} de ${tot})`:''} — o arquivo continua na NFe/Entrada e é tentado de novo:${_nfeGrupoHtml(g)}
+      ${acesso?`<div class="mut" style="margin-top:6px">🔑 <b>"Access denied"</b> = o arquivo (ou a pasta) pertence a <b>outra conta do Google</b>, e a planilha só pode apagar o que é dela. No Drive, abra a NFe/Entrada, veja o dono do arquivo e apague-o à mão (ou peça à pessoa para copiar os XML em vez de mover). As notas já lidas não entram duas vezes.</div>`:''}</div>`; }
   return h; }
 // o que aconteceu com cada arquivo lido (últimos 30): nova, repetida, ignorada (com botão p/ reabrir) ou rejeitada — com o motivo
 const NFE_HIST_ST={nova:['ok','Nova'],casada:['ok','Casou c/ recebimento'],duplicada:['rep','Repetida'],ignorada:['ign','Ignorada'],rejeitada:['rej','Rejeitada'],cancelada:['canc','Cancelamento']};
@@ -2233,7 +2234,7 @@ function nfeListaHtml(){
     const cls=R?(R.pronto?' ia-pronto':' ia-pend'):'', tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
     const ia=R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
       :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:'');
-    return `<div class="nfe-row${cls}">
+    return `<div class="nfe-row${cls}" data-busca="${esc(nfeBuscaTxt(nt, tipoTxt))}">
       <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(tipoTxt)}</span>
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div>${ia}</div>
       <div class="nfe-row-act">${R&&R.pronto?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
@@ -2247,16 +2248,26 @@ function nfeListaHtml(){
     .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
   const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta <b>NFe/Entrada</b> do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
   const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }).length;
+  if(NFE_UI.q) setTimeout(nfeAplicaBusca,0);   // v306: reaplica a busca depois de redesenhar
   return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:'🤖 IA desligada: coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha'} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
       <div class="spacer"></div>${prontas>1?`<button class="btn btn-primary btn-sm" data-act="nfeAprovarTodas" title="Aprova uma a uma as notas em que a IA reconheceu tudo">✅ Aprovar ${prontas} prontas</button>`:''}<button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
     <div class="nfe-stats">${c?`<span class="nfe-chip st-ult" title="${c.lidas} arquivo(s) lidos nessa leitura">🕒 Última leitura <b>${ult}</b></span>`:''}${chips}</div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(c)}
+    ${nN?`<div class="nfe-busca"><input id="nfe-q" class="txt" type="search" placeholder="🔎 Buscar fornecedor, nº da nota, CNPJ, produtor, valor, produto…" value="${esc(NFE_UI.q||'')}"><span class="mut" id="nfe-q-n"></span></div>`:''}
     ${rows||vazio}
     ${nfeIgnoradasHtml(L)}
     ${nfeRecebidasHtml()}
     ${nfeHistoricoHtml(L)}</div>`;
 }
+// v306: busca na caixa de entrada — texto do cartão + itens (xProd) + chave; sem acento e sem maiúscula
+let NFE_UI={q:''};
+function nfeBuscaTxt(nt, tipoTxt){ const its=(nt.itens||[]).concat(nt.xprods||[], (nt.ia&&nt.ia.itens)||[]).map(i=>typeof i==='string'?i:[i.xprod,i.produto,i.maquina].filter(Boolean).join(' ')).join(' '), prod=nt.produtor?nfeProdutorTxt(nt.produtor).nome:'';   // itens: do XML quando vierem + o que a IA reconheceu
+  return _agNorm([nt.fornecedor, nt.cnpj, nt.nNF, nt.serie, tipoTxt, nt.tipo, nt.origem, nt.obs, prod, nt.produtor, nt.chave, fmtDataBR(nt.emissao), brl(nt.valor), String(+nt.valor||0).replace('.',','), its].filter(Boolean).join(' ')); }
+function nfeAplicaBusca(){ const q=_agNorm(NFE_UI.q||'').trim().split(/\s+/).filter(Boolean); let n=0, tot=0;
+  document.querySelectorAll('.nfe-lista .nfe-row[data-busca]').forEach(r=>{ tot++; const ok=q.every(t=>(r.dataset.busca||'').indexOf(t)>=0); r.hidden=!ok; if(ok) n++; });
+  const el=document.getElementById('nfe-q-n'); if(el) el.textContent=q.length?`${n} de ${tot}`:''; }
+document.addEventListener('input',e=>{ if(e.target.id!=='nfe-q') return; NFE_UI.q=e.target.value; nfeAplicaBusca(); });
 // itens da nota no formato da planilha (NFE ITENS)
 // custo do item: o da própria nota; na REMESSA (valor simbólico) vale o custo do contrato de faturamento
 function nfeCustoItem(imp,i){ if(imp.nota.tipo==='REMESSA'){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref), it=c&&c.itens.find(x=>x.produto===i.produto);
