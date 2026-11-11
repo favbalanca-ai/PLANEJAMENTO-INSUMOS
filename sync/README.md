@@ -132,6 +132,13 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Revisão do Administrativo, fase 3 (v310)
+
+- `conciliaGrava_`: avulso com `participante` (CPF/CNPJ); DE-PARA BANCO ganha a coluna **DOC**. `tituloGrava_` recalcula
+  ABERTO/PARCIAL/PAGO dos títulos gravados. `finTitulosDaNota_` guarda vencimento/categoria/imóvel/obs/forma dos títulos
+  ABERTOS com `QUEM ≠ nota` e reaplica ao recriar (`QUEM = nota (ajustes mantidos)`). `fechamentoEnviar_`: e-mail que
+  falha não interrompe — registra "só salvo" com a pasta e devolve `erro`.
+
 ## Revisão do Administrativo, fase 2 (v309)
 
 - `nfeClassifica_`: `ref` vazia não apaga a CHAVE REFERENCIADA; RECEBIDA não volta a EM TRÂNSITO/A ENTREGAR (salvo

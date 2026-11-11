@@ -1264,7 +1264,7 @@ var BANCO_SHEET = 'EXTRATO BANCO', BANCO_COLS = ['ID','CONTA','PRODUTOR','DATA',
 var BANCO_KEYS = ['id','conta','produtor','data','valor','historico','doc','titulo','status','baixa','importadoEm','quem','atualizado'];
 // v292 (Fase C): fechamento mensal enviado ao contador
 var FECH_SHEET = 'FECHAMENTOS', FECH_COLS = ['ID','MÊS','PRODUTOR','ENVIADO EM','PARA','CC','QUEM','ENTRADAS','SAÍDAS','SALDO','PENDÊNCIAS','PASTA','ATUALIZADO'], FECH_KEYS = ['id','mes','produtor','enviadoEm','para','cc','quem','entradas','saidas','saldo','pendencias','pasta','atualizado'];
-var BANCO_REGRA_SHEET = 'DE-PARA BANCO', BANCO_REGRA_COLS = ['CONTÉM','TIPO','CATEGORIA','PARTICIPANTE','QUEM','ATUALIZADO'], BANCO_REGRA_KEYS = ['contem','tipo','categoria','participanteNome','quem','atualizado'];
+var BANCO_REGRA_SHEET = 'DE-PARA BANCO', BANCO_REGRA_COLS = ['CONTÉM','TIPO','CATEGORIA','PARTICIPANTE','QUEM','ATUALIZADO','DOC'], BANCO_REGRA_KEYS = ['contem','tipo','categoria','participanteNome','quem','atualizado','doc'];   // v310: DOC (CPF/CNPJ) da regra
 var FIN_TIT_COLS = ['ID','TIPO','PRODUTOR','PARTICIPANTE','PARTICIPANTE NOME','DOC TIPO','DOC Nº','CHAVE','PARCELA','EMISSÃO','VENCIMENTO','VALOR','FORMA PGTO','CATEGORIA','IMÓVEL','STATUS','DATA PGTO','ORIGEM','OBS','ATUALIZADO','QUEM'];
 var FIN_TIT_KEYS = ['id','tipo','produtor','participante','participanteNome','docTipo','docNum','chave','parcela','emissao','vencimento','valor','formaPgto','categoria','imovel','status','dataPgto','origem','obs','atualizado','quem'];
 var FIN_CAD_ = { produtor:[FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS], imovel:[FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS], conta:[FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS], contraparte:[FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS] };
@@ -1294,12 +1294,12 @@ function fechamentoEnviar_(p, acc){
   } catch (e) { return { rows:0, erro:'Drive: ' + e }; }
   if (!p.soSalvar){ var assunto = S(p.assunto) || ('Fechamento ' + mes), corpo = S(p.corpo) || assunto, opts = { attachments:blobs, name:'Planejamento da Fazenda' }; if (cc.length) opts.cc = cc.join(',');
     try { GmailApp.sendEmail(para.join(','), assunto, corpo, opts); out.enviado = true; }
-    catch (e1) { try { MailApp.sendEmail(para.join(','), assunto, corpo, opts); out.enviado = true; } catch (e2) { return { rows:0, erro:'e-mail não enviado: ' + e2 + ' (rode autorizarPermissoes no Apps Script)', pasta:out.pasta, arquivos:out.arquivos }; } } }
+    catch (e1) { try { MailApp.sendEmail(para.join(','), assunto, corpo, opts); out.enviado = true; } catch (e2) { out.erro = 'e-mail não enviado: ' + e2 + ' (rode autorizarPermissoes no Apps Script)'; out.enviado = false; } } }   // v310: segue e registra "só salvo" com a pasta
   var r = p.resumo || {}, agora = Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm'), ant = null;
   if (sh(FECH_SHEET)) ant = _finLer_(FECH_SHEET, FECH_COLS, FECH_KEYS).filter(function(x){ return x.id === cpf + '|' + mes; })[0] || null;
   var jaEnv = ant && S(ant.enviadoEm) && !/^só salvo/.test(S(ant.enviadoEm));   // só salvar de novo não apaga um envio feito antes
-  out.rows = _finUpsert_(FECH_SHEET, FECH_COLS, FECH_KEYS, [{ id:cpf + '|' + mes, mes:mes, produtor:cpf, enviadoEm:out.enviado ? agora : (jaEnv ? ant.enviadoEm : (p.soSalvar ? 'só salvo ' + agora : '')), para:out.enviado ? para.join(', ') : (jaEnv ? ant.para : para.join(', ')), cc:out.enviado ? cc.join(', ') : (jaEnv ? ant.cc : cc.join(', ')), quem:quem, entradas:N(r.entradas), saidas:N(r.saidas), saldo:N(r.saldo), pendencias:N(r.pendencias), pasta:out.pasta }]);
-  out.enviadoEm = agora; return out;
+  out.rows = _finUpsert_(FECH_SHEET, FECH_COLS, FECH_KEYS, [{ id:cpf + '|' + mes, mes:mes, produtor:cpf, enviadoEm:out.enviado ? agora : (jaEnv ? ant.enviadoEm : ((p.soSalvar || out.erro) ? 'só salvo ' + agora : '')), para:out.enviado ? para.join(', ') : (jaEnv ? ant.para : para.join(', ')), cc:out.enviado ? cc.join(', ') : (jaEnv ? ant.cc : cc.join(', ')), quem:quem, entradas:N(r.entradas), saidas:N(r.saidas), saldo:N(r.saldo), pendencias:N(r.pendencias), pasta:out.pasta }]);
+  out.enviadoEm = out.enviado ? agora : (jaEnv ? ant.enviadoEm : 'só salvo ' + agora); return out;
 }
 // v291: linhas do extrato já tratadas (últimos 180 dias) — para outros aparelhos não reimportarem e para o histórico
 function bancoExtratoLer_(){ if (!sh(BANCO_SHEET)) return []; var lim = new Date(); lim.setDate(lim.getDate() - 180); var l = Utilities.formatDate(lim, tz_(), 'yyyy-MM-dd');
@@ -1317,7 +1317,7 @@ function conciliaGrava_(p, acc){
     if (it.ignorar){ lin.status = 'IGNORADO'; n.ignorados++; linhas.push(lin); return; }
     var tid = S(it.titulo);
     if (!tid && it.novo && typeof it.novo === 'object'){ var nv = it.novo; tid = 'bk:' + key;
-      titulos.push({ id:tid, tipo:v < 0 ? 'PAGAR' : 'RECEBER', produtor:prod, participante:'', participanteNome:S(nv.participanteNome || hist).slice(0, 80), docTipo:'Extrato bancário', docNum:S(it.doc).slice(0, 40), chave:'', parcela:'', emissao:data, vencimento:data, valor:Math.abs(v),
+      titulos.push({ id:tid, tipo:v < 0 ? 'PAGAR' : 'RECEBER', produtor:prod, participante:_doc_(nv.participante), participanteNome:S(nv.participanteNome || hist).slice(0, 80), docTipo:'Extrato bancário', docNum:S(it.doc).slice(0, 40), chave:'', parcela:'', emissao:data, vencimento:data, valor:Math.abs(v),   // v310: CPF/CNPJ p/ o Livro Caixa
         formaPgto:S(nv.formaPgto || 'Débito em conta'), categoria:S(nv.categoria || 'Outros'), imovel:S(nv.imovel), status:'ABERTO', origem:'banco', obs:hist }); n.novos++; }
     if (!tid){ linhas.push(lin); return; }   // sem título e sem lançamento novo: fica pendente
     var bid = 'bb:' + key; baixas.push({ id:bid, titulo:tid, produtor:prod, conta:conta, data:data, valorPago:Math.abs(v), juros:0, desconto:0, comprovante:'', obs:'conciliação bancária: ' + hist, compensacao:'', ref:'', bancoId:id });
@@ -1325,7 +1325,7 @@ function conciliaGrava_(p, acc){
   if (titulos.length) tituloGrava_(titulos, acc);
   if (baixas.length) baixaGrava_(baixas, acc);   // grava e recalcula os títulos (ABERTO/PARCIAL/PAGO)
   if (linhas.length) _finUpsert_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS, linhas);
-  var regras = (p.regras || []).filter(function(r){ return S(r.contem).length >= 3; }).map(function(r){ return { contem:S(r.contem).toUpperCase().slice(0, 60), tipo:S(r.tipo), categoria:S(r.categoria), participanteNome:S(r.participanteNome).slice(0, 80), quem:quem }; });
+  var regras = (p.regras || []).filter(function(r){ return S(r.contem).length >= 3; }).map(function(r){ return { contem:S(r.contem).toUpperCase().slice(0, 60), tipo:S(r.tipo), categoria:S(r.categoria), participanteNome:S(r.participanteNome).slice(0, 80), doc:_doc_(r.doc), quem:quem }; });   // v310: doc
   if (regras.length) _finUpsert_(BANCO_REGRA_SHEET, BANCO_REGRA_COLS, BANCO_REGRA_KEYS, regras);
   n.rows = linhas.length + regras.length; return n;
 }
@@ -1425,7 +1425,9 @@ function tituloGrava_(p, acc){
     if (x.produtor !== undefined) x.produtor = _doc_(x.produtor); if (x.participante !== undefined) x.participante = _doc_(x.participante);
     if (x.valor !== undefined) x.valor = N(x.valor); x.quem = quem; if (!x.del && !x.status) x.status = 'ABERTO'; if (!x.del && !x.tipo) x.tipo = 'PAGAR'; if (!x.del && !x.origem) x.origem = 'manual';
     return x; });
-  return { rows:_finUpsert_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS, itens) };
+  var n = _finUpsert_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS, itens);
+  try { var rec = itens.filter(function(x){ return !x.del && x.valor !== undefined && S(x.status).toUpperCase() !== 'CANCELADO'; }).map(function(x){ return S(x.id); }); if (rec.length) finRecalcTitulos_(rec); } catch (e) {}   // v310: valor editado → PARCIAL/PAGO conferem com as baixas
+  return { rows:n };
 }
 // parcelas (cobr/dup) e forma de pagamento (pag/detPag) do XML da nota
 function finDupsGs_(txt){
@@ -1452,9 +1454,10 @@ function finTitulosDaNota_(chave, dupsApp, pagApp, categoria, tipoTit){
   var emissao = _fmtD(g('EMISSÃO')), vNF = N(g('VALOR')), forma = finFormaPgto_(info.pag);
   var dups = info.dups.filter(function(d){ return d.valor > 0; });
   var semParc = !dups.length; if (semParc) dups = [{ n:'1', venc:emissao, valor:vNF }];
-  var tit = _ler_(FIN_TIT_SHEET, FIN_TIT_COLS), fechados = {}, abertos = [];
+  var tit = _ler_(FIN_TIT_SHEET, FIN_TIT_COLS), fechados = {}, abertos = [], ajustes = {};
   tit.forEach(function(x){ if (S(x['CHAVE']) !== chave) return; var s = S(x['STATUS']).toUpperCase();
-    if (s === 'ABERTO') abertos.push(x['__r']); else fechados[S(x['ID'])] = 1; });
+    if (s === 'ABERTO'){ abertos.push(x['__r']); if (S(x['QUEM']) && S(x['QUEM']) !== 'nota') ajustes[S(x['ID'])] = { vencimento:_fmtD(x['VENCIMENTO']), categoria:S(x['CATEGORIA']), imovel:S(x['IMÓVEL']), obs:S(x['OBS']), formaPgto:S(x['FORMA PGTO']) }; }   // v310: o que a pessoa ajustou no Financeiro não se perde ao reclassificar
+    else fechados[S(x['ID'])] = 1; });
   if (abertos.length) _delLinhas_(sheetCols_(FIN_TIT_SHEET, FIN_TIT_COLS).s, abertos);
   var base = { tipo:S(tipoTit) === 'RECEBER' ? 'RECEBER' : 'PAGAR', produtor:_doc_(g('PRODUTOR')), participante:S(g('CNPJ EMITENTE')), participanteNome:S(g('FORNECEDOR')), docTipo:'1 - Nota fiscal', docNum:S(g('Nº')) + (S(g('SÉRIE')) ? '/' + S(g('SÉRIE')) : ''),
     chave:chave, emissao:emissao, formaPgto:forma, categoria:S(categoria) || 'Insumos', origem:(st === 'A ENTREGAR' || tipoNota === 'FATURAMENTO') ? 'contrato' : 'nfe', status:'ABERTO', quem:'nota' };
@@ -1462,7 +1465,9 @@ function finTitulosDaNota_(chave, dupsApp, pagApp, categoria, tipoTit){
   dups.forEach(function(d, i){ var id = chave + '-' + (S(d.n) || String(i + 1)); if (fechados[id]) return;
     var x = {}; for (var k in base) x[k] = base[k];
     x.id = id; x.parcela = (i + 1) + '/' + dups.length; x.vencimento = d.venc || emissao; x.valor = d.valor;
-    x.obs = semParc ? 'sem parcelas no XML: vencimento = emissão — confirmar' : ''; novos.push(x); });
+    x.obs = semParc ? 'sem parcelas no XML: vencimento = emissão — confirmar' : '';
+    var aj = ajustes[id]; if (aj){ if (aj.vencimento) x.vencimento = aj.vencimento; if (aj.categoria) x.categoria = aj.categoria; if (aj.imovel) x.imovel = aj.imovel; if (aj.obs) x.obs = aj.obs; if (aj.formaPgto) x.formaPgto = aj.formaPgto; x.quem = 'nota (ajustes mantidos)'; }
+    novos.push(x); });
   return _finUpsert_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS, novos);
 }
 function finCancelaTitulos_(chave, motivo){
