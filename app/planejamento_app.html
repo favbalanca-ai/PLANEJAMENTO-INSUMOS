@@ -1166,6 +1166,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-head b{display:block;font-size:14px;overflow-wrap:anywhere}
 .nfe-head span{display:block;font-size:11.5px;color:var(--muted)}
 .nfe-tipo.t-VENDA{color:#1b5e20}.nfe-tipo.t-REMESSA{color:#1f4a55}.nfe-tipo.t-FATURAMENTO{color:#b3261e}.nfe-tipo.t-OUTRA{color:#8a6d00}
+.nfe-tipo.t-COMBUSTIVEL,.nfe-tipo.t-ATIVO,.nfe-tipo.t-CONSERTO,.nfe-tipo.t-CONSUMO{color:#4a3f8f}.nfe-tipo.t-BONIFICACAO,.nfe-tipo.t-INDUSTRIALIZACAO{color:#1b5e20}.nfe-tipo.t-DEVOLUCAO,.nfe-tipo.t-DEMONSTRACAO,.nfe-tipo.t-VASILHAME{color:#8a6d00}.nfe-tipo.t-ENERGIA,.nfe-tipo.t-SERVICO{color:#555}   /* v307 */
 .nfe-chave{padding:0 14px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;letter-spacing:.02em;overflow-wrap:anywhere}
 .nfe-aviso{margin:6px 14px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.45}
 .nfe-aviso.err{background:#fdecea;color:#8e1a14;border:1px solid #f5c2bd}
@@ -2729,7 +2730,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-306';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-307';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4516,12 +4517,42 @@ const nfeCnpjFmt=c=>/^\d{14}$/.test(c)?c.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(
 function nfeJaEntrou(ch){ const m=(DATA&&DATA.movimentacao&&DATA.movimentacao.nfe)||{}; if(m[ch]) return m[ch];
   const c=(COMPRAS&&COMPRAS.registros||[]).find(x=>x.id===ch); return c?(c.data||'?'):''; }
 // ---- classificação pelo CFOP (seção 6 da spec) ----
-function nfeTipoCfop(cfop){ const c=String(cfop||'').replace(/\D/g,''), f=c.slice(1);
-  if(/^[567]\d{3}$/.test(c)){ if(f==='922') return 'FATURAMENTO'; if(f==='116'||f==='117') return 'REMESSA'; if(/^1(0[1-9]|1[0-9]|2[0-4])$/.test(f)) return 'VENDA'; }
-  return 'OUTRA'; }
-function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop));
-  return t.includes('FATURAMENTO')?'FATURAMENTO':t.includes('REMESSA')?'REMESSA':t.includes('VENDA')?'VENDA':'OUTRA'; }
-const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',OUTRA:'Outra operação',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};
+// v307: tabela de CFOP pelos 3 últimos dígitos (vale para 1/2/3 = entrada e 5/6/7 = saída: o fornecedor às vezes emite
+// com o código de entrada, ex.: 1662 numa venda de lubrificante). A MESMA tabela está no Code.gs (nfeTipoCfopGs_).
+const CFOP_TAB=[[/^(10[1-9]|11[0-5]|11[89]|12[0-5]|40[1-5])$/,'VENDA'],[/^922$/,'FATURAMENTO'],[/^11[67]$/,'REMESSA'],[/^(65[1-9]|66[0-7])$/,'COMBUSTIVEL'],[/^55[1-5]$/,'ATIVO'],[/^55[67]$/,'CONSUMO'],
+  [/^91[01]$/,'BONIFICACAO'],[/^91[23]$/,'DEMONSTRACAO'],[/^(91[56]|933)$/,'CONSERTO'],[/^(90[1-3]|92[45])$/,'INDUSTRIALIZACAO'],[/^(20[1-9]|210|41[0-3])$/,'DEVOLUCAO'],[/^25[1-8]$/,'ENERGIA'],[/^(30[1-7]|35[1-9]|360)$/,'SERVICO'],[/^(91[7-9]|92[01])$/,'VASILHAME']];
+const CFOP_NOME={101:'venda de produção do estabelecimento',102:'venda de mercadoria adquirida de terceiros',103:'venda de produção efetuada fora do estabelecimento',104:'venda de mercadoria adquirida, efetuada fora do estabelecimento',105:'venda de produção que não deva transitar pelo estabelecimento',106:'venda de mercadoria adquirida que não deva transitar pelo estabelecimento',109:'venda de produção para a ZFM',110:'venda de mercadoria adquirida para a ZFM',111:'venda de produção remetida anteriormente em consignação',112:'venda de mercadoria adquirida remetida anteriormente em consignação',113:'venda de produção remetida em consignação',114:'venda de mercadoria remetida em consignação',115:'venda de mercadoria recebida de terceiros em consignação',116:'remessa de produção — venda para entrega futura',117:'remessa de mercadoria adquirida — venda para entrega futura',118:'venda de produção entregue por conta e ordem (venda à ordem)',119:'venda de mercadoria adquirida entregue por conta e ordem (venda à ordem)',120:'venda de mercadoria adquirida entregue ao destinatário pelo vendedor remetente',122:'venda de produção remetida para industrialização por conta e ordem',123:'venda de mercadoria adquirida remetida para industrialização por conta e ordem',124:'industrialização efetuada para outra empresa',125:'industrialização efetuada para outra empresa (sem emprego de material)',
+  201:'devolução de compra para industrialização',202:'devolução de compra para comercialização',208:'devolução de mercadoria recebida em transferência para industrialização',209:'devolução de mercadoria recebida em transferência para comercialização',210:'devolução de compra para uso na prestação de serviço',251:'venda de energia elétrica para distribuição',252:'venda de energia elétrica para indústria',253:'venda de energia elétrica para comércio',254:'venda de energia elétrica para produtor rural',255:'venda de energia elétrica para consumo não industrial',256:'venda de energia elétrica para consumidor final',257:'venda de energia elétrica para consumo por demanda contratada',258:'venda de energia elétrica para não contribuinte',
+  301:'serviço de comunicação para industrialização',302:'serviço de comunicação para comercialização',303:'serviço de comunicação para produtor rural',305:'serviço de comunicação (outros)',306:'serviço de comunicação para consumidor final',307:'serviço de comunicação para não contribuinte',351:'serviço de transporte para industrialização',352:'serviço de transporte para comercialização',353:'serviço de transporte para produtor rural',354:'serviço de transporte (outros)',355:'serviço de transporte para consumidor final',356:'serviço de transporte para não contribuinte',357:'serviço de transporte para não contribuinte',359:'serviço de transporte — mercadoria com fim específico de exportação',360:'serviço de transporte a contribuinte substituto',
+  401:'venda de produção sujeita a substituição tributária',402:'venda de produção (ST) a contribuinte substituto',403:'venda de mercadoria adquirida sujeita a ST, na condição de substituto',405:'venda de mercadoria adquirida sujeita a ST, na condição de substituído',410:'devolução de compra para industrialização (ST)',411:'devolução de compra para comercialização (ST)',412:'devolução de bem do ativo imobilizado (ST)',413:'devolução de material de uso ou consumo (ST)',
+  551:'venda de bem do ativo imobilizado',552:'transferência de bem do ativo imobilizado',553:'devolução de compra de bem para o ativo imobilizado',554:'remessa de bem do ativo imobilizado para uso fora do estabelecimento',555:'devolução de bem do ativo imobilizado de terceiro',556:'devolução de compra de material de uso ou consumo',557:'transferência de material de uso ou consumo',
+  651:'venda de combustível/lubrificante de produção para industrialização',652:'venda de combustível/lubrificante de produção para comercialização',653:'venda de combustível/lubrificante de produção a consumidor final',654:'venda de combustível/lubrificante adquirido para industrialização',655:'venda de combustível/lubrificante adquirido para comercialização',656:'venda de combustível/lubrificante adquirido a consumidor final',657:'remessa de combustível/lubrificante para venda fora do estabelecimento',658:'transferência de combustível/lubrificante de produção',659:'transferência de combustível/lubrificante adquirido',660:'devolução de compra de combustível/lubrificante para industrialização',661:'devolução de compra de combustível/lubrificante para comercialização',662:'devolução de compra de combustível/lubrificante para consumo',663:'remessa de combustível/lubrificante para armazenagem',664:'retorno de combustível/lubrificante recebido para armazenagem',665:'retorno simbólico de combustível/lubrificante para armazenagem',666:'remessa por conta e ordem de combustível/lubrificante',667:'venda de combustível/lubrificante a consumidor final em outra UF',
+  901:'remessa para industrialização por encomenda',902:'retorno de mercadoria utilizada na industrialização por encomenda',903:'retorno de mercadoria recebida para industrialização e não aplicada',905:'remessa para depósito fechado ou armazém geral',906:'retorno de mercadoria depositada',910:'remessa em bonificação, doação ou brinde',911:'remessa de amostra grátis',912:'remessa para demonstração',913:'retorno de mercadoria recebida para demonstração',914:'remessa de mercadoria para exposição ou feira',915:'remessa para conserto ou reparo',916:'retorno de mercadoria recebida para conserto ou reparo',917:'remessa em consignação mercantil',918:'devolução de mercadoria recebida em consignação',919:'devolução simbólica de consignação',920:'remessa de vasilhame ou sacaria',921:'devolução de vasilhame ou sacaria',922:'simples faturamento — venda para entrega futura',924:'remessa para industrialização por conta e ordem',925:'retorno de mercadoria recebida para industrialização por conta e ordem',927:'baixa de estoque por perda, roubo ou deterioração',929:'lançamento de operação com cupom fiscal',933:'prestação de serviço tributada pelo ISSQN',934:'remessa simbólica de mercadoria depositada',949:'outra saída de mercadoria não especificada'};
+const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',COMBUSTIVEL:'Compra de combustível / lubrificante',ATIVO:'Bem do ativo (máquina, equipamento)',CONSUMO:'Material de uso e consumo',BONIFICACAO:'Bonificação / amostra',DEMONSTRACAO:'Demonstração',CONSERTO:'Conserto / serviço',INDUSTRIALIZACAO:'Industrialização (remessa/retorno)',DEVOLUCAO:'Devolução',ENERGIA:'Energia elétrica',SERVICO:'Comunicação / frete',VASILHAME:'Consignação / vasilhame',OUTRA:'Outra operação',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};
+const NFE_TIPO_ORD=['FATURAMENTO','REMESSA','VENDA','COMBUSTIVEL','ATIVO','CONSUMO','BONIFICACAO','INDUSTRIALIZACAO','CONSERTO','DEVOLUCAO','DEMONSTRACAO','VASILHAME','ENERGIA','SERVICO'];
+function nfeTipoCfop(cfop){ const c=String(cfop||'').replace(/\D/g,''); if(!/^[1-7]\d{3}$/.test(c)) return 'OUTRA'; const f=c.slice(1); for(const [re,t] of CFOP_TAB) if(re.test(f)) return t; return 'OUTRA'; }
+function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop)); for(const k of NFE_TIPO_ORD) if(t.includes(k)) return k; return 'OUTRA'; }
+function nfeCfopNome(cfop){ const c=String(cfop||'').replace(/\D/g,''); return CFOP_NOME[+c.slice(1)]||''; }
+function nfeCfopsTxt(itens){ return [...new Set((itens||[]).map(i=>i.cfop).filter(Boolean))].map(c=>{ const n=nfeCfopNome(c); return n?`${c} — ${n}`:c; }).join(' · '); }
+// o que cada tipo significa para a fazenda: entra no estoque? aviso da conferência; destino sugerido dos itens
+const NFE_TIPO_INFO={
+  VENDA:{entra:true},FATURAMENTO:{entra:false},REMESSA:{entra:true},
+  COMBUSTIVEL:{entra:false,dest:'tanque',cls:'info',txt:'⛽ <b>Compra de combustível ou lubrificante</b>. Diesel e Arla vão para o <b>Tanque</b>; óleo e graxa, para a <b>máquina</b> (ou para a Oficina). Não entra no estoque de insumos.'},
+  ATIVO:{entra:false,dest:'maquina',cls:'info',txt:'🚜 <b>Bem do ativo</b> (máquina, implemento, equipamento). O item vai para <b>Máquinas</b> como bem, não para o estoque.'},
+  CONSUMO:{entra:false,dest:'oficina',cls:'info',txt:'🧰 <b>Material de uso e consumo</b>. Sugerido para a <b>Oficina</b> (ou Benfeitoria); não entra no estoque de insumos.'},
+  BONIFICACAO:{entra:true,cls:'info',txt:'🎁 <b>Bonificação, doação ou amostra</b>. Entra no estoque; confira o valor — brinde pode ter custo zero.'},
+  DEMONSTRACAO:{entra:false,ignorar:true,cls:'warn',txt:'👀 <b>Demonstração</b>. A mercadoria volta ao fornecedor: não entra no estoque (itens já marcados para ignorar).'},
+  CONSERTO:{entra:false,dest:'maquina',cls:'info',txt:'🔧 <b>Conserto ou serviço</b>. Peça e mão de obra vão para a <b>máquina</b> (ou Oficina), sem entrar no estoque.'},
+  INDUSTRIALIZACAO:{entra:true,cls:'warn',txt:'🏭 <b>Industrialização</b> (ex.: tratamento de semente). <b>Retorno</b> entra no estoque; <b>remessa</b> não. Confira o CFOP de cada item.'},
+  DEVOLUCAO:{entra:true,cls:'warn',txt:'↩️ <b>Devolução</b>: mercadoria voltando para a fazenda (ex.: grãos ou insumo devolvido). Confira se deve mesmo entrar no estoque antes de confirmar.'},
+  ENERGIA:{entra:false,ignorar:true,cls:'warn',txt:'💡 <b>Conta de energia elétrica</b>. Não entra no estoque; lance no <b>Financeiro</b> (Títulos) se quiser controlar o pagamento.'},
+  SERVICO:{entra:false,ignorar:true,cls:'warn',txt:'📡 <b>Comunicação ou frete</b>. Não entra no estoque; lance no <b>Financeiro</b> se quiser controlar o pagamento.'},
+  VASILHAME:{entra:false,ignorar:true,cls:'warn',txt:'📦 <b>Consignação, vasilhame ou sacaria</b>. Não é compra: itens já marcados para ignorar.'},
+  OUTRA:{entra:false,cls:'warn',txt:'⚠️ <b>Outra operação</b> — não é venda nem remessa (ex.: perda, depósito, exposição). Confira se deve mesmo entrar no estoque.'} };
+function nfeTipoAvisoHtml(n){ const I=NFE_TIPO_INFO[n.tipo]; if(!I||!I.txt) return ''; return `<div class="nfe-aviso ${I.cls||'info'}">${I.txt} <span class="mut">CFOP ${esc(nfeCfopsTxt(n.itens))}</span></div>`; }
+// destino sugerido para um item só pelo CFOP (antes da descrição): '' quando o CFOP não diz nada
+function nfeDestPorCfop(it){ const t=nfeTipoCfop(it.cfop), x=String(it.xprod||''); if(t==='COMBUSTIVEL') return /diesel|arla|s-?10\b|s-?500|gasolina|etanol|querosene/i.test(x)?'tanque':'maquina'; if(t==='ATIVO'||t==='CONSERTO') return 'maquina'; if(t==='CONSUMO') return 'oficina'; return ''; }
+function nfeIgnorarPorCfop(it){ const I=NFE_TIPO_INFO[nfeTipoCfop(it.cfop)]; return !!(I&&I.ignorar); }
 // ===== v277: VENDA DO PRODUTOR (receita) — nota emitida pelo produtor OU contranota de entrada do comprador =====
 // v286: produtor (destinatário) da nota, para mostrar na lista e na conferência
 function nfeProdutorTxt(doc, nomeXml){ doc=String(doc||'').replace(/\D/g,''); if(!doc) return {nome:nomeXml||'—', doc:'', fora:false}; const prods=FIN().produtores, p=prods.find(x=>x.cpf===doc);
@@ -4676,9 +4707,10 @@ function nfeItemInicial(nota,it){
     if(nfeDestManut(ia.destino)) return Object.assign({},it,{fonte:'ia',produto:'',ignorar:false,fator:1,ok:true,dest:ia.destino,maq:ia.destino==='oficina'?'Oficina':(ia.maquina||nfeMaqPadrao(ia.destino,nota.cnpj)),tipoMaq:ia.tipoGasto||nfeTipoGuess(ia.destino,it.xprod),iaConf:+ia.confianca});
     if(ia.produto&&PROD[ia.produto]) return Object.assign({},it,{fonte:'ia',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:true,iaConf:+ia.confianca}); }
   else if(ia && ia.produto && PROD[ia.produto]) return Object.assign({},it,{fonte:'sug',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:false,iaConf:+ia.confianca});
+  if(nfeIgnorarPorCfop(it)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v307: energia, frete, vasilhame, demonstração: não é compra de insumo
   const sug=sugP;
   if(sug && !pecaSug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
-  if(pecaSug) return Object.assign({},it,{fonte:'sug',produto:'',fator:1,ignorar:false,ok:false,dest:pecaSug,maq:nfeMaqPadrao(pecaSug,nota.cnpj),tipoMaq:nfeTipoGuess(pecaSug,it.xprod)});   // v276: parece peça/serviço · v285: oficina/benfeitoria
+  if(pecaSug) return Object.assign({},it,{fonte:'sug',produto:'',fator:1,ignorar:false,ok:false,dest:pecaSug,maq:nfeMaqPadrao(pecaSug,nota.cnpj),tipoMaq:(pecaSug==='maquina'&&nfeTipoCfop(it.cfop)==='COMBUSTIVEL')?'Óleo/lubrificante':nfeTipoGuess(pecaSug,it.xprod)});   // v276: parece peça/serviço · v285: oficina/benfeitoria · v307: CFOP de lubrificante
   return Object.assign({},it,{fonte:'novo',produto:'',fator:nfeFatorDe(it.xprod,it.ucom,''),ignorar:false,ok:false}); }
 function nfeItemStatus(it){ if(it.ignorar) return 'ignorar'; if(nfeDestManut(it.dest)) return String(it.maq||'').trim()?'maq':'maqsug'; if(it.ok && PROD[it.produto]) return it.fonte==='auto'?'auto':it.fonte==='ia'?'ia':'ok'; return it.fonte==='sug'?'sug':'novo'; }
 function nfeResolvido(it){ const s=nfeItemStatus(it); return s==='ignorar' || s==='maq' || ((s==='auto'||s==='ok'||s==='ia') && +it.fator>0); }
@@ -4691,7 +4723,8 @@ function nfeDestManut(d){ return d==='maquina'||d==='oficina'||d==='benfeitoria'
 const TANQ_TIPOS=['Combustível','Arla 32','Outro'];
 const _RX_ITEM_OFIC=/\b(ferramenta|chave (?:de )?(?:fenda|boca|combinada|philips|allen|inglesa|estrela|grifo)|jogo de chaves|alicate|martelo|marreta|eletrodo|disco de (?:corte|desbaste)|lixa|serra|broca|soldador|m[aá]quina de solda|esmeril|furadeira|parafusadeira|compressor|macaco|talha|luva|[oó]culos de prote|protetor auricular|bota|capacete|\bepi\b|estopa|desengraxante|silicone|fita isolante|abra[cç]adeira|rebite|graxeira|bancada|morsa|paqu[ií]metro|tri?ncha|pincel|rolo de pintura)\b/i;
 const _RX_ITEM_BENF=/\b(cimento|tijolo|telha|areia|brita|arame|cerca|mour[aã]o|palanque|estaca|tinta|madeira|t[aá]bua|caibro|ripa|viga|vergalh|ferro (?:ca|cm|\d)|eletroduto|fio (?:el[eé]trico|flex|r[ií]gido|\d)|cabo (?:el[eé]trico|flex|\d)|disjuntor|tomada|interruptor|cano|tubo pvc|conex[aã]o|caixa d.?[aá]gua|torneira|registro (?:de )?(?:gaveta|press|esfera)|piso|argamassa|reboco|bloco|laje|calha|port[aã]o|dobradi[cç]a|cadeado|fechadura|grade|tela (?:soldada|galv|arame)|alambrado|concreto|massa corrida|verniz|gesso|prego|cal hidrat|manilha|bebedouro|cocho)\b/i;
-function nfeTipoGuess(dest, xprod){ const x=String(xprod||''); if(dest==='oficina'){ if(/luva|[oó]culos|bota|capacete|\bepi\b|protetor|m[aá]scara/i.test(x)) return 'EPI'; if(/ferramenta|chave|alicate|martelo|marreta|serra|furadeira|parafusadeira|esmeril|compressor|macaco|talha|morsa|bancada|paqu[ií]metro|soldador|m[aá]quina/i.test(x)) return 'Ferramenta'; return 'Consumível'; }
+function nfeTipoGuess(dest, xprod){ const x=String(xprod||''); if(dest==='tanque') return /arla/i.test(x)?'Arla 32':'Combustível';   // v307
+  if(dest==='oficina'){ if(/luva|[oó]culos|bota|capacete|\bepi\b|protetor|m[aá]scara/i.test(x)) return 'EPI'; if(/ferramenta|chave|alicate|martelo|marreta|serra|furadeira|parafusadeira|esmeril|compressor|macaco|talha|morsa|bancada|paqu[ií]metro|soldador|m[aá]quina/i.test(x)) return 'Ferramenta'; return 'Consumível'; }
   if(dest==='benfeitoria'){ if(/fio|cabo|disjuntor|tomada|interruptor|eletroduto|l[aâ]mpada|lumin/i.test(x)) return 'Elétrica'; if(/cano|tubo|conex|torneira|registro|caixa d|bebedouro|hidr/i.test(x)) return 'Hidráulica'; if(/tinta|massa corrida|verniz|lixa|selador/i.test(x)) return 'Reforma'; return 'Construção'; }
   return nfeTipoMaqGuess(x); }
 function nfeMaqPadrao(dest, cnpj){ return dest==='oficina'?'Oficina':dest==='tanque'?'Tanque da fazenda':dest==='benfeitoria'?nfeBenfUltima(cnpj):nfeMaqUltima(cnpj); }
@@ -4703,14 +4736,17 @@ function benfListaManut(){ const set=new Set(); ((DATA&&DATA.manutencao)||[]).fo
 // ===== v276: peças e serviços apropriados por máquina (não entram no estoque; vão para a aba MANUTENÇÃO MÁQUINAS) =====
 const MANUT_TIPOS=['Peça','Pneu','Óleo/lubrificante','Serviço/mão de obra','Combustível','Frete','Outro'];
 const _RX_FORN_PECAS=/M[AÁ]QUINA|PE[CÇ]AS?\b|IMPLEMENTO|SERVI[CÇ]O|OFICINA|PNEU|AUTO ?PE|TRATOR|MEC[AÂ]NIC|RETIFIC|RET[IÍ]FICA|FERRAGEM|FERRAMENT|LUBRIFIC|POSTO|COMBUST|DIESEL|BORRACH|HIDR[AÁ]ULIC|EL[EÉ]TRIC|SOLDA|TORNEAR/i;
+const _RX_TANQ=/\bdiesel\b|\barla\b|\bs-?10\b|\bs-?500\b/i;   // v307: vai para o tanque da fazenda
 const _RX_ITEM_PECAS=/\b(filtro|[oó]leo|lubrif|graxa|rolamento|correia|pneu|c[aâ]mara|parafuso|porca|arruela|mangueira|bico|pastilha|lona|freio|bateria|l[aâ]mpada|farol|retentor|junta|veda[cç]|bomba|pist[aã]o|cilindro|embreagem|disco|haste|mola|pino|bucha|eixo|engrenagem|rolo|corrente|faca|navalha|l[aâ]mina|dente|ponteira|enxada|servi[cç]o|m[aã]o de obra|revis|hora t[eé]cnica|conserto|reparo|manuten|solda|torno|frete|deslocamento|diesel|arla|gasolina|hidr[aá]ulic|terminal|cabo|rel[eé]|fus[ií]vel|sensor|v[aá]lvula|radiador|turbina|injetor|pist[aã]o|cubo|roda|aro)\b/i;
 const _RX_CFOP_SERV=/^(5933|6933|5915|6915|5916|6916|5949|6949)$/;
-function nfeTipoMaqGuess(xprod){ const x=String(xprod||''); if(/pneu|c[aâ]mara/i.test(x)) return 'Pneu'; if(/filtro|elemento/i.test(x)) return 'Peça'; if(/[oó]leo|lubrif|graxa|fluido|arla/i.test(x)) return /arla|diesel/i.test(x)?'Combustível':'Óleo/lubrificante'; if(/diesel|gasolina|etanol|combust/i.test(x)) return 'Combustível'; if(/frete|deslocamento/i.test(x)) return 'Frete'; if(/servi[cç]o|m[aã]o de obra|revis|hora t[eé]cnica|conserto|reparo|manuten|solda|torno/i.test(x)) return 'Serviço/mão de obra'; return 'Peça'; }
+function nfeTipoMaqGuess(xprod){ const x=String(xprod||''); if(/pneu|c[aâ]mara/i.test(x)) return 'Pneu'; if(/filtro|elemento/i.test(x)) return 'Peça'; if(/[oó]leo|lubrif|graxa|fluido|arla|\b\d{1,2}w-?\d{2}\b|\bsae\b|hidr[aá]ulic|\b(ambra|lubrax|mobil|castrol|shell|ipiranga)\b/i.test(x)) return /arla|diesel/i.test(x)?'Combustível':'Óleo/lubrificante'; if(/diesel|gasolina|etanol|combust/i.test(x)) return 'Combustível'; if(/frete|deslocamento/i.test(x)) return 'Frete'; if(/servi[cç]o|m[aã]o de obra|revis|hora t[eé]cnica|conserto|reparo|manuten|solda|torno/i.test(x)) return 'Serviço/mão de obra'; return 'Peça'; }
 // a nota parece de peças/serviços? pelo fornecedor (nome ou memória), pelos itens e pelo CFOP
 function nfeDetectaPecas(n){ const cnpj=n.cnpj||'', mem=Object.values(Object.assign({}, (DATA&&DATA.depara_nfe)||{}, deparaLocal())).filter(d=>d.cnpj===cnpj);
   const fornMem=mem.length&&mem.filter(d=>nfeDestManut(d.destino)).length>mem.filter(d=>!nfeDestManut(d.destino)&&d.produto).length;
   const forn=_RX_FORN_PECAS.test(n.fornecedor||'')||fornMem;
-  const itens=(n.itens||[]).map(it=>{ const x=it.xprod||''; return _RX_ITEM_OFIC.test(x)?'oficina':_RX_ITEM_BENF.test(x)?'benfeitoria':(_RX_ITEM_PECAS.test(x)||_RX_CFOP_SERV.test(String(it.cfop||'')))?'maquina':''; });   // v285: destino sugerido por item
+  const itens=(n.itens||[]).map(it=>{ const x=it.xprod||'', pc=nfeDestPorCfop(it), tc=nfeTipoCfop(it.cfop);   // v307: diesel/Arla → tanque; CFOP de combustível, ativo ou conserto manda antes da descrição ("grade aradora" não é cerca)
+    if(_RX_TANQ.test(x)) return 'tanque'; if(pc && tc!=='CONSUMO') return pc;
+    return _RX_ITEM_OFIC.test(x)?'oficina':_RX_ITEM_BENF.test(x)?'benfeitoria':(_RX_ITEM_PECAS.test(x)||_RX_CFOP_SERV.test(String(it.cfop||'')))?'maquina':pc; });   // v285: destino sugerido por item
   const nItem=itens.filter(Boolean).length, nota=forn||(n.itens&&n.itens.length&&nItem>=Math.ceil(n.itens.length/2));
   return {nota, forn, itens, nItem}; }
 // última máquina usada com este fornecedor (memória do de-para)
@@ -5000,6 +5036,7 @@ document.addEventListener('input',e=>{ if(e.target.id!=='nfe-q') return; NFE_UI.
 function nfeCustoItem(imp,i){ if(imp.nota.tipo==='REMESSA'){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref), it=c&&c.itens.find(x=>x.produto===i.produto);
     if(it && it.custo>0) return it.custo; }
   return nfeCustoReal(i,i.fator); }
+function itensEstoque(imp){ return (imp.itens||[]).filter(i=>!i.ignorar&&!nfeDestManut(i.dest)&&i.produto).length; }   // v307
 function nfeItensPayload(imp){ return imp.itens.map(i=>{ const mq=!i.ignorar&&nfeDestManut(i.dest); return {n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:(i.ignorar||mq)?'':i.produto, fator:mq?1:(+i.fator||1),
   qtd:(i.ignorar||mq)?0:+((+i.qcom||0)*(+i.fator||0)).toFixed(4), un:mq?'':((PROD[i.produto]||{}).un||''), custo:(i.ignorar||mq)?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar,
   dest:mq?i.dest:'estoque', maq:mq?(i.dest==='oficina'?'Oficina':String(i.maq||'').trim()):'', tipoMaq:mq?(i.tipoMaq||nfeTiposDe(i.dest)[0]):'', valor:mq?nfeItemValor(i):0}; }); }   // v276/v285: dest/maq/tipoMaq/valor
@@ -5019,7 +5056,7 @@ function nfeConfirmar(modo){
   if(!imp.itens.every(nfeResolvido)){ toast('Resolva todos os itens (produto do app e fator, ou Ignorar)'); return; }
   if(imp.reclass && modo!=='entrada'){ toast('Reclassificar só regrava a entrada'); return; }
   const ja=imp.reclass?'':nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
-  if(n.tipo==='OUTRA' && !confirm(`Esta nota não é de venda nem de remessa (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}).\nEx.: bonificação, devolução, remessa para conserto.\n\nContinuar mesmo assim?`)) return;
+  { const I=NFE_TIPO_INFO[n.tipo]; if(I && !I.entra && n.tipo!=='FATURAMENTO' && itensEstoque(imp) && !confirm(`Esta nota é "${NFE_TIPO[n.tipo]||n.tipo}" (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}): normalmente não entra no estoque de insumos.\n\nTem ${itensEstoque(imp)} item(ns) marcado(s) para o estoque. Continuar mesmo assim?`)) return; }   // v307
   const itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&!nfeDestManut(i.dest)&&i.produto), manut=itensP.filter(i=>!i.ignorar&&nfeDestManut(i.dest));   // v276/v285
   if(!usados.length&&!manut.length){ toast('Todos os itens estão marcados como Ignorar — nada a registrar'); return; }
   if(manut.length&&!srv){ toast('Apropriações (máquina, oficina, benfeitoria) precisam da NF-e ligada à planilha (token + Code.gs novo)'); return; }
@@ -5097,8 +5134,8 @@ function nfeConferirHtml(){
   const aviso = (n.tipo==='FATURAMENTO' && srv)?`<div class="nfe-aviso info">📑 <b>Faturamento de entrega futura</b> — CFOP ${esc(cfops)}. Vira um <b>contrato</b>: os produtos ficam "a entregar" e baixam conforme chegam as notas de <b>remessa</b>. Não entra no estoque agora.</div>`
     : n.tipo==='REMESSA' && srv ? nfeRemessaHtml(imp)
     : fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
-    : n.tipo==='OUTRA'?`<div class="nfe-aviso warn">⚠️ <b>Outra operação</b> (CFOP ${esc(cfops)}) — não é venda nem remessa (ex.: bonificação, devolução, conserto). Confira se deve mesmo entrar no estoque.</div>`
-    : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`:'';
+    : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`
+    : nfeTipoAvisoHtml(n);   // v307: um aviso por tipo de CFOP (combustível, ativo, energia, devolução…)
   const reclass=imp.reclass?`<div class="nfe-aviso warn">♻️ <b>Reclassificando</b> — esta nota já deu entrada${imp.reclass.data?` em <b>${esc(fmtDataBR(imp.reclass.data))}</b>`:''}. Corrija o produto ou o <b>fator</b> e confirme: a entrada anterior é <b>substituída</b> (estoque, razão e de-para) — nada duplica.</div>`:'';
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
   const det=nfeDetectaPecas(n), nMaq=imp.itens.filter(i=>nfeDestManut(i.dest)&&!i.ignorar).length, maqAll=nfeMaqUltima(n.cnpj), benfAll=nfeBenfUltima(n.cnpj);   // v276/v285
@@ -5113,7 +5150,7 @@ function nfeConferirHtml(){
     const extras=[it.vdesc?`desc. −${brl(it.vdesc)}`:'', it.vfrete?`frete ${brl(it.vfrete)}`:'', it.voutro?`outras ${brl(it.voutro)}`:'', it.vipi?`IPI ${brl(it.vipi)}`:'', it.vst?`ICMS-ST ${brl(it.vst)}`:''].filter(Boolean).join(' · ');
     return `<div class="nfe-it st-${st}">
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
-      <div class="nfe-it-sub">cód. ${esc(it.cprod)} · CFOP ${esc(it.cfop)} · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
+      <div class="nfe-it-sub">cód. ${esc(it.cprod)} · <span title="${esc(nfeCfopNome(it.cfop))}">CFOP ${esc(it.cfop)}${nfeCfopNome(it.cfop)?` <span class="mut">(${esc(nfeCfopNome(it.cfop))})</span>`:''}</span> · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
       ${it.ignorar?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${!nfeDestManut(it.dest)?' checked':''}> 📦 Insumo (estoque)</label>${Object.keys(NFE_DEST).map(k=>`<label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="${k}"${it.dest===k?' checked':''}> ${NFE_DEST[k].ico} ${NFE_DEST[k].lbl}</label>`).join('')}</div>`}
       ${it.ignorar?'':nfeDestManut(it.dest)?`<div class="nfe-it-map nfe-it-maq">
         ${it.dest==='maquina'?`<label class="nfe-prod">Máquina ou bem<input list="maqlist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="trator, pulverizador, caminhonete, outro bem…"></label>`
@@ -5138,7 +5175,7 @@ function nfeConferirHtml(){
       ${(()=>{ const pr=nfeProdutorTxt(n.dest, n.destNome); return `<div${pr.fora?' class="nfe-fora"':''}><small>Produtor (destinatário)</small><b>👤 ${esc(pr.nome)}</b><span>${esc(pr.doc)}${pr.fora?' · <b>fora da lista de produtores</b>':''}</span></div>`; })()}
       <div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
       <div><small>Valor da nota</small><b>${brl(n.vNF)}</b><span>${n.itens.length} item(ns)</span></div>
-      <div><small>Tipo (CFOP)</small><b class="nfe-tipo t-${n.tipo}">${esc(NFE_TIPO[n.tipo])}</b><span>CFOP ${esc(cfops)}</span></div>
+      <div><small>Tipo (CFOP)</small><b class="nfe-tipo t-${n.tipo}">${esc(NFE_TIPO[n.tipo]||n.tipo)}</b><span title="${esc(nfeCfopsTxt(n.itens))}">CFOP ${esc(cfops)}</span></div>
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>

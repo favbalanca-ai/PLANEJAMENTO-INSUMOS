@@ -755,9 +755,14 @@ function _xfirst(el, name){ if (!el) return null; var k = el.getChildren();
   for (var j = 0; j < k.length; j++){ var r = _xfirst(k[j], name); if (r) return r; } return null; }
 function _xall(el, name, out){ out = out || []; if (!el) return out; el.getChildren().forEach(function(c){ if (c.getName() === name) out.push(c); else _xall(c, name, out); }); return out; }
 function _xt(el, name){ var x = _xfirst(el, name); return x ? S(x.getText()) : ''; }
-function nfeTipoCfopGs_(cfop){ var c = S(cfop).replace(/\D/g,''), f = c.slice(1);
-  if (/^[567]\d{3}$/.test(c)){ if (f === '922') return 'FATURAMENTO'; if (f === '116' || f === '117') return 'REMESSA'; if (/^1(0[1-9]|1[0-9]|2[0-4])$/.test(f)) return 'VENDA'; }
+// v307: MESMA tabela do app (CFOP_TAB em app.js) — 3 últimos dígitos, para 1/2/3 (entrada) e 5/6/7 (saída)
+var CFOP_TAB_ = [[/^(10[1-9]|11[0-5]|11[89]|12[0-5]|40[1-5])$/,'VENDA'],[/^922$/,'FATURAMENTO'],[/^11[67]$/,'REMESSA'],[/^(65[1-9]|66[0-7])$/,'COMBUSTIVEL'],[/^55[1-5]$/,'ATIVO'],[/^55[67]$/,'CONSUMO'],
+  [/^91[01]$/,'BONIFICACAO'],[/^91[23]$/,'DEMONSTRACAO'],[/^(91[56]|933)$/,'CONSERTO'],[/^(90[1-3]|92[45])$/,'INDUSTRIALIZACAO'],[/^(20[1-9]|210|41[0-3])$/,'DEVOLUCAO'],[/^25[1-8]$/,'ENERGIA'],[/^(30[1-7]|35[1-9]|360)$/,'SERVICO'],[/^(91[7-9]|92[01])$/,'VASILHAME']];
+var NFE_TIPO_ORD_ = ['FATURAMENTO','REMESSA','VENDA','COMBUSTIVEL','ATIVO','CONSUMO','BONIFICACAO','INDUSTRIALIZACAO','CONSERTO','DEVOLUCAO','DEMONSTRACAO','VASILHAME','ENERGIA','SERVICO'];
+function nfeTipoCfopGs_(cfop){ var c = S(cfop).replace(/\D/g,''); if (!/^[1-7]\d{3}$/.test(c)) return 'OUTRA'; var f = c.slice(1);
+  for (var i = 0; i < CFOP_TAB_.length; i++) if (CFOP_TAB_[i][0].test(f)) return CFOP_TAB_[i][1];
   return 'OUTRA'; }
+function nfeTipoNotaGs_(tipos){ for (var i = 0; i < NFE_TIPO_ORD_.length; i++) if (tipos.indexOf(NFE_TIPO_ORD_[i]) >= 0) return NFE_TIPO_ORD_[i]; return 'OUTRA'; }
 // v304: o arquivo não é NF-e de produto — diz O QUE ele é, para a pessoa entender por que não entrou
 function nfeTipoOutro_(root){ var rn = S(root.getName()), tem = function(n){ return rn === n || !!_xfirst(root, n); };
   if (tem('infCte') || tem('infCTe') || /^cte/i.test(rn)) return 'CT-e (conhecimento de frete) — o app só trata NF-e de produto';
@@ -778,7 +783,7 @@ function nfeLerGs_(txt){
   var prot = _xfirst(root, 'infProt'), ide = _xfirst(inf,'ide'), emit = _xfirst(inf,'emit'), dest = _xfirst(inf,'dest');
   var dets = _xall(inf,'det'), tipos = dets.map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
   var cfops = dets.map(function(d){ return S(_xt(d,'CFOP')); }), xprods = dets.map(function(d){ return S(_xt(d,'xProd')); });   // v288
-  var tipo = tipos.indexOf('FATURAMENTO')>=0 ? 'FATURAMENTO' : tipos.indexOf('REMESSA')>=0 ? 'REMESSA' : tipos.indexOf('VENDA')>=0 ? 'VENDA' : 'OUTRA';
+  var tipo = nfeTipoNotaGs_(tipos);   // v307
   var idAttr = inf.getAttribute('Id');
   return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
     nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
@@ -1568,10 +1573,11 @@ function nfeIaClassificar_(chave, forcar){
       candidatos:c.map(function(p){ return p.produto + ' [' + S(p.un) + (p.classe ? ' · ' + p.classe : '') + ']'; }),
       memoria:m ? { destino:m.destino || (m.ignorar ? 'ignorar' : 'estoque'), produto:m.produto || '', fator:m.fator, maquina:m.maquina || '', tipoGasto:m.tipoGasto || '' } : null }; });
   var dados = { fornecedor:n.fornecedor, cnpj_emitente:n.cnpj, destinatario:n.destNome, doc_destinatario:n.dest, emitente_e_produtor_da_fazenda:ehProdutor, destinatario_e_produtor_da_fazenda:destProdutor,
-    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, itens:linhas, maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
+    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, tipo_pelo_cfop:n.tipo, itens:linhas, maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
   var system = 'Você classifica notas fiscais (NF-e) de uma fazenda de grãos no Brasil para um sistema de estoque e contabilidade. Responda SOMENTE com JSON válido, sem comentários nem markdown.\n' +
     'Regras: tipo = compra_insumo (insumo agrícola: sementes, fertilizantes, defensivos, corretivos, adjuvantes), venda (a fazenda vende sua produção: soja, milho, feijão, laranja etc.; a nota pode ser emitida pelo produtor ou ser contranota de ENTRADA do comprador), pecas (peça, pneu, óleo, filtro ou serviço de uma máquina), oficina (ferramenta, consumível, EPI de uso geral), benfeitoria (material de construção, cerca, elétrica, hidráulica, obra), servico (serviço sem máquina), outra.\n' +
     'Por item: destino = estoque (insumo que entra no estoque; escolha "produto" EXATAMENTE como um dos candidatos, ou deixe vazio se nenhum candidato for o mesmo produto), maquina (informe "maquina" com um nome da lista maquinas_da_fazenda quando der; "tipoGasto" entre Peça, Pneu, Óleo/lubrificante, Serviço/mão de obra, Combustível, Frete, Outro), oficina ("tipoGasto" entre Ferramenta, Consumível, EPI, Outro), benfeitoria ("maquina" = nome da benfeitoria, reaproveite benfeitorias_ja_usadas quando for a mesma; "tipoGasto" entre Construção, Reforma, Elétrica, Hidráulica, Outro), tanque (óleo diesel, Arla 32 ou outro combustível a granel para o tanque da fazenda; "tipoGasto" Combustível ou Arla 32), ignorar (palete, embalagem, brinde, frete destacado).\n' +
+    'tipo_pelo_cfop é a leitura do CFOP: COMBUSTIVEL = diesel/Arla vão para destino tanque e óleo/graxa para maquina; ATIVO ou CONSERTO = maquina; CONSUMO = oficina; ENERGIA, SERVICO, VASILHAME ou DEMONSTRACAO = ignorar (não é compra de insumo); DEVOLUCAO = confira pela descrição.\n' +
     'fator = quantas unidades do produto do app existem em 1 unidade da nota (ex.: caixa com 10 litros e produto em L → 10; saco de 25 kg e produto em kg → 25; mesma unidade → 1). Se houver "memoria" no item, siga-a salvo erro evidente.\n' +
     'Se tipo = venda, informe "cultura" (uma das culturas) e nos itens use destino "estoque" com produto vazio. confianca de 0 a 1 por item e para a nota; abaixo de 0.75 a pessoa vai conferir.\n' +
     'Formato: {"tipo":"","categoria":"Insumos|Manutenção|Benfeitorias|Venda de grãos|Serviços|Outros","cultura":"","confianca":0.0,"motivo":"frase curta em português","itens":[{"n":1,"destino":"","produto":"","fator":1,"maquina":"","tipoGasto":"","confianca":0.0}]}';
