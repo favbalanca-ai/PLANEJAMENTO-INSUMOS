@@ -71,6 +71,20 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão do Administrativo, fase 1 (v308)** — correções pequenas achadas na revisão do módulo:
+  (1) módulo Máquinas liberável para operadores (`MODULOS_APP` no Code.gs estava sem `maquinas`); (2) toque duplo em
+  "Registrar baixa" não grava duas vezes (id nasce ao abrir o formulário + trava `_bxBusy` + botão desabilitado);
+  (3) "Notas do mês" do fechamento contava zero (filtro por `docTipo` "NF-e"; agora chave de 44 dígitos ou
+  "1 - Nota fiscal"); (4) excluir uma baixa feita pela conciliação solta a linha do EXTRATO BANCO (volta a PENDENTE);
+  (5) gravar o WhatsApp das etiquetas limpa o cache da CONFIG APP (o número antigo voltava por 6 h); (6) Receber nota
+  com trava contra toque duplo (`REC.enviando`) e "Quem conferiu" já vem com o usuário logado; (7) de-para: cópia local
+  já enviada é descartada quando a planilha tem a chave — a planilha vence; (8) a IA não recebe mais o CPF do
+  produtor; fator que a IA não informou vem 0 e o app aplica a regra de embalagem, e fator que diverge >25 % da regra
+  fica amarelo; (9) "Aprovar todas" espera a venda gravar e não marca como pronta remessa (contrato) nem tipo que não
+  entra com item para o estoque (`trava` no cartão); (10) fila de NF-e: recusa definitiva da planilha sai da fila com
+  o motivo no toast (`nfeErroPermanente`), só rede/"ocupada" reenvia; (11) remessa de contrato não abate o "em pedido"
+  de novo; (12) Cadastros só para ADMIN quando há login, link "registrar compra" só com acesso, teclado numérico em
+  Inicial/Em pedido; login com mensagem única (não revela logins).
 - **Tabela de CFOP na conferência (v307)** — o tipo da nota passa a ser decidido pelos 3 últimos dígitos do CFOP
   (`CFOP_TAB`, igual no Code.gs): além de venda, faturamento e remessa, agora há compra de combustível/lubrificante,
   bem do ativo, uso e consumo, bonificação, demonstração, conserto/serviço, industrialização, devolução, energia,
