@@ -115,6 +115,11 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 
 ## Permissões (appsscript.json)
 
+- v305: `autorizarPermissoes` explica a falha. Se o Google ainda não perguntou pelas permissões declaradas, imprime o
+  **link de autorização** (`ScriptApp.getAuthorizationInfo`) para abrir e aceitar todas as caixinhas. Se já concedeu
+  tudo o que o manifesto declara e internet/Gmail falharam, o manifesto está sem esses escopos: colar o
+  `sync/appsscript.json` e rodar de novo.
+
 O manifesto `sync/appsscript.json` lista **todas** as permissões que o `Code.gs` usa (planilha, Drive, internet para
 a IA e a planilha da balança, Gmail/e-mail para capturar notas e enviar o fechamento, gatilhos). Se o projeto do Apps
 Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Google **não pede** as permissões novas e

@@ -2483,8 +2483,17 @@ function autorizarPermissoes(){
   try { UrlFetchApp.fetch('https://www.google.com/generate_204', { muteHttpExceptions:true }); ok.push('internet: ok'); } catch (e) { ok.push('internet: ' + e); }
   try { GmailApp.getUserLabelByName('NFE-OK'); ok.push('gmail: ok'); } catch (e) { ok.push('gmail: ' + e); }
   ok.push('gatilhos: ' + ScriptApp.getProjectTriggers().length);
+  // v305: diz POR QUE internet/gmail falharam e dá o link de autorização completo
+  var falhou = ok.some(function(l){ return /^(internet|gmail): .*(Exception|permiss)/i.test(l); });
+  try { var ai = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL);
+    if (ai.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED)
+      ok.push('FALTA AUTORIZAR: abra o link abaixo no navegador, entre com a conta dona da planilha e aceite TODAS as caixinhas. Depois rode esta função de novo.\n' + ai.getAuthorizationUrl());
+    else if (falhou)
+      ok.push('O Google já concedeu tudo o que o appsscript.json pede — então o appsscript.json NÃO tem as permissões de internet/Gmail. Em ⚙️ Configurações do projeto marque "Mostrar o arquivo de manifesto appsscript.json", cole o arquivo sync/appsscript.json do repositório, salve e rode de novo.');
+    else ok.push('autorização: completa');
+  } catch (e) { ok.push('autorização: ' + e); }
   Logger.log(ok.join('\n'));
-  return 'Permissões concedidas — ' + ok.join(' · ');
+  return 'Permissões — ' + ok.join(' · ');
 }
 
 function doGet(e){
