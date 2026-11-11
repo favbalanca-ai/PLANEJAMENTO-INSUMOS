@@ -918,6 +918,7 @@ function processarXmlNfe(txt, origem){
     var obs = (st === 'RECEBIDA' || st === 'RECEBIDA SEM XML') ? '⚠ CANCELADA DEPOIS DA ENTRADA NO ESTOQUE — conferir com o fornecedor e ajustar o estoque' : 'cancelada pelo emitente em ' + n.data;
     _setCells_(t, rc, { 'STATUS':'CANCELADA', 'OBS':obs });
     try { finCancelaTitulos_(n.chave, 'nota cancelada pelo emitente'); } catch (e) {}   // v273: títulos em aberto da nota
+    try { abastDaNotaApaga_(n.chave); } catch (e) {}   // v309: diesel/Arla que esta nota pôs no tanque
     var refC = S(t.s.getRange(rc, t.col('CHAVE REFERENCIADA') + 1).getValue()); if (refC) _atualizaContrato_(refC);   // remessa cancelada devolve o saldo ao contrato
     return { status:'cancelada', chave:n.chave, alerta:(st === 'RECEBIDA' || st === 'RECEBIDA SEM XML') };
   }
@@ -938,8 +939,9 @@ function processarXmlNfe(txt, origem){
   if (vendaProd){ vals['TIPO'] = 'VENDA PRODUTOR'; vals['PRODUTOR'] = emitProd ? n.cnpj : n.dest; vals['CNPJ EMITENTE'] = emitProd ? n.dest : n.cnpj; vals['FORNECEDOR'] = emitProd ? n.destNome : n.fornecedor; }   // FORNECEDOR/CNPJ = comprador
   var stRow = row ? S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase() : '';
   if (row && stRow === 'RECEBIDA SEM XML'){            // caminhão chegou antes do XML: a nota casa sozinha com o recebimento
-    vals['STATUS'] = 'RECEBIDA'; vals['OBS'] = 'XML chegou depois do recebimento na fazenda — conferir de-para e custo';
+    vals['STATUS'] = 'RECEBIDA'; vals['OBS'] = '⚠ XML chegou depois do recebimento na fazenda — conferir produto, fator e custo (Reclassificar)';
     _setCells_(t, row, vals); if (n.ref) _atualizaContrato_(n.ref);
+    try { finTitulosDaNota_(n.chave, null, null, ''); } catch (e) { Logger.log('títulos (casada) ' + n.chave + ': ' + e); }   // v309: a nota recebida sem XML ganha os títulos a pagar
     return { status:'casada', chave:n.chave, motivo:vals['OBS'] }; }
   if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
   else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
@@ -1048,8 +1050,18 @@ function nfeReabrir_(r){
   try { nfeRepararChaves_(); } catch (e) {}
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(r && r.chave)); if (!row) return { rows:0, erro:'nota não encontrada' };
   var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
-  if (st !== 'IGNORADA') return { rows:0, erro:'a nota está ' + (st || 'sem status') + ', não IGNORADA' };
-  var obs = S(t.s.getRange(row, t.col('OBS') + 1).getValue());
+  var podeForcar = r && r.forcar && (st === 'EM TRÂNSITO' || st === 'A ENTREGAR');   // v309: classificada errada antes de chegar
+  if (st !== 'IGNORADA' && !podeForcar) return { rows:0, erro:'a nota está ' + (st || 'sem status') + ' — só IGNORADA, EM TRÂNSITO ou A ENTREGAR podem ser reabertas' };
+  var obs = S(t.s.getRange(row, t.col('OBS') + 1).getValue()), chave = S(r.chave);
+  if (podeForcar){   // desfaz o que a classificação criou: itens, títulos em aberto, apropriações, entrada no razão, contrato
+    try { var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2); _delLinhas_(s, apagar); } } catch (e) {}
+    try { finCancelaTitulos_(chave, 'nota reaberta'); } catch (e) {}
+    try { if (sh(MANUT_SHEET)) manutGrava_(chave, [], {}); } catch (e) {}
+    try { movDeleteBySources_([chave]); } catch (e) {}
+    var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue());
+    _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'OBS':'reaberta no app (estava ' + st.toLowerCase() + ')' + (obs ? ' · antes: ' + obs : '') });
+    try { if (st === 'A ENTREGAR') _atualizaContrato_(chave); else if (ref) _atualizaContrato_(ref); } catch (e) {}
+    return { rows:1 }; }
   _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'OBS':'reaberta no app' + (obs ? ' (antes: ' + obs + ')' : '') });
   return { rows:1 };
 }
@@ -1074,6 +1086,10 @@ function nfeLista_(status){
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
   return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign };
 }
+// v309: entradas no tanque feitas por uma NF-e (id abnf:<chave>:<item>) marcadas como apagadas
+function abastDaNotaApaga_(chave){ if (!sh(ABAST_SHEET)) return 0; var m = readMapApp(ABAST_SHEET), out = {}, n = 0, u = Date.now();
+  Object.keys(m).forEach(function(k){ var a = m[k]; if (a && !a.del && String(a.id || k).indexOf('abnf:' + chave + ':') === 0){ var c = {}; for (var x in a) c[x] = a[x]; c.del = true; c._u = u; out[k] = c; n++; } });
+  if (n) writeMapApp(ABAST_SHEET, out); return n; }
 function nfeUma_(chave){
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(chave)); if (!row) return { ok:false, erro:'nota não encontrada' };
   var o = _rowObj(t, t.s.getRange(row,1,1,t.ncol).getValues()[0]), id = S(o[_hkey('FILE ID')]);
@@ -1087,8 +1103,11 @@ function nfeClassifica_(c){
   if (atual === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
   // fase 3: EM TRÂNSITO (venda/remessa) · A ENTREGAR (faturamento = contrato) · RECEBIDA (entrada direta) · IGNORADA
   var st = S(c.status || 'RECEBIDA').toUpperCase(), agora = new Date(), vals = { 'STATUS':st, 'CLASSIFICADA EM':agora };
-  if (st === 'RECEBIDA'){ vals['RECEBIDA EM'] = c.data ? new Date(S(c.data).slice(0,10) + 'T12:00:00') : agora; vals['RECEBIDA POR'] = S(c.por) || 'app'; }
-  if (c.ref != null) vals['CHAVE REFERENCIADA'] = S(c.ref);            // remessa → contrato (faturamento)
+  // v309: nota já recebida na fazenda não volta para "em trânsito"/"a entregar" por um envio atrasado de outro aparelho
+  if ((atual === 'RECEBIDA' || atual === 'RECEBIDA SEM XML') && (st === 'EM TRÂNSITO' || st === 'A ENTREGAR') && !c.forcar) return { rows:0, erro:'nota já recebida na fazenda — não volta para ' + st.toLowerCase() };
+  var jaRecebida = atual === 'RECEBIDA' && !!c.reclass;   // v309: reclassificar mantém quem/quando recebeu
+  if (st === 'RECEBIDA' && !jaRecebida){ vals['RECEBIDA EM'] = c.data ? new Date(S(c.data).slice(0,10) + 'T12:00:00') : agora; vals['RECEBIDA POR'] = S(c.por) || 'app'; }
+  if (S(c.ref)) vals['CHAVE REFERENCIADA'] = S(c.ref);            // remessa → contrato (faturamento) · v309: vazio nunca apaga a referência que veio do XML
   if (c.obs) vals['OBS'] = S(c.obs);
   _setCells_(t, row, vals);
   var n = 0;
@@ -1109,9 +1128,10 @@ function nfeClassifica_(c){
   // contrato afetado: o próprio (faturamento) ou o da remessa
   var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue());
   if (st === 'A ENTREGAR') _atualizaContrato_(S(c.chave)); else if (ref) _atualizaContrato_(ref);
-  try { if (['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0) finTitulosDaNota_(S(c.chave), c.dups, c.pag, S(c.categoria)); else if (st === 'IGNORADA') finCancelaTitulos_(S(c.chave), 'nota ignorada'); }   // v273 (v276: categoria Manutenção)
+  try { if (['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0) finTitulosDaNota_(S(c.chave), c.dups, c.pag, S(c.categoria)); else if (st === 'IGNORADA'){ finCancelaTitulos_(S(c.chave), 'nota ignorada'); try { movDeleteBySources_([S(c.chave)]); } catch (e2) {} } }   // v273 (v276: categoria Manutenção) · v309: ignorar tira a entrada do razão
   catch (e) { Logger.log('títulos da nota ' + c.chave + ': ' + e); }
-  return { rows:n + 1 };
+  var ne = 0; if (c.entrada && S(c.entrada.id)) try { ne = (writeCompraApp(c.entrada) || {}).rows || 0; } catch (e) { Logger.log('entrada da nota ' + c.chave + ': ' + e); }   // v309: entrada no razão no mesmo pedido
+  return { rows:n + 1 + ne };
 }
 // ---- FASE 3: entrega futura (contratos = notas de FATURAMENTO) ----
 var _LER_MEMO_ = null;   // memória de leituras durante UMA montagem da parte APP (só leitura, nada grava no meio)
@@ -1174,7 +1194,7 @@ function nfeChave_(chave){
   var o = {}; var r = t.s.getRange(row,1,1,t.ncol).getValues()[0]; NFE_IDX_COLS.forEach(function(h){ o[h] = r[t.col(h)]; });
   var itens = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; }).map(function(i){
     return { n:S(i['Nº ITEM']), cprod:S(i['CPROD']), xprod:S(i['XPROD']), ucom:S(i['UCOM']), qcom:N(i['QCOM']), produto:S(i['PRODUTO APP']), fator:N(i['FATOR']) || 1,
-      qtd:N(i['QTD APP']), un:S(i['UN APP']), custo:N(i['CUSTO UNIT. REAL']), ignorar:!!S(i['IGNORAR']), recebida:S(i['QTD RECEBIDA']) === '' ? null : N(i['QTD RECEBIDA']) }; });
+      qtd:N(i['QTD APP']), un:S(i['UN APP']), custo:N(i['CUSTO UNIT. REAL']), ignorar:!!S(i['IGNORAR']), recebida:S(i['QTD RECEBIDA']) === '' ? null : N(i['QTD RECEBIDA']), maquina:S(i['MÁQUINA']) }; });   // v309: maquina (tanque) p/ o recebimento
   return { ok:true, encontrada:true, nota:{ chave:chave, status:S(o['STATUS']).toUpperCase(), tipo:S(o['TIPO']), fornecedor:S(o['FORNECEDOR']), cnpj:S(o['CNPJ EMITENTE']),
     nNF:S(o['Nº']), serie:S(o['SÉRIE']), emissao:_fmtD(o['EMISSÃO']), valor:N(o['VALOR']), ref:S(o['CHAVE REFERENCIADA']), obs:S(o['OBS']),
     recebida:_fmtD(o['RECEBIDA EM']), recebidaPor:S(o['RECEBIDA POR']), temXml:!!S(o['FILE ID']) }, itens:itens };
@@ -1182,7 +1202,10 @@ function nfeChave_(chave){
 // recebimento conferido: status RECEBIDA, QTD RECEBIDA por item e (fase 5) pendências. Sem XML: cria a nota
 // "RECEBIDA SEM XML" com os dados da própria chave e os itens informados; quando o XML chegar, casa sozinho.
 // A ENTRADA no estoque vai pelo __entrada normal do app (id = chave) — reenviar não duplica.
-function nfeRecebimento_(r){
+function nfeRecebimento_(r){ var out = nfeRecebimentoGrava_(r);
+  if (!out.erro && r && r.entrada && S(r.entrada.id)) try { out.rows += (writeCompraApp(r.entrada) || {}).rows || 0; } catch (e) { Logger.log('entrada do recebimento ' + r.chave + ': ' + e); }   // v309: entrada no razão no mesmo pedido
+  return out; }
+function nfeRecebimentoGrava_(r){
   var chave = S(r.chave); if (!/^\d{44}$/.test(chave)) return { rows:0, erro:'chave inválida' };
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave), agora = new Date();
   var quando = r.data ? new Date(S(r.data).slice(0,10) + 'T12:00:00') : agora;
@@ -1196,6 +1219,7 @@ function nfeRecebimento_(r){
     var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
     if (st === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
     if (['EM TRÂNSITO','RECEBIDA','RECEBIDA SEM XML'].indexOf(st) < 0) return { rows:0, erro:'nota ' + st.toLowerCase() + ' — não pode ser recebida' };
+    if (st === 'RECEBIDA' && !r.refazer && !r.semXml) return { rows:0, erro:'nota já recebida na fazenda (' + _fmtD(t.s.getRange(row, t.col('RECEBIDA EM') + 1).getValue()) + ')' };   // v309: reenvio atrasado não sobrescreve quem recebeu
     if (st === 'EM TRÂNSITO') t.s.getRange(row, t.col('STATUS') + 1).setValue('RECEBIDA');
   }
   _setCells_(t, row, { 'RECEBIDA EM':quando, 'RECEBIDA POR':S(r.por) || 'app' });
@@ -1465,7 +1489,9 @@ function nfeVenda_(p, acc){
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return { rows:0, erro:'nota não encontrada' };
   var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase(); if (st === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
   var agora = new Date();
-  if (p.desfazer){ _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'TIPO':S(p.tipo) || 'OUTRA', 'OBS':'não é venda — voltou para compra' }); vendasGrava_(chave, [], {}); finCancelaTitulos_(chave, 'venda desfeita'); return { rows:1 }; }
+  if (p.desfazer){ var vd = { 'STATUS':'A CLASSIFICAR', 'TIPO':S(p.tipo) || 'OUTRA', 'OBS':'não é venda — voltou para compra' };
+    try { var fid = S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()); if (fid){ var nx = nfeLerGs_(_blobTxt(DriveApp.getFileById(fid).getBlob())); if (nx && !nx.erro){ vd['PRODUTOR'] = nx.dest; vd['CNPJ EMITENTE'] = nx.cnpj; vd['FORNECEDOR'] = nx.fornecedor; if (!S(p.tipo)) vd['TIPO'] = nx.tipo || 'OUTRA'; } } } catch (e) { Logger.log('desfazer venda ' + chave + ': ' + e); }   // v309: a linha volta a ser do fornecedor de verdade
+    _setCells_(t, row, vd); vendasGrava_(chave, [], {}); finCancelaTitulos_(chave, 'venda desfeita'); return { rows:1 }; }
   var vals = { 'STATUS':'VENDA', 'TIPO':'VENDA PRODUTOR', 'CLASSIFICADA EM':agora };
   if (S(p.comprador)) vals['FORNECEDOR'] = S(p.comprador); if (_doc_(p.cnpj)) vals['CNPJ EMITENTE'] = _doc_(p.cnpj); if (_doc_(p.produtor)) vals['PRODUTOR'] = _doc_(p.produtor);
   _setCells_(t, row, vals);
