@@ -2727,7 +2727,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-304';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-305';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4715,7 +4715,9 @@ function nfeDetectaPecas(n){ const cnpj=n.cnpj||'', mem=Object.values(Object.ass
 function nfeMaqUltima(cnpj){ const L=Object.values(Object.assign({}, (DATA&&DATA.depara_nfe)||{}, deparaLocal())).filter(d=>d.cnpj===cnpj&&d.destino==='maquina'&&d.maquina).sort((a,b)=>(+b._u||0)-(+a._u||0)||String(b.data||'').localeCompare(String(a.data||''))); return L.length?L[0].maquina:''; }
 // máquinas para apropriar: máquinas e implementos dos conjuntos + bens já usados na manutenção (+ "outro bem" digitável)
 function maqListaManut(){ const set=new Set(); maquinasAll().forEach(m=>{ if(m.maquina) set.add(String(m.maquina).trim()); if(m.implemento) set.add(String(m.implemento).trim()); });
-  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina) set.add(String(r.maquina).trim()); }); set.delete(''); return [...set].sort((a,b)=>a.localeCompare(b,'pt')); }
+  ((DATA&&DATA.manutencao)||[]).forEach(r=>{ if(r.maquina) set.add(String(r.maquina).trim()); });
+  try{ maqTodas().forEach(m=>{ if(m.nome) set.add(String(m.nome).trim()); }); }catch(e){}   // v305: cadastro do módulo Máquinas (MÁQUINAS APP) também entra — ex.: caminhão MB1313
+  set.delete(''); return [...set].sort((a,b)=>a.localeCompare(b,'pt')); }
 const nfeItemValor=it=>+(((+it.vprod||0)-(+it.vdesc||0)+(+it.vfrete||0)+(+it.voutro||0)+(+it.vipi||0)+(+it.vst||0)).toFixed(2));
 async function nfeImportarArquivo(file){
   // foto/câmera: nesta fase o app lê o ARQUIVO XML da nota, não o código de barras do DANFE (leitura pela câmera = fase 4)
