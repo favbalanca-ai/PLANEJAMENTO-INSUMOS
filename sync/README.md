@@ -132,6 +132,13 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Revisão do Administrativo, fase 1 (v308)
+
+- `MODULOS_APP` ganha `maquinas` (o módulo não era liberável para operador). `configAppGravar_` limpa o pacote
+  `config_app` do cache. `baixaGrava_` com `del` devolve a linha do EXTRATO BANCO a PENDENTE. IA: payload sem
+  `doc_destinatario`; `iaSaneia_` mantém `fator:0` quando a IA não informou. Login: mesma mensagem para login
+  inexistente e desativado.
+
 ## CFOP (v307)
 
 - `CFOP_TAB_` / `nfeTipoCfopGs_` / `nfeTipoNotaGs_`: mesma tabela do app (3 últimos dígitos, entrada ou saída). A

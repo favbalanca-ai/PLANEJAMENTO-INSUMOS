@@ -2730,7 +2730,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-307';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-308';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3177,7 +3177,7 @@ function navTelas(m){ return Array.from(document.querySelectorAll('#nav a[data-v
   .map(a=>({v:a.dataset.view, nome:(a.querySelector('.lbl')||a).textContent.trim()})); }
 function podeTela(v){
   if(TELAS_LIVRES.includes(v)) return true;
-  const u=sessUsuario(); if(v==='usuarios') return !!(u&&u.perfil==='ADMIN');
+  const u=sessUsuario(); if(v==='usuarios') return !!(u&&u.perfil==='ADMIN'); if(v==='cadastros') return !u || u.perfil==='ADMIN';   // v308: Cadastros é só do administrador (sem login exigido, continua aberto)
   if(!u || u.perfil==='ADMIN') return true;
   v=TELA_PAI[v]||v; const vm=VIEW_MOD[v]; const mods=u.modulos||[], t=u.telas||[];
   const daTela=(vm==='both'?(TELA_MODS[v]||[]):[vm]).filter(m=>mods.includes(m)); if(!daTela.length) return false;
@@ -4481,7 +4481,7 @@ function pushDeParaNfe(){
 }
 // ao puxar: o que a planilha já tem igual sai da memória local
 function deparaApplyPulled(map){ if(!map||typeof map!=='object') return; const L=deparaLocal(); let ch=false;
-  Object.keys(L).forEach(k=>{ const l=L[k], r=map[k]; if(l.pushed && r && (r.produto||'')===(l.produto||'') && !!r.ignorar===!!l.ignorar && Math.abs((+r.fator||1)-(+l.fator||1))<1e-6){ delete L[k]; ch=true; } });
+  Object.keys(L).forEach(k=>{ const l=L[k], r=map[k]; if(l.pushed && r){ delete L[k]; ch=true; } });   // v308: já subiu e a planilha tem a chave → a planilha vence (outro aparelho pode ter corrigido)
   if(ch) saveDeParaLocal(); }
 // ---- leitura do XML ----
 function _nx(el,tag){ if(!el) return null; const l=el.getElementsByTagNameNS('*',tag); return l.length?l[0]:null; }
@@ -4705,7 +4705,8 @@ function nfeItemInicial(nota,it){
   if(ia && +ia.confianca>=NFE_IA_MIN){
     if(ia.destino==='ignorar') return Object.assign({},it,{fonte:'ia',produto:'',ignorar:true,fator:1,ok:true,iaConf:+ia.confianca});
     if(nfeDestManut(ia.destino)) return Object.assign({},it,{fonte:'ia',produto:'',ignorar:false,fator:1,ok:true,dest:ia.destino,maq:ia.destino==='oficina'?'Oficina':(ia.maquina||nfeMaqPadrao(ia.destino,nota.cnpj)),tipoMaq:ia.tipoGasto||nfeTipoGuess(ia.destino,it.xprod),iaConf:+ia.confianca});
-    if(ia.produto&&PROD[ia.produto]) return Object.assign({},it,{fonte:'ia',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:true,iaConf:+ia.confianca}); }
+    if(ia.produto&&PROD[ia.produto]){ const fh=nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un), fi=+ia.fator>0?+ia.fator:fh, diverge=fh>0&&Math.abs(fi-fh)/fh>0.25;   // v308: fator da IA ≠ regra de embalagem → fica amarelo para a pessoa decidir
+      return Object.assign({},it,{fonte:diverge?'sug':'ia',produto:ia.produto,fator:fi,ignorar:false,ok:!diverge,iaConf:+ia.confianca}); } }
   else if(ia && ia.produto && PROD[ia.produto]) return Object.assign({},it,{fonte:'sug',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:false,iaConf:+ia.confianca});
   if(nfeIgnorarPorCfop(it)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v307: energia, frete, vasilhame, demonstração: não é compra de insumo
   const sug=sugP;
@@ -4911,7 +4912,7 @@ async function nfeAprovar(chave){ if(!nfeServerOk()){ toast('Aprovar precisa da 
     const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
     if(!nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha', {ia:d.ia||nt.ia||null})) return;
     const imp=nfeImport; if(!imp) return;
-    if(imp.venda){ if(!imp.venda.cultura){ toast('Escolha a cultura da venda'); return; } nfeVendaOk(); return; }
+    if(imp.venda){ if(!imp.venda.cultura){ toast('Escolha a cultura da venda'); return; } await nfeVendaOk(); return; }   // v308: espera gravar (Aprovar todas não para na venda)
     const pend=imp.itens.filter(i=>!nfeResolvido(i)).length; if(pend){ toast(`${pend} item(ns) precisam da sua decisão (em amarelo)`); return; }
     const n=imp.nota, itensP=nfeItensPayload(imp), soManut=itensP.every(i=>i.ignorar||nfeDestManut(i.dest));
     nfeConfirmar(n.tipo==='FATURAMENTO'?'contrato':soManut?'entrada':'transito');   // compra: em trânsito (entra no estoque quando o caminhão chegar); peças/obra: direto
@@ -4930,8 +4931,12 @@ async function nfeIaPedir(chave, forcar){ if(!nfeServerOk()) return; toast('🤖
 // resumo da classificação automática de uma nota da lista (para o cartão da caixa de entrada)
 const IA_TIPO_TXT={compra_insumo:'Compra de insumos', venda:'Venda da produção', pecas:'Peças/serviços → máquina', oficina:'Material de oficina', benfeitoria:'Benfeitoria', servico:'Serviço', outra:'Outra operação'};
 function nfeIaResumo(nt){ const ia=nt.ia; if(!ia||!Array.isArray(ia.itens)) return null; const its=ia.itens, okI=its.filter(x=>+x.confianca>=NFE_IA_MIN&&(x.destino==='ignorar'||x.destino==='oficina'||((x.destino==='maquina'||x.destino==='benfeitoria')&&x.maquina)||(x.destino==='estoque'&&(x.produto||ia.tipo==='venda')))).length;   // peça sem máquina e insumo sem produto ficam para a pessoa
-  const pronto=its.length>0&&okI===its.length&&+ia.confianca>=NFE_IA_MIN&&(ia.tipo!=='venda'||ia.cultura);
-  return {tipo:ia.tipo, tipoTxt:IA_TIPO_TXT[ia.tipo]||'Nota', cultura:ia.cultura, n:its.length, okI, pend:its.length-okI, pronto, conf:+ia.confianca||0, motivo:ia.motivo||'', categoria:ia.categoria||''}; }
+  let pronto=its.length>0&&okI===its.length&&+ia.confianca>=NFE_IA_MIN&&(ia.tipo!=='venda'||ia.cultura), trava='';
+  // v308: o que abriria uma pergunta no meio do "Aprovar" fica para a pessoa: remessa (contrato) e tipo que não entra com item para o estoque
+  const tp=String(nt.tipo||'').toUpperCase(), I=(typeof NFE_TIPO_INFO!=='undefined')?NFE_TIPO_INFO[tp]:null;
+  if(pronto && tp==='REMESSA'){ pronto=false; trava='remessa: confira o contrato'; }
+  else if(pronto && I && !I.entra && tp!=='FATURAMENTO' && its.some(x=>x.destino==='estoque')){ pronto=false; trava=`${(NFE_TIPO[tp]||tp).toLowerCase()}: item para o estoque precisa de você`; }
+  return {tipo:ia.tipo, tipoTxt:IA_TIPO_TXT[ia.tipo]||'Nota', cultura:ia.cultura, n:its.length, okI, pend:its.length-okI, pronto, trava, conf:+ia.confianca||0, motivo:(ia.motivo||'')+(trava?(ia.motivo?' · ':'')+trava:''), categoria:ia.categoria||''}; }
 // nota JÁ RECEBIDA: abre a conferência de novo para corrigir produto/fator; ao confirmar, substitui a entrada (mesma chave)
 async function nfeReclassificar(chave){
   if(!nfeServerOk()){ toast('Reclassificar precisa da NF-e ligada (token + Code.gs)'); return; }
@@ -4965,9 +4970,13 @@ function nfePend(){ try{ return JSON.parse(localStorage.getItem(NFE_PEND_KEY))||
 function nfePendSave(a){ lsSet(NFE_PEND_KEY, JSON.stringify(a)) }
 async function nfeEnviarClassif(cl){
   const envio=Object.assign({}, cl); delete envio.xml;
-  try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave)); updateEditBadge(); return true; } }catch(e){}
+  try{ const r=await nfePost({__nfeClassifica:envio}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave)); updateEditBadge(); return true; }
+    if(r && nfeErroPermanente(r)){ nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave)); updateEditBadge(); toast(`NF-e ${String(cl.chave).slice(25,34).replace(/^0+/,'')}: a planilha recusou — ${nfeMsgs(r)}`); return false; } }catch(e){}   // v308
   nfePendSave(nfePend().filter(x=>x.kind==='rec'||x.chave!==cl.chave).concat([cl])); updateEditBadge(); return false;
 }
+// v308: recusa definitiva da planilha (não adianta reenviar) × falha passageira (rede, "ocupada", timeout)
+function nfeMsgs(r){ return ((r&&r.msgs)||[]).concat(r&&r.erro?[r.erro]:[]).join(' ').slice(0,160)||'sem detalhe'; }
+function nfeErroPermanente(r){ const m=nfeMsgs(r); if(!r||!r.fail&&!r.erro) return false; return !/ocupad|rede|timeout|tempo|conex|fetch|network|Service invoked too many|Exception: Service/i.test(m); }
 async function nfeFlushPend(){ if(!nfeServerOk()) return; const a=nfePend(); if(!a.length) return;
   for(const cl of a){ if(cl.kind==='rec'){ const pl=Object.assign({},cl); delete pl.kind; await nfeEnviarRecebimento(pl); continue; }
     if(cl.xml){ try{ await nfePost({__nfeUpload:{xml:cl.xml}}); }catch(e){} } await nfeEnviarClassif(cl); }
@@ -5095,7 +5104,7 @@ function nfeConfirmar(modo){
   nfeImport=null; route(); updateEditBadge();
   if(manut.length) toast(`${manut.length} item(ns) apropriado(s) a máquina (${brl(manut.reduce((s,i)=>s+i.valor,0))}) — veja em Máquinas`);
   toast(imp.reclass?`Entrada da NF-e ${n.nNF} regravada: ${usados.length} produto(s) (a anterior foi substituída)`:modo==='entrada'?`Entrada da NF-e ${n.nNF} registrada: ${usados.length} produto(s)`:modo==='contrato'?`Contrato da NF-e ${n.nNF} registrado — ${usados.length} produto(s) a entregar`:`NF-e ${n.nNF} em trânsito — dá entrada ao receber na fazenda`);
-  if(rec && !imp.reclass) pedidoAbater(rec.itens);   // chegou: abate o "em pedido" (regravação não abate de novo)
+  if(rec && !imp.reclass && !(n.tipo==='REMESSA' && imp.ref)) pedidoAbater(rec.itens);   // chegou: abate o "em pedido" (regravação e remessa de contrato não abatem de novo · v308)
   if(rec) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });
   pushDeParaNfe();
 }
@@ -5388,8 +5397,10 @@ function recBuscarNumero(v){ const n=String(v||'').replace(/\D/g,'').replace(/^0
 // quantidade que ENTRA no estoque (fase 5: desconta falta/avaria/troca, soma sobra)
 function recQtdUso(i){ const q=+i.qtd||0, d=i.div; if(!d||!d.tipo) return q; const x=(+d.qtdNota||0)*(+i.fator||1);
   return d.tipo==='SOBRA'?q+x:Math.max(0,q-x); }
-async function recConfirmar(){
-  const r=REC.info||{}, nota=r.nota||{}, semXml=REC.etapa==='semxml', por=(document.getElementById('rec-por')||{}).value||recPor();
+async function recConfirmar(){ if(REC.enviando){ toast('Registrando… aguarde'); return; } REC.enviando=true;   // v308
+  try{ document.querySelectorAll('[data-act="recConfirmar"]').forEach(b=>b.disabled=true); await _recConfirmar(); } finally { REC.enviando=false; document.querySelectorAll('[data-act="recConfirmar"]').forEach(b=>b.disabled=false); } }
+async function _recConfirmar(){
+  const r=REC.info||{}, nota=r.nota||{}, semXml=REC.etapa==='semxml', por=(document.getElementById('rec-por')||{}).value||recPor()||((sessUsuario()||{}).nome||'');
   lsSet(REC_POR_KEY, por);
   let itens;
   if(semXml){ itens=REC.itens.filter(i=>i.produto&&PROD[i.produto]&&(+i.qtd>0)).map((i,k)=>({n:k+1, produto:i.produto, un:(PROD[i.produto]||{}).un||'', qtd:+i.qtd, custo:precoDe(i.produto)}));
@@ -5406,7 +5417,7 @@ async function recConfirmar(){
   if(uso.length){ const rec={ id:ch, fornecedor:nota.fornecedor||REC.fornecedor||nfeCnpjFmt(p.doc), data:hoje, nf:`${p.nNF}/${p.serie}`,
       obs:`Recebida na fazenda${por?' por '+por:''}${semXml?' · sem XML':''}${temDiv?' · com divergência':''}`, itens:uso.map(i=>({produto:i.produto, un:i.un, qtd:+i.qtd.toFixed(4), preco:+(+i.custo||0).toFixed(4)})),
       pushed:false, ts:Date.now(), nfe:{chave:ch, recebimento:true} };
-    COMPRAS.registros.push(rec); saveCompras(); pedidoAbater(rec.itens); pushEntrada(rec); }
+    COMPRAS.registros.push(rec); saveCompras(); if(String(nota.tipo||'').toUpperCase()!=='REMESSA') pedidoAbater(rec.itens); pushEntrada(rec); }   // v308: remessa de contrato já abateu ao registrar o contrato
   const payload={chave:ch, data:hoje, por, itens:itens.map(i=>({n:i.n, produto:i.produto, un:i.un, qtdRecebida:+(+i.qtd).toFixed(4)})), pendencias:pend, canhoto};
   if(semXml) payload.semXml={fornecedor:REC.fornecedor||''};
   nfeEnviarRecebimento(payload).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
@@ -5418,7 +5429,8 @@ async function recConfirmar(){
 }
 // recebimento que não subiu fica na mesma fila das classificações
 async function nfeEnviarRecebimento(pl){
-  try{ const r=await nfePost({__recebimento:pl}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave))); updateEditBadge(); return true; } }catch(e){}
+  try{ const r=await nfePost({__recebimento:pl}); if(r && !r.fail){ nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave))); updateEditBadge(); return true; }
+    if(r && nfeErroPermanente(r)){ nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave))); updateEditBadge(); toast(`Recebimento da NF-e ${String(pl.chave).slice(25,34).replace(/^0+/,'')}: a planilha recusou — ${nfeMsgs(r)}`); return false; } }catch(e){}   // v308
   nfePendSave(nfePend().filter(x=>!(x.kind==='rec'&&x.chave===pl.chave)).concat([Object.assign({kind:'rec'}, pl)])); updateEditBadge(); return false;
 }
 function recAvisoHtml(){
@@ -5450,7 +5462,7 @@ function recConferirHtml(){
     <p class="mut" style="font-size:12.5px;padding:0 14px">Confira as quantidades que chegaram. ${com?'Se algo faltou, veio avariado, trocado ou sobrando, toque em <b>Divergência</b> no item.':''}</p>
     <div class="rec-itens">${cards}</div>
     ${temDiv&&typeof recCanhotoHtml==='function'?recCanhotoHtml():''}
-    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor())}" placeholder="seu nome" style="max-width:180px"></label>
+    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor()||((sessUsuario()||{}).nome||''))}" placeholder="seu nome" style="max-width:180px"></label>
       <span class="spacer"></span><button class="btn btn-outline btn-sm" data-act="recNova">Cancelar</button>
       <button class="btn btn-primary" data-act="recConfirmar">${temDiv?'⚠️ Confirmar com divergência':'✅ Conferido, tudo ok'}</button></div></div>`;
 }
@@ -5467,7 +5479,7 @@ function recSemXmlHtml(){
     <div style="padding:6px 14px"><label class="mut" style="font-size:12px;font-weight:700">Fornecedor (opcional)<input class="txt" data-recf="fornecedor" value="${esc(REC.fornecedor||'')}" placeholder="nome do fornecedor"></label></div>
     <div class="rec-sx">${rows}</div>
     <div style="padding:4px 14px"><button class="btn btn-outline btn-sm" data-act="recSxAdd">+ produto</button></div>
-    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor())}" placeholder="seu nome" style="max-width:180px"></label>
+    <div class="nfe-foot"><label>Quem conferiu<input class="txt" id="rec-por" value="${esc(recPor()||((sessUsuario()||{}).nome||''))}" placeholder="seu nome" style="max-width:180px"></label>
       <span class="spacer"></span><button class="btn btn-outline btn-sm" data-act="recNova">Cancelar</button>
       <button class="btn btn-primary" data-act="recConfirmar">✅ Registrar recebimento</button></div></div>`;
 }
@@ -5650,10 +5662,10 @@ V.estoque=function(){
     const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0;
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
       <td class="c-full" data-th="Produto"><b class="est-prod" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Ver o extrato (entradas e saídas) deste produto">${esc(r.produto)}</b>${r.classe&&r.classe!=='—'?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td>
-      <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
+      <td class="num" data-th="Inicial"><input class="cell ${(r.produto in OV.estoque)?'edited':''}" inputmode="decimal" data-edit="estoque" data-prod="${esc(r.produto)}" value="${r.ini||''}" placeholder="0"></td>
       <td class="num c-more" data-th="Custo inicial R$/un">${(()=>{ const ci=custoIniDe(r.produto), auto=r.ci&&r.ci.fonte!=='digitado'?r.ci.puIni:0, fonte=r.ci?r.ci.fonte:'';
         return `<input class="cell ${(OV.custoIni&&r.produto in OV.custoIni)?'edited':''}" inputmode="decimal" data-edit="custoIni" data-prod="${esc(r.produto)}" value="${ci>0?fmtDose(ci):''}" placeholder="${auto>0?fmtDose(auto):'—'}" title="R$ por ${esc(r.un||'un')} do estoque inicial da safra. Vazio = ${fonte==='nota'?'preço da última nota':'preço de referência da planilha'} (vai para a coluna CUSTO INICIAL do PORTIFÓLIO)">`; })()}</td>
-      <td class="num" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0" title="Quantidade já pedida ao fornecedor (vai para a coluna EM PEDIDO do PORTIFÓLIO)"></td>
+      <td class="num" data-th="Em pedido"><input class="cell ${(r.produto in OV.pedido)?'edited':''}" inputmode="decimal" data-edit="pedido" data-prod="${esc(r.produto)}" value="${r.ped>0?r.ped:''}" placeholder="0" title="Quantidade já pedida ao fornecedor (vai para a coluna EM PEDIDO do PORTIFÓLIO)"></td>
       <td class="num" data-th="Entradas">${r.ent?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="De onde veio">${num(r.ent)}</a>`:'·'}</td>
       <td class="num" data-th="Saídas (aplic.)">${r.sai?`<a class="link" data-act="estExtrato" data-prod="${esc(r.produto)}" title="Para onde foi">${num(r.sai)}</a>`:'·'}</td>
       <td class="num" data-th="Saldo"><b class="est-saldo ${cls}">${num(r.saldo)}</b></td>
@@ -5667,7 +5679,7 @@ V.estoque=function(){
   return `
   <div class="kpi-grid">
     <div class="kpi accent" title="saldo de cada produto × custo médio (o que foi pago nas notas)"><div class="k-label">Valor em estoque (custo real)</div><div class="k-value">${brl0(valReal)}</div><div class="k-sub">${nRef?`${nRef} produto(s) ainda a preço de referência · `:''}referência: ${brl0(valSaldo)}</div></div>
-    <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub"><a class="link" data-go="#/entradas">registrar compra →</a></div></div>
+    <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub">${podeTela('entradas')?`<a class="link" data-go="#/entradas">registrar compra →</a>`:''}</div></div>
     <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
@@ -5895,13 +5907,16 @@ function finBaixaFormHtml(){ const B=finBaixa; if(!B) return ''; const t=FIN().t
     <div class="fin-bx-calc mut">${(()=>{ const vp=+B.valorPago||0, ab=vp-(+B.juros||0)+(+B.desconto||0), rest=Math.max(0,saldo-ab); return vp>0?`Abate do título: <b>${brl(ab)}</b> · ${rest>0.004?`fica um saldo de <b>${brl(rest)}</b> (pagamento parcial)`:'<b>quita o título</b>'}`:'Informe o valor pago.'; })()}</div>
     <div class="bulk-add" style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="finBaixaSalvar"${contas.length?'':' disabled'}>💾 Registrar baixa</button><button class="btn btn-outline btn-sm" data-act="finBaixaCancelar">Cancelar</button></div></div>`; }
 function finBaixarAbrir(id){ const t=FIN().titulos.find(x=>x.id===id); if(!t) return; const contas=finContasDe(t.produtor), semConta=finSemConta(t);
-  finBaixa={tit:id, data:semConta&&_isISO(t.dataPgto)?t.dataPgto:_hojeISO(), conta:contas.length===1?contas[0].codigo:'', valorPago:semConta?(+t.valor||0):finSaldo(t), juros:0, desconto:0, obs:'', arq:null}; finDraft=null; route(); const el=document.getElementById('fin-bx-form'); if(el) el.scrollIntoView({block:'start'}); }
+  finBaixa={tit:id, id:'b:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), data:semConta&&_isISO(t.dataPgto)?t.dataPgto:_hojeISO(), conta:contas.length===1?contas[0].codigo:'', valorPago:semConta?(+t.valor||0):finSaldo(t), juros:0, desconto:0, obs:'', arq:null}; finDraft=null; /* v308: id nasce aqui — reenvio = mesma baixa, nunca duas */ route(); const el=document.getElementById('fin-bx-form'); if(el) el.scrollIntoView({block:'start'}); }
 function finBaixaRefresh(){ const el=document.getElementById('fin-bx-form'); if(!el) return; const tmp=document.createElement('div'); tmp.innerHTML=finBaixaFormHtml(); const nov=tmp.firstElementChild; if(nov) el.replaceWith(nov); }
 async function finArqLer(file){ if(!file) return null; if(file.size>6*1024*1024){ toast('Arquivo grande demais (máx. 6 MB)'); return null; }
   if(/^image\//.test(file.type)){ const d=await recFotoReduzir(file); return {nome:file.name.replace(/\.[^.]+$/,'')+'.jpg', mime:'image/jpeg', b64:String(d).split(',')[1]||''}; }
   const d=await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(new Error('não li o arquivo')); r.readAsDataURL(file); });
   return {nome:file.name, mime:file.type||'application/pdf', b64:String(d).split(',')[1]||''}; }
-async function finBaixaSalvar(){ const B=finBaixa; if(!B) return; const t=FIN().titulos.find(x=>x.id===B.tit); if(!t) return;
+let _bxBusy=false;   // v308: toque duplo em "Registrar baixa" não grava duas vezes
+async function finBaixaSalvar(){ const B=finBaixa; if(!B) return; const t=FIN().titulos.find(x=>x.id===B.tit); if(!t) return; if(_bxBusy){ toast('Gravando… aguarde'); return; }
+  _bxBusy=true; try{ await _finBaixaSalvar(B,t); } finally { _bxBusy=false; } }
+async function _finBaixaSalvar(B,t){
   if(!_isISO(B.data)){ toast('Informe a data'); return; } if(!B.conta){ toast('Escolha a conta do produtor'); return; }
   const vp=+(+B.valorPago||0).toFixed(2); if(!(vp>0)){ toast('Informe o valor pago'); return; }
   const ab=vp-(+B.juros||0)+(+B.desconto||0); if(ab<=0){ toast('Juros maiores que o valor pago — confira'); return; }
@@ -5909,11 +5924,12 @@ async function finBaixaSalvar(){ const B=finBaixa; if(!B) return; const t=FIN().
   const url=syncUrl(); let comp='';
   try{
     if(B.arq){ toast('Enviando comprovante…'); const r=await syncPost(url, JSON.stringify({__finArquivo:B.arq})); comp=(r&&r.arquivo&&r.arquivo.url)||''; if(!comp) toast('O comprovante não subiu — a baixa vai sem ele'); }
-    const bx={id:'b:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), titulo:t.id, produtor:t.produtor||'', conta:B.conta, data:B.data, valorPago:vp, juros:+(+B.juros||0).toFixed(2), desconto:+(+B.desconto||0).toFixed(2), comprovante:comp, obs:B.obs||''};
-    const r=await syncPost(url, JSON.stringify({__baixa:{baixas:[bx]}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
-    const F=FIN(); F.baixas.push(bx); DATA.financeiro.baixas=F.baixas; finAplicaStatus(t);
+    const btn=document.querySelector('[data-act="finBaixaSalvar"]'); if(btn) btn.disabled=true;
+    const bx={id:B.id||('b:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)), titulo:t.id, produtor:t.produtor||'', conta:B.conta, data:B.data, valorPago:vp, juros:+(+B.juros||0).toFixed(2), desconto:+(+B.desconto||0).toFixed(2), comprovante:comp, obs:B.obs||''};
+    const r=await syncPost(url, JSON.stringify({__baixa:{baixas:[bx]}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); const b2=document.querySelector('[data-act="finBaixaSalvar"]'); if(b2) b2.disabled=false; return; }
+    const F=FIN(); if(!F.baixas.some(x=>x.id===bx.id)) F.baixas.push(bx); DATA.financeiro.baixas=F.baixas; finAplicaStatus(t);
     finBaixa=null; FIN_UI.open=FIN_UI.open||{}; FIN_UI.open[t.id]=true; route({keepScroll:true}); toast(finSaldo(t)>0.004?`Baixa parcial registrada — saldo ${brl(finSaldo(t))}`:'Título quitado'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600);
-  }catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
+  }catch(e){ toast('Sem conexão com a planilha — tente de novo'); const b3=document.querySelector('[data-act="finBaixaSalvar"]'); if(b3) b3.disabled=false; } }
 // status local do título a partir das baixas (a planilha faz a mesma conta)
 function finAplicaStatus(t){ const bx=finBaixasDe(t.id), ab=bx.reduce((s,b)=>s+finAbatido(b),0); if(String(t.status||'').toUpperCase()==='CANCELADO') return;
   t.status=ab<=0.004?'ABERTO':(finSaldo(t)<=0.004?'PAGO':'PARCIAL'); t.dataPgto=bx.length?bx.map(b=>b.data||'').sort().pop():''; }
@@ -6144,7 +6160,7 @@ function fechResumo(cpf, mes){ const F=FIN(), P=fechPeriodo(mes), movs=finMovime
   const cats=k=>[...new Set(Object.keys(at[k]).concat(Object.keys(an[k])))].sort((a,b)=>(at[k][b]||0)-(at[k][a]||0)).map(c=>({c, v:at[k][c]||0, va:an[k][c]||0}));
   const contas=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)).map(c=>({c, saldo:bancoSaldoApp(c.codigo,P.fim)}));
   const abertos=F.titulos.filter(t=>t.produtor===cpf&&_finAberto(finSit(t))), aPagar=abertos.filter(t=>String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER').reduce((s,t)=>s+finSaldo(t),0), aReceber=abertos.filter(t=>String(t.tipo||'').toUpperCase()==='RECEBER').reduce((s,t)=>s+finSaldo(t),0);
-  const compras=F.titulos.filter(t=>t.produtor===cpf&&String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER'&&/NF-?e|^55/i.test(t.docTipo||'')&&String(t.emissao||'').slice(0,7)===mes&&finSit(t)!=='cancelado'), nfs=new Set(compras.map(t=>t.chave||t.docNum)).size, vCompras=compras.reduce((s,t)=>s+(+t.valor||0),0);
+  const compras=F.titulos.filter(t=>t.produtor===cpf&&String(t.tipo||'PAGAR').toUpperCase()!=='RECEBER'&&(/^\d{44}$/.test(String(t.chave||''))||/NF-?e|^55|^1\b/i.test(t.docTipo||''))&&String(t.emissao||'').slice(0,7)===mes&&finSit(t)!=='cancelado'), nfs=new Set(compras.map(t=>t.chave||t.docNum)).size, vCompras=compras.reduce((s,t)=>s+(+t.valor||0),0);
   const vendas=((DATA&&DATA.vendas)||[]).filter(v=>(!v.produtor||v.produtor===cpf)&&String(v.data||'').slice(0,7)===mes), vVendas=vendas.reduce((s,v)=>s+(+v.valor||0),0);
   return {P, at, an, entCats:cats('ent'), saiCats:cats('sai'), contas, aPagar, aReceber, nfs, vCompras, vendas:vendas.length, vVendas, movs:movs.filter(m=>m.data>=P.ini&&m.data<=P.fim).sort((a,b)=>a.data.localeCompare(b.data))}; }
 const _fechVar=(v,va)=>va?`${v>=va?'+':''}${Math.round((v-va)/va*100)}%`:(v?'novo':'—');

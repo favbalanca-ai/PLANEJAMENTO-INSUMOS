@@ -185,6 +185,7 @@ function configAppGravar_(chave, valor, obs){
   if (!L) L = _novaLinha_(s);
   s.getRange(L, 1, 1, 3).setValues([[chave, valor, obs || '']]);
   try { CacheService.getScriptCache().remove('pa_config_app_'); } catch (e) {}
+  try { cacheClearAppKeys_(['config_app']); } catch (e) {}   // v308: o pacote config_app (6 h) voltava com o valor antigo
 }
 // sem link na CONFIG APP: procura sozinho, entre as planilhas mexidas nos últimos 15 dias, a do Monitor de Irrigação
 // (tem as abas CLIMA, FAZENDAS e LEITURAS) e grava o link na CONFIG APP. Tenta no máximo 1 vez a cada 6 h.
@@ -1333,6 +1334,11 @@ function baixaGrava_(p, acc){
   var antes = _ler_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS), tituloDe = {}; antes.forEach(function(b){ tituloDe[S(b['ID'])] = S(b['TÍTULO']); });
   itens.forEach(function(x){ var t = S(x.titulo) || tituloDe[S(x.id)]; if (t) afetados[t] = 1; });
   var n = _finUpsert_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS, itens);
+  // v308: baixa apagada → a linha do EXTRATO BANCO que ela conciliou volta a PENDENTE (antes ficava CONCILIADO para sempre)
+  var dels = itens.filter(function(x){ return x.del; }).map(function(x){ return S(x.id); });
+  if (dels.length) try { var ext = _ler_(BANCO_SHEET, BANCO_COLS), solta = [];
+    ext.forEach(function(l){ if (dels.indexOf(S(l['BAIXA'])) >= 0) solta.push({ id:S(l['ID']), status:'PENDENTE', baixa:'', titulo:'' }); });
+    if (solta.length) _finUpsert_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS, solta); } catch (e) {}
   finRecalcTitulos_(Object.keys(afetados));
   return { rows:n };
 }
@@ -1572,8 +1578,8 @@ function nfeIaClassificar_(chave, forcar){
     return { n:it.n, cprod:it.cprod, descricao:it.xprod, cfop:it.cfop, un:it.ucom, qtd:it.qcom, valor_total:it.vprod,
       candidatos:c.map(function(p){ return p.produto + ' [' + S(p.un) + (p.classe ? ' · ' + p.classe : '') + ']'; }),
       memoria:m ? { destino:m.destino || (m.ignorar ? 'ignorar' : 'estoque'), produto:m.produto || '', fator:m.fator, maquina:m.maquina || '', tipoGasto:m.tipoGasto || '' } : null }; });
-  var dados = { fornecedor:n.fornecedor, cnpj_emitente:n.cnpj, destinatario:n.destNome, doc_destinatario:n.dest, emitente_e_produtor_da_fazenda:ehProdutor, destinatario_e_produtor_da_fazenda:destProdutor,
-    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, tipo_pelo_cfop:n.tipo, itens:linhas, maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
+  var dados = { fornecedor:n.fornecedor, cnpj_emitente:n.cnpj, destinatario:n.destNome, emitente_e_produtor_da_fazenda:ehProdutor, destinatario_e_produtor_da_fazenda:destProdutor,
+    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, tipo_pelo_cfop:n.tipo, itens:linhas, /* v308: sem o CPF do produtor */ maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
   var system = 'Você classifica notas fiscais (NF-e) de uma fazenda de grãos no Brasil para um sistema de estoque e contabilidade. Responda SOMENTE com JSON válido, sem comentários nem markdown.\n' +
     'Regras: tipo = compra_insumo (insumo agrícola: sementes, fertilizantes, defensivos, corretivos, adjuvantes), venda (a fazenda vende sua produção: soja, milho, feijão, laranja etc.; a nota pode ser emitida pelo produtor ou ser contranota de ENTRADA do comprador), pecas (peça, pneu, óleo, filtro ou serviço de uma máquina), oficina (ferramenta, consumível, EPI de uso geral), benfeitoria (material de construção, cerca, elétrica, hidráulica, obra), servico (serviço sem máquina), outra.\n' +
     'Por item: destino = estoque (insumo que entra no estoque; escolha "produto" EXATAMENTE como um dos candidatos, ou deixe vazio se nenhum candidato for o mesmo produto), maquina (informe "maquina" com um nome da lista maquinas_da_fazenda quando der; "tipoGasto" entre Peça, Pneu, Óleo/lubrificante, Serviço/mão de obra, Combustível, Frete, Outro), oficina ("tipoGasto" entre Ferramenta, Consumível, EPI, Outro), benfeitoria ("maquina" = nome da benfeitoria, reaproveite benfeitorias_ja_usadas quando for a mesma; "tipoGasto" entre Construção, Reforma, Elétrica, Hidráulica, Outro), tanque (óleo diesel, Arla 32 ou outro combustível a granel para o tanque da fazenda; "tipoGasto" Combustível ou Arla 32), ignorar (palete, embalagem, brinde, frete destacado).\n' +
@@ -1597,7 +1603,7 @@ function iaSaneia_(ia, itens, prods){ ia = ia && typeof ia === 'object' ? ia : {
   var out = { tipo:IA_TIPOS.indexOf(S(ia.tipo)) >= 0 ? S(ia.tipo) : 'outra', categoria:S(ia.categoria), cultura:IA_CULTURAS.indexOf(S(ia.cultura).toLowerCase()) >= 0 ? S(ia.cultura).toLowerCase() : '', confianca:Math.max(0, Math.min(1, +ia.confianca || 0)), motivo:S(ia.motivo).slice(0, 240), itens:[] };
   var porN = {}; (ia.itens || []).forEach(function(x){ porN[+x.n] = x; });
   itens.forEach(function(it){ var x = porN[+it.n] || {}, dest = IA_DESTINOS.indexOf(S(x.destino)) >= 0 ? S(x.destino) : 'estoque', prod = S(x.produto); if (!nomes[prod]) prod = '';
-    var f = +x.fator; if (!(f > 0)) f = 1; var conf = Math.max(0, Math.min(1, +x.confianca || 0)); if (dest === 'estoque' && !prod && out.tipo !== 'venda') conf = Math.min(conf, 0.5);
+    var f = +x.fator; if (!(f > 0)) f = 0; /* v308: 0 = não informou (o app aplica a regra de embalagem) */ var conf = Math.max(0, Math.min(1, +x.confianca || 0)); if (dest === 'estoque' && !prod && out.tipo !== 'venda') conf = Math.min(conf, 0.5);
     out.itens.push({ n:it.n, destino:dest, produto:prod, fator:Math.round(f * 10000) / 10000, maquina:S(x.maquina).slice(0, 80), tipoGasto:S(x.tipoGasto).slice(0, 40), confianca:Math.round(conf * 100) / 100 }); });
   if (out.tipo === 'venda' && !out.cultura) out.confianca = Math.min(out.confianca, 0.5);
   return out; }
@@ -2224,7 +2230,7 @@ function custoIniColOf(P){
    - EXIGIR LOGIN = NÃO (padrão): funciona como antes para quem não entrou; quem entrou já é filtrado. */
 var USU_SHEET = 'USUÁRIOS APP', CFGAPP_SHEET = 'CONFIG APP';
 var USU_COLS = ['NOME','LOGIN','PERFIL','MÓDULOS','TELAS','PIN NOVO','PIN','ATIVO','VERSÃO','ÚLTIMO ACESSO'];
-var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas'];
+var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas','maquinas'];   // v308: 'maquinas' faltava — a marcação do admin sumia e o módulo não abria para operador
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
@@ -2316,7 +2322,7 @@ function loginFaz_(l){
   var U = usuariosLer_(), u = U.lista.filter(function(x){ return x.login === login; })[0], t = U.t;
   var falha = function(msg){ c.put(kf, String(falhas + 1), 600); return { ok:false, erro:msg || 'login ou PIN errado' }; };
   if (!u) return falha();
-  if (!u.ativo) return { ok:false, erro:'usuário desativado — fale com o administrador' };
+  if (!u.ativo) return falha();   // v308: mesma mensagem (não revela quais logins existem)
   if (u.pinNovo){   // PIN digitado na planilha: vira embaralhado, some da planilha e derruba sessões antigas
     var pn = u.pinNovo.replace(/\D/g, ''); if (!/^\d{4,6}$/.test(pn)) return { ok:false, erro:'o PIN NOVO na planilha precisa ter 4 a 6 números' };
     u.pin = _hashPin_(login, pn); u.versao++; _setCells_(t, u.row, { 'PIN':u.pin, 'PIN NOVO':'', 'VERSÃO':u.versao }); }
