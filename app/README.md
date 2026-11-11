@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Busca na caixa de entrada de Notas + arquivos de outra conta (v306)** — campo 🔎 acima dos cartões: filtra por
+  fornecedor, nº da nota, CNPJ, produtor, tipo, data, valor, chave e o que a IA reconheceu (produto/máquina); várias
+  palavras = todas precisam bater; mostra "n de N"; a busca sobrevive ao redesenho (`NFE_UI.q`, `nfeAplicaBusca`).
+  Na planilha, arquivo lido que não pode ir para a lixeira ("Access denied: DriveApp" = arquivo de outra conta do
+  Google) é movido para `NFe/Lidos` ou só desligado da Entrada; se nada funcionar, a nota fica registrada, o arquivo
+  entra numa lista de "já lidos" (`NFE_ARQ_FEITOS`) e não é lido de novo — acaba o erro repetido a cada 15 min. A
+  mensagem diz o passo que falhou (ler / gravar / tirar da Entrada) e o app explica o que é "Access denied".
 - **Máquinas do cadastro na lista "Máquina ou bem" (v305)** — na conferência da NF-e (peças, oficina) e no
   Financeiro, a lista de máquinas (`maqListaManut`) agora inclui as cadastradas no módulo Máquinas (aba MÁQUINAS APP),
   não só as da CUSTO OPERAÇÃO e as que já apareceram em notas. Ex.: caminhão MB1313 cadastrado passa a aparecer ao

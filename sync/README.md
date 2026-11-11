@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Captura de NF-e: arquivos de outra conta do Google (v306)
+
+- Depois de ler um XML da `NFe/Entrada`, `_nfeTiraDaEntrada_` tenta: lixeira → mover para `NFe/Lidos` (ou
+  `Rejeitados`) → desligar da pasta (`removeFile`). "Access denied: DriveApp" acontece quando o arquivo é de outra
+  conta (só o dono apaga). Se nada funcionar, o id do arquivo entra em `NFE_ARQ_FEITOS` (Propriedades do Script,
+  300 mais recentes) e o laço pula esse arquivo nas próximas leituras — a nota já está na NFE RECEBIDAS.
+- A mensagem de erro diz o passo (`não consegui ler / gravar / tirar da Entrada — …`). "Access denied" não é
+  confundido com falta de escopo (o aviso de `autorizarPermissoes` só sai para "permission").
+
 ## Captura de NF-e: motivos claros e permissão (v304)
 
 - `nfeTipoOutro_` diz o que é um XML que não é NF-e de produto (NFS-e, CT-e, NFCom, MDF-e, NF-e incompleta, raiz

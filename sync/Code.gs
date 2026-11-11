@@ -965,17 +965,25 @@ function capturarNfe(maxMs){
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
     var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
     // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
-    var p = nfePastas_(cfg), it = p.entrada.getFiles(), permFalta = false;
-    while (it.hasNext() && !fimTempo()){ var f = it.next();
+    var p = nfePastas_(cfg), it = p.entrada.getFiles(), permFalta = false, feitos = _nfeFeitos_(), feitosMudou = false;
+    while (it.hasNext() && !fimTempo()){ var f = it.next(), fid = '', fnome = '';
+      try { fid = f.getId(); fnome = S(f.getName()); } catch (e) { fid = ''; }
+      if (fid && feitos[fid]) continue;   // v306: já lido, só não deu para tirar da Entrada (arquivo de outra conta) — não lê de novo
+      var passoAtual = 'ler';
       try {
         var bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
-        if (!bs.length) res.push({ status:'rejeitada', arq:f.getName(), motivo:'não é arquivo .xml nem .zip' });
-        bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = S(f.getName()); res.push(r); if (r.status === 'rejeitada') ok = false; });
-        if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados);   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
+        if (!bs.length) res.push({ status:'rejeitada', arq:fnome, motivo:'não é arquivo .xml nem .zip' });
+        passoAtual = 'gravar';
+        bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = fnome; res.push(r); if (r.status === 'rejeitada') ok = false; });
+        passoAtual = 'tirar da Entrada';
+        var falhaTira = _nfeTiraDaEntrada_(f, ok ? null : p.rejeitados, p);   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
+        if (falhaTira){ if (fid){ feitos[fid] = Date.now(); feitosMudou = true; }
+          erros.push('arquivo "' + fnome + '": a nota FOI lida, mas não deu para tirar o arquivo da NFe/Entrada (' + falhaTira + '). Ele é de outra conta do Google: apague-o à mão no Drive. Não será lido de novo.'); }
       } catch (e){ var em = String(e);
-        if (/permission|permiss/i.test(em)){ permFalta = true; var sobra = 1; while (it.hasNext()){ it.next(); sobra++; }   // v304: um aviso só, e para (todos iam falhar igual)
+        if (/permission|permiss/i.test(em) && !/Access denied/i.test(em)){ permFalta = true; var sobra = 1; while (it.hasNext()){ it.next(); sobra++; }   // v304: um aviso só, e para (todos iam falhar igual)
           erros.push('SEM PERMISSÃO no Drive (' + sobra + ' arquivo(s) esperando na NFe/Entrada): ' + em); break; }
-        erros.push('arquivo "' + f.getName() + '": ' + em); } }   // fica na Entrada: tenta de novo na próxima
+        erros.push('arquivo "' + fnome + '": não consegui ' + passoAtual + ' — ' + em); } }   // fica na Entrada: tenta de novo na próxima
+    if (feitosMudou) _nfeFeitosSalva_(feitos);
     // v279: XML das NFAs emitidas pela balança (Pesagem v2) — entram como venda do produtor
     if (!fimTempo()) try { capturarNfaPesagem_(passo, res, fimTempo); } catch (e){ erros.push('balança: ' + e); }
     // e-mail DESLIGADO por padrão: as notas entram só pela pasta NFe/Entrada (a pessoa alimenta à mão).
@@ -1016,6 +1024,18 @@ function _nfeCapturaSalva_(res, erros, parcial){
   } catch (e) {}
 }
 function nfeCapturaInfo_(){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_CAPTURA') || 'null'); } catch (e) { return null; } }
+// v306: tirar o arquivo da NFe/Entrada depois de lido. Arquivo de OUTRA conta do Google não pode ir para a lixeira
+// pelo dono da pasta ("Access denied: DriveApp"): tenta mover (Rejeitados / Lidos) e, por fim, só desligar da pasta.
+// Devolve '' quando conseguiu, ou o erro resumido.
+function _nfeTiraDaEntrada_(f, destinoRej, p){
+  var erro = '';
+  if (!destinoRej){ try { f.setTrashed(true); return ''; } catch (e) { erro = String(e); } }
+  try { f.moveTo(destinoRej || _pasta(p.raiz, 'Lidos')); return ''; } catch (e) { erro = erro || String(e); }
+  try { p.entrada.removeFile(f); return ''; } catch (e) { erro = erro || String(e); }
+  return erro.replace(/^(Error|Exception):\s*/g, '').replace(/^(Error|Exception):\s*/g, '').replace(/\s+/g, ' ').slice(0, 120); }
+function _nfeFeitos_(){ try { var m = JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_ARQ_FEITOS') || '{}'); return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } }
+function _nfeFeitosSalva_(m){ try { var ks = Object.keys(m); if (ks.length > 300){ ks.sort(function(a, b){ return m[a] - m[b]; }); ks.slice(0, ks.length - 300).forEach(function(k){ delete m[k]; }); }
+  PropertiesService.getScriptProperties().setProperty('NFE_ARQ_FEITOS', JSON.stringify(m)); } catch (e) {} }
 function nfeCapturaHist_(){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_CAPTURA_HIST') || '[]'); } catch (e) { return []; } }
 // nota IGNORADA (ex.: destinatário fora da lista PRODUTOR) volta para "A CLASSIFICAR" pelo app
 function nfeReabrir_(r){
