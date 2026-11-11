@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-310';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-311';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3138,7 +3138,8 @@ function finFormHtml(){ const d=finDraft; if(!d) return '';
     <div class="bulk-add" style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="finSalvar">💾 Salvar</button><button class="btn btn-outline btn-sm" data-act="finCancelarForm">Cancelar</button></div></div>`; }
 V.financeiro=function(){
   if(!syncUrl()) return `<div class="empty">💵 O Financeiro vive na planilha. Configure a sincronização em <a class="link" data-go="#/sync">Sincronizar</a>.</div>`;
-  if(!(DATA&&DATA.financeiro)) return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`;
+  if(!(DATA&&DATA.financeiro)){ if(!sessToken()) return `<div class="empty">💵 O Financeiro (contas, títulos, extrato) só aparece para quem <b>entrou com login</b>. <div style="margin-top:10px"><a class="btn btn-primary btn-sm" data-go="#/login">Entrar</a></div></div>`;   // v311
+    return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`; }
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
   const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
@@ -3685,7 +3686,8 @@ function lcGerarTxt(){ const d=lcdprDados(LC_UI.cpf, LC_UI.ano); if(!d.P) return
 function lcGerarCsv(){ const d=lcdprDados(LC_UI.cpf, LC_UI.ano); if(!d.P||!d.lanc.length){ toast('Nenhum lançamento'); return; } download(`LCDPR_conferencia_${lcN(d.P.cpf)}_${LC_UI.ano}.csv`, lcdprCsv(d), 'text/csv;charset=utf-8'); toast('CSV de conferência exportado'); }
 V.cadastros=function(){
   if(sessUsuario()&&!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
-  if(!(DATA&&DATA.financeiro)) return `<div class="empty">🗃️ Cadastros ainda não disponíveis: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo).</div>`;
+  if(!(DATA&&DATA.financeiro)){ if(!sessToken()) return `<div class="empty">🗃️ Os cadastros (produtores, contas) só aparecem para quem <b>entrou com login</b>. <div style="margin-top:10px"><a class="btn btn-primary btn-sm" data-go="#/login">Entrar</a></div></div>`;   // v311
+    return `<div class="empty">🗃️ Cadastros ainda não disponíveis: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo).</div>`; }
   const F=FIN(), E=CAD_EDIT, prods=F.produtores, imov=F.imoveis, contas=F.contas, cps=F.contrapartes, CT=F.contador||{};
   const pSel=(k,v)=>`<select class="sel" data-cadf="${k}"><option value="">—</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===v?' selected':''}>${esc(p.nome)}</option>`).join('')}</select>`;
   const inp=(k,v,ph,extra)=>`<input class="txt" data-cadf="${k}" value="${esc(v==null?'':v)}" placeholder="${esc(ph||'')}" ${extra||''}>`;
@@ -5207,6 +5209,7 @@ async function sessSair(){
   if(hasPending()){ if(!confirm('Há dados deste aparelho ainda não enviados à planilha. Enviar agora e depois sair?')) return; try{ await syncPush({}); }catch(e){} }
   if(hasPending() && !confirm('Ainda ficou algo sem enviar (sem internet?). Sair mesmo assim? O que não foi enviado continua guardado neste aparelho.')) return;
   sessSalva(null); try{ localStorage.removeItem(DATA_KEY); }catch(e){}   // tira do aparelho os dados que eram dessa pessoa
+  try{ const manter=new Set([SYNC_KEY, AUTO_KEY, NFE_TOKEN_KEY, LOGIN_EXIG_KEY, MOD_KEY, SESS_KEY]); Object.keys(localStorage).filter(k=>k.indexOf('planejamento_')===0 && !manter.has(k)).forEach(k=>localStorage.removeItem(k)); }catch(e){}   // v311: compras, recomendações, fila de NF-e, fotos, extrato, log — nada fica para o próximo usuário
   location.hash=loginExigido()?'#/login':(EMBED?'#/receber':'#/inicio'); location.reload();
 }
 // ---- tela Usuários (só ADMIN) ----
@@ -5240,13 +5243,14 @@ V.usuarios=function(){
   if(!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
   if(USU_LISTA===null){ setTimeout(usuCarregar,0); return `<div class="panel"><div class="panel-head"><h2>👥 Usuários</h2><span class="sub">carregando…</span></div></div>`; }
   if(USU_LISTA.erro) return `<div class="nfe-aviso err">Não carregou: ${esc(USU_LISTA.erro)} <button class="btn btn-sm btn-outline" data-act="usuRecarregar">Tentar de novo</button></div>`;
+  const avisoLogin=(!loginExigido()&&USU_LISTA.length)?`<div class="nfe-aviso warn" style="margin:0 0 10px">🔓 <b>EXIGIR LOGIN está em NÃO</b> na aba CONFIG APP da planilha: quem tiver a URL do app entra sem senha (o Financeiro e os cadastros já ficam escondidos para quem não entrou, mas o resto do app abre). Com usuários cadastrados, mude para <b>SIM</b>.</div>`:'';   // v311
   const rows=USU_LISTA.map(u=>{ const mods=u.perfil==='ADMIN'?['todos']:(u.modulos||[]);
     return `<div class="usu-row${u.ativo?'':' off'}"><div class="usu-quem"><b>${esc(u.nome||u.login)}</b><small>${esc(u.login)} · ${u.perfil==='ADMIN'?'<span class="uc-adm">ADMIN</span>':'operador'}${u.ativo?'':' · <span class="usu-off">desativado</span>'}</small></div>
       <div class="usu-chips">${mods.map(m=>m==='todos'?'<span class="usu-chip">tudo</span>':`<span class="usu-chip">${MOD_INFO[m].ico} ${esc(MOD_INFO[m].nome)}</span>`).join('')||'<span class="mut">nada liberado</span>'}
         ${u.perfil!=='ADMIN'&&(u.telas||[]).length?`<span class="usu-chip t">${u.telas.length} tela(s)</span>`:''}</div>
       <div class="usu-ult mut">${u.ultimo?'último acesso '+esc(u.ultimo):'nunca entrou'}</div>
       <button class="btn btn-outline btn-sm" data-act="usuEditar" data-login="${esc(u.login)}">Editar</button></div>`; }).join('');
-  return `${USU_EDIT?usuForm():''}
+  return `${avisoLogin}${USU_EDIT?usuForm():''}
   <div class="panel"><div class="panel-head"><h2>👥 Usuários</h2><span class="sub">${USU_LISTA.length} pessoa(s) · ${loginExigido()?'login <b>exigido</b>':'login ainda <b>não exigido</b> (aba CONFIG APP → EXIGIR LOGIN)'}</span>
     <div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="usuNovo">+ Novo usuário</button></div>
     <div class="usu-list">${rows||'<div class="mut" style="padding:14px">Nenhum usuário.</div>'}</div></div>
@@ -11365,7 +11369,10 @@ function reconcileOverrides(){
 // fetch com timeout GENEROSO (o Apps Script lê a planilha toda e pode demorar; só aborta se travar de vez)
 async function syncFetch(url, opts, ms){
   const su=syncUrl(), tk=sessToken();
-  if(tk && su && typeof url==='string' && url.indexOf(su)===0) url+=(url.indexOf('?')<0?'?':'&')+'s='+encodeURIComponent(tk);
+  let noCorpo=false;   // v311: no POST o token vai dentro do JSON (fora de logs de URL); planilha antiga ignora e usa a URL
+  if(tk && su && typeof url==='string' && url.indexOf(su)===0 && opts && String(opts.method||'').toUpperCase()==='POST' && typeof opts.body==='string' && /^\s*\{/.test(opts.body)){
+    try{ const o=JSON.parse(opts.body); if(o && typeof o==='object' && !Array.isArray(o)){ o.s=tk; opts=Object.assign({}, opts, {body:JSON.stringify(o)}); noCorpo=true; } }catch(e){} }
+  if(tk && su && typeof url==='string' && url.indexOf(su)===0 && !(noCorpo && (DATA&&DATA.cap&&DATA.cap.sCorpo))) url+=(url.indexOf('?')<0?'?':'&')+'s='+encodeURIComponent(tk);
   const ctrl = ('AbortController' in window) ? new AbortController() : null;
   const to = ctrl ? setTimeout(()=>ctrl.abort(), ms||120000) : null;
   // keepalive: pedido disparado ao SAIR do app (aba escondida/fechando) continua mesmo com a página em segundo plano
