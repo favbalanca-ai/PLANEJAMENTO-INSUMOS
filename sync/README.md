@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Revisão do Administrativo, fase 4 — segurança (v311)
+
+- `temUsuarios_()` (cache 10 min): com usuários na aba USUÁRIOS APP, `doGet` sem sessão devolve o pacote sem
+  `financeiro`/`vendas` e `doPost` recusa `__cadFin`, `__titulo`, `__baixa`, `__concilia`, `__fechamento`,
+  `__finArquivo`, `__bancoIa` ("entre com seu login para mexer no Financeiro"). Sem usuários, nada muda.
+- Token de sessão aceito em `payload.s` (corpo do POST); `cap.sCorpo:1` avisa o app para não mandar na URL.
+- `writeRetorno` exige id existente em RECOM LINKS e corta obs/operador/itens. `_sstId`/`precosSS` leem
+  `PLANILHA SST` e `BANCO PRECOS` da CONFIG APP antes das constantes.
+
 ## Revisão do Administrativo, fase 3 (v310)
 
 - `conciliaGrava_`: avulso com `participante` (CPF/CNPJ); DE-PARA BANCO ganha a coluna **DOC**. `tituloGrava_` recalcula

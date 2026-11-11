@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão do Administrativo, fase 4 — segurança (v311)** — (1) com usuários cadastrados na planilha, o
+  **Financeiro e os cadastros só chegam a quem entrou com login** (o Code.gs tira `financeiro`/`vendas` do pacote e
+  recusa gravações do Financeiro sem sessão, mesmo com EXIGIR LOGIN = NÃO); as telas explicam e oferecem "Entrar";
+  (2) a tela Usuários avisa quando EXIGIR LOGIN está em NÃO e já há usuários; (3) o token de sessão vai **no corpo** do
+  POST (`cap.sCorpo`), não mais na URL; GET e planilha antiga continuam pela URL; (4) **Sair** apaga do aparelho
+  compras, recomendações, fila de NF-e, fotos, extrato e log (ficam só URL da planilha, auto-sync, token da NF-e e
+  módulo); (5) `__retorno` só aceita recomendação que existe em RECOM LINKS e limita os campos; (6) ids das planilhas
+  SST e Banco de Preços passam a ser lidos da CONFIG APP (`PLANILHA SST`, `BANCO PRECOS`) antes do valor no código.
 - **Revisão do Administrativo, fase 3 — conciliação e fechamento (v310)** — (1) lançamento do extrato cujo fornecedor
   tem título em aberto fora da janela de ±10 dias vira "escolha o título" (não mais avulso pronto que duplicava a
   despesa); (2) o mesmo título em duas linhas bloqueia a confirmação; valor pago ≠ saldo aparece na pergunta;

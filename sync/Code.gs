@@ -141,7 +141,8 @@ function readAppPart_(){ return readAppKeys_(APP_TODAS_); }
 var SST_DB_ID = '1y-lZPzzJkj-F2at99XrEpCeUJ2MYjA1Ddf3sgzeYXGw';
 // extrai o ID de uma URL de planilha; ignora URLs de Web App (/exec) e outras
 function _sstId(){
-  var v = String(SST_DB_ID||'').trim(); if (!v) return '';
+  var v = ''; try { v = S(configAppMapa_()['PLANILHA SST']); } catch (e) {}   // v311: CONFIG APP → PLANILHA SST (link ou id) vem antes do valor no código
+  if (!v) v = String(SST_DB_ID||'').trim(); if (!v) return '';
   var m = v.match(/\/d\/([a-zA-Z0-9_-]{20,})/); if (m) return m[1];   // URL de planilha
   if (/^https?:/i.test(v)) return '';                                 // qualquer outra URL: inválida aqui
   return v;                                                           // já é o ID puro
@@ -1754,7 +1755,9 @@ function readRecomLink_(id){
 }
 
 function writeRetorno(ret){
-  var s = retornosSheet(), when = new Date(), itens = (ret && ret.itens) || [], rows = [];
+  if (!ret || !S(ret.id) || !readRecomLink_(ret.id)) return { rows:0, erro:'recomendação não encontrada' };   // v311: a URL /exec é pública — só aceita retorno de uma recomendação que existe
+  ret.obs = S(ret.obs).slice(0, 500); ret.operador = S(ret.operador).slice(0, 80); ret.talhao = S(ret.talhao).slice(0, 40);
+  var s = retornosSheet(), when = new Date(), itens = ((ret && ret.itens) || []).slice(0, 200), rows = [];
   if (!S(s.getRange(1, 10).getValue())) s.getRange(1, 10).setValue('LINHA');
   for (var i = 0; i < itens.length; i++){
     var it = itens[i];
@@ -1782,7 +1785,8 @@ var PRECOS_SHEET = 'PREÇOS APP';
 // a própria planilha de planejamento (comportamento antigo). NÃO mude ao criar
 // um planejamento novo: assim o histórico de preços é sempre o mesmo.
 var PRECOS_DB_ID = '1-pNApvSfw9oUbfec5Tm7g-DEh9xCgupAEpjsZp7EBKg';
-function precosSS(){ if (PRECOS_DB_ID){ try { return SpreadsheetApp.openById(PRECOS_DB_ID); } catch(e){} } return ss(); }
+function _precosDbId_(){ var v = ''; try { v = S(configAppMapa_()['BANCO PRECOS']); } catch (e) {} var m = v.match(/\/d\/([a-zA-Z0-9_-]{20,})/); if (m) return m[1]; if (v && !/^https?:/i.test(v)) return v; return PRECOS_DB_ID; }   // v311: CONFIG APP → BANCO PRECOS
+function precosSS(){ var id = _precosDbId_(); if (id){ try { return SpreadsheetApp.openById(id); } catch(e){} } return ss(); }
 function precosSheet(){ var b = precosSS(), s = b.getSheetByName(PRECOS_SHEET); if (!s) s = b.insertSheet(PRECOS_SHEET); return s; }
 function readPrecosSheet(){
   var s = precosSS().getSheetByName(PRECOS_SHEET); if (!s) return { safras:{} };
@@ -1833,7 +1837,7 @@ function writePrecosSheet(precos){
 // Grava também no Banco (histórico permanente), mas o VLOOKUP do PORTIFÓLIO usa a local.
 function writeFlatPrecos(list, safra){
   writeFlatPrecosEm(ss(), list, safra);                       // local (planejamento) — é a que o PORTIFÓLIO usa
-  if (PRECOS_DB_ID){ try { writeFlatPrecosEm(precosSS(), list, safra); } catch(e){} }   // cópia no Banco (histórico)
+  if (_precosDbId_()){ try { writeFlatPrecosEm(precosSS(), list, safra); } catch(e){} }   // cópia no Banco (histórico)
   try { escreveUnPortifolio(list); } catch(e){}               // a unidade do módulo Preços acompanha na planilha (PORTIFÓLIO UN)
   return { rows: (list||[]).length };
 }
@@ -2308,7 +2312,7 @@ function usuarioPorLogin_(login){
     if (k) _USU_MEMO_ = JSON.parse(k); else { _USU_MEMO_ = {}; usuariosLer_().lista.forEach(function(u){ _USU_MEMO_[u.login] = u; }); try { c.put('lg_usu', JSON.stringify(_USU_MEMO_), 60); } catch (e) {} } }
   return _USU_MEMO_[_normLogin_(login)] || null;
 }
-function _usuLimpaCache_(){ _USU_MEMO_ = null; try { CacheService.getScriptCache().removeAll(['lg_usu','lg_cfg']); } catch (e) {} }
+function _usuLimpaCache_(){ _USU_MEMO_ = null; try { CacheService.getScriptCache().removeAll(['lg_usu','lg_cfg','lg_nusu']); } catch (e) {} }
 function usuarioInfo_(u){ return { nome:u.nome || u.login, login:u.login, perfil:u.perfil, modulos:u.perfil === 'ADMIN' ? MODULOS_APP.slice() : u.modulos, telas:u.perfil === 'ADMIN' ? [] : u.telas }; }
 function tokenGera_(login, ver){ var p = login + '|' + ver + '|' + (Date.now() + 30 * 864e5);
   return _b64_(p) + '.' + _b64_(Utilities.computeHmacSha256Signature(p, _prop_('LOGIN_SEGREDO'))); }
@@ -2604,12 +2608,16 @@ function doGet_(e){
   var leve = !!(e && e.parameter && e.parameter.h);
   if (leve){ var hs = cacheStamps_(acc, cfg); return jsonStr(JSON.stringify(hs ? { hash:hs } : { hash:'', frio:1 })); }   // sem montar o pacote
   var str = acessoFiltra_(currentJson(false), acc);
-  str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + ',"cap":{"lote":1,"cacheAba":1}}';
+  if (!(acc && acc.u) && temUsuarios_()){ try { var dd = JSON.parse(str); PACOTES_SO_SESSAO_.forEach(function(k){ delete dd[k]; }); str = JSON.stringify(dd); } catch (e) {} }   // v311: sem sessão, sem Financeiro
+  str = str.slice(0, -1) + ',"acesso":' + JSON.stringify({ exigido:cfg.exigido, usuario:(acc && acc.u) ? usuarioInfo_(acc.u) : null }) + ',"cap":{"lote":1,"cacheAba":1,"sCorpo":1}}';
   if (_SRV_) str = str.slice(0, -1) + ',"_srv":' + JSON.stringify(_SRV_) + '}';   // fora do hash (muda a cada leitura)
   return jsonStr(str);
 }
 
 var _ACC_ = null;   // sessão do pedido atual (doPost)
+// v311: tipos do Financeiro que exigem sessão quando a planilha tem usuários (dados bancários e CPF não ficam abertos pela URL)
+var FIN_SO_SESSAO_ = { __cadFin:1, __titulo:1, __baixa:1, __concilia:1, __fechamento:1, __finArquivo:1, __bancoIa:1 }, PACOTES_SO_SESSAO_ = ['financeiro', 'vendas'];
+function temUsuarios_(){ try { var c = CacheService.getScriptCache(), k = c.get('lg_nusu'); if (k != null) return k === '1'; var n = (usuariosLer_().lista || []).length > 0; c.put('lg_nusu', n ? '1' : '0', 600); return n; } catch (e) { return false; } }
 function doPost(e){
   var out = { ok:0, fail:0, msgs:[] }, base = false, inval = {};
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
@@ -2621,8 +2629,11 @@ function doPost(e){
   var lock = semTrava ? null : LockService.getScriptLock();
   if (lock && !lock.tryLock(20000)){ out.fail = 1; out.msgs.push('planilha ocupada — tente de novo'); return json(out); }
   try {
-    var acc = acessoDe_(e && e.parameter && e.parameter.s), cfg = loginCfg_();
+    var acc = acessoDe_((e && e.parameter && e.parameter.s) || (payload && !Array.isArray(payload) && payload.s)), cfg = loginCfg_();   // v311: token também no corpo do POST
     _ACC_ = acc;
+    // v311: com usuários cadastrados, o Financeiro só grava com sessão (mesmo com EXIGIR LOGIN = NÃO)
+    var ksFin = Array.isArray(payload && payload.__lote) ? payload.__lote.map(function(p){ return Object.keys(p || {}).filter(function(k){ return k.indexOf('__') === 0; })[0]; }) : ks1;
+    if (!(acc && acc.u) && ksFin.some(function(k){ return FIN_SO_SESSAO_[k]; }) && temUsuarios_()){ out.fail = 1; out.msgs.push('entre com seu login para mexer no Financeiro'); return json(out); }
     // __lote: vários payloads (um tipo cada) numa requisição só — grava um a um, na ordem, e responde um resultado por item
     if (payload && Array.isArray(payload.__lote)){
       var lista = payload.__lote; out.itens = [];
@@ -2663,7 +2674,7 @@ function gravaUm_(payload, acc, cfg, out){
     } else if (payload && payload.__recomLink){     // link curto da recomendação (PDF / QR Code)
       var rk = writeRecomLink_(payload.__recomLink); out.ok = rk.rows; semCache = true; if (rk.erro){ out.fail = 1; out.msgs.push(rk.erro); }
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
-      var rr = writeRetorno(payload.__retorno); out.ok = rr.rows;
+      var rr = writeRetorno(payload.__retorno); out.ok = rr.rows; if (rr.erro){ out.fail = 1; out.msgs.push(rr.erro); }
     } else if (payload && payload.__entradas){       // VÁRIAS compras (e exclusões) numa requisição só
       var ens = writeComprasApp(payload.__entradas); out.ok = ens.rows; out.ids = ens.ids;
     } else if (payload && payload.__entrada){        // compra do app -> entrada no razão de estoque
