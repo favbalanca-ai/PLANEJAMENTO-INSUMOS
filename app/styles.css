@@ -2082,7 +2082,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fin-t tr.mq-tr-erro td{background:var(--red-soft)}.fin-t tr.mq-tr-aviso td{background:#fffdf5}
 @media (max-width:640px){ .mq-form label{min-width:46%} }
 /* referência de dose da bula na recomendação (v294) */
-.rc-bula{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}.rc-bula.acima{color:var(--red);font-weight:700}.rc-bula.abaixo{color:var(--amber);font-weight:700}.rc-bula.sem{font-weight:400}
+.rc-bula{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}
+.rc-conj{font-size:11px;color:var(--ink2);white-space:normal;margin-top:2px;font-weight:500}   /* v302: rendimento do conjunto */.rc-bula.acima{color:var(--red);font-weight:700}.rc-bula.abaixo{color:var(--amber);font-weight:700}.rc-bula.sem{font-weight:400}
 .rc-tbl input.cell.dose-acima,.rc-dose.dose-acima{color:var(--red);font-weight:700}.rc-tbl input.cell.dose-acima{border-color:var(--red);background:var(--red-soft)}
 .rc-tbl input.cell.dose-abaixo,.rc-dose.dose-abaixo{color:var(--amber);font-weight:700}.rc-obs.rc-acima{color:var(--red)}
 /* fechamento mensal (v292) */

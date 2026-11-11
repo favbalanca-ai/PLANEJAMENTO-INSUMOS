@@ -71,6 +71,20 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Conjunto como modelo da operação (v302)** — em **⚙️ Conjuntos e custo**, "Montar conjunto" escolhe a
+  **máquina** e o **implemento** no cadastro do módulo Máquinas (ou "outra… digitar"); escolher a máquina já preenche
+  L/h e R$/HM do cadastro. Cada conjunto ganha um **tipo de operação** (Pulverização, Plantio, Adubação/Correção,
+  Colheita, Preparo de solo, Outra) — coluna nova na tabela; quando não escolhido, o app adivinha pelo nome e mostra
+  com "?". A sugestão automática de conjunto da operação usa esse tipo (herbicida → Pulverização, semente → Plantio…)
+  antes da busca por palavra no nome. Tudo o que antes ficava só no aparelho sobe para a aba **CONJUNTOS APP**
+  (payload `__conjunto`): conjuntos montados (`c:`), edições de largura/velocidade/eficiência/L/h/R$/HM/operação dos
+  conjuntos da CUSTO OPERAÇÃO (`ov:`, só o que mudou) e o conjunto escolhido em cada operação do talhão (`op:TL|P3`).
+  Os dados antigos do aparelho são migrados e enviados na primeira abertura (`conjMigrar`). Na **recomendação** e na
+  **execução do Campo** o select mostra primeiro os conjuntos do tipo da operação e, embaixo, o rendimento
+  ("🚜 ≈ 12,2 ha/h · ~6,5 h para 80 ha") — a linha vai para o PDF, para a leitura da recomendação enviada e para o
+  texto do WhatsApp. Trocar o conjunto na recomendação atualiza a operação no planejamento (fonte única); no Campo,
+  o conjunto da recomendação enviada vem pré-selecionado. Correção no redesenho parcial: um `select` cuja lista de
+  opções mudou de estrutura (optgroup) ficava vazio depois de editar outro campo da mesma tela.
 - **Todas as máquinas na aba MÁQUINAS APP (v301)** — antes a aba só recebia as máquinas editadas no Cadastro; as da
   CUSTO OPERAÇÃO e das notas ficavam só em memória. Agora o primeiro abastecimento ou OS de uma máquina já a grava na
   aba (`maqRegistrar`) e o Cadastro tem o botão **"Enviar as N que faltam para a planilha"** (`maqRegistrarTodas`).
