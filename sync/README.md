@@ -132,6 +132,13 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Venda do produtor: regra (v312)
+
+- `nfeEhVendaProd_(n, cfg, origem)`: produtor cadastrado emitindo, balança, CPF vendendo só grão, ou **NF-e de entrada
+  (`tpNF = 0`)** com produtor como destinatário / só grãos. CFOP 1xxx numa nota de saída não vale (ERP do fornecedor).
+  `nfeEhGrao_` descarta SEMENTE/FARELO/ÓLEO/ADUBO… `nfeReavaliarVendas_` (na captura, até 15 por vez) relê o XML das
+  notas A CLASSIFICAR com TIPO "VENDA PRODUTOR" e devolve as que são compra.
+
 ## Revisão do Administrativo, fase 4 — segurança (v311)
 
 - `temUsuarios_()` (cache 10 min): com usuários na aba USUÁRIOS APP, `doGet` sem sessão devolve o pacote sem
