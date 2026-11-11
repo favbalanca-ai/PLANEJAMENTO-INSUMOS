@@ -758,6 +758,15 @@ function _xt(el, name){ var x = _xfirst(el, name); return x ? S(x.getText()) : '
 function nfeTipoCfopGs_(cfop){ var c = S(cfop).replace(/\D/g,''), f = c.slice(1);
   if (/^[567]\d{3}$/.test(c)){ if (f === '922') return 'FATURAMENTO'; if (f === '116' || f === '117') return 'REMESSA'; if (/^1(0[1-9]|1[0-9]|2[0-4])$/.test(f)) return 'VENDA'; }
   return 'OUTRA'; }
+// v304: o arquivo não é NF-e de produto — diz O QUE ele é, para a pessoa entender por que não entrou
+function nfeTipoOutro_(root){ var rn = S(root.getName()), tem = function(n){ return rn === n || !!_xfirst(root, n); };
+  if (tem('infCte') || tem('infCTe') || /^cte/i.test(rn)) return 'CT-e (conhecimento de frete) — o app só trata NF-e de produto';
+  if (tem('infNFCom') || /nfcom/i.test(rn)) return 'NFCom (conta de telecom/internet) — o app só trata NF-e de produto';
+  if (tem('infMDFe') || /mdfe/i.test(rn)) return 'MDF-e (manifesto de transporte) — o app só trata NF-e de produto';
+  if (tem('infNfse') || tem('Nfse') || tem('CompNfse') || tem('NFSe') || tem('infDPS') || tem('DPS') || tem('ConsultarNfseResposta') || /nfse|dps/i.test(rn)) return 'NFS-e (nota de serviço) — não entra no estoque; se precisar, lance no Financeiro';
+  if (/^(NFe|nfeProc)$/i.test(rn)) return 'NF-e sem o bloco infNFe (arquivo incompleto)';
+  return 'não é XML de NF-e (raiz <' + rn + '>)'; }
+function nfeEventoNome_(tp){ return { '110110':'carta de correção', '110111':'cancelamento', '110140':'EPEC (contingência)', '210200':'confirmação da operação (manifesto do destinatário)', '210210':'ciência da operação (manifesto)', '210220':'desconhecimento da operação (manifesto)', '210240':'operação não realizada (manifesto)' }[S(tp)] || ('evento ' + S(tp)); }
 function nfeLerGs_(txt){
   var root = XmlService.parse(txt).getRootElement();
   var ev = _xfirst(root, 'infEvento') || (root.getName() === 'infEvento' ? root : null);
@@ -765,7 +774,7 @@ function nfeLerGs_(txt){
     var ret = _xfirst(root, 'retEvento');
     return { evento:true, tp:_xt(ev,'tpEvento'), chave:_xt(ev,'chNFe'), cstat:ret ? _xt(ret,'cStat') : '', data:_xt(ev,'dhEvento').slice(0,10) };
   }
-  var inf = _xfirst(root, 'infNFe'); if (!inf) return { erro:'não é XML de NF-e' };
+  var inf = _xfirst(root, 'infNFe'); if (!inf) return { erro:nfeTipoOutro_(root) };   // v304: diz o que o arquivo é
   var prot = _xfirst(root, 'infProt'), ide = _xfirst(inf,'ide'), emit = _xfirst(inf,'emit'), dest = _xfirst(inf,'dest');
   var dets = _xall(inf,'det'), tipos = dets.map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
   var cfops = dets.map(function(d){ return S(_xt(d,'CFOP')); }), xprods = dets.map(function(d){ return S(_xt(d,'xProd')); });   // v288
@@ -892,7 +901,7 @@ function processarXmlNfe(txt, origem){
   if (n.erro) return { status:'rejeitada', motivo:n.erro };
   var pastas = nfePastas_(cfg), t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), agora = new Date();
   if (n.evento){   // eventos: só o CANCELAMENTO (110111) muda algo
-    if (n.tp !== '110111') return { status:'rejeitada', chave:n.chave, motivo:'evento ' + n.tp + ' não tratado' };
+    if (n.tp !== '110111') return { status:'rejeitada', chave:n.chave, motivo:nfeEventoNome_(n.tp) + ' — evento da NF-e, não muda estoque nem valores' };   // v304
     if (['135','136','155'].indexOf(n.cstat) < 0) return { status:'rejeitada', chave:n.chave, motivo:'cancelamento não homologado (cStat ' + n.cstat + ')' };
     _salvaXml_(pastas, n.chave, n.data, txt, 'canc');
     var rc = _nfeLinha_(t, n.chave);
@@ -956,19 +965,22 @@ function capturarNfe(maxMs){
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
     var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
     // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
-    var p = nfePastas_(cfg), it = p.entrada.getFiles();
+    var p = nfePastas_(cfg), it = p.entrada.getFiles(), permFalta = false;
     while (it.hasNext() && !fimTempo()){ var f = it.next();
       try {
         var bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
         if (!bs.length) res.push({ status:'rejeitada', arq:f.getName(), motivo:'não é arquivo .xml nem .zip' });
         bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = S(f.getName()); res.push(r); if (r.status === 'rejeitada') ok = false; });
         if (ok) f.setTrashed(true); else f.moveTo(p.rejeitados);   // processado: a cópia padronizada está em NFe/XML/AAAA-MM
-      } catch (e){ erros.push('arquivo "' + f.getName() + '": ' + e); } }   // fica na Entrada: tenta de novo na próxima
+      } catch (e){ var em = String(e);
+        if (/permission|permiss/i.test(em)){ permFalta = true; var sobra = 1; while (it.hasNext()){ it.next(); sobra++; }   // v304: um aviso só, e para (todos iam falhar igual)
+          erros.push('SEM PERMISSÃO no Drive (' + sobra + ' arquivo(s) esperando na NFe/Entrada): ' + em); break; }
+        erros.push('arquivo "' + f.getName() + '": ' + em); } }   // fica na Entrada: tenta de novo na próxima
     // v279: XML das NFAs emitidas pela balança (Pesagem v2) — entram como venda do produtor
     if (!fimTempo()) try { capturarNfaPesagem_(passo, res, fimTempo); } catch (e){ erros.push('balança: ' + e); }
     // e-mail DESLIGADO por padrão: as notas entram só pela pasta NFe/Entrada (a pessoa alimenta à mão).
     // Para voltar a ler o Gmail: na CONFIG NFE, linha "LER E-MAIL" = SIM.
-    if (cfg.email && !fimTempo()) try {
+    if (cfg.email && !fimTempo() && !permFalta) try {
       var label = GmailApp.getUserLabelByName(NFE_LABEL) || GmailApp.createLabel(NFE_LABEL);
       var ths = GmailApp.search('has:attachment (filename:xml OR filename:zip) newer_than:7d -label:' + NFE_LABEL, 0, 50);
       for (var i = 0; i < ths.length; i++){ var th = ths[i]; if (fimTempo()) break;
@@ -994,7 +1006,7 @@ function _nfeCapturaSalva_(res, erros, parcial){
     var c = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial };
     res.forEach(function(r){ if (r.status === 'nova' || r.status === 'casada') c.novas++; else if (r.status === 'duplicada') c.repetidas++;
       else if (r.status === 'ignorada') c.ignoradas++; else if (r.status === 'rejeitada') c.rejeitadas.push((r.arq ? r.arq + ': ' : '') + (r.motivo || '')); });
-    c.rejeitadas = c.rejeitadas.slice(0,10);
+    c.totRej = c.rejeitadas.length; c.totErr = (erros || []).length; c.rejeitadas = c.rejeitadas.slice(0,20);   // v304: totais (a lista mostrada é um recorte)
     var pr = PropertiesService.getScriptProperties();
     pr.setProperty('NFE_CAPTURA', JSON.stringify(c));
     // histórico dos últimos 30 arquivos lidos (não some quando a busca seguinte não acha nada)
