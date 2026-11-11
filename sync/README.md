@@ -132,6 +132,16 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Revisão do Administrativo, fase 2 (v309)
+
+- `nfeClassifica_`: `ref` vazia não apaga a CHAVE REFERENCIADA; RECEBIDA não volta a EM TRÂNSITO/A ENTREGAR (salvo
+  `forcar`); `reclass:true` mantém RECEBIDA EM/POR; `entrada` (payload da compra) é gravada no razão no mesmo pedido;
+  IGNORADA apaga a entrada `[#chave]`. `nfeRecebimento_`: recusa receber de novo (salvo `refazer`/`semXml`); grava
+  `entrada` junto. Captura "casada" (XML depois do recebimento): OBS com ⚠ e `finTitulosDaNota_`. `nfeReabrir_` com
+  `forcar` reabre EM TRÂNSITO/A ENTREGAR (apaga NFE ITENS, cancela títulos, limpa MANUTENÇÃO e razão, recalcula o
+  contrato). `nfeVenda_` desfazer relê o XML e devolve PRODUTOR/CNPJ EMITENTE/FORNECEDOR. `nfe_chave` devolve `maquina`
+  por item. Cancelamento marca `del` nas entradas `abnf:<chave>:*` da ABASTECIMENTOS APP (`abastDaNotaApaga_`).
+
 ## Revisão do Administrativo, fase 1 (v308)
 
 - `MODULOS_APP` ganha `maquinas` (o módulo não era liberável para operador). `configAppGravar_` limpa o pacote

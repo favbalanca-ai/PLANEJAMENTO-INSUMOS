@@ -71,6 +71,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão do Administrativo, fase 2 — integridade (v309)** — (1) remessa de entrega futura: "Aprovar" espera
+  carregar os contratos (`nfeRemessaResolver`) e, sem contrato ligado, deixa a nota para a pessoa; a planilha nunca
+  mais apaga a CHAVE REFERENCIADA do XML com uma referência vazia; (2) reclassificar uma nota recebida respeita a
+  quantidade recebida (falta/avaria) e o fator novo (`nfeQtdItem`), e a planilha mantém quem/quando recebeu
+  (`reclass:true`); (3) a entrada no razão vai **no mesmo pedido** da classificação (`cl.entrada`) e do recebimento
+  (`payload.entrada`): não fica mais "status gravado, estoque não"; (4) nota "recebida sem XML" que casa depois ganha os
+  títulos a pagar e um alerta ⚠ na caixa de entrada com botão Reclassificar; alerta de nota cancelada ganha "Estornar
+  entrada"; (5) a planilha recusa rebaixar RECEBIDA para EM TRÂNSITO e receber de novo uma nota já recebida (envio
+  atrasado de outro aparelho); ignorar uma nota tira a entrada do razão; (6) "Não é venda" desfaz na planilha e
+  fornecedor/CNPJ/produtor voltam do XML; (7) nota EM TRÂNSITO ou contrato registrado por engano pode ser **reaberto**
+  (`nfeReabrirStatus`: botão ↩ no contrato sem entrega e link na conferência do Receber) — itens, títulos, apropriações
+  e entrada são desfeitos; (8) diesel/Arla só entram no tanque quando a nota **chega** (recebimento) ou na entrada
+  direta; ignorar ou cancelar a nota tira do tanque.
 - **Revisão do Administrativo, fase 1 (v308)** — correções pequenas achadas na revisão do módulo:
   (1) módulo Máquinas liberável para operadores (`MODULOS_APP` no Code.gs estava sem `maquinas`); (2) toque duplo em
   "Registrar baixa" não grava duas vezes (id nasce ao abrir o formulário + trava `_bxBusy` + botão desabilitado);
