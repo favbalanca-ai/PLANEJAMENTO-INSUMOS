@@ -71,6 +71,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão do Administrativo, fase 3 — conciliação e fechamento (v310)** — (1) lançamento do extrato cujo fornecedor
+  tem título em aberto fora da janela de ±10 dias vira "escolha o título" (não mais avulso pronto que duplicava a
+  despesa); (2) o mesmo título em duas linhas bloqueia a confirmação; valor pago ≠ saldo aparece na pergunta;
+  (3) avulsos ganham campo **CPF/CNPJ** (vai para o Livro Caixa) e a regra DE-PARA BANCO guarda o DOC; (4) linhas sem
+  decisão sobem como PENDENTE (outro aparelho vê); (5) o extrato lido e as decisões ficam guardados no aparelho
+  (`planejamento_banco`) e voltam ao reabrir a aba; fechar pergunta antes de descartar; (6) **↩ Desfazer** a última
+  conciliação (até 7 dias): apaga as baixas e os avulsos e devolve as linhas a pendentes; (7) título cancelado tem
+  Reabrir; editar o valor de um título com baixas recalcula PARCIAL/PAGO (app e planilha); (8) reclassificar uma nota
+  mantém vencimento, categoria, imóvel, obs e forma de pagamento ajustados à mão nos títulos em aberto; (9) fechamento
+  com e-mail que falha registra a pasta como "só salvo" em vez de perder o link.
 - **Revisão do Administrativo, fase 2 — integridade (v309)** — (1) remessa de entrega futura: "Aprovar" espera
   carregar os contratos (`nfeRemessaResolver`) e, sem contrato ligado, deixa a nota para a pessoa; a planilha nunca
   mais apaga a CHAVE REFERENCIADA do XML com uma referência vazia; (2) reclassificar uma nota recebida respeita a

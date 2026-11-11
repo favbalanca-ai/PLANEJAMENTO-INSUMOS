@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-309';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-310';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3167,7 +3167,7 @@ V.financeiro=function(){
       <td data-th="Categoria" class="c-more">${esc(t.categoria||'—')}${t.formaPgto?` <span class="mut">· ${esc(t.formaPgto)}</span>`:''}${t.imovel?` <span class="mut">· ${esc(t.imovel)}</span>`:''}</td>
       <td class="num" data-th="Valor"><b>${pagar?'':'+ '}${brl(+t.valor||0)}</b></td>
       <td data-th="Situação"><span class="pill fin-st ${semConta?'warn':cls}">${stTxt}</span></td>
-      <td class="fin-acts">${_finAberto(sit)?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Registrar o pagamento na conta do produtor">💳 Baixar</button>`:(semConta?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Informar a conta deste pagamento">Completar baixa</button>`:(sit==='pago'&&!bx.length?`<button class="btn btn-outline btn-sm" data-act="finReabrir" data-id="${esc(t.id)}">Reabrir</button>`:''))}<button class="icon-btn" data-act="finEditar" data-id="${esc(t.id)}" title="Editar">✎</button>${manual?`<button class="icon-btn del" data-act="finDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>`:(_finAberto(sit)&&!bx.length?`<button class="icon-btn" data-act="finCancelar" data-id="${esc(t.id)}" title="Cancelar este título (a nota continua)">✕</button>`:'')}</td></tr>${sub}`; }).join('');
+      <td class="fin-acts">${_finAberto(sit)?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Registrar o pagamento na conta do produtor">💳 Baixar</button>`:(semConta?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Informar a conta deste pagamento">Completar baixa</button>`:((sit==='pago'&&!bx.length)||sit==='cancelado'?`<button class="btn btn-outline btn-sm" data-act="finReabrir" data-id="${esc(t.id)}" title="${sit==='cancelado'?'Cancelado por engano: volta a aberto':'Volta a aberto'}">Reabrir</button>`:''))}<button class="icon-btn" data-act="finEditar" data-id="${esc(t.id)}" title="Editar">✎</button>${manual?`<button class="icon-btn del" data-act="finDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>`:(_finAberto(sit)&&!bx.length?`<button class="icon-btn" data-act="finCancelar" data-id="${esc(t.id)}" title="Cancelar este título (a nota continua)">✕</button>`:'')}</td></tr>${sub}`; }).join('');
   const total=L.reduce((s,t)=>s+(String(t.tipo||'PAGAR').toUpperCase()==='PAGAR'?1:-1)*(+t.valor||0),0);
   return kpis+seg+`
   ${finBaixaFormHtml()}${finFormHtml()}
@@ -3330,7 +3330,7 @@ function bancoCands(l, prod, amplo){ const F=FIN(), tipo=l.valor<0?'PAGAR':'RECE
     .map(t=>{ const tk=bancoTokens(t.participanteNome); const hit=tk.filter(x=>hk.some(h=>h.startsWith(x)||x.startsWith(h))).length; const dv=String(t.vencimento||'').slice(0,10); const d=_isISO(dv)?Math.abs((dl-new Date(dv+'T12:00:00'))/86400000):99; return {t, hit, d, dv:Math.abs(finSaldo(t)-v)}; })
     .sort((a,b)=>b.hit-a.hit||a.dv-b.dv||a.d-b.d).map(x=>x.t); }
 function bancoRegraDe(l){ const h=_bkNorm(l.historico), tipo=l.valor<0?'PAGAR':'RECEBER';
-  const r=(FIN().regrasBanco||[]).find(r=>r.contem && h.includes(_bkNorm(r.contem)) && (!r.tipo||String(r.tipo).toUpperCase()===tipo)); if(r) return {categoria:r.categoria||'Outros', nome:r.participanteNome||'', fonte:'regra'};
+  const r=(FIN().regrasBanco||[]).find(r=>r.contem && h.includes(_bkNorm(r.contem)) && (!r.tipo||String(r.tipo).toUpperCase()===tipo)); if(r) return {categoria:r.categoria||'Outros', nome:r.participanteNome||'', doc:String(r.doc||'').replace(/\D/g,''), fonte:'regra'};   // v310: CPF/CNPJ da regra
   const p=BANCO_REGRAS_PADRAO.find(x=>x[0].test(h) && x[1]===tipo); if(p) return {categoria:p[2], nome:p[3], fonte:'padrao'}; return null; }
 function bancoEhTransf(l){ const h=_bkNorm(l.historico); if(BANCO_TRANSF.test(h)) return 'aplicação/transferência própria';
   const F=FIN(); const par=(F.extratoBanco||[]).find(x=>x.conta!==BANCO.conta && String(x.data).slice(0,10)===l.data && Math.abs((+x.valor||0)+l.valor)<0.005); return par?`contrapartida na conta ${finContaNome(par.conta)}`:''; }
@@ -3342,7 +3342,9 @@ function bancoClassificar(){ const B=BANCO; if(!B) return; const usos={};
     if(cands.length===1){ l.st='auto'; l.titulo=cands[0].id; usos[l.titulo]=(usos[l.titulo]||0)+1; return; }
     if(cands.length>1){ l.st='sug'; l.titulo=cands[0].participanteNome && bancoTokens(cands[0].participanteNome).some(x=>bancoTokens(l.historico).some(h=>h.startsWith(x)||x.startsWith(h)))?cands[0].id:''; return; }
     if(tr){ l.st='ign'; l.motivo=tr; return; }
-    const rg=bancoRegraDe(l); l.st='novo'; l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', fonte:rg?rg.fonte:'', lembrar:false}; });
+    const parecidos=bancoCands(l, B.produtor, true).filter(t=>{ const tk=bancoTokens(t.participanteNome), hk=bancoTokens(l.historico); return tk.some(x=>hk.some(h=>h.startsWith(x)||x.startsWith(h))); });   // v310: fornecedor com título em aberto fora da janela de ±10 dias
+    if(parecidos.length){ l.st='sug'; l.amplo=true; l.cands=parecidos; l.motivo='há título em aberto deste fornecedor (vencimento distante) — confira antes de criar avulso'; return; }
+    const rg=bancoRegraDe(l); l.st='novo'; l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', doc:rg?rg.doc:'', fonte:rg?rg.fonte:'', lembrar:false}; });
   B.linhas.forEach(l=>{ if(l.st==='auto' && usos[l.titulo]>1){ l.st='sug'; l.titulo=''; l.motivo='o mesmo título casa com mais de uma linha'; } }); }
 function bancoPronta(l){ if(l.st==='ja') return false; if(l.st==='ign') return true; if(l.st==='auto'||l.st==='sug') return !!l.titulo; if(l.st==='novo') return !!(l.novo&&l.novo.categoria); return false; }
 function bancoSaldoApp(conta, data){ const c=FIN().contas.find(x=>x.codigo===conta); if(!c) return null; const d0=String(c.dataSaldo||'').slice(0,10); if(!_isISO(d0)) return null;
@@ -3352,19 +3354,34 @@ function bancoImportarArquivo(f){ const fr=new FileReader(); fr.onload=()=>{ try
       let txt; if(/CHARSET:1252|ENCODING:USASCII|encoding="?(ISO-8859-1|windows-1252)/i.test(asc)) txt=new TextDecoder('windows-1252').decode(buf); else { txt=new TextDecoder('utf-8').decode(buf); if(txt.includes('�')) txt=new TextDecoder('windows-1252').decode(buf); }
       const r=/<OFX>|<STMTTRN>|OFXHEADER/i.test(txt)?ofxParse(txt):csvBancoParse(txt); if(!r.ok){ toast('Extrato: '+r.erro); return; }
       const c=bancoContaDe(r.banco, r.acctid); BANCO=Object.assign({arquivo:f.name, conta:c?c.codigo:'', produtor:c?c.produtor:''}, r);
-      BANCO.linhas.forEach(l=>{ l.st='novo'; l.novo={}; }); bancoClassificar(); FIN_UI.view='banco'; route(); rolarTopo();
+      BANCO.linhas.forEach(l=>{ l.st='novo'; l.novo={}; }); bancoClassificar(); bancoGuardar(); FIN_UI.view='banco'; route(); rolarTopo();
       const nJa=BANCO.linhas.filter(l=>l.st==='ja').length; toast(`${BANCO.linhas.length} lançamento(s) lido(s)${nJa?` · ${nJa} já conciliado(s)`:''}${c?'':' — escolha a conta'}`); }
     catch(e){ toast('Não consegui ler o extrato: '+e.message); } }; fr.readAsArrayBuffer(f); }
+// v310: o extrato lido e as decisões ficam guardados no aparelho (trocar de app no celular não perde o trabalho)
+const BANCO_KEY='planejamento_banco', BANCO_ULT_KEY='planejamento_banco_ultima';
+function bancoGuardar(){ try{ if(!BANCO){ localStorage.removeItem(BANCO_KEY); return; } const c=Object.assign({}, BANCO); delete c.buf; localStorage.setItem(BANCO_KEY, JSON.stringify(c)); }catch(e){} }
+function bancoRestaurar(){ if(BANCO) return; try{ const c=JSON.parse(localStorage.getItem(BANCO_KEY)||'null'); if(c&&Array.isArray(c.linhas)&&c.linhas.length){ BANCO=c; FIN_UI.view='banco'; } }catch(e){} }
+function bancoUltimaSalvar(u){ try{ localStorage.setItem(BANCO_ULT_KEY, JSON.stringify(u)); }catch(e){} }
+function bancoUltima(){ try{ const u=JSON.parse(localStorage.getItem(BANCO_ULT_KEY)||'null'); return (u&&u.ts&&Date.now()-u.ts<7*86400000)?u:null; }catch(e){ return null; } }
+async function bancoDesfazerUltima(){ const u=bancoUltima(); if(!u) return; const url=syncUrl(); if(!url) return;
+  if(!ask(`Desfazer a última conciliação (${u.arquivo||'extrato'} · ${u.baixas.length} baixa(s) · ${u.titulos.length} avulso(s))?\nAs baixas saem, os avulsos são apagados e as linhas do extrato voltam a pendentes.`)) return;
+  toast('Desfazendo…');
+  try{ if(u.baixas.length){ const r1=await syncPost(url, JSON.stringify({__baixa:{baixas:u.baixas.map(id=>({id, del:true}))}})); if(!postOk(r1)){ toast('Não desfez as baixas: '+nfeMsgs(r1)); return; } }
+    if(u.titulos.length){ const r2=await syncPost(url, JSON.stringify({__titulo:{titulos:u.titulos.map(id=>({id, del:true}))}})); if(!postOk(r2)){ toast('Não apagou os avulsos: '+nfeMsgs(r2)); return; } }
+    if(u.linhas.length){ const r3=await syncPost(url, JSON.stringify({__concilia:{conta:u.conta, produtor:u.produtor||'', itens:u.linhas.map(l=>Object.assign({refazer:true}, l)), regras:[]}})); if(!postOk(r3)){ toast('As linhas do extrato não voltaram: '+nfeMsgs(r3)); } }
+    try{ localStorage.removeItem(BANCO_ULT_KEY); }catch(e){} BANCO=null; bancoGuardar(); toast('Conciliação desfeita — importe o extrato de novo para refazer'); await syncPull({auto:true, force:true, silentToast:true}); route(); }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
 // ---- tela ----
 const BK_ST={ja:['Já conciliado','✔️'], auto:['Casou com um título','🟢'], sug:['Escolha o título','🟡'], novo:['Lançamento avulso','⚪'], ign:['Ignorar','⏭']};
-function finBancoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.ativa)), B=BANCO;
+function finBancoHtml(){ bancoRestaurar(); const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.ativa)), B=BANCO, ultC=bancoUltima();
   const sel=`<select class="sel" id="bk-conta"><option value="">— escolha a conta —</option>${contas.map(c=>`<option value="${esc(c.codigo)}"${B&&c.codigo===B.conta?' selected':''}>${esc(finContaNome(c.codigo))}${c.produtor?' · '+esc(finProdNome(c.produtor)):''}</option>`).join('')}</select>`;
   const imp=`<label class="btn btn-primary btn-sm" style="cursor:pointer">📥 Importar extrato<input type="file" id="banco-file" accept=".ofx,.qfx,.csv,.txt,application/x-ofx,text/csv" hidden></label>`;
   const ajuda=`<p class="mut" style="font-size:12px;margin:8px 0 0"><b>Banco do Brasil:</b> Extrato → período → Salvar/Exportar → <b>OFX</b> (ou CSV). <b>Sicoob:</b> Conta corrente → Extrato → Exportar → <b>OFX</b> (ou CSV). O arquivo é lido só neste aparelho; a planilha recebe apenas as baixas e os lançamentos que você confirmar.</p>`;
   if(!B){ const pend=(F.extratoBanco||[]).filter(x=>x.status==='PENDENTE'), conc=(F.extratoBanco||[]).filter(x=>x.status==='CONCILIADO'), ult=conc.map(x=>String(x.data).slice(0,10)).sort().pop();
     return `<div class="panel"><div class="panel-head"><h2>🔁 Conciliar extrato do banco</h2><span class="sub">o app casa cada lançamento do extrato com um título e dá a baixa; o que não tem título vira lançamento avulso</span><div class="spacer"></div>${imp}</div>
       <div style="padding:0 14px 14px">${ajuda}<div class="rel-uso-kpis" style="margin-top:10px"><span><small>Conciliados (180 dias)</small>${conc.length}</span><span><small>Último lançamento conciliado</small>${ult?_dtBRc(ult):'—'}</span><span><small>Pendentes de outro aparelho</small>${pend.length}</span></div>
-      ${contas.length?'':'<p class="rel-ap-aviso" style="margin-top:10px">Nenhuma conta bancária cadastrada. Em <b>Cadastros → Contas</b> informe banco, agência, conta, <b>número do banco</b> (001 BB, 756 Sicoob) e o saldo inicial com data.</p>'}</div></div>`; }
+      ${contas.length?'':'<p class="rel-ap-aviso" style="margin-top:10px">Nenhuma conta bancária cadastrada. Em <b>Cadastros → Contas</b> informe banco, agência, conta, <b>número do banco</b> (001 BB, 756 Sicoob) e o saldo inicial com data.</p>'}
+      ${ultC?`<p class="mut" style="font-size:12px;margin-top:10px">Última conciliação neste aparelho: ${esc(ultC.arquivo||'extrato')} · ${_dtBRc(new Date(ultC.ts).toISOString().slice(0,10))} · ${ultC.baixas.length} baixa(s), ${ultC.titulos.length} avulso(s) <button class="btn btn-outline btn-sm" data-act="bkDesfazerUltima">↩ Desfazer</button></p>`:''}</div></div>`; }
   const n={ja:0,auto:0,sug:0,novo:0,ign:0}; B.linhas.forEach(l=>n[l.st]++); const prontas=B.linhas.filter(bancoPronta).length, semCat=B.linhas.filter(l=>l.st==='novo'&&!(l.novo&&l.novo.categoria)).length;
   const saldoApp=B.conta?bancoSaldoApp(B.conta, B.dataSaldo):null, dif=(saldoApp!=null&&B.saldoBanco!=null)?+(B.saldoBanco-saldoApp).toFixed(2):null;
   const cards=B.linhas.map((l,i)=>{ const st=BK_ST[l.st]||BK_ST.novo, neg=l.valor<0, t=l.titulo?F.titulos.find(x=>x.id===l.titulo):null;
@@ -3375,6 +3392,7 @@ function finBancoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.at
         ${l.amplo?'':`<a class="link" data-act="bkAmplo" data-i="${i}">ver todos em aberto</a> · `}<a class="link" data-act="bkIgn" data-i="${i}">ignorar</a></div>`; }
     else if(l.st==='novo'){ const nv=l.novo||{}; corpo=`<div class="bk-novo"><label>Categoria<select class="sel" data-bk="cat" data-i="${i}"><option value="">— escolha —</option>${FIN_CATS.map(c=>`<option value="${esc(c)}"${c===nv.categoria?' selected':''}>${esc(c)}</option>`).join('')}</select></label>
         <label>${neg?'Fornecedor':'Pagador'}<input class="txt" data-bk="nome" data-i="${i}" value="${esc(nv.nome||'')}" placeholder="nome (opcional)"></label>
+        <label>CPF/CNPJ <small class="mut">(Livro Caixa)</small><input class="txt" inputmode="numeric" data-bk="doc" data-i="${i}" value="${esc(nv.doc||'')}" placeholder="só números"></label>
         <span class="bk-acts">${nv.fonte?`<span class="mut" title="categoria preenchida por regra">${nv.fonte==='regra'?'📌 regra da planilha':'📌 regra padrão'}</span>`:`<label class="bk-chk"><input type="checkbox" data-bk="lembrar" data-i="${i}"${nv.lembrar?' checked':''}> lembrar para este histórico</label>`}${l.cands&&l.cands.length?` · <a class="link" data-act="bkSug" data-i="${i}">casar com título</a>`:` · <a class="link" data-act="bkAmplo" data-i="${i}">casar com título</a>`} · <a class="link" data-act="bkIgn" data-i="${i}">ignorar</a></span></div>`; }
     else if(l.st==='ign') corpo=`<div class="mut">não entra no Financeiro${l.motivo?' · '+esc(l.motivo):''} · <a class="link" data-act="bkDesfazer" data-i="${i}">desfazer</a></div>`;
     return `<div class="bk-row st-${l.st}${bancoPronta(l)?' pronta':''}"><div class="bk-main"><div class="bk-top"><span class="nfe-chip st-${l.st==='auto'?'auto':l.st==='sug'?'sug':l.st==='novo'?'novo':l.st==='ign'?'ignorar':'ok'}">${st[1]} ${st[0]}</span><b class="${neg?'bk-neg':'bk-pos'}">${neg?'−':'+'} ${brl(Math.abs(l.valor))}</b><span class="mut">${_dtBRc(l.data)}${l.doc?' · doc '+esc(l.doc):''}</span></div>
@@ -3390,27 +3408,35 @@ function finBancoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.at
     <div class="bk-list">${cards}</div></div>`; }
 // ---- ações ----
 function bancoCampo(el){ const B=BANCO; if(!B) return; const i=+el.dataset.i, l=B.linhas[i]; if(!l) return; const f=el.dataset.bk; l.manual=true;
-  if(f==='titulo'){ if(el.value==='__novo'){ l.st='novo'; l.titulo=''; const rg=bancoRegraDe(l); l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', fonte:rg?rg.fonte:''}; } else { l.titulo=el.value; l.st=l.titulo?(l.st==='auto'?'auto':'sug'):'sug'; } route({keepScroll:true}); return; }
-  l.novo=l.novo||{}; if(f==='cat'){ l.novo.categoria=el.value; l.novo.fonte=''; if(l.novo.lembrar==null) l.novo.lembrar=true; route({keepScroll:true}); } else if(f==='nome'){ l.novo.nome=el.value; } else if(f==='lembrar'){ l.novo.lembrar=el.checked; } }
+  if(f==='titulo'){ if(el.value==='__novo'){ l.st='novo'; l.titulo=''; const rg=bancoRegraDe(l); l.novo={categoria:rg?rg.categoria:'', nome:rg?rg.nome:'', doc:rg?rg.doc:'', fonte:rg?rg.fonte:''}; } else { l.titulo=el.value; l.st=l.titulo?(l.st==='auto'?'auto':'sug'):'sug'; } bancoGuardar(); route({keepScroll:true}); return; }
+  l.novo=l.novo||{}; if(f==='cat'){ l.novo.categoria=el.value; l.novo.fonte=''; if(l.novo.lembrar==null) l.novo.lembrar=true; route({keepScroll:true}); } else if(f==='nome'){ l.novo.nome=el.value; } else if(f==='doc'){ l.novo.doc=String(el.value||'').replace(/\D/g,''); } else if(f==='lembrar'){ l.novo.lembrar=el.checked; }
+  bancoGuardar(); }
 function bancoAcao(act, i){ const B=BANCO; if(!B) return; const l=B.linhas[i]; if(!l) return; l.manual=true;
   if(act==='bkIgn'){ l.prev=l.st; l.st='ign'; l.motivo='marcado por você'; }
   else if(act==='bkDesfazer'){ l.manual=false; bancoClassificar(); }
   else if(act==='bkTrocar'){ l.st='sug'; l.amplo=true; }
   else if(act==='bkAmplo'){ l.st='sug'; l.amplo=true; l.titulo=''; }
   else if(act==='bkSug'){ l.st='sug'; l.titulo=''; }
-  route({keepScroll:true}); }
+  bancoGuardar(); route({keepScroll:true}); }
 function bancoRegraContem(l){ const h=_bkNorm(l.historico), tk=bancoTokens(l.historico); if(!tk.length) return ''; const a=h.indexOf(tk[0]); let b=a+tk[0].length; if(tk[1]){ const j=h.indexOf(tk[1], b); if(j>=0 && j-b<=12) b=j+tk[1].length; } return h.slice(a,b).trim().slice(0,60); }   // trecho contíguo do histórico (ex.: "JOAO DA SILVA")
 async function bancoConfirmar(){ const B=BANCO; if(!B||!B.conta){ toast('Escolha a conta do app'); return; } const url=syncUrl(); if(!url){ toast('Configure a sincronização'); return; }
   const L=B.linhas.filter(bancoPronta); if(!L.length) return;
-  const itens=L.map(l=>{ const it={fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}; if(l.st==='ign') it.ignorar=true; else if(l.titulo) it.titulo=l.titulo; else it.novo={tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||'', imovel:bancoImovelDe(B.produtor)}; return it; });
-  const regras=[]; L.forEach(l=>{ if(l.st==='novo'&&l.novo&&l.novo.lembrar&&l.novo.categoria){ const c=bancoRegraContem(l); if(c && !regras.some(r=>r.contem===c)) regras.push({contem:c, tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||''}); } });
-  const nNovos=itens.filter(i=>i.novo).length; if(!ask(`Confirmar ${L.length} lançamento(s)?\n• ${itens.filter(i=>i.titulo).length} baixa(s) em títulos\n• ${nNovos} lançamento(s) avulso(s)\n• ${itens.filter(i=>i.ignorar).length} ignorado(s)${regras.length?`\n• ${regras.length} regra(s) nova(s) de categoria`:''}`)) return;
+  // v310: o mesmo título em duas linhas não passa; valor diferente do saldo é avisado
+  { const usos={}; L.forEach(l=>{ if(l.titulo) usos[l.titulo]=(usos[l.titulo]||0)+1; }); const rep=Object.keys(usos).filter(k=>usos[k]>1);
+    if(rep.length){ const F=FIN(); toast('O mesmo título está em mais de uma linha: '+rep.map(id=>{ const t=F.titulos.find(x=>x.id===id); return t?(t.participanteNome||id):id; }).join(', ')+' — deixe só uma'); return; } }
+  const difs=L.filter(l=>l.titulo).map(l=>{ const t=FIN().titulos.find(x=>x.id===l.titulo); const d=t?Math.abs(l.valor)-finSaldo(t):0; return (t&&Math.abs(d)>0.011)?`• ${t.participanteNome||t.id}: pago ${brl(Math.abs(l.valor))} × saldo ${brl(finSaldo(t))}`:''; }).filter(Boolean);
+  const itens=L.map(l=>{ const it={fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}; if(l.st==='ign') it.ignorar=true; else if(l.titulo) it.titulo=l.titulo; else it.novo={tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||'', participante:l.novo.doc||'', imovel:bancoImovelDe(B.produtor)}; return it; });
+  const pend=B.linhas.filter(l=>l.st!=='ja'&&!bancoPronta(l)).map(l=>({fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}));   // v310: o que ficou sem decisão sobe como PENDENTE (outro aparelho vê)
+  const regras=[]; L.forEach(l=>{ if(l.st==='novo'&&l.novo&&l.novo.lembrar&&l.novo.categoria){ const c=bancoRegraContem(l); if(c && !regras.some(r=>r.contem===c)) regras.push({contem:c, tipo:l.valor<0?'PAGAR':'RECEBER', categoria:l.novo.categoria, participanteNome:l.novo.nome||'', doc:l.novo.doc||''}); } });
+  const nNovos=itens.filter(i=>i.novo).length, semDoc=itens.filter(i=>i.novo&&!i.novo.participante).length;
+  if(!ask(`Confirmar ${L.length} lançamento(s)?\n• ${itens.filter(i=>i.titulo).length} baixa(s) em títulos\n• ${nNovos} lançamento(s) avulso(s)${semDoc?` (${semDoc} sem CPF/CNPJ — o Livro Caixa vai pedir)`:''}\n• ${itens.filter(i=>i.ignorar).length} ignorado(s)${regras.length?`\n• ${regras.length} regra(s) nova(s) de categoria`:''}${pend.length?`\n• ${pend.length} sem decisão ficam pendentes`:''}${difs.length?`\n\n⚠ Valor pago diferente do saldo do título:\n${difs.join('\n')}`:''}`)) return;
   toast('Gravando conciliação…');
-  try{ const r=await syncPost(url, JSON.stringify({__concilia:{conta:B.conta, produtor:B.produtor||'', itens, regras}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
+  try{ const r=await syncPost(url, JSON.stringify({__concilia:{conta:B.conta, produtor:B.produtor||'', itens:itens.concat(pend), regras}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
+    bancoUltimaSalvar({conta:B.conta, produtor:B.produtor||'', ts:Date.now(), arquivo:B.arquivo||'', baixas:L.filter(l=>l.st!=='ign').map(l=>'bb:'+(B.conta+'|'+l.fitid).replace(/[^A-Za-z0-9|_.-]/g,'_')), titulos:itens.filter(i=>i.novo).map(i=>'bk:'+(B.conta+'|'+i.fitid).replace(/[^A-Za-z0-9|_.-]/g,'_')), linhas:L.map(l=>({fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}))});   // v310: para desfazer
     const F=FIN(), hoje=_hojeISO(); DATA.financeiro.extratoBanco=F.extratoBanco||[];
     L.forEach(l=>{ const id=B.conta+'|'+l.fitid; const st=l.st==='ign'?'IGNORADO':'CONCILIADO'; const e=DATA.financeiro.extratoBanco.find(x=>x.id===id); if(e) Object.assign(e,{status:st, titulo:l.titulo||''}); else DATA.financeiro.extratoBanco.push({id, conta:B.conta, produtor:B.produtor||'', data:l.data, valor:l.valor, historico:l.historico, doc:l.doc, titulo:l.titulo||'', status:st}); l.st='ja'; l.ja={status:st, data:hoje}; });
     regras.forEach(r=>{ DATA.financeiro.regrasBanco=(F.regrasBanco||[]).filter(x=>x.contem!==r.contem).concat([r]); });
-    const c=r.concilia||{}; route({keepScroll:true}); toast(`Conciliado: ${c.baixas||0} baixa(s) · ${c.novos||0} avulso(s) · ${c.ignorados||0} ignorado(s)${c.pulados?` · ${c.pulados} já estavam`:''}`);
+    const c=r.concilia||{}; bancoGuardar(); route({keepScroll:true}); toast(`Conciliado: ${c.baixas||0} baixa(s) · ${c.novos||0} avulso(s) · ${c.ignorados||0} ignorado(s)${c.pulados?` · ${c.pulados} já estavam`:''}`);
     setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 800); }
   catch(e){ toast('Sem conexão com a planilha — tente de novo'); } }
 function bancoImovelDe(cpf){ const ims=FIN().imoveis.filter(i=>_finAtivo(i.ativo)&&(!cpf||i.produtor===cpf)); if(ims.length===1) return ims[0].codigo; const p=FIN().produtores.find(x=>x.cpf===cpf); return (p&&p.imovelPadrao)||''; }
@@ -3524,7 +3550,7 @@ V.fluxocaixa=function(){ location.replace('#/financeiro'); return ''; };   // te
 async function finPost(titulos, msgOk){ const url=syncUrl(); if(!url){ toast('Configure a sincronização primeiro'); return false; }
   try{ const r=await syncPost(url, JSON.stringify({__titulo:{titulos}}));
     if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return false; }
-    const F=FIN(); titulos.forEach(t=>{ const i=F.titulos.findIndex(x=>x.id===t.id); if(t.del){ if(i>=0) F.titulos.splice(i,1); } else if(i>=0) Object.assign(F.titulos[i], t); else F.titulos.push(Object.assign({status:'ABERTO', tipo:'PAGAR', origem:'manual'}, t)); });
+    const F=FIN(); titulos.forEach(t=>{ const i=F.titulos.findIndex(x=>x.id===t.id); if(t.del){ if(i>=0) F.titulos.splice(i,1); } else if(i>=0){ Object.assign(F.titulos[i], t); if(String(t.status||'').toUpperCase()!=='CANCELADO') finAplicaStatus(F.titulos[i]); } else F.titulos.push(Object.assign({status:'ABERTO', tipo:'PAGAR', origem:'manual'}, t)); });   // v310: valor editado recalcula PARCIAL/PAGO
     DATA.financeiro.titulos=F.titulos;   // vale até o próximo puxar (a planilha confirma)
     if(msgOk) toast(msgOk); route({keepScroll:true}); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); return true; }
   catch(e){ toast('Sem conexão com a planilha — tente de novo'); return false; } }
@@ -10463,7 +10489,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='maqRegistrarTodas'){ const n=maqRegistrarTodas(); route({keepScroll:true}); toast(n?`${n} máquina(s) enviada(s) para a aba MÁQUINAS APP`:'Nada a enviar'); }
     else if(a.act==='maqCadAbrir'){ MQ_UI.cadAberto=MQ_UI.cadAberto===a.maq?'':a.maq; route({keepScroll:true}); } else if(a.act==='maqCadSalvar'){ maqCadSalvarForm(a.maq); } else if(a.act==='maqCadNova'){ maqCadNova(); } else if(a.act==='maqCadReativar'){ maqCadSalvar(a.maq,{ativa:true}); route({keepScroll:true}); }
     else if(a.act==='fechGerar'){ fechGerar(); } else if(a.act==='fechBaixar'){ fechBaixar(a.doc); } else if(a.act==='fechEnviar'){ fechEnviar(false); } else if(a.act==='fechSalvar'){ fechEnviar(true); }
-    else if(a.act==='bkConfirmar'){ bancoConfirmar(); } else if(a.act==='bkIa'){ bancoIa(); } else if(a.act==='bkLimpar'){ BANCO=null; route(); }
+    else if(a.act==='bkConfirmar'){ bancoConfirmar(); } else if(a.act==='bkIa'){ bancoIa(); } else if(a.act==='bkLimpar'){ if(BANCO&&BANCO.linhas.some(l=>l.st!=='ja')&&!ask('Fechar o extrato? O que não foi confirmado é esquecido.')) return; BANCO=null; bancoGuardar(); route(); } else if(a.act==='bkDesfazerUltima'){ bancoDesfazerUltima(); }
     else if(/^bk(Ign|Desfazer|Trocar|Amplo|Sug)$/.test(a.act)){ bancoAcao(a.act, +a.i); }
     else if(a.act==='finBaixaSalvar'){ finBaixaSalvar(); }
     else if(a.act==='finBaixaCancelar'){ finBaixa=null; route({keepScroll:true}); }
