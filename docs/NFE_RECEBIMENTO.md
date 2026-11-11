@@ -111,16 +111,34 @@ que a mesma nota nunca entre duas vezes.
 
 ## 6. Classificação por CFOP
 
-O CFOP fica **em cada item** (`det/prod/CFOP`). O tipo da nota é o dos itens de insumo.
+O CFOP fica **em cada item** (`det/prod/CFOP`). Desde a v307 o tipo é decidido pelos **3 últimos dígitos**
+(vale para 1/2/3 = entrada e 5/6/7 = saída: fornecedor às vezes emite venda de lubrificante com 1662). A tabela
+é a mesma no app (`CFOP_TAB`) e no Code.gs (`CFOP_TAB_`); o tipo da nota é o primeiro desta ordem que aparecer
+entre os itens: faturamento, remessa, venda, combustível, ativo, consumo, bonificação, industrialização,
+conserto, devolução, demonstração, vasilhame, energia, serviço; senão OUTRA.
 
-| CFOP | Tipo | Efeito no app |
+| CFOP (3 últimos) | Tipo | Efeito no app |
 |---|---|---|
-| 5101, 5102, 6101, 6102 (e demais vendas) | VENDA | Vai para **em trânsito** |
-| 5922, 6922 | FATURAMENTO (entrega futura) | Vira contrato **a entregar**. Não entra em trânsito nem em estoque |
-| 5116, 5117, 6116, 6117 | REMESSA (entrega futura) | Vai para **em trânsito** e abate o saldo a entregar do contrato |
-| Outros (devolução, bonificação, remessa p/ conserto…) | OUTRA | Fica "a classificar" para o escritório decidir |
+| 101–115, 118–125, 401–405 | VENDA | Vai para **em trânsito** → estoque |
+| 922 | FATURAMENTO (entrega futura) | Vira contrato **a entregar** |
+| 116, 117 | REMESSA (entrega futura) | Baixa o contrato e entra no estoque |
+| 651–659, 660–667 | COMBUSTIVEL | Diesel/Arla → **Tanque**; óleo/graxa → **Máquina** (tipo Óleo/lubrificante) |
+| 551–555 | ATIVO | Item → **Máquina** (bem); não entra no estoque |
+| 556, 557 | CONSUMO | Sugere **Oficina** (descrição pode mandar para Benfeitoria) |
+| 910, 911 | BONIFICACAO | Entra no estoque; aviso de brinde |
+| 912, 913 | DEMONSTRACAO | Itens marcados **Ignorar** |
+| 915, 916, 933 | CONSERTO | Item → **Máquina** (peça/serviço) |
+| 901–903, 924, 925 | INDUSTRIALIZACAO | Retorno entra; remessa não (aviso) |
+| 201–210, 410–413 | DEVOLUCAO | Aviso: mercadoria voltando; confirmar |
+| 251–258 | ENERGIA | Itens **Ignorar**; dica Financeiro |
+| 301–307, 351–360 | SERVICO | Itens **Ignorar**; dica Financeiro |
+| 917–921 | VASILHAME | Itens **Ignorar** |
+| demais (949, 927, 905…) | OUTRA | Aviso; confirmar antes de entrar no estoque |
 
-Lista final de CFOPs a confirmar com a contabilidade.
+A conferência mostra o **nome** de cada CFOP (`CFOP_NOME`), um aviso por tipo (`NFE_TIPO_INFO`) e, ao confirmar um
+tipo que "não entra" com item marcado para o estoque, pede confirmação. A IA recebe `tipo_pelo_cfop` como pista.
+Ordem de sugestão do destino por item (`nfeDetectaPecas`): diesel/Arla → tanque; CFOP de combustível, ativo ou
+conserto → destino do CFOP; depois a descrição (oficina/benfeitoria/peças); por fim o CFOP de consumo.
 
 ## 7. Tela de de-para (escritório) — fase 1
 

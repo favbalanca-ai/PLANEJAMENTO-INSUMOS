@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Tabela de CFOP na conferência (v307)** — o tipo da nota passa a ser decidido pelos 3 últimos dígitos do CFOP
+  (`CFOP_TAB`, igual no Code.gs): além de venda, faturamento e remessa, agora há compra de combustível/lubrificante,
+  bem do ativo, uso e consumo, bonificação, demonstração, conserto/serviço, industrialização, devolução, energia,
+  comunicação/frete e consignação/vasilhame. Cada tipo tem um aviso explicando o que acontece e o destino sugerido
+  dos itens (diesel/Arla → Tanque, óleo → Máquina, bem → Máquina, consumo → Oficina, energia/frete/vasilhame →
+  Ignorar). O CFOP aparece com o nome (`CFOP_NOME`) no item e no cartão. Confirmar um tipo que "não entra" com item
+  no estoque pede confirmação. Caso que motivou: óleo 15W40 com CFOP 1662 aparecia como "Outra operação".
+  Ver `docs/NFE_RECEBIMENTO.md` §6.
 - **Busca na caixa de entrada de Notas + arquivos de outra conta (v306)** — campo 🔎 acima dos cartões: filtra por
   fornecedor, nº da nota, CNPJ, produtor, tipo, data, valor, chave e o que a IA reconheceu (produto/máquina); várias
   palavras = todas precisam bater; mostra "n de N"; a busca sobrevive ao redesenho (`NFE_UI.q`, `nfeAplicaBusca`).

@@ -132,6 +132,12 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## CFOP (v307)
+
+- `CFOP_TAB_` / `nfeTipoCfopGs_` / `nfeTipoNotaGs_`: mesma tabela do app (3 últimos dígitos, entrada ou saída). A
+  coluna TIPO da NFE RECEBIDAS ganha os tipos novos (COMBUSTIVEL, ATIVO, CONSUMO, BONIFICACAO, DEMONSTRACAO,
+  CONSERTO, INDUSTRIALIZACAO, DEVOLUCAO, ENERGIA, SERVICO, VASILHAME). A IA recebe `tipo_pelo_cfop` como pista.
+
 ## Captura de NF-e: arquivos de outra conta do Google (v306)
 
 - Depois de ler um XML da `NFe/Entrada`, `_nfeTiraDaEntrada_` tenta: lixeira → mover para `NFe/Lidos` (ou

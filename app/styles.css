@@ -1149,6 +1149,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-head b{display:block;font-size:14px;overflow-wrap:anywhere}
 .nfe-head span{display:block;font-size:11.5px;color:var(--muted)}
 .nfe-tipo.t-VENDA{color:#1b5e20}.nfe-tipo.t-REMESSA{color:#1f4a55}.nfe-tipo.t-FATURAMENTO{color:#b3261e}.nfe-tipo.t-OUTRA{color:#8a6d00}
+.nfe-tipo.t-COMBUSTIVEL,.nfe-tipo.t-ATIVO,.nfe-tipo.t-CONSERTO,.nfe-tipo.t-CONSUMO{color:#4a3f8f}.nfe-tipo.t-BONIFICACAO,.nfe-tipo.t-INDUSTRIALIZACAO{color:#1b5e20}.nfe-tipo.t-DEVOLUCAO,.nfe-tipo.t-DEMONSTRACAO,.nfe-tipo.t-VASILHAME{color:#8a6d00}.nfe-tipo.t-ENERGIA,.nfe-tipo.t-SERVICO{color:#555}   /* v307 */
 .nfe-chave{padding:0 14px 8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;letter-spacing:.02em;overflow-wrap:anywhere}
 .nfe-aviso{margin:6px 14px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.45}
 .nfe-aviso.err{background:#fdecea;color:#8e1a14;border:1px solid #f5c2bd}
