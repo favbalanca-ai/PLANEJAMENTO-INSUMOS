@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-302';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-303';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -686,20 +686,53 @@ function conjSig(){ return sigHash(JSON.stringify((OV&&OV.conjApp)||{})); }
 function conjServerOk(){ return !!(DATA && DATA.conjuntos_app && typeof DATA.conjuntos_app==='object'); }
 function conjRecs(){ return Object.values((OV&&OV.conjApp)||{}).filter(r=>r&&!r.del); }
 function conjMontado(conj){ const r=OV.conjApp&&OV.conjApp['c:'+conjSlug(conj)]; return (r&&!r.del)?r:null; }
-function conjAplicar(){ if(!OV) return; OV.maqAdd=[]; OV.maqAttr={}; OV.maquina={}; OV.opMaq={};
+function conjAplicar(){ if(!OV) return; OV.maqAdd=[]; OV.maqAttr={}; OV.maquina={}; OV.opMaq={}; OV.conjOculto={};
   conjRecs().forEach(r=>{ const id=String(r.id||'');
     if(id.startsWith('c:')) OV.maqAdd.push({conjunto:r.conjunto, maquina:r.maquina||'', implemento:r.implemento||'', operacao:r.operacao||'', largura:+r.largura||0, velocidade:+r.velocidade||0, eficiencia:+r.eficiencia||85, l_h:+r.l_h||0, rs_hm:+r.rs_hm||0});
-    else if(id.startsWith('ov:')){ const a=r.attr||{}; if(Object.keys(a).length) OV.maqAttr[r.conjunto]=Object.assign({},a); if(r.rs_hm!=null) OV.maquina[r.conjunto]=+r.rs_hm; }
+    else if(id.startsWith('ov:')){ const a=r.attr||{}; if(Object.keys(a).length) OV.maqAttr[r.conjunto]=Object.assign({},a); if(r.rs_hm!=null) OV.maquina[r.conjunto]=+r.rs_hm; if(r.oculto) OV.conjOculto[r.conjunto]=1; }
     else if(id.startsWith('op:')) OV.opMaq[id.slice(3)]=r.conj==null?'':String(r.conj); });
   if(DATA) buildMaqIndex(); }
 function conjGravar(id, rec){ OV.conjApp=OV.conjApp||{}; OV.conjApp[id]=Object.assign({}, OV.conjApp[id]||{}, rec, {id, _u:tsAgora()}); conjAplicar(); saveOverrides(); loteAgendar('__conjunto'); return OV.conjApp[id]; }
-function conjGravarOp(tid, tagoi, conj){ return conjGravar('op:'+tid+'|'+tagoi, {conj:conj==null?'':String(conj)}); }
+function conjGravarOp(tid, tagoi, conj){ return conjGravar('op:'+tid+'|'+tagoi, {conj:conj==null?'':String(conj), del:false}); }   // del:false — registro apagado antes volta a valer
 // edição de um conjunto da planilha (CUSTO OPERAÇÃO): guarda só o que mudou; sem nada → registro sai
 function conjGravarOv(conjunto, patch){ const id='ov:'+conjSlug(conjunto), cur=(OV.conjApp&&OV.conjApp[id])||{}; const attr=Object.assign({}, cur.attr||{}); let rs=(cur.rs_hm!=null&&!cur.del)?cur.rs_hm:null;
   if(cur.del){ for(const k in attr) delete attr[k]; }
   if(patch.attr){ for(const k in patch.attr){ if(patch.attr[k]==null||patch.attr[k]==='') delete attr[k]; else attr[k]=patch.attr[k]; } }
   if('rs_hm' in patch) rs=patch.rs_hm;
-  const vazio=!Object.keys(attr).length && rs==null; return conjGravar(id, {conjunto, attr, rs_hm:rs, del:vazio}); }
+  let oc=!!cur.oculto&&!cur.del; if('oculto' in patch) oc=!!patch.oculto;   // v303: conjunto da planilha escondido das listas
+  const vazio=!Object.keys(attr).length && rs==null && !oc; return conjGravar(id, {conjunto, attr, rs_hm:rs, oculto:oc, del:vazio}); }
+// v303: editar/apagar qualquer conjunto. Da planilha (CUSTO OPERAÇÃO) não dá para apagar a linha de lá: fica OCULTO.
+function conjOcultos(){ const oc=(OV&&OV.conjOculto)||{}; return (DATA.maquinas||[]).filter(m=>oc[m.conjunto]); }
+function conjOpsQueUsam(conj){ const out=[]; for(const k in (OV.opMaq||{})){ if(OV.opMaq[k]===conj){ const i=k.indexOf('|'); out.push({tid:k.slice(0,i), tagoi:k.slice(i+1)}); } } return out; }
+// apaga (montado → del; da planilha → oculto) e solta as operações que apontavam para ele (voltam à sugestão)
+function conjApagar(conj){ const mont=conjMontado(conj); conjOpsQueUsam(conj).forEach(o=>conjGravar('op:'+o.tid+'|'+o.tagoi,{del:true}));
+  if(mont) conjGravar(mont.id,{del:true}); else conjGravarOv(conj,{oculto:true}); }
+// edita máquina/implemento/operação. Nome muda → vira um conjunto novo (c:), o antigo some (del/oculto) e as operações
+// e recomendações em rascunho passam a apontar para o novo. Os números (largura, L/h…) são os efetivos de hoje.
+function conjEditarSalvar(conj, maq, imp, op){ const m=maqByConj[conj]; if(!m) return null; const e=effMaq(m); maq=(maq||'').trim(); imp=(imp||'').trim();
+  if(!maq&&!imp){ toast('Informe máquina e/ou implemento'); return null; }
+  let novo=(maq+(imp?' + '+imp:'')).trim(); const mont=conjMontado(conj);
+  if(novo!==conj){ let base=novo, i=2; while(maqByConj[novo]){ novo=base+' ('+i+')'; i++; } }
+  if(novo===conj && mont){ return conjGravar(mont.id,{maquina:maq, implemento:imp, operacao:op||''}); }
+  if(novo===conj){ conjGravarOv(conj,{attr:{operacao:op||null}}); return maqByConj[conj]; }   // da planilha, só a operação mudou
+  const ops=conjOpsQueUsam(conj);
+  const rec=conjGravar('c:'+conjSlug(novo),{conjunto:novo, maquina:maq, implemento:imp, operacao:op||'', largura:e.largura, velocidade:e.velocidade, eficiencia:e.eficiencia, l_h:e.l_h, rs_hm:e.rs_hm, del:false});
+  if(mont) conjGravar(mont.id,{del:true}); else conjGravarOv(conj,{oculto:true});
+  ops.forEach(o=>conjGravarOp(o.tid,o.tagoi,novo));
+  try{ let n=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(r.maquina===conj&&r.status==='rascunho'){ r.maquina=novo; n++; } }); if(n) saveRecom(); }catch(_){}
+  return rec; }
+// listas para montar/editar: máquina = usadas como máquina em algum conjunto ou grupo ≠ Implemento; implemento = usadas como
+// implemento em algum conjunto ou grupo Implemento (plantadeira/plataforma do cadastro contam como implemento)
+function conjListas(){ const ms=maqTodas(), all=(DATA.maquinas||[]).concat(OV.maqAdd||[]), usoM=new Set(), usoI=new Set();
+  all.forEach(c=>{ if(c.maquina) usoM.add(maqId(c.maquina)); if(c.implemento) usoI.add(maqId(c.implemento)); });
+  return { mq: ms.filter(x=>usoM.has(x.id)||(x.grupo!=='Implemento'&&!usoI.has(x.id))), im: ms.filter(x=>usoI.has(x.id)||x.grupo==='Implemento') }; }
+function conjEditHtml(m){ const L=conjListas(), mq=L.mq, im=L.im;
+  const sel=(id,lista,val,outra,ph)=>{ const tem=val&&lista.some(x=>x.nome===val); return `<select class="sel" id="${id}" data-edit="mqSel" style="min-width:170px"><option value="">— ${ph} —</option>${lista.map(x=>`<option value="${esc(x.nome)}"${(tem&&x.nome===val)?' selected':''}>${esc(x.nome)}</option>`).join('')}<option value="${outra}"${(val&&!tem)?' selected':''}>✏️ ${outra==='__outra'?'outra':'outro'} (digitar)…</option></select><input class="txt" id="${id}-txt" value="${esc((val&&!tem)?val:'')}" placeholder="nome" style="min-width:170px;${(val&&!tem)?'':'display:none'}">`; };
+  return `<tr class="mq-edit-row"><td colspan="14"><div class="bulk-add" style="padding:8px 6px"><b style="font-size:12px">✏️ ${esc(m.conjunto)}</b>
+    ${sel('ce-maq',mq,m.maquina||'','__outra','máquina')}${sel('ce-imp',im,m.implemento||'','__outro','implemento (nenhum)')}
+    <select class="sel" id="ce-op"><option value="">— operação —</option>${CONJ_OPS.map(o=>`<option value="${esc(o)}"${conjOpExplicita(m)===o?' selected':''}>${esc(o)}</option>`).join('')}</select>
+    <button class="btn btn-primary btn-sm" data-act="conjEditSalvar" data-conj="${esc(m.conjunto)}">Salvar</button><button class="btn btn-sm" data-act="conjEditCancel">Cancelar</button>
+    <span class="mut" style="font-size:11px">${conjMontado(m.conjunto)?'mudar máquina ou implemento renomeia o conjunto':'conjunto da planilha: ao mudar máquina/implemento o app cria o conjunto novo e esconde este'}</span></div></td></tr>`; }
 // primeira vez com a v302: o que estava só no aparelho vira registro e sobe para a planilha
 function conjMigrar(){ OV.conjApp=OV.conjApp||{}; if(Object.keys(OV.conjApp).length){ conjAplicar(); return; }
   const tem=(OV.maqAdd||[]).length||Object.keys(OV.maqAttr||{}).length||Object.keys(OV.maquina||{}).length||Object.keys(OV.opMaq||{}).length; if(!tem) return;
@@ -725,7 +758,7 @@ function conjOptsHtml(sel, tipo, extra){ const ms=maquinasAll(); const o=m=>`<op
 // rendimento do conjunto para a área: "≈ 12,2 ha/h · ~6,5 h para 80 ha"
 function conjRendTxt(conj, area){ const m=conj&&maqByConj[conj]; if(!m) return ''; const e=effMaq(m); if(!(e.ha_h>0)) return '';
   return `≈ ${num(e.ha_h)} ha/h`+((+area>0)?` · ~${numH(area/e.ha_h)} h para ${num(area)} ha`:''); }
-function maquinasAll(){ return (DATA.maquinas||[]).concat(OV.maqAdd); }
+function maquinasAll(){ const oc=OV.conjOculto||{}; return (DATA.maquinas||[]).filter(m=>!oc[m.conjunto]).concat(OV.maqAdd); }   // v303: ocultos ficam fora
 function maqAttr(m,k){ const o=OV.maqAttr[m.conjunto]; return (o&&o[k]!=null)?+o[k]:(+m[k]||0); }
 function rsHmDe(m){ return (m.conjunto in OV.maquina)?+OV.maquina[m.conjunto]:(+m.rs_hm||0); }
 // máquina "efetiva": aplica edições de largura/velocidade/efic/L-h e recalcula ha/h, HM/ha, L/ha, custos
@@ -4423,7 +4456,7 @@ function frotaRelHtml(){ const ms=maqTodas(), T=tanqueSaldo(); let tot={h:0,l:0,
   <p style="font-size:10px;color:#555;margin-top:10px">Custo-hora real = (combustível + peças e serviços das notas + ordens de serviço) ÷ horas do horímetro (ou do Campo). Planejado = CUSTO OPERAÇÃO / cadastro.</p>`; }
 async function maqPdf(mid){ const html=mid?maqRelHtml(maqDe(mid)):frotaRelHtml(); if(!html) return; toast('Gerando PDF…'); try{ const blob=await pdfArquivo(html,''); const nome=mid?`maquina_${mid.replace(/^m:/,'').toLowerCase()}.pdf`:'frota_custo_por_maquina.pdf'; const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=nome; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); toast('PDF pronto'); }catch(e){ toast('PDF: '+e.message); } }
 // ---- telas ----
-let MQ_UI={maq:'', osAberta:'', mostrarTodos:false, cadAberto:''};
+let MQ_UI={maq:'', osAberta:'', mostrarTodos:false, cadAberto:'', conjEdit:''};
 function maqSelectHtml(id, sel, ph){ return `<select class="sel" id="${id}"><option value="">${ph||'— máquina —'}</option>${maqTodas().map(m=>`<option value="${esc(m.id)}"${m.id===sel?' selected':''}>${esc(m.nome)}</option>`).join('')}</select>`; }
 const _alertHtml=(al)=>al.length?`<ul class="mq-alertas">${al.map(a=>`<li class="${a.nivel}">${a.nivel==='erro'?'⛔':'⚠️'} ${esc(a.txt)}</li>`).join('')}</ul>`:'';
 V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
@@ -4540,7 +4573,7 @@ V.maquinas = function(){
   ${manutPainelHtml()}
   <div class="panel"><div class="panel-head"><h2>Montar conjunto</h2><span class="sub">máquina + implemento do cadastro — largura e velocidade definem o rendimento · o conjunto vai para a planilha (CONJUNTOS APP) e vale no planejamento, na recomendação e no Campo</span></div>
     <div class="bulk-add">
-      ${(()=>{ const ms=maqTodas(), mq=ms.filter(m=>m.grupo!=='Implemento'), im=ms.filter(m=>m.grupo==='Implemento');
+      ${(()=>{ const L=conjListas(), mq=L.mq, im=L.im;
         return `<select class="sel" id="mq-maq" data-edit="mqSel" style="min-width:170px"><option value="">— máquina —</option>${mq.map(m=>`<option value="${esc(m.nome)}" data-lh="${+m.lh||0}" data-rs="${+m.rsHm||0}">${esc(m.nome)}</option>`).join('')}<option value="__outra">✏️ outra (digitar)…</option></select>
       <input class="txt" id="mq-maq-txt" placeholder="nome da máquina" style="min-width:170px;display:none">
       <select class="sel" id="mq-imp" data-edit="mqSel" style="min-width:170px"><option value="">— implemento (nenhum) —</option>${im.map(m=>`<option value="${esc(m.nome)}">${esc(m.nome)}</option>`).join('')}<option value="__outro">✏️ outro (digitar)…</option></select>
@@ -4574,9 +4607,10 @@ V.maquinas = function(){
         <td class="num"><input class="cell ${(m.conjunto in OV.maquina)?'edited':''}" data-edit="maquina" data-conj="${esc(m.conjunto)}" value="${e.rs_hm}" style="width:80px"></td>
         <td class="num">${brl(e.custoMaqHa)}</td><td class="num">${num(e.l_ha)}</td>
         <td class="num">${brl(e.dieselHa)}</td><td class="num"><b>${brl(e.custoHa)}</b></td>
-        <td class="num">${novo?`<button class="icon-btn del" title="Excluir conjunto" data-act="delmaq" data-conj="${esc(m.conjunto)}">🗑</button>`:''}</td></tr>`;
+        <td class="num" style="white-space:nowrap"><button class="icon-btn" title="Editar máquina, implemento e operação" data-act="conjEditar" data-conj="${esc(m.conjunto)}">✏️</button><button class="icon-btn del" title="${novo?'Excluir conjunto':'Ocultar conjunto (some das listas; dá para restaurar)'}" data-act="delmaq" data-conj="${esc(m.conjunto)}">🗑</button></td></tr>${MQ_UI.conjEdit===m.conjunto?conjEditHtml(m):''}`;
     }).join('')}</tbody>
   </table></div></div>
+  ${(()=>{ const oc=conjOcultos(); return oc.length?`<details class="panel" style="padding:8px 14px"><summary style="cursor:pointer;font-size:13px">🙈 Conjuntos ocultos da planilha (${oc.length}) — restaurar</summary><div style="padding:6px 0">${oc.map(m=>`<div style="display:flex;gap:8px;align-items:center;padding:3px 0;font-size:12.5px"><span>${esc(m.conjunto)}</span><button class="btn btn-sm" data-act="conjRestaurar" data-conj="${esc(m.conjunto)}">↩ restaurar</button></div>`).join('')}</div></details>`:''; })()}
   <p style="color:var(--muted);font-size:12px">O <b>custo médio por passada</b> alimenta a estimativa de máquinas no DRE. Cada operação do talhão usa o conjunto atribuído na tela do talhão; a <b>operação</b> do conjunto é o que o app usa para sugerir o conjunto certo (herbicida → Pulverização, semente → Plantio…). Conjuntos montados, edições e a escolha por operação ficam na aba <b>CONJUNTOS APP</b> e aparecem em todos os aparelhos.</p>`;
 };
 
@@ -10014,9 +10048,19 @@ document.addEventListener('click',e=>{
         eficiencia:nn('mq-efic')||85,l_h:nn('mq-lh'),rs_hm:nn('mq-rs'),del:false});
       route(); toast('Conjunto montado: '+conj);
     }
-    else if(a.act==='delmaq'){
-      const c=a.conj, mont=conjMontado(c); if(mont) conjGravar(mont.id,{del:true}); route(); toast('Conjunto excluído');
+    else if(a.act==='delmaq'){   // v303: montado → apaga; da planilha → oculta. Operações que usavam voltam à sugestão
+      const c=a.conj, mont=conjMontado(c), n=conjOpsQueUsam(c).length;
+      if(!confirm(`${mont?'Excluir':'Ocultar'} o conjunto "${c}"?${n?` ${n} operação(ões) usavam este conjunto e voltam à sugestão automática.`:''}${mont?'':' Ele some das listas; dá para restaurar embaixo da tabela.'}`)) return;
+      conjApagar(c); if(MQ_UI.conjEdit===c) MQ_UI.conjEdit=''; route(); toast(mont?'Conjunto excluído':'Conjunto oculto');
     }
+    else if(a.act==='conjEditar'){ MQ_UI.conjEdit=(MQ_UI.conjEdit===a.conj)?'':a.conj; route({keepScroll:true}); }
+    else if(a.act==='conjEditCancel'){ MQ_UI.conjEdit=''; route({keepScroll:true}); }
+    else if(a.act==='conjEditSalvar'){
+      const sv=(id,outra)=>{ const s=$('#'+id); if(!s) return ''; if(s.value===outra) return ($('#'+id+'-txt').value||'').trim(); return (s.value||'').trim(); };
+      const rec=conjEditarSalvar(a.conj, sv('ce-maq','__outra'), sv('ce-imp','__outro'), ($('#ce-op')||{}).value||'');
+      if(rec){ MQ_UI.conjEdit=''; route({keepScroll:true}); toast(rec.conjunto===a.conj?'Conjunto atualizado':`Conjunto virou "${rec.conjunto}"`); }
+    }
+    else if(a.act==='conjRestaurar'){ conjGravarOv(a.conj,{oculto:false}); route({keepScroll:true}); toast('Conjunto restaurado'); }
     else if(a.act==='sync-save'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); else localStorage.removeItem(SYNC_KEY); toast('URL salva'); syncLog('URL salva.'); setSyncStatus(); startPolling(); if(u&&autoOn()) syncPull({auto:true, silentToast:true}); }
     else if(a.act==='sync-pull'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPull({force:true}); }
     else if(a.act==='sync-push'){ const u=($('#sync-url').value||'').trim(); if(u) localStorage.setItem(SYNC_KEY,u); syncPush(); }

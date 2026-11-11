@@ -135,6 +135,8 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
 - Registros: `c:<CONJUNTO>` conjunto montado no app (máquina, implemento, operação, largura, velocidade, eficiência,
   L/h, R$/HM); `ov:<CONJUNTO>` edições de um conjunto da aba CUSTO OPERAÇÃO (`attr` com só o que mudou + `rs_hm`);
   `op:<TL>|<P3>` conjunto escolhido para a operação. A CUSTO OPERAÇÃO continua sendo a base dos conjuntos.
+- v303: `ov:` pode trazer `oculto:true` (conjunto da CUSTO OPERAÇÃO escondido das listas do app; a linha da planilha
+  fica como está). Nada muda no Code.gs.
 
 ## Máquinas, parte B (v296)
 

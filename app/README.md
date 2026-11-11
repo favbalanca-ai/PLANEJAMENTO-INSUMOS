@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Editar e apagar conjuntos, inclusive os da planilha (v303)** — em ⚙️ Conjuntos e custo cada linha tem ✏️ e 🗑.
+  O lápis abre a edição de máquina, implemento (listas montadas pelo uso real nos conjuntos: plantadeira/plataforma
+  entram como implemento) e tipo de operação. Mudar máquina ou implemento renomeia: para um conjunto montado o
+  registro vira o nome novo; para um da CUSTO OPERAÇÃO o app cria o conjunto novo (`c:`) com os mesmos números e
+  **oculta** o antigo (`ov:` com `oculto:true`), porque a linha da planilha não é apagada pelo app. As operações do
+  talhão e as recomendações em rascunho que usavam o antigo passam para o novo. 🗑 exclui o montado ou oculta o da
+  planilha (confirmação; as operações que o usavam voltam à sugestão automática). Os ocultos ficam numa lista
+  "Conjuntos ocultos da planilha" embaixo da tabela, com ↩ restaurar. Correção: escolher de novo um conjunto para
+  uma operação cujo registro tinha sido apagado não "pegava" (`del` antigo ficava no merge).
 - **Conjunto como modelo da operação (v302)** — em **⚙️ Conjuntos e custo**, "Montar conjunto" escolhe a
   **máquina** e o **implemento** no cadastro do módulo Máquinas (ou "outra… digitar"); escolher a máquina já preenche
   L/h e R$/HM do cadastro. Cada conjunto ganha um **tipo de operação** (Pulverização, Plantio, Adubação/Correção,
