@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Todas as máquinas na aba MÁQUINAS APP (v301)** — antes a aba só recebia as máquinas editadas no Cadastro; as da
+  CUSTO OPERAÇÃO e das notas ficavam só em memória. Agora o primeiro abastecimento ou OS de uma máquina já a grava na
+  aba (`maqRegistrar`) e o Cadastro tem o botão **"Enviar as N que faltam para a planilha"** (`maqRegistrarTodas`).
 - **Etiquetas separadas (v300)** — dois botões: **Etiquetas WhatsApp** (um QR do WhatsApp por máquina, só aparece com
   o número salvo) e **Etiquetas App** (um QR `MAQ:<id>` por máquina). Cada PDF tem um QR grande por máquina, três por
   linha. `maqEtiquetas(modo)`.
