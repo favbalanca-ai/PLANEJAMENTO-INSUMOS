@@ -69,6 +69,11 @@ isso porque não usa certificado na conexão. **Certificado nunca vai para o git
   produtor na `NFE RECEBIDAS`.
 - Evento de cancelamento (`procEventoNFe`, `tpEvento = 110111`): marcar a nota
   como `CANCELADA`. Se já tiver sido recebida no estoque, gerar alerta.
+- v304: arquivo que não é NF-e de produto vai para `Rejeitados` com o motivo dizendo **o que ele é**
+  (`nfeTipoOutro_`): NFS-e (nota de serviço, ABRASF ou padrão nacional), CT-e, NFCom, MDF-e, NF-e sem `infNFe`
+  ou "raiz <X>". Eventos que não são cancelamento recebem o nome (`nfeEventoNome_`: carta de correção,
+  manifesto…) e a nota "não muda estoque nem valores". Erro de permissão do Drive gera **um** aviso só
+  (com a contagem de arquivos esperando) e a busca para; o app mostra o passo a passo do `autorizarPermissoes`.
 
 ## 5. Estrutura no Drive e na planilha
 

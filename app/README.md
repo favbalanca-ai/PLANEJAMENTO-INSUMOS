@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Caixa de entrada de Notas: avisos legíveis (v304)** — os arquivos rejeitados aparecem **agrupados por motivo**
+  ("7× NFS-e (nota de serviço) — não entra no estoque…"), com os nomes escondidos num "n arquivos" e a contagem
+  total; a planilha agora diz o que o arquivo é (NFS-e, CT-e, NFCom, MDF-e, carta de correção, manifesto…) em vez de
+  "não é XML de NF-e". Erro de permissão do Drive vira **um** aviso só, com quantos arquivos esperam na NFe/Entrada
+  e o passo a passo do `autorizarPermissoes` (sem o texto cru do erro repetido dez vezes); outros erros são agrupados
+  por mensagem. Funções: `nfeRejeitadasHtml`, `nfeErrosHtml`, `_nfeAgrupa`.
 - **Editar e apagar conjuntos, inclusive os da planilha (v303)** — em ⚙️ Conjuntos e custo cada linha tem ✏️ e 🗑.
   O lápis abre a edição de máquina, implemento (listas montadas pelo uso real nos conjuntos: plantadeira/plataforma
   entram como implemento) e tipo de operação. Mudar máquina ou implemento renomeia: para um conjunto montado o

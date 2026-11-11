@@ -127,6 +127,14 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Captura de NF-e: motivos claros e permissão (v304)
+
+- `nfeTipoOutro_` diz o que é um XML que não é NF-e de produto (NFS-e, CT-e, NFCom, MDF-e, NF-e incompleta, raiz
+  desconhecida); `nfeEventoNome_` dá nome aos eventos (carta de correção, manifesto…). Vão para `NFe/Rejeitados`.
+- Na leitura da `NFe/Entrada`, o primeiro erro de permissão do Drive para a busca e registra um aviso só, com o
+  número de arquivos que ficaram esperando (`SEM PERMISSÃO no Drive (n arquivo(s) esperando…)`); o Gmail é pulado.
+  Resolve com `autorizarPermissoes`. `NFE_CAPTURA` ganha `totRej` e `totErr` (a lista salva é um recorte de 20/10).
+
 ## Conjuntos (aba `CONJUNTOS APP`, v302)
 
 - Aba nova no padrão KEY|JSON, criada quando falta. Payload `__conjunto` → `writeMapApp(CONJ_SHEET, …)` (merge por

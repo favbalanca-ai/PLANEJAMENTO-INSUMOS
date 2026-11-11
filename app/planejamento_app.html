@@ -1170,6 +1170,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-aviso{margin:6px 14px;padding:8px 11px;border-radius:9px;font-size:12.5px;line-height:1.45}
 .nfe-aviso.err{background:#fdecea;color:#8e1a14;border:1px solid #f5c2bd}
 .nfe-aviso.warn{background:#fff8e1;color:#6b5400;border:1px solid #f2dfa0}
+.nfe-grupo{margin-top:4px}.nfe-arqs{margin:2px 0 2px 10px;font-size:11.5px;opacity:.85}.nfe-arqs summary{cursor:pointer}   /* v304: rejeitados/erros agrupados */
 .nfe-aviso.info{background:#e8f4f6;color:#1f4a55;border:1px solid #bcdde3}
 .nfe-itens{display:flex;flex-direction:column;gap:10px;padding:10px 14px}
 .nfe-it{border:1px solid var(--line);border-left:5px solid #b0bec5;border-radius:11px;padding:10px 12px;background:#fff}
@@ -2388,6 +2389,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .nfe-head span{font-size:9.5px}
   .nfe-chave{font-size:10px}
   .nfe-aviso{font-size:10px}
+  .nfe-arqs{font-size:9.5px}
   .nfe-it-top b{font-size:11px}
   .nfe-it-sub{font-size:9.5px}
   .nfe-kv b{font-size:11px}
@@ -2725,7 +2727,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-303';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-304';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4796,9 +4798,24 @@ function nfeCapturaHtml(c){
   const parado=!isNaN(min) && min>45;
   return `${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
-    ${(c.rejeitadas||[]).length?`<div class="nfe-aviso warn" style="margin:8px 14px 0">Foram para <b>NFe/Rejeitados</b>:<br>${c.rejeitadas.map(esc).join('<br>')}</div>`:''}
-    ${(c.erros||[]).length?`<div class="nfe-aviso err" style="margin:8px 14px 0">Erro na busca (o arquivo continua na pasta e é tentado de novo):<br>${c.erros.map(esc).join('<br>')}</div>`:''}`;
+    ${nfeRejeitadasHtml(c)}${nfeErrosHtml(c)}`;
 }
+// v304: rejeitados agrupados por motivo (antes era uma linha por arquivo, todas iguais) + dica do que fazer
+function _nfeAgrupa(lista, re){ const g={}; (lista||[]).forEach(s=>{ const m=String(s).match(re); const arq=m?m[1]:'', mot=(m?m[2]:String(s)).trim(); (g[mot]=g[mot]||[]).push(arq); }); return g; }
+function _nfeGrupoHtml(g){ return Object.keys(g).sort((a,b)=>g[b].length-g[a].length).map(mot=>{ const arqs=g[mot].filter(Boolean);
+  return `<div class="nfe-grupo"><b>${g[mot].length}×</b> ${esc(mot)}${arqs.length?`<details class="nfe-arqs"><summary>${arqs.length===1?'1 arquivo':arqs.length+' arquivos'}</summary>${arqs.map(esc).join('<br>')}</details>`:''}</div>`; }).join(''); }
+function nfeRejeitadasHtml(c){ const L=c.rejeitadas||[]; if(!L.length) return ''; const g=_nfeAgrupa(L,/^([^:]+?): (.*)$/s), tot=+c.totRej||L.length;
+  const soServico=Object.keys(g).every(m=>/NFS-e|CT-e|NFCom|MDF-e|evento|carta de correção|manifesto/.test(m));
+  return `<div class="nfe-aviso warn" style="margin:8px 14px 0">📂 <b>${tot} arquivo(s)</b> foram para <b>NFe/Rejeitados</b>${tot>L.length?` (mostrando os últimos ${L.length})`:''}:${_nfeGrupoHtml(g)}
+    <div class="mut" style="margin-top:6px">${soServico?'Nota de serviço, frete, telecom e eventos (carta de correção, manifesto) não entram no estoque — não precisa copiar esses arquivos para a NFe/Entrada.':'Só NF-e de produto autorizada entra: nota de serviço, frete e eventos não têm o que lançar no estoque.'}</div></div>`; }
+function nfeErrosHtml(c){ const L=c.erros||[]; if(!L.length) return ''; const isPerm=s=>/SEM PERMISSÃO|not have permission|não tem permissão|Required permissions/i.test(String(s));
+  const perm=L.filter(isPerm), outros=L.filter(s=>!isPerm(s)); let h='';
+  if(perm.length){ const m=String(perm[0]).match(/\((\d+) arquivo\(s\) esperando/); const n=m?+m[1]:perm.length;
+    h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">🔒 <b>A planilha está sem permissão para gravar no Drive.</b> ${n} arquivo(s) esperando na <b>NFe/Entrada</b> — eles entram sozinhos assim que a autorização for dada.<br>
+      <b>Como resolver:</b> abra o Apps Script da planilha, escolha a função <b>autorizarPermissoes</b> no menu de cima, clique em ▶ Executar e aceite tudo (Drive, internet, Gmail). Depois toque em <b>Atualizar</b> aqui.</div>`; }
+  if(outros.length){ const g=_nfeAgrupa(outros,/^arquivo "(.+?)": (.*)$/s), tot=+c.totErr||L.length;
+    h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">⚠️ Erro na busca${tot>L.length?` (mostrando ${L.length} de ${tot})`:''} — o arquivo continua na NFe/Entrada e é tentado de novo:${_nfeGrupoHtml(g)}</div>`; }
+  return h; }
 // o que aconteceu com cada arquivo lido (últimos 30): nova, repetida, ignorada (com botão p/ reabrir) ou rejeitada — com o motivo
 const NFE_HIST_ST={nova:['ok','Nova'],casada:['ok','Casou c/ recebimento'],duplicada:['rep','Repetida'],ignorada:['ign','Ignorada'],rejeitada:['rej','Rejeitada'],cancelada:['canc','Cancelamento']};
 let nfeHistAberto=false;   // histórico de leitura começa RECOLHIDO (lembra se você abriu)
