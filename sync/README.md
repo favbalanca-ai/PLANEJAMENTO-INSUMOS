@@ -132,6 +132,18 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Fluxo do armazém geral (v318)
+
+- `nfeLerGs_` devolve `entregaDoc`/`entregaNome` (bloco `entrega`) e `autXml` (CNPJs autorizados).
+- `nfeAchaVenda_(t, n)`: acha a NF de venda da nota de depósito/retorno pelo nº citado nas observações + mesmo
+  produtor (desempate: `autXml` contém o CNPJ emitente da venda); senão pela referência (retorno → nota de depósito →
+  CHAVE REFERENCIADA dela). `nfeArmazemLiga_` grava a ligação (CHAVE REFERENCIADA da nota do armazém) e anota na
+  venda EM TRÂNSITO/A CLASSIFICAR o passo (🏬 no armazém / 🚛 saiu — receber); OBS com ⚠ não é sobrescrita.
+  Chamado na captura e em `nfeReavaliarVendas_`.
+- `nfeChave_(chave)`: se a nota é DEPOSITO/RETORNO_DEP ligada a uma venda, devolve a **venda** com
+  `viaArmazem:{chave, nNF, fornecedor, tipo}`. `__recebimento` com `viaArmazem` anota a nota do armazém como
+  "entregue na fazenda em … — recebida pela NF de venda nº X".
+
 ## Armazém geral e estorno (v317)
 
 - `CFOP_TAB_`: 501/502 → VENDA, 503/504 → DEVOLUCAO, 905/923/934 → DEPOSITO, 906/907 → RETORNO_DEP.

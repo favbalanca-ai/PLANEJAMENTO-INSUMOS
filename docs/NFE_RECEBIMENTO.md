@@ -148,6 +148,10 @@ CFOP de compra** (x101–x125, x401–x405, x116/x117/x922); uma NF-e de entrada
 pelo fornecedor é o produto velho voltando para ele, não venda. Nota com `tPag 90` (sem pagamento) e sem parcela não
 gera título no Financeiro.
 
+**Fluxo do armazém geral** (v318): venda com entrega em terceiro → aviso "ponha em trânsito"; nota de depósito e de
+retorno do armazém ficam IGNORADAS e ligadas à venda (CHAVE REFERENCIADA), anotando nela o passo; o DANFE do armazém
+em "Receber nota" abre a conferência da venda ligada (`nfe_chave` devolve `viaArmazem`) e o recebimento vai para a venda.
+
 **Custo real do item** (v317): `(vProd − vDesc − vICMSDeson quando indDeduzDeson = 1 + vFrete + vOutro + vIPI + vST) ÷
 quantidade convertida`. A desoneração abatida do total da nota não é custo (a Syngenta abate R$ 14.435,50 de uma nota
 de R$ 75.976,30: paga-se R$ 61.540,80).
