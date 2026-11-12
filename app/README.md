@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Cadastrar insumos (v320)** — aba nova no módulo Preços (`#/insumos`, "➕ Insumos"): formulário com nome, classe
+  (lista das existentes), unidade no app, fabricante, preço à vista/a prazo ou % sobre a referência da classe, e o botão
+  **🏛️ Catálogo MAPA** (defensivo ou cultivar) que preenche nome, classe, fabricante, unidade e cria a ficha da bula.
+  Avisa nome já existente (não duplica; atalho para abrir em Preços) e % com classe sem referência (mostra o preço
+  calculado quando há). Ao cadastrar, o insumo entra no portfólio da safra ativa e no `PROD` (`agProdutoGarantir`),
+  com a data (`criado`); a lista "Cadastrados recentemente" mostra os últimos 20 com atalhos para Preços e bula. O
+  painel Portfólio da tela Preços ganhou o atalho "➕ Cadastrar insumo (formulário)". Sincroniza pelo caminho normal
+  dos preços (automático ou "Enviar para a planilha").
 - **Desfazer recebimento (v319)** — nota recebida por engano como compra (caso real: as notas de depósito e de retorno
   do armazém da Bravo, recebidas como compra do Cruiser) ganha o botão **↩ Desfazer recebimento** na lista de compras
   (admin, NF-e ligada; nas duas vistas). Na planilha, `__nfeReabrir{forcar, recebida}` desfaz tudo de uma vez: entrada no

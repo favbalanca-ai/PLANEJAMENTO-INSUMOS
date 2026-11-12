@@ -1997,6 +1997,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rcv-fin .recom-list{padding:0 10px 10px}
 
 /* ===== Novo produto (conferência da NF-e, v238) ===== */
+.ins-form{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 12px;padding:10px 14px 4px}   /* v320 */
+.ins-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
+.ins-form .ins-wide{grid-column:1/-1}.ins-form .txt,.ins-form .cell{width:100%;font-weight:500;color:var(--ink)}.ins-form .agp-row{display:flex;gap:6px;align-items:center}.ins-form .agp-row .txt{flex:1}
+.ins-aviso{font-weight:500;font-size:12px}.ins-aviso.err{color:var(--red)}.ins-aviso.warn{color:#8a6d00}.ins-aviso.ok{color:#1b5e20}
 .pn-form{display:flex;flex-direction:column;gap:10px;padding:2px 0 8px}
 .pn-form label{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:700;color:var(--muted)}
 .pn-form .txt,.pn-form .sel{width:100%;font-weight:500;color:var(--ink)}
@@ -2550,6 +2554,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-chev{font-size:11.5px}
   .rc-resumo{font-size:10px}
   .rcv-fin>summary b{font-size:9.5px}
+  .ins-form label{font-size:9.5px}
+  .ins-aviso{font-size:9.5px}
   .pn-form label{font-size:9.5px}
   .fin-area{font-size:9.5px}
   .fin-encerra{font-size:10px}

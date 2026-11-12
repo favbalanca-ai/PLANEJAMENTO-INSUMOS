@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-319';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-320';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -421,7 +421,7 @@ function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' | 'admin' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
 const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
-  empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos',
+  empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos', insumos:'precos',   // v320: cadastro de insumos
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'both', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
@@ -2372,6 +2372,8 @@ function nfeAplicaBusca(){ const q=_agNorm(NFE_UI.q||'').trim().split(/\s+/).fil
   document.querySelectorAll('.nfe-lista .nfe-row[data-busca]').forEach(r=>{ tot++; const ok=q.every(t=>(r.dataset.busca||'').indexOf(t)>=0); r.hidden=!ok; if(ok) n++; });
   const el=document.getElementById('nfe-q-n'); if(el) el.textContent=q.length?`${n} de ${tot}`:''; }
 document.addEventListener('input',e=>{ if(e.target.id!=='nfe-q') return; NFE_UI.q=e.target.value; nfeAplicaBusca(); });
+document.addEventListener('input',e=>{ if(!(e.target.dataset&&e.target.dataset.insf!=null)) return; const f=e.target.dataset.insf; INS_FORM[f]=e.target.value; if(f==='nome'&&INS_FORM.p){ INS_FORM.p=null; INS_FORM.cultivar=''; }   // v320: formulário Cadastrar insumo
+  if(f==='nome'||f==='classe'||f==='pct'||f==='vista'){ clearTimeout(window._insT); window._insT=setTimeout(()=>{ if(/#\/insumos/.test(location.hash)) route({keepScroll:true}); }, 350); } });
 // itens da nota no formato da planilha (NFE ITENS)
 // custo do item: o da própria nota; na REMESSA (valor simbólico) vale o custo do contrato de faturamento
 function nfeCustoItem(imp,i){ if(imp.nota.tipo==='REMESSA'){ const c=((NFE_CONTRATOS&&NFE_CONTRATOS.lista)||[]).find(x=>x.chave===imp.ref), it=c&&c.itens.find(x=>x.produto===i.produto);
@@ -4495,6 +4497,7 @@ V.precos = function(){
     <div class="pr-list">${itemsList}</div>
     <div class="op-add">
       <button class="btn btn-primary btn-sm" data-act="prAddItem">+ adicionar produto</button>
+      <a class="btn btn-outline btn-sm" data-go="#/insumos" title="Formulário de cadastro: nome, classe, unidade, fabricante, preço e catálogo MAPA">➕ Cadastrar insumo (formulário)</a>
       <button class="btn btn-outline btn-sm" data-act="prImportPdf">📄 Importar lista PDF</button>
       <button class="btn btn-outline btn-sm" data-act="prImportXlsx">📊 Importar tabela Excel</button>
       <button class="btn btn-outline btn-sm" data-act="prBuscarValor" title="Traz o preço da coluna VALOR do planejamento para o Preço à vista">⬇ Buscar preços (VALOR)</button>
@@ -6510,7 +6513,7 @@ function agItemDados(x){ if(x.k==='p'){ const p=x.p; return {produto:x.marca, cl
 // garante o produto no PORTFÓLIO (lista de Preços da safra + PROD) — usado pela NF-e, compras e recebimento;
 // devolve o nome. Produto que já existe não é mexido.
 function agProdutoGarantir(x){ const d=agItemDados(x), nome=d.produto; if(!nome) return '';
-  if(!PROD[nome]){ const s=safraAtual(); if(s&&s.itens&&!s.itens.some(i=>bulaKey(i.produto)===bulaKey(nome))){ s.itens.push({produto:nome, classe:d.classe, empresa:d.empresa, un:d.un, precoVista:'', precoPrazo:'', pct:0}); savePrecos(); }
+  if(!PROD[nome]){ const s=safraAtual(); if(s&&s.itens&&!s.itens.some(i=>bulaKey(i.produto)===bulaKey(nome))){ s.itens.push({produto:nome, classe:d.classe, empresa:d.empresa, un:d.un, precoVista:'', precoPrazo:'', pct:0, criado:tsAgora()}); savePrecos(); }   // v320: criado = data do cadastro
     const pobj={produto:nome, classe:d.classe, un:d.un, empresa:d.empresa, preco:0, estoque:0, pedido:0, _precos:true}; (DATA.produtos=DATA.produtos||[]).push(pobj); PROD[nome]=pobj; _mpKey=''; }
   if(d.p) agBulaDe(d.p, nome); return nome; }
 // Preços: preencher a linha do produto pelo catálogo (defensivo ou cultivar) e criar a ficha da bula
@@ -6564,6 +6567,50 @@ function agrofitListaRefresh(){ const el=document.getElementById('ag-lista'); if
   document.querySelectorAll('#ag-classes .chip-f').forEach(ch=>{ const c=ch.dataset.classe; const n=c?(cont[c]||0):Object.values(cont).reduce((a,b)=>a+b,0); const b=ch.querySelector('b'); if(b) b.textContent=n; ch.classList.toggle('on', c===AGROFIT.classe); }); }
 let _agQTimer=null;
 function agrofitBusca(v){ AGROFIT.q=v; AGROFIT.lim=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitListaRefresh, 120); }
+// ===== v320: CADASTRAR INSUMOS (módulo Preços) — formulário de produto novo no portfólio da safra =====
+let INS_FORM={nome:'', classe:'', un:'', empresa:'', vista:'', prazo:'', pct:'', pctPrazo:'', p:null, cultivar:''};
+function insReset(){ INS_FORM={nome:'', classe:'', un:'', empresa:'', vista:'', prazo:'', pct:'', pctPrazo:'', p:null, cultivar:''}; }
+function insExistente(nome){ const k=bulaKey(nome||''); if(!k) return null; if(PROD[nome]) return nome; const s=safraAtual(); const it=(s&&s.itens||[]).find(i=>bulaKey(i.produto)===k); if(it) return it.produto; for(const n in PROD){ if(bulaKey(n)===k) return n; } return null; }
+function insRefDaClasse(classe){ const c=String(classe||'').toUpperCase().trim(); return (safraAtual().refs||[]).find(r=>String(r.classe||'').toUpperCase().trim()===c && +r.vista>0)||null; }
+function insUnidades(){ const uns=new Set(['KG','L','TON','SC','UN']); for(const n in PROD){ const u=String((PROD[n]||{}).un||'').trim().toUpperCase(); if(u&&u.length<=6) uns.add(u); } return [...uns].sort(); }
+function insMapa(){ agPickOpen(Object.assign({}, AG_PICK_PROD, {q:INS_FORM.nome||'', onPick:x=>{ const d=agItemDados(x); INS_FORM.nome=d.produto||INS_FORM.nome; INS_FORM.classe=d.classe||INS_FORM.classe; INS_FORM.empresa=d.empresa||INS_FORM.empresa; INS_FORM.un=d.un||INS_FORM.un; INS_FORM.p=d.p||null; INS_FORM.cultivar=d.cultivar||'';
+  route(); toast(d.p?'Preenchido pelo catálogo MAPA — a bula entra junto ao cadastrar':'Cultivar do SIGEF preenchida'); }})); }
+function insSalvar(){ const F=INS_FORM, nome=String(F.nome||'').trim(); if(!nome){ toast('Dê um nome ao insumo'); return; }
+  const ja=insExistente(nome); if(ja){ toast(`${ja} já está no portfólio — abra em Preços para editar`); precoQ=ja; route(); return; }
+  const num=v=>{ const x=String(v==null?'':v).replace(/\./g,'').replace(',','.'); const n=parseFloat(x); return isFinite(n)&&n>0?n:null; };
+  const pctN=v=>{ const x=String(v==null?'':v).replace(',','.').trim(); if(x==='') return null; const n=parseFloat(x); return isFinite(n)?n/100:null; };
+  const criado=agProdutoGarantir({k:'novo', nome, classe:F.classe, un:F.un, empresa:F.empresa}); if(!criado){ toast('Não consegui cadastrar'); return; }
+  const s=safraAtual(), it=(s.itens||[]).find(i=>bulaKey(i.produto)===bulaKey(criado));
+  if(it){ const v=num(F.vista), p=num(F.prazo), pc=pctN(F.pct), pp=pctN(F.pctPrazo); it.precoVista=v!=null?v:''; it.precoPrazo=p!=null?p:''; if(pc!=null) it.pct=pc; if(pp!=null) it.pctPrazo=pp; it.criado=it.criado||tsAgora(); if(PROD[criado]&&v!=null) PROD[criado].preco=v; }
+  if(F.p) agBulaDe(F.p, criado);
+  savePrecos(); _mpKey=''; try{ mergePrecosProdutos(); }catch(e){}
+  const bula=!!(F.p), classe=F.classe; insReset(); INS_FORM.classe=classe;   // a classe costuma repetir no próximo cadastro
+  route(); toast(`${criado} cadastrado no portfólio da safra ${PRECOS.atual}${bula?' · bula preenchida pelo catálogo':''}`); }
+V.insumos=function(){
+  const s=safraAtual(), F=INS_FORM, ja=insExistente(F.nome), ref=insRefDaClasse(F.classe), usaPct=String(F.pct||'').trim()!=='' && !(parseFloat(String(F.vista||'').replace(',','.'))>0);
+  const fmtn=v=>(Math.round((+v||0)*100)/100).toFixed(2).replace('.',',');
+  const compV=(ref&&usaPct)?(+ref.vista||0)*(1+(parseFloat(String(F.pct).replace(',','.'))||0)/100):0;
+  const recentes=(s.itens||[]).filter(i=>i.criado).sort((a,b)=>(+b.criado||0)-(+a.criado||0)).slice(0,20);
+  const rows=recentes.map(it=>{ const fv=precoFinal(it,'vista'), temB=bulaTem(bulaDe(it.produto)); return `<div class="nfe-row"><div class="nfe-row-main"><b>${esc(it.produto)}</b><span class="nfe-tipo">${esc(it.classe||'sem classe')}</span>
+      <div class="mut">${esc(it.un||'—')}${it.empresa?` · ${esc(it.empresa)}`:''} · ${fv>0?`R$ ${fmtn(fv)}`:'sem preço'} · ${esc(fmtDataBR(new Date(+it.criado).toISOString().slice(0,10)))}</div></div>
+      <div class="nfe-row-act"><button class="btn btn-outline btn-sm" data-act="insEditar" data-prod="${esc(it.produto)}" title="Abrir na lista de Preços">💲 Preços</button><button class="btn btn-outline btn-sm${temB?' on':''}" data-act="bulaAbrir" data-prod="${esc(it.produto)}">📘 ${temB?'Bula':'Cadastrar bula'}</button></div></div>`; }).join('');
+  return `<div class="panel"><div class="panel-head"><h2>➕ Cadastrar insumo</h2><span class="sub">entra no portfólio da safra <b>${esc(PRECOS.atual)}</b> (lista de Preços) e já pode ser usado em notas, compras, estoque e recomendações</span></div>
+    <div class="ins-form">
+      <label class="ins-wide">Nome do insumo<span class="agp-row"><input class="txt" data-insf="nome" value="${esc(F.nome)}" placeholder="como vai aparecer no app (ex.: GLIFOSATO 480 SL)" autocomplete="off"><button type="button" class="btn btn-outline btn-sm" data-act="insMapa" title="Preencher pelo catálogo MAPA (defensivo registrado ou cultivar): nome, classe, fabricante, unidade e bula">🏛️ Catálogo MAPA</button></span>
+        ${ja?`<small class="ins-aviso err">⚠ <b>${esc(ja)}</b> já está no portfólio — não vai duplicar. <a class="link" data-act="insEditar" data-prod="${esc(ja)}">Abrir em Preços</a></small>`:F.p?`<small class="ins-aviso ok">🏛️ Do catálogo MAPA: ${esc(F.p.ia||'')} · reg. ${esc(F.p.r||'')} — a bula entra junto</small>`:F.cultivar?`<small class="ins-aviso ok">🌱 Cultivar ${esc(F.cultivar)} (SIGEF)</small>`:''}</label>
+      <label>Classe<input class="txt" data-insf="classe" list="ins-classes" value="${esc(F.classe)}" placeholder="ex.: HERBICIDA, FERTILIZANTES" autocomplete="off"><datalist id="ins-classes">${agClassesLista().map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+        ${(F.classe&&!ref&&usaPct)?`<small class="ins-aviso warn">⚠ a classe <b>${esc(F.classe.toUpperCase())}</b> não tem preço de referência — o % não vai gerar preço (cadastre a referência em Preços ou informe o preço à vista)</small>`:ref?`<small class="mut">referência da classe: ${esc(ref.produto||'')} · R$ ${fmtn(ref.vista)}${+ref.prazo>0?` / ${fmtn(ref.prazo)} a prazo`:''}</small>`:''}</label>
+      <label>Unidade no app<input class="txt" data-insf="un" list="ins-uns" value="${esc(F.un)}" placeholder="L, KG, SC, UN…" autocomplete="off"><datalist id="ins-uns">${insUnidades().map(u=>`<option value="${esc(u)}">`).join('')}</datalist></label>
+      <label>Fabricante / fornecedor<input class="txt" data-insf="empresa" value="${esc(F.empresa)}" placeholder="opcional" autocomplete="off"></label>
+      <label>Preço à vista (R$)<input class="cell" inputmode="decimal" data-insf="vista" value="${esc(F.vista)}" placeholder="0,00"></label>
+      <label>Preço a prazo (R$)<input class="cell" inputmode="decimal" data-insf="prazo" value="${esc(F.prazo)}" placeholder="0,00"></label>
+      <label>% sobre a referência (à vista)<input class="cell" inputmode="decimal" data-insf="pct" value="${esc(F.pct)}" placeholder="só se não tiver preço">${compV>0?`<small class="mut">= R$ ${fmtn(compV)}</small>`:''}</label>
+      <label>% a prazo<input class="cell" inputmode="decimal" data-insf="pctPrazo" value="${esc(F.pctPrazo)}" placeholder="opcional"></label>
+    </div>
+    <div class="nfe-foot"><span class="mut" style="font-size:12px">${syncUrl()?(autoOn()?'Vai para a planilha sozinho (sincronização automática).':'Depois toque em "Enviar para a planilha" na tela Preços.'):'Fica neste aparelho até configurar a sincronização.'}</span><span class="spacer"></span>
+      <button class="btn btn-outline btn-sm" data-act="insLimpar">Limpar</button><button class="btn btn-primary" data-act="insSalvar"${ja?' disabled':''}>➕ Cadastrar insumo</button></div></div>
+  <div class="panel"><div class="panel-head"><h2>Cadastrados recentemente</h2><span class="sub">${recentes.length?`últimos ${recentes.length} desta safra`:'nenhum ainda nesta safra'}</span></div>
+    ${rows||'<p class="mut" style="padding:12px 14px">Os insumos cadastrados por aqui (ou pelo "Novo produto" da conferência de nota) aparecem nesta lista.</p>'}</div>`; };
 V.catalogo=function(){
   const seg=location.hash.split('/'), reg=decodeURIComponent(String(seg[2]||'')), sub=decodeURIComponent(String(seg[3]||''));
   if(reg==='alvos') return agrofitAlvosView(sub);
@@ -9718,7 +9765,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={insumos:'Cadastrar insumos',frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -10403,6 +10450,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='prAddRef'){ safraAtual().refs.push({classe:'',produto:'',vista:0,prazo:0}); savePrecos(); route(); }
     else if(a.act==='prDelRef'){ safraAtual().refs.splice(+a.i,1); savePrecos(); route(); }
     else if(a.act==='prAddItem'){ safraAtual().itens.push({empresa:'',classe:'',produto:'',pct:0}); savePrecos(); route(); }
+    else if(a.act==='insSalvar'){ insSalvar(); }   // v320
+    else if(a.act==='insLimpar'){ insReset(); route(); }
+    else if(a.act==='insMapa'){ insMapa(); return; }
+    else if(a.act==='insEditar'){ precoQ=a.prod||''; precoClasse=''; precoSemPreco=false; location.hash='#/precos'; }
     else if(a.act==='prDelItem'){ safraAtual().itens.splice(+a.i,1); savePrecos(); route(); }
     else if(a.act==='prNovaSafra'){ const nome=(prompt('Nome da nova safra (ex.: 2027/2028):')||'').trim();
       if(nome){ if(!PRECOS.safras[nome]) PRECOS.safras[nome]={refs:[],itens:[]}; PRECOS.atual=nome; savePrecos(); route(); toast('Safra '+nome+' criada'); } }
