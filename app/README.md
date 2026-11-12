@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Insumo novo ganha linha no PORTIFÓLIO sozinho (v321)** — produto cadastrado só em Preços (aba Cadastrar insumos ou
+  "Novo produto" da nota) não existia na aba `PORTIFÓLIO`; ao usá-lo no planejamento (estoque, pedido, operação), a
+  planilha respondia `produto não encontrado` a cada envio. Agora `buildFieldEdits` põe um edit `addprod` (empresa,
+  classe, nome, preço) na frente das edições para cada produto desses (`addprodPendentes`), e o `Code.gs` cria a linha
+  (mesmo caminho do "Alimentar planejamento"). Autoconserto em `syncPush`: se mesmo assim vier `produto não encontrado: X`
+  e X existe no app, marca X e reenvia uma vez com o `addprod`.
 - **Cadastrar insumos (v320)** — aba nova no módulo Preços (`#/insumos`, "➕ Insumos"): formulário com nome, classe
   (lista das existentes), unidade no app, fabricante, preço à vista/a prazo ou % sobre a referência da classe, e o botão
   **🏛️ Catálogo MAPA** (defensivo ou cultivar) que preenche nome, classe, fabricante, unidade e cria a ficha da bula.
