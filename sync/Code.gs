@@ -392,7 +392,7 @@ function writeOcorrenciasApp(map){
 }
 // arquivo enviado pelo app → pasta ao lado da planilha (link de visualização para quem tiver o link)
 function driveArquivo_(f, pastaNome, mimePadrao, nomePadrao){
-  if (!f || !f.b64) return { url:'' };
+  if (!f || !f.b64) return { url:'', erro:'arquivo sem conteúdo (o app mandou a foto vazia)' };   // v323: o motivo vai no log do app
   var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder();
   var pasta = _pasta(base, pastaNome);
   var blob = Utilities.newBlob(Utilities.base64Decode(S(f.b64)), S(f.mime) || mimePadrao, S(f.nome) || nomePadrao);
@@ -2745,7 +2745,7 @@ function doPost(e){
   var out = { ok:0, fail:0, msgs:[] }, base = false, inval = {};
   // TRAVA: uma gravação por vez. Dois aparelhos (ou 2 envios do mesmo) gravando juntos podiam
   // apagar a linha errada do razão ou perder uma compra na COMPRAS APP. Quem chega depois espera.
-  var payload = null; try { payload = JSON.parse(e.postData.contents); } catch (err){ out.msgs.push('payload inválido: ' + err); return json(out); }
+  var payload = null; try { payload = JSON.parse(e.postData.contents); } catch (err){ out.fail = 1; out.msgs.push('payload inválido: ' + err); return json(out); }
   // foto/PDF para o Drive e download de bula não mexem na planilha: ficam FORA da trava (uma foto de 1 MB segurava todo mundo)
   var ks1 = (payload && !Array.isArray(payload) && typeof payload === 'object') ? Object.keys(payload).filter(function(k){ return k.indexOf('__') === 0; }) : [];
   var semTrava = ks1.length === 1 && SEM_TRAVA_[ks1[0]];
@@ -2765,7 +2765,7 @@ function doPost(e){
         if (r.base) base = true; (r.inval || []).forEach(function(k){ inval[k] = 1; });
         out.itens.push(o); out.ok += +o.ok || 0; if (o.fail) out.fail = 1; out.msgs = out.msgs.concat(o.msgs); });
     } else { var r1 = gravaUm_(payload, acc, cfg, out); if (r1.base) base = true; (r1.inval || []).forEach(function(k){ inval[k] = 1; }); }
-  } catch(err){ out.msgs.push('payload inválido: ' + err); }
+  } catch(err){ out.fail++; out.msgs.push('erro na planilha: ' + err); }   // v323: idem (falha de verdade, o app reenvia)
   finally {
     // invalida o cache: o próximo puxar traz o dado fresco. Mexeu na BASE = tudo; senão só as chaves da parte APP que a gravação muda.
     if (base) cacheClear(); else cacheClearAppKeys_(Object.keys(inval));
@@ -2843,6 +2843,7 @@ function gravaUm_(payload, acc, cfg, out){
       var oc = writeOcorrenciasApp(payload.__ocorrencia); out.ok = oc.rows;
     } else if (payload && payload.__campoFoto){       // foto de ocorrência/anotação → Drive (pasta "Fotos do Campo")
       out.foto = campoFoto_(payload.__campoFoto); out.ok = out.foto && out.foto.url ? 1 : 0; semCache = true;
+      if (!out.ok){ out.fail = 1; out.msgs.push('foto: ' + ((out.foto && out.foto.erro) || 'não gravou no Drive')); }   // v323: antes respondia "ok 0" sem dizer por quê
     } else if (payload && payload.__mistura){         // misturas de produtos + eficácia (Campo) — merge por chave
       var mi = writeMisturasApp(payload.__mistura); out.ok = mi.rows;
     } else if (payload && payload.__bula){            // bulas dos produtos (módulo Preços) — merge por chave
@@ -2873,7 +2874,7 @@ function gravaUm_(payload, acc, cfg, out){
     } else {
       applyEditsBatch(payload, out); base = true;   // edições de campo (dose, estoque, área…): mexem na BASE
     }
-  } catch(err){ out.msgs.push('payload inválido: ' + err); }
+  } catch(err){ out.fail++; out.msgs.push('erro na planilha: ' + err); }   // v323: conta como falha — antes o app achava que tinha gravado e descartava o pendente
   if (_MAP_ERROS_.length){ out.msgs = out.msgs.concat(_MAP_ERROS_); _MAP_ERROS_ = []; }   // registro grande demais: avisa, o resto foi gravado
   var ch = chaves && chaves.length === 1 ? chaves[0] : '';
   return { base:base, inval: base ? [] : (semCache ? [] : (ch && APP_INVALIDA_[ch]) ? APP_INVALIDA_[ch] : APP_TODAS_) };
