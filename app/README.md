@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Fluxo do armazém geral (v318)** — a compra entregue via armazém segue as notas: (1) a **nota de venda** do
+  fornecedor com entrega num terceiro (`entrega` ≠ destinatário) mostra o aviso "Entrega no armazém X: confirme e ponha
+  em trânsito" (`nfeEntregaTerceiro`/`nfeEntregaHtml`); (2) a nota de **depósito** do armazém fica IGNORADA e anota na
+  nota de venda "🏬 no armazém desde…"; (3) a nota de **retorno de depósito** (entrega) fica IGNORADA, ligada à nota de
+  venda (CHAVE REFERENCIADA) e anota nela "🚛 saiu do armazém — receber na fazenda"; (4) em **Receber nota**, o DANFE do
+  armazém abre a conferência da **NF de venda** ligada (a planilha devolve `viaArmazem`), com um banner explicando, e o
+  recebimento é registrado na nota de venda (`payload.viaArmazem` marca a nota do armazém como entregue). A lista
+  "Em trânsito" mostra essas observações.
 - **Armazém geral, estorno e custo com desoneração (v317)** — casos reais: (a) compra da Syngenta entregue via
   armazém (Bravo): a nota de **venda** 5102 é a compra; a **entrada simbólica para depósito** (1934) e o **retorno de
   depósito** (5906) viraram compras também e o estoque ficou em 360 L em vez de 120; (b) **estorno** (NF-e de ajuste,

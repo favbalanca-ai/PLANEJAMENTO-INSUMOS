@@ -820,6 +820,8 @@ function nfeLerGs_(txt){
     cnpj:(_xt(emit,'CNPJ') || _xt(emit,'CPF')).replace(/\D/g,''), fornecedor:_xt(emit,'xNome'),
     dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
     ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length, natOp:natOp, cfopCompra:cfopCompra, finNFe:finNFe, nfVenda:mv ? (mv[1] || mv[2]) : '',   // v314 · v317
+    entregaDoc:(_xt(_xfirst(inf,'entrega'),'CNPJ') || _xt(_xfirst(inf,'entrega'),'CPF')).replace(/\D/g,''), entregaNome:_xt(_xfirst(inf,'entrega'),'xNome'),   // v318: local de entrega (armazém)
+    autXml:_xall(inf,'autXML').map(function(a){ return (_xt(a,'CNPJ') || _xt(a,'CPF')).replace(/\D/g,''); }).filter(Boolean),
     entrada:tpNF === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
     producao:producao, xprods:xprods };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
 }
@@ -926,7 +928,9 @@ function nfeReavaliarVendas_(){
     var fid = S(r[t.col('FILE ID')]); if (!fid) return; lidas++;
     try { var nx = nfeLerGs_(_blobTxt(DriveApp.getFileById(fid).getBlob())); if (!nx || nx.erro || nfeEhVendaProd_(nx, cfg, S(r[t.col('ORIGEM')]))) return;
       var novo = nx.tipo || 'OUTRA'; if (tipoAtual === 'OUTRA' && novo === 'OUTRA') return;
-      if (NFE_TIPO_NOTA_IGN_[novo]){ _setCells_(t, i + 2, { 'TIPO':novo, 'STATUS':'IGNORADA', 'OBS':nfeAutoIgnora_(nx) }); if (novo === 'ESTORNO') try { nfeMarcaEstornada_(t, nx); } catch (e3) {} n++; return; }   // v317
+      if (NFE_TIPO_NOTA_IGN_[novo]){ var cel = { 'TIPO':novo, 'STATUS':'IGNORADA', 'OBS':nfeAutoIgnora_(nx) };
+        if (novo === 'ESTORNO') try { nfeMarcaEstornada_(t, nx); } catch (e3) {} else try { var lg = nfeArmazemLiga_(t, nx); if (lg) cel['CHAVE REFERENCIADA'] = lg; } catch (e4) {}   // v318
+        _setCells_(t, i + 2, cel); n++; return; }   // v317
       var obs = novo === 'RETORNO' ? 'era "' + (tipoAtual === 'OUTRA' ? 'outra operação' : 'venda do produtor') + '" — é mercadoria voltando ao fornecedor (NF-e de entrada do fornecedor, troca/devolução): nada entra no estoque'
         : novo === 'TROCA' ? 'era "outra operação" — é reposição do fornecedor (troca), sem cobrança'
         : 'era "venda do produtor" pela regra antiga — é compra (nota de saída do fornecedor)';
@@ -992,13 +996,41 @@ function processarXmlNfe(txt, origem){
   if (row){ vals['OBS'] = 'cancelamento recebido antes da nota'; }           // já estava CANCELADA: completa os dados, mantém o status
   else { vals['STATUS'] = fora ? 'IGNORADA' : 'A CLASSIFICAR';
     vals['OBS'] = fora ? 'destinatário ' + n.dest + ' fora da lista de produtores (CONFIG NFE)' : vendaProd ? 'venda do produtor — conferir em Compras (Conferir venda)' : (cfg.produtores.length ? '' : 'lista de produtores vazia na CONFIG NFE — conferir destinatário');
-    var ai = nfeAutoIgnora_(n); if (ai){ vals['STATUS'] = 'IGNORADA'; vals['OBS'] = ai; }   // v317: estorno / depósito / retorno de depósito
+    var ai = nfeAutoIgnora_(n); if (ai){ vals['STATUS'] = 'IGNORADA'; vals['OBS'] = ai;   // v317: estorno / depósito / retorno de depósito
+      if (n.tipo !== 'ESTORNO') try { var lig = nfeArmazemLiga_(t, n); if (lig) vals['CHAVE REFERENCIADA'] = lig; } catch (e) { Logger.log('armazém ' + n.chave + ': ' + e); } }   // v318: ligada à NF de venda
     row = _novaLinha_(t.s); }
   _setCells_(t, row, vals);
   if (n.tipo === 'ESTORNO') try { nfeMarcaEstornada_(t, n); } catch (e) { Logger.log('estorno ' + n.chave + ': ' + e); }   // v317: a nota anulada ganha o alerta ⚠
   return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '', dest:fora ? n.dest : '' };
 }
 // v317: motivo de IGNORADA para a nota que fica fora do estoque por natureza (estorno, depósito em armazém, retorno de depósito)
+// v318: armazém geral — acha a NF de VENDA do fornecedor que esta nota de depósito/retorno acompanha:
+// pelo nº citado nas observações ("NF venda: 179873") + mesmo produtor (desempate: CNPJ autorizado no XML = emitente da venda);
+// senão pela referência (retorno → nota de depósito → a venda que ela já ligou). Devolve a chave ou ''.
+function nfeAchaVenda_(t, n){
+  var s = t.s, last = s.getLastRow(); if (last < 2) return '';
+  var num = S(n.nfVenda).replace(/^0+/, ''), cands = [];
+  if (num){ var v = s.getRange(2, 1, last - 1, t.ncol).getValues();
+    for (var i = 0; i < v.length; i++){ var r = v[i];
+      if (S(r[t.col('Nº')]).replace(/^0+/, '') === num && _doc_(r[t.col('PRODUTOR')]) === S(n.dest) && /^\d{44}$/.test(S(r[t.col('CHAVE')])) && S(r[t.col('CHAVE')]) !== S(n.chave) && !NFE_TIPO_NOTA_IGN_[S(r[t.col('TIPO')])]) cands.push(r); }
+    if (cands.length > 1 && n.autXml && n.autXml.length){ var c2 = cands.filter(function(r){ return n.autXml.indexOf(S(r[t.col('CNPJ EMITENTE')])) >= 0; }); if (c2.length) cands = c2; }
+    if (cands.length) return S(cands[0][t.col('CHAVE')]); }
+  if (/^\d{44}$/.test(S(n.ref))){ var row = _nfeLinha_(t, S(n.ref));
+    if (row){ var rr = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue()), tp = S(t.s.getRange(row, t.col('TIPO') + 1).getValue());
+      if (/^\d{44}$/.test(rr) && (tp === 'DEPOSITO' || tp === 'RETORNO_DEP')) return rr; } }
+  return '';
+}
+// v318: liga a nota do armazém à NF de venda e anota nela o passo ("no armazém" / "saiu do armazém — receber")
+function nfeArmazemLiga_(t, n){
+  var ch = nfeAchaVenda_(t, n); if (!ch) return '';
+  var row = _nfeLinha_(t, ch); if (!row) return '';
+  var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase(), obs = S(t.s.getRange(row, t.col('OBS') + 1).getValue());
+  if (obs.indexOf('⚠') === 0) return ch;   // alerta tem prioridade
+  var txt = n.tipo === 'DEPOSITO' ? '🏬 no armazém ' + S(n.fornecedor) + ' desde ' + S(n.emissao) + ' (NF de depósito nº ' + S(n.nNF) + ')'
+    : '🚛 saiu do armazém ' + S(n.fornecedor) + ' em ' + S(n.emissao) + ' (NF nº ' + S(n.nNF) + ') — receber na fazenda; o DANFE do armazém serve';
+  if (st === 'EM TRÂNSITO' || st === 'A CLASSIFICAR' || st === 'A ENTREGAR') _setCells_(t, row, { 'OBS':txt });
+  return ch;
+}
 function nfeAutoIgnora_(n){
   if (!n || !NFE_TIPO_NOTA_IGN_[n.tipo]) return '';
   var refN = /^\d{44}$/.test(S(n.ref)) ? String(+S(n.ref).slice(25,34)) : '', venda = S(n.nfVenda);
@@ -1256,11 +1288,16 @@ function nfeEstados_(){
 }
 // ---- FASE 4: recebimento na fazenda (tela Receber nota) ----
 // consulta pela chave lida na câmera: status + itens já classificados (NFE ITENS)
-function nfeChave_(chave){
+function nfeChave_(chave, semVia){
   _nfeConsertoLeve_();
   chave = S(chave); var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave);
   if (!row) return { ok:true, encontrada:false };
   var o = {}; var r = t.s.getRange(row,1,1,t.ncol).getValues()[0]; NFE_IDX_COLS.forEach(function(h){ o[h] = r[t.col(h)]; });
+  // v318: DANFE do armazém (depósito / retorno de depósito) ligado a uma NF de venda → o recebimento é da NF de venda
+  var tpo = S(o['TIPO']), refo = S(o['CHAVE REFERENCIADA']);
+  if (!semVia && (tpo === 'RETORNO_DEP' || tpo === 'DEPOSITO') && /^\d{44}$/.test(refo) && refo !== chave){
+    var alvo = nfeChave_(refo, true);
+    if (alvo && alvo.encontrada){ alvo.viaArmazem = { chave:chave, nNF:S(o['Nº']), fornecedor:S(o['FORNECEDOR']), tipo:tpo }; return alvo; } }
   var itens = _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).filter(function(i){ return S(i['CHAVE']) === chave; }).map(function(i){
     return { n:S(i['Nº ITEM']), cprod:S(i['CPROD']), xprod:S(i['XPROD']), ucom:S(i['UCOM']), qcom:N(i['QCOM']), produto:S(i['PRODUTO APP']), fator:N(i['FATOR']) || 1,
       qtd:N(i['QTD APP']), un:S(i['UN APP']), custo:N(i['CUSTO UNIT. REAL']), ignorar:!!S(i['IGNORAR']), recebida:S(i['QTD RECEBIDA']) === '' ? null : N(i['QTD RECEBIDA']), maquina:S(i['MÁQUINA']) }; });   // v309: maquina (tanque) p/ o recebimento
@@ -1273,6 +1310,8 @@ function nfeChave_(chave){
 // A ENTRADA no estoque vai pelo __entrada normal do app (id = chave) — reenviar não duplica.
 function nfeRecebimento_(r){ var out = nfeRecebimentoGrava_(r);
   if (!out.erro && r && r.entrada && S(r.entrada.id)) try { out.rows += (writeCompraApp(r.entrada) || {}).rows || 0; } catch (e) { Logger.log('entrada do recebimento ' + r.chave + ': ' + e); }   // v309: entrada no razão no mesmo pedido
+  if (!out.erro && r && /^\d{44}$/.test(S(r.viaArmazem))) try { var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), rw = _nfeLinha_(t, S(r.viaArmazem));   // v318: DANFE do armazém usado no recebimento
+    if (rw) _setCells_(t, rw, { 'OBS':'entregue na fazenda em ' + (r.data ? S(r.data).slice(0,10) : _fmtD(new Date())) + ' — recebida pela NF de venda nº ' + String(+S(r.chave).slice(25,34)) }); } catch (e) { Logger.log('via armazém ' + r.chave + ': ' + e); }
   return out; }
 function nfeRecebimentoGrava_(r){
   var chave = S(r.chave); if (!/^\d{44}$/.test(chave)) return { rows:0, erro:'chave inválida' };

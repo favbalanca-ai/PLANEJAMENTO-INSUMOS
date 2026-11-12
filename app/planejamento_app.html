@@ -2732,7 +2732,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-317';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-318';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4505,8 +4505,12 @@ function nfeLerXml(txt){
     dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''), destNome:_nt(dest,'xNome'), tpNF:_nt(ide,'tpNF'), natOp:_nt(ide,'natOp'),   // produtor destinatário · tpNF 0 = nota de entrada (contranota do comprador, v277) · v314: natureza da operação ("Remessa de troca")
     dups:[...inf.getElementsByTagNameNS('*','dup')].map(d=>({n:_nt(d,'nDup'), venc:_nt(d,'dVenc').slice(0,10), valor:_nn(d,'vDup')})).filter(d=>d.valor>0),   // parcelas (v273)
     pag:[...inf.getElementsByTagNameNS('*','detPag')].map(d=>({t:_nt(d,'tPag'), v:_nn(d,'vPag')})),
-    finNFe:_nt(ide,'finNFe'), infCpl:_nt(_nx(inf,'infAdic'),'infCpl').slice(0,600) };   // v317: finalidade (3 = ajuste/estorno) e observações (armazém cita a NF de venda)
+    finNFe:_nt(ide,'finNFe'), infCpl:_nt(_nx(inf,'infAdic'),'infCpl').slice(0,600),   // v317: finalidade (3 = ajuste/estorno) e observações (armazém cita a NF de venda)
+    entregaDoc:(_nt(_nx(inf,'entrega'),'CNPJ')||_nt(_nx(inf,'entrega'),'CPF')).replace(/\D/g,''), entregaNome:_nt(_nx(inf,'entrega'),'xNome') };   // v318: local de entrega (armazém geral)
 }
+// v318: a nota de venda manda entregar num terceiro (armazém geral / depósito por conta e ordem)? Então a mercadoria chega depois, pela nota do armazém
+function nfeEntregaTerceiro(n){ const d=String((n&&n.entregaDoc)||''); return !!d && d!==String(n.dest||'') && d!==String(n.cnpj||''); }
+function nfeEntregaHtml(n){ if(!nfeEntregaTerceiro(n)) return ''; return `<div class="nfe-aviso info">🏬 <b>Entrega no armazém ${esc(n.entregaNome||nfeCnpjFmt(n.entregaDoc))}</b> (depósito por conta e ordem): a mercadoria ainda <b>não está na fazenda</b>. Confirme e <b>ponha em trânsito</b>; quando o armazém entregar, receba pela tela <b>Receber nota</b> — o DANFE do armazém (retorno de depósito) serve: o app encontra esta nota por ele.</div>`; }
 // v317: nota de venda citada nas observações (armazém geral: "NF venda: 179873", "venda179873")
 function nfeNfVendaCitada(n){ const m=String((n&&n.infCpl)||'').match(/NF\.?\s*(?:de\s*)?venda:?\s*(\d{3,9})|venda\s*(\d{4,9})\b/i); return m?(m[1]||m[2]):''; }
 const nfeRefNum=ref=>/^\d{44}$/.test(ref||'')?String(+ref.slice(25,34)):'';   // nº da nota referenciada (posições 26–34 da chave)
@@ -5217,7 +5221,7 @@ function nfeConferirHtml(){
     : n.tipo==='REMESSA' && srv ? nfeRemessaHtml(imp)
     : fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
     : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`
-    : nfeTipoAvisoHtml(n);   // v307: um aviso por tipo de CFOP (combustível, ativo, energia, devolução…)
+    : nfeEntregaHtml(n)+nfeTipoAvisoHtml(n);   // v307: um aviso por tipo de CFOP (combustível, ativo, energia, devolução…) · v318: entrega no armazém
   const reclass=imp.reclass?`<div class="nfe-aviso warn">♻️ <b>Reclassificando</b> — esta nota já deu entrada${imp.reclass.data?` em <b>${esc(fmtDataBR(imp.reclass.data))}</b>`:''}. Corrija o produto ou o <b>fator</b> e confirme: a entrada anterior é <b>substituída</b> (estoque, razão e de-para) — nada duplica.</div>`:'';
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
   const det=nfeDetectaPecas(n), nMaq=imp.itens.filter(i=>nfeDestManut(i.dest)&&!i.ignorar).length, maqAll=nfeMaqUltima(n.cnpj), benfAll=nfeBenfUltima(n.cnpj);   // v276/v285
@@ -5286,8 +5290,10 @@ function nfeConferirHtml(){
    Aceita a chave só depois de 2 LEITURAS IGUAIS seguidas e confere o DV. Alternativas: nº da nota, 44 dígitos
    digitados ou leitor USB/Bluetooth (funciona como teclado no mesmo campo). */
 const REC_POR_KEY='planejamento_nfe_recebedor';
-let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:'', canhoto:''};
-function recReset(){ REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:'', canhoto:''}; }
+let REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:null, cam:null, ultima:'', fornecedor:'', canhoto:'', via:null};
+function recReset(){ REC={etapa:'ler', chave:'', digitos:'', msg:'', info:null, itens:[], transito:REC.transito, cam:null, ultima:'', fornecedor:'', canhoto:'', via:null}; }
+// v318: o DANFE lido era do armazém (retorno de depósito): a planilha devolveu a NF de venda ligada
+function recViaHtml(){ const v=REC.via; if(!v) return ''; return `<div class="nfe-aviso info" style="margin:8px 14px">🚛 Você leu a nota do <b>armazém</b> (${esc(v.fornecedor||'')} nº ${esc(v.nNF||'')}). A mercadoria é da <b>NF de venda nº ${esc(((REC.info||{}).nota||{}).nNF||'')}</b> de ${esc(((REC.info||{}).nota||{}).fornecedor||'')} — é ela que está sendo recebida.</div>`; }
 // redesenha a tela DEPOIS do evento (redesenhar dentro do 'change' que veio de um blur quebra o innerHTML)
 let _recRr=0; function recRerender(){ clearTimeout(_recRr); _recRr=setTimeout(()=>route({keepScroll:true}), 0); }
 function recPor(){ try{ return localStorage.getItem(REC_POR_KEY)||''; }catch(e){ return ''; } }
@@ -5451,7 +5457,8 @@ async function recAbrirChave(d){
   if(!nfeServerOk()){ REC.msg='A NF-e não está ligada neste aparelho: cole o Token da NF-e em Sincronizar.'; route({keepScroll:true}); return; }
   REC.chave=d; REC.msg='Buscando a nota…'; route({keepScroll:true});
   try{ const r=await nfeGet({acao:'nfe_chave', chave:d}); if(!r||!r.ok) throw new Error((r&&r.erro)||'falha');
-    REC.info=r; REC.msg='';
+    REC.info=r; REC.msg=''; REC.via=null;
+    if(r.encontrada && r.viaArmazem && r.nota && /^\d{44}$/.test(r.nota.chave||'')){ REC.via=r.viaArmazem; REC.chave=r.nota.chave; }   // v318: DANFE do armazém → recebe a NF de venda
     if(!r.encontrada){ REC.etapa='semxml'; REC.itens=[{produto:'',qtd:'',un:''}]; }
     else { const st=r.nota.status;
       if(st==='EM TRÂNSITO'){ REC.etapa='conferir'; REC.itens=r.itens.filter(i=>!i.ignorar&&i.produto).map(i=>Object.assign({},i,{div:null})); }
@@ -5495,6 +5502,7 @@ async function _recConfirmar(){
       pushed:false, ts:Date.now(), nfe:{chave:ch, recebimento:true} };
     COMPRAS.registros.push(rec); saveCompras(); if(String(nota.tipo||'').toUpperCase()!=='REMESSA') pedidoAbater(rec.itens); if(!nfeServerOk()) pushEntrada(rec); }   // v308: remessa de contrato já abateu ao registrar o contrato · v309: com NF-e ligada a entrada vai junto do recebimento
   const payload={chave:ch, data:hoje, por, itens:itens.map(i=>({n:i.n, produto:i.produto, un:i.un, qtdRecebida:+(+i.qtd).toFixed(4)})), pendencias:pend, canhoto};
+  if(REC.via&&REC.via.chave) payload.viaArmazem=REC.via.chave;   // v318: a nota do armazém fica anotada como entregue
   if(semXml) payload.semXml={fornecedor:REC.fornecedor||''};
   const recEnt=uso.length?COMPRAS.registros.find(c=>c.id===ch):null; if(recEnt && nfeServerOk()) payload.entrada=compraPayload(recEnt);   // v309: um pedido só
   if(!semXml) try{ ((r.itens)||[]).filter(i=>/tanque/i.test(i.maquina||'')).forEach(i=>{ const L=/^M3|^M³/i.test(String(i.ucom||''))?(+i.qcom||0)*1000:(+i.qcom||0); if(!(L>0)) return;   // v309: diesel/Arla entram no tanque quando a nota CHEGA
@@ -5522,7 +5530,7 @@ function recAvisoHtml(){
   else if(st==='A CLASSIFICAR'){ txt='🗂️ O escritório <b>ainda não conferiu</b> esta nota (de-para dos produtos). Peça para classificar em Administrativo → Compras e leia de novo.'; }
   else if(st==='IGNORADA'){ txt='Esta nota foi marcada como <b>ignorada</b> pelo escritório (não é compra de insumo).'+(n.obs?` Motivo: ${esc(n.obs)}`:''); }
   else txt=`Status da nota: <b>${esc(st||'—')}</b>.`;
-  return `<div class="panel"><div class="panel-head"><h2>📄 ${cab}</h2></div><div class="nfe-aviso ${cls}" style="margin:12px 14px">${txt}</div>
+  return `<div class="panel"><div class="panel-head"><h2>📄 ${cab}</h2></div>${recViaHtml()}<div class="nfe-aviso ${cls}" style="margin:12px 14px">${txt}</div>
     <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
     <div class="nfe-foot"><button class="btn btn-primary btn-sm" data-act="recNova">📷 Ler outra nota</button></div></div>`;
 }
@@ -5535,6 +5543,7 @@ function recConferirHtml(){
       ${com?recDivHtml(i,k):''}</div>`; }).join('');
   const temDiv=REC.itens.some(i=>i.div&&i.div.tipo);
   return `<div class="panel rec-conf"><div class="panel-head"><h2>📦 Conferir recebimento</h2><span class="sub">${esc(n.fornecedor||'')}</span></div>
+    ${recViaHtml()}
     <div class="nfe-head"><div><small>Nota</small><b>Nº ${esc(n.nNF)} · série ${esc(n.serie)}</b><span>emissão ${esc(fmtDataBR(n.emissao))}</span></div>
       <div><small>Fornecedor</small><b>${esc(n.fornecedor||'—')}</b><span>CNPJ ${esc(nfeCnpjFmt(n.cnpj))}</span></div></div>
     <div class="nfe-chave"><small>Chave</small> ${esc(nfeChaveFmt(REC.chave))}</div>
@@ -5588,7 +5597,7 @@ V.receber=function(){
       <label>Chave (44 dígitos) — ou leitor USB/Bluetooth<input class="txt rec-44" id="rec-44" inputmode="numeric" autocomplete="off" value="${esc(nfeChaveFmt(REC.digitos))}" placeholder="0000 0000 0000 …"><span class="rec-44-st" id="rec-44-st">${esc(recChaveMsg(REC.digitos))}</span></label>
     </div></details></div>
   <div class="panel"><div class="panel-head"><h2>🚚 Em trânsito</h2><span class="sub">${T?`${lista.length} nota(s)`:'carregando…'}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="recTransAtualizar">🔄</button></div>
-    ${lista.map(x=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(x.fornecedor||'—')}</b><div class="mut">Nº ${esc(x.nNF)}/${esc(x.serie)} · emissão ${esc(fmtDataBR(x.emissao))} · ${brl(x.valor)}</div></div>
+    ${lista.map(x=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(x.fornecedor||'—')}</b><div class="mut">Nº ${esc(x.nNF)}/${esc(x.serie)} · emissão ${esc(fmtDataBR(x.emissao))} · ${brl(x.valor)}</div>${x.obs?`<div class="mut">${esc(x.obs)}</div>`:''}</div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="recAbrir" data-chave="${esc(x.chave)}">Receber</button></div></div>`).join('')||(T?'<p class="mut" style="padding:12px 14px">Nenhuma nota em trânsito.</p>':'')}</div>`;
 };
 /* ================= NF-e (fase 5): divergências na conferência + pendências ================= */
