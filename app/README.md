@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Armazém geral, estorno e custo com desoneração (v317)** — casos reais: (a) compra da Syngenta entregue via
+  armazém (Bravo): a nota de **venda** 5102 é a compra; a **entrada simbólica para depósito** (1934) e o **retorno de
+  depósito** (5906) viraram compras também e o estoque ficou em 360 L em vez de 120; (b) **estorno** (NF-e de ajuste,
+  finNFe 3) da ADM anulando uma contranota de soja. Agora: tipos **DEPOSITO** (CFOP 905, 923, 934), **RETORNO_DEP**
+  (906, 907) e **ESTORNO** (finNFe 3 ou natureza "estorno") ficam fora do estoque: itens já marcados Ignorar, botão
+  "Ignorar esta nota" em destaque, aviso cita a nota referenciada e a NF de venda citada nas observações do armazém
+  (`nfeRefHtml`, `nfeNfVendaCitada`); nunca viram "venda do produtor" (soja depositada em armazém também não). A
+  captura já grava essas notas como IGNORADA com o motivo (qual nota receber) e, no estorno, põe o alerta ⚠ na nota
+  anulada; "Receber nota" na fazenda com o DANFE do armazém responde qual nota receber. CFOP 501/502 (fim específico
+  de exportação) contam como compra/venda e 503/504 como devolução. Grão (soja, milho…) nunca recebe a sugestão
+  "Máquina?". **Custo real**: ICMS desonerado abatido do total da nota (`indDeduzDeson = 1`) é descontado do custo
+  do item e do valor apropriado (R$ 633,14/L → R$ 512,84/L no caso real); aparece como "ICMS desonerado −R$…".
 - **Devolução ao fornecedor pela NF-e (v316)** — cada nota da troca faz a sua parte no estoque: a nota de saída
   "Remessa de troca" (TROCA) dá **entrada** no lote novo pelo preço da nota, sem título; a NF-e de entrada
   "troca/entrada" do fornecedor (RETORNO) ganha o botão **↩ Confirmar devolução (saída do estoque)**: cada item

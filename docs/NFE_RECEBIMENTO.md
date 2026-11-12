@@ -135,6 +135,11 @@ conserto, devolução, demonstração, vasilhame, energia, serviço; senão OUTR
 | 917–921 | VASILHAME | Itens **Ignorar** |
 | demais (949, 927, 905…) | OUTRA | Aviso; confirmar antes de entrar no estoque |
 | x949 de **saída** com natureza "troca/reposição/garantia" (v314) | TROCA | Reposição do fornecedor: **entra** no estoque pelo preço da nota, **sem título** (v316) |
+| 501, 502 (fim específico de exportação, v317) | VENDA | Contranota 1501/2501 de grão = venda do produtor |
+| 503, 504 (v317) | DEVOLUCAO | Como 201–210 |
+| 905, 923, 934 (depósito / armazém geral / conta e ordem, v317) | DEPOSITO | Nada entra, itens Ignorar, captura já marca IGNORADA citando a NF de venda; nunca é venda do produtor |
+| 906, 907 (retorno de depósito, v317) | RETORNO_DEP | Idem: a compra é a nota de venda do fornecedor (em trânsito → receber essa) |
+| **finNFe 3** ou natureza "estorno" (v317) | ESTORNO | NF-e de ajuste: nada entra, captura marca IGNORADA e põe ⚠ na nota anulada |
 | NF-e de **entrada** (`tpNF 0`) de terceiro **sem CFOP de compra** (v314) | RETORNO | Mercadoria voltando ao fornecedor: botão **Confirmar devolução** → linhas SAÍDA no razão com a etiqueta da nota, status DEVOLVIDA (v316); "Ignorar esta nota" se o produto nunca entrou; **sem título** |
 
 Desde a v314 o tipo da nota também olha o `tpNF` e a natureza da operação (`natOp`): `nfeTipoDaNota` no app,
@@ -142,6 +147,10 @@ Desde a v314 o tipo da nota também olha o `tpNF` e a natureza da operação (`n
 CFOP de compra** (x101–x125, x401–x405, x116/x117/x922); uma NF-e de entrada 2949 "remessa de troca/entrada" emitida
 pelo fornecedor é o produto velho voltando para ele, não venda. Nota com `tPag 90` (sem pagamento) e sem parcela não
 gera título no Financeiro.
+
+**Custo real do item** (v317): `(vProd − vDesc − vICMSDeson quando indDeduzDeson = 1 + vFrete + vOutro + vIPI + vST) ÷
+quantidade convertida`. A desoneração abatida do total da nota não é custo (a Syngenta abate R$ 14.435,50 de uma nota
+de R$ 75.976,30: paga-se R$ 61.540,80).
 
 A conferência mostra o **nome** de cada CFOP (`CFOP_NOME`), um aviso por tipo (`NFE_TIPO_INFO`) e, ao confirmar um
 tipo que "não entra" com item marcado para o estoque, pede confirmação. A IA recebe `tipo_pelo_cfop` como pista.

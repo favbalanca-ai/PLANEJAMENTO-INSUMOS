@@ -132,6 +132,18 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Armazém geral e estorno (v317)
+
+- `CFOP_TAB_`: 501/502 → VENDA, 503/504 → DEVOLUCAO, 905/923/934 → DEPOSITO, 906/907 → RETORNO_DEP.
+  `nfeTipoNotaCompleto_` recebe `finNFe`: 3 (ou natureza "estorno") → ESTORNO; DEPOSITO/RETORNO_DEP nunca viram
+  RETORNO. `nfeLerGs_` devolve `finNFe` e `nfVenda` (NF de venda citada no infCpl do armazém).
+- `NFE_TIPO_NOTA_IGN_` (ESTORNO, DEPOSITO, RETORNO_DEP): `nfeEhVendaProd_` devolve falso; a captura grava a nota
+  como **IGNORADA** com `nfeAutoIgnora_` (motivo cita a nota anulada / a NF de venda a receber); `nfeMarcaEstornada_`
+  põe "⚠ ESTORNADA pelo emitente — NF-e nº X anula esta nota" na nota referenciada (com o que fazer, conforme o
+  status). `nfeReavaliarVendas_` aplica o mesmo às notas A CLASSIFICAR com TIPO OUTRA/VENDA PRODUTOR.
+- `finTitulosDaNota_` não gera título para esses tipos; `nfeRecebimentoGrava_` devolve a OBS quando a nota está
+  IGNORADA ("…receba essa, não esta").
+
 ## Devolução ao fornecedor (v316)
 
 - `__nfeClassifica` com `status:'DEVOLVIDA'` e `saida:{data, origem, operador, itens:[{produto, un, real, custo}]}`:
