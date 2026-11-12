@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Troca neutra (v315)** — a nota "Reposição do fornecedor (troca)" passa a vir com os itens já marcados **Ignorar** e o
+  botão "Ignorar esta nota": o lote velho já está no estoque e o novo só toma o lugar dele (o app não lança saída
+  avulsa). Se o produto velho nunca entrou, é só desmarcar "Ignorar" e dar entrada.
 - **Troca e devolução com o fornecedor (v314)** — caso real das notas da AGROPLACE: o fornecedor trocou um lote de
   foliar e emitiu (a) uma nota de **saída** CFOP 6949 "Remessa de troca" com o lote novo e (b) uma **NF-e de entrada**
   (`tpNF = 0`) CFOP 2949 "Remessa de troca/entrada" para receber o lote velho de volta. A (b) era marcada "Venda do

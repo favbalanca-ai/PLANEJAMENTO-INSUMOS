@@ -134,7 +134,7 @@ conserto, devolução, demonstração, vasilhame, energia, serviço; senão OUTR
 | 301–307, 351–360 | SERVICO | Itens **Ignorar**; dica Financeiro |
 | 917–921 | VASILHAME | Itens **Ignorar** |
 | demais (949, 927, 905…) | OUTRA | Aviso; confirmar antes de entrar no estoque |
-| x949 de **saída** com natureza "troca/reposição/garantia" (v314) | TROCA | Reposição do fornecedor: entra no estoque, **sem título** |
+| x949 de **saída** com natureza "troca/reposição/garantia" (v314) | TROCA | Reposição do fornecedor: troca **neutra** (v315) — itens Ignorar, botão "Ignorar esta nota", **sem título**; desmarcar Ignorar se o lote velho nunca entrou |
 | NF-e de **entrada** (`tpNF 0`) de terceiro **sem CFOP de compra** (v314) | RETORNO | Mercadoria voltando ao fornecedor: nada entra, itens Ignorar, botão "Ignorar esta nota", **sem título** |
 
 Desde a v314 o tipo da nota também olha o `tpNF` e a natureza da operação (`natOp`): `nfeTipoDaNota` no app,

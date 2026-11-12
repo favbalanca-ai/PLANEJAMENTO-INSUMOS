@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-314';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-315';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1831,7 +1831,7 @@ const NFE_TIPO_INFO={
   VASILHAME:{entra:false,ignorar:true,cls:'warn',txt:'📦 <b>Consignação, vasilhame ou sacaria</b>. Não é compra: itens já marcados para ignorar.'},
   OUTRA:{entra:false,cls:'warn',txt:'⚠️ <b>Outra operação</b> — não é venda nem remessa (ex.: perda, depósito, exposição). Confira se deve mesmo entrar no estoque.'},
   // v314: troca de lote/produto com o fornecedor — a nota de SAÍDA traz o produto novo; a nota de ENTRADA que o fornecedor emite é o produto velho voltando
-  TROCA:{entra:true,cls:'info',txt:'🔁 <b>Reposição do fornecedor (troca)</b>: o produto novo entra no estoque com o preço da nota, <b>sem cobrança</b> (não vira título a pagar). Confira se o lote antigo já <b>saiu</b> do estoque — a nota de "troca/entrada" que o fornecedor emite depois é a saída dele.'},
+  TROCA:{entra:false,ignorar:true,cls:'warn',txt:'🔁 <b>Reposição do fornecedor (troca)</b>, sem cobrança. A troca é <b>neutra</b>: o lote velho já está no estoque e o novo só toma o lugar dele — itens já marcados para ignorar (o app não lança saída avulsa). Se o produto velho <b>nunca</b> entrou no estoque, desmarque "Ignorar" e dê entrada. Não vira título a pagar.'},   // v315: neutra
   RETORNO:{entra:false,ignorar:true,cls:'warn',txt:'↪️ <b>Mercadoria voltando ao fornecedor</b>: NF-e de <b>entrada</b> que o fornecedor emitiu para receber de volta o produto (troca, devolução). <b>Nada entra no estoque</b> e não é venda do produtor: itens já marcados para ignorar. Se o produto velho já tinha entrado, lance a <b>saída</b> dele no Estoque.'} };
 function nfeTipoAvisoHtml(n){ const I=NFE_TIPO_INFO[n.tipo]; if(!I||!I.txt) return ''; return `<div class="nfe-aviso ${I.cls||'info'}">${I.txt} <span class="mut">CFOP ${esc(nfeCfopsTxt(n.itens))}</span></div>`; }
 // destino sugerido para um item só pelo CFOP (antes da descrição): '' quando o CFOP não diz nada
@@ -1979,7 +1979,7 @@ function nfeSugereProduto(xprod){ const xt=new Set(_nfeTok(xprod)); if(!xt.size)
 function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(it.vprod-it.vdesc+it.vfrete+it.voutro+it.vipi+it.vst)/q:0; }
 // ---- estado de cada item na conferência ----
 function nfeItemInicial(nota,it){
-  if(nota.tipo==='RETORNO') return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v314: mercadoria voltando ao fornecedor — nada entra
+  if(nota.tipo==='RETORNO'||nota.tipo==='TROCA') return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v314: mercadoria voltando ao fornecedor — nada entra · v315: troca é neutra
   const dp=deparaDe(nota.cnpj,it.cprod);
   if(dp && nfeDestManut(dp.destino)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:false,fator:1,ok:true,dest:dp.destino,maq:dp.maquina||nfeMaqPadrao(dp.destino,nota.cnpj),tipoMaq:dp.tipoGasto||nfeTipoGuess(dp.destino,it.xprod)});   // v276/v285: memória "→ máquina / oficina / benfeitoria"
   const det=nfeDetectaPecas(nota), idx=(nota.itens||[]).indexOf(it), sugP=nfeSugereProduto(it.xprod), pecaSug=det.itens[idx]||((det.forn&&!sugP&&!(dp&&PROD[dp.produto]))?'maquina':'');   // fornecedor de peças: item que não parece insumo conhecido vai para máquina · v285: oficina/benfeitoria pela descrição
@@ -2497,7 +2497,7 @@ function nfeConferirHtml(){
       <span class="spacer"></span>
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
-      ${(n.tipo==='RETORNO'&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn btn-primary btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="Mercadoria voltando ao fornecedor: a nota sai da lista sem entrar no estoque">🚫 Ignorar esta nota</button>`:''}
+      ${((n.tipo==='RETORNO'||n.tipo==='TROCA')&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn btn-primary btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="${n.tipo==='TROCA'?'Troca neutra: a nota sai da lista sem mexer no estoque':'Mercadoria voltando ao fornecedor: a nota sai da lista sem entrar no estoque'}">🚫 Ignorar esta nota</button>`:''}
       ${imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''}>♻️ Regravar entrada (substitui a anterior)</button>`
         : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>`
         : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' disabled':''}>📑 Registrar contrato (a entregar)</button>`
