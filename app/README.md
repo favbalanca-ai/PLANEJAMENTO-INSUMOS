@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Devolução ao fornecedor pela NF-e (v316)** — cada nota da troca faz a sua parte no estoque: a nota de saída
+  "Remessa de troca" (TROCA) dá **entrada** no lote novo pelo preço da nota, sem título; a NF-e de entrada
+  "troca/entrada" do fornecedor (RETORNO) ganha o botão **↩ Confirmar devolução (saída do estoque)**: cada item
+  mapeado vira uma linha **SAÍDA** no razão MOVIMENTAÇÃO ESTOQUE com a etiqueta da nota, pelo custo médio do dia, e a
+  nota fica **DEVOLVIDA** na planilha (`nfeConfirmarDevolucao`, payload `__nfeClassifica{status:'DEVOLVIDA', saida}`).
+  Se a devolução for maior que o saldo, o app avisa. Uma nota de devolução recebida **por engano** como compra abre
+  mesmo assim: a planilha apaga a entrada errada e a compra no mesmo pedido (mesma etiqueta) e a compra sai da lista
+  do aparelho. O extrato do produto lista as devoluções nas saídas (`DATA.movimentacao.devol`) e o custo médio conta
+  com elas. "Ignorar esta nota" continua para o caso de o produto nunca ter entrado. (Desfaz a "troca neutra" da v315.)
 - **Troca neutra (v315)** — a nota "Reposição do fornecedor (troca)" passa a vir com os itens já marcados **Ignorar** e o
   botão "Ignorar esta nota": o lote velho já está no estoque e o novo só toma o lugar dele (o app não lança saída
   avulsa). Se o produto velho nunca entrou, é só desmarcar "Ignorar" e dar entrada.

@@ -132,6 +132,16 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Devolução ao fornecedor (v316)
+
+- `__nfeClassifica` com `status:'DEVOLVIDA'` e `saida:{data, origem, operador, itens:[{produto, un, real, custo}]}`:
+  `nfeClassifica_` cancela os títulos da nota, apaga a compra do COMPRAS APP se existir (nota recebida por engano;
+  `writeCompraApp({id, del:true})` tira a ENTRADA do razão pela mesma etiqueta) e grava as linhas **SAÍDA** com
+  `writeSaida` (id = chave → `[#chave]` no ORIGEM, idempotente). `writeSaida` aceita `sd.origem` próprio
+  ("Devolução ao fornecedor · NF-e nº · fornecedor").
+- `readMovimentacao` devolve também `devol` (saídas com etiqueta de NF-e e ORIGEM começando por "Devolu"):
+  `{chave, data, produto, un, qtd, nNF, forn, origem}` — o app lista no extrato e no custo médio.
+
 ## Troca e devolução com o fornecedor (v314)
 
 - `nfeLerGs_` devolve `natOp` (natureza da operação) e `cfopCompra` (algum item com CFOP de venda/compra, faturamento
