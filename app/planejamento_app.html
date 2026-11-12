@@ -2739,7 +2739,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-321';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-322';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -13207,7 +13207,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='mapaNdvi'){ ndviToggle(); }
     else if(a.act==='mapaNomes'){ mapaNomesAlternar(act); }
     else if(a.act==='pendDiscardOrfas'){ const orf=edicoesOrfas(buildFieldEdits());
-      if(orf.length && confirm(`Descartar ${orf.length} edição(ões) de talhões sem aba na planilha?\nElas voltam a valer o que está na planilha.`)){ let n=0; orf.forEach(e=>{ try{ if(discardEdit(e)) n++; }catch(err){} }); saveOverrides(); toast(n+' edição(ões) descartada(s)'); updateEditBadge(); route({keepScroll:true}); } }
+      if(orf.length && confirm(`Descartar ${orf.length} edição(ões) presas (talhão sem aba na planilha / produto fora do portfólio)?\nElas voltam a valer o que está na planilha.`)){ let n=0; orf.forEach(e=>{ try{ if(discardEdit(e)) n++; }catch(err){} }); saveOverrides(); toast(n+' edição(ões) descartada(s)'); updateEditBadge(); route({keepScroll:true}); } }
     else if(a.act==='pendDiscard'){ let e=null; try{ e=JSON.parse(decodeURIComponent(a.sig||'')); }catch(err){}
       const cur=e&&buildFieldEdits().find(x=>JSON.stringify(x)===JSON.stringify(e));
       if(!cur){ toast('Essa edição já não está pendente'); updateSyncBar(); }
@@ -14412,7 +14412,7 @@ async function syncPush(opts){
   if(!dadosDaPlanilha){ try{ await syncPull({auto:true, silentToast:true}); }catch(e){}
     if(!dadosDaPlanilha){ if(!opts.auto) toast('Não consegui ler a planilha ainda — tento enviar de novo em seguida'); scheduleAutoPush(); return false; } }
   let eds=buildFieldEdits(); const orfas=edicoesOrfas(eds);
-  if(orfas.length){ eds=eds.filter(e=>!orfas.includes(e)); if(!opts.auto) toast(`${orfas.length} edição(ões) de talhão sem aba na planilha — veja em Sincronizar`); }
+  if(orfas.length){ eds=eds.filter(e=>!orfas.includes(e)); if(!opts.auto) toast(`${orfas.length} edição(ões) presa(s) (talhão sem aba / produto fora do portfólio) — veja em Sincronizar`); }
   const sig=JSON.stringify(eds);
   if(!eds.length){ if(!opts.auto) toast('Nenhuma edição de campo para enviar'); lastPushSig=sig; lastPushOk=true; updateSyncBar(); return true; }
   if(opts.auto && sig===lastPushSig && lastPushOk) return true;  // já enviamos isto COM SUCESSO (se falhou, tenta de novo)
@@ -14688,8 +14688,11 @@ function talhoesSemAba(){
     (DATA.talhoes||[]).forEach(t=>{ if(!DATA.planos[t.id] && !novos.has(t.id)) out.add(t.id); }); }
   return out;
 }
-function edicoesOrfas(eds){ const sa=talhoesSemAba(); if(!sa.size) return [];
-  return (eds||[]).filter(e=>e.talhao && sa.has(e.talhao) && !/^(addtalhao|deltalhao)$/.test(e.type)); }
+function edicoesOrfas(eds){ const sa=talhoesSemAba();
+  return (eds||[]).filter(e=>(sa.size && e.talhao && sa.has(e.talhao) && !/^(addtalhao|deltalhao)$/.test(e.type)) || edicaoProdutoOrfa(e)); }
+// v322: estoque/pedido/custo inicial de um produto que não está mais no portfólio do app (sumiu de Preços ou foi renomeado):
+// a planilha responde "produto não encontrado" para sempre — segura a edição e mostra em Sincronizar (cadastrar de novo ou descartar)
+function edicaoProdutoOrfa(e){ return !!(e && e.produto && /^(estoque|pedido|custoIni)$/.test(e.type) && dadosDaPlanilha && !PROD[e.produto]); }
 function discardEdit(e){
   const k=(e.talhao||'')+'|'+(e.tag||'')+(e.op!=null?e.op:''), seq=e.tag==='S'?'safrinha':'principal';
   switch(e.type){
@@ -14713,10 +14716,13 @@ function discardEdit(e){
 }
 // painel "Edições pendentes" da tela Sincronizar (o que ainda não foi confirmado pela planilha) — uma linha por edição
 function pendingPanelHtml(eds){
-  const orf=edicoesOrfas(eds), sa=[...talhoesSemAba()];
-  const aviso=orf.length?`<div class="nfe-aviso err" style="margin:10px 14px">⚠️ <b>${orf.length} edição(ões)</b> são de talhões que <b>não têm aba na planilha</b>: <b>${esc([...new Set(orf.map(e=>e.talhao))].join(', '))}</b>. Elas não conseguem ser gravadas e não são mais reenviadas.<br>
-    Confira na planilha se essas abas foram excluídas ou renomeadas (dá para recuperar em <b>Arquivo → Histórico de versões</b>). Se não precisar mais delas: <button class="btn btn-sm btn-outline" data-act="pendDiscardOrfas">Descartar essas ${orf.length} edições</button></div>`
+  const orf=edicoesOrfas(eds), sa=[...talhoesSemAba()], orfP=orf.filter(edicaoProdutoOrfa), orfT=orf.filter(e=>!edicaoProdutoOrfa(e));
+  let aviso=orfT.length?`<div class="nfe-aviso err" style="margin:10px 14px">⚠️ <b>${orfT.length} edição(ões)</b> são de talhões que <b>não têm aba na planilha</b>: <b>${esc([...new Set(orfT.map(e=>e.talhao))].join(', '))}</b>. Elas não conseguem ser gravadas e não são mais reenviadas.<br>
+    Confira na planilha se essas abas foram excluídas ou renomeadas (dá para recuperar em <b>Arquivo → Histórico de versões</b>). Se não precisar mais delas: <button class="btn btn-sm btn-outline" data-act="pendDiscardOrfas">Descartar essas ${orfT.length} edições</button></div>`
     :(sa.length?`<div class="nfe-aviso warn" style="margin:10px 14px">A planilha não tem aba para: <b>${esc(sa.join(', '))}</b>.</div>`:'');
+  // v322: produto que não está mais no portfólio do app (a planilha responderia "produto não encontrado" para sempre)
+  if(orfP.length) aviso+=`<div class="nfe-aviso err" style="margin:10px 14px">⚠️ <b>${orfP.length} edição(ões)</b> são de produtos que <b>não estão mais no portfólio do app</b>: <b>${esc([...new Set(orfP.map(e=>e.produto))].join(', '))}</b>. A planilha não tem onde gravar e elas não são mais reenviadas.<br>
+    Para aproveitar: cadastre o produto de novo <b>com o mesmo nome</b> em <a class="link" data-go="#/insumos">Cadastrar insumos</a> (módulo Preços) — a edição volta a ser enviada sozinha. Se não precisar mais: <button class="btn btn-sm btn-outline" data-act="pendDiscardOrfas">Descartar essas ${orfP.length} edições</button></div>`;
   if(orf.length) eds=eds.filter(e=>!orf.includes(e));
   if(!(eds||[]).length) return aviso+ `<div class="mut" style="padding:12px 18px;font-size:13px">✔ Nenhuma edição pendente — tudo o que está no app já foi confirmado pela planilha.</div>`;
   const lim=40, pode=e=>!/^(addtalhao|deltalhao)$/.test(e.type);
@@ -14747,7 +14753,7 @@ function _pendingInfo(fe0){
   const add=(n,lbl)=>{ if(n>0){ parts.push(`${n} ${lbl}`); total+=n; } };
   try{
     if(!DATA||!OV) return {total:0, parts:[]};
-    { const fe=fe0||buildFieldEdits(), orf=edicoesOrfas(fe); add(fe.length-orf.length, 'edição(ões) de campo'); add(orf.length, 'edição(ões) de talhão SEM ABA na planilha'); }
+    { const fe=fe0||buildFieldEdits(), orf=edicoesOrfas(fe); add(fe.length-orf.length, 'edição(ões) de campo'); add(orf.length, 'edição(ões) presa(s) (talhão sem aba / produto fora do portfólio)'); }
     if(COMPRAS) add((COMPRAS.registros||[]).filter(c=>!c.pushed).length, 'compra(s)');
     if(COMPRAS) add((COMPRAS.excluidas||[]).filter(e=>!e.ok).length, 'exclusão(ões) de compra');
     let bx=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r.opKey && r.status==='aprovada' && !r.saidaPushed) bx++; });

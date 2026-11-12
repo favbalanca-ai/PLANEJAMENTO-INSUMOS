@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Edição presa de produto fora do portfólio (v322)** — estoque/pedido/custo inicial de um produto que não está mais
+  no portfólio do app (sumiu de Preços ou foi renomeado) fazia a planilha responder `produto não encontrado` a cada
+  envio. `edicoesOrfas` agora segura essas edições (`edicaoProdutoOrfa`), como já fazia com talhões sem aba; a tela
+  Sincronizar mostra o aviso com o nome do produto, o atalho para cadastrar de novo com o mesmo nome (a edição volta a
+  ser enviada sozinha) e o botão Descartar.
 - **Insumo novo ganha linha no PORTIFÓLIO sozinho (v321)** — produto cadastrado só em Preços (aba Cadastrar insumos ou
   "Novo produto" da nota) não existia na aba `PORTIFÓLIO`; ao usá-lo no planejamento (estoque, pedido, operação), a
   planilha respondia `produto não encontrado` a cada envio. Agora `buildFieldEdits` põe um edit `addprod` (empresa,
