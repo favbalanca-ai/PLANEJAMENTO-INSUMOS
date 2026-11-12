@@ -666,7 +666,7 @@ function writeDeParaNfe(itens){
 var NFE_CONFIG_SHEET = 'CONFIG NFE', NFE_IDX_SHEET = 'NFE RECEBIDAS', NFE_ITENS_SHEET = 'NFE ITENS', NFE_LABEL = 'NFE-OK';
 var NFE_CONFIG_COLS = ['CHAVE','VALOR','OBS'];
 var NFE_IDX_COLS = ['CHAVE','PRODUTOR','CNPJ EMITENTE','FORNECEDOR','Nº','SÉRIE','EMISSÃO','VALOR','TIPO','CHAVE REFERENCIADA','STATUS',
-  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO','IA','IA EM'];   // v290: classificação automática (JSON) e quando foi feita
+  'FILE ID','CLASSIFICADA EM','RECEBIDA EM','RECEBIDA POR','ORIGEM','OBS','CAPTURADA EM','FOTO CANHOTO','IA','IA EM','ITENS'];   // v313: ITENS = descrições do XML (busca na caixa de entrada antes da IA)   // v290: classificação automática (JSON) e quando foi feita
 var NFE_ITENS_COLS = ['CHAVE','Nº ITEM','CPROD','XPROD','CFOP','UCOM','QCOM','PRODUTO APP','FATOR','QTD APP','UN APP','CUSTO UNIT. REAL','QTD RECEBIDA','IGNORAR','MÁQUINA'];
 // v276: peças e serviços apropriados por máquina (não entram no estoque)
 var MANUT_SHEET = 'MANUTENÇÃO MÁQUINAS';
@@ -803,7 +803,7 @@ function nfeLerGs_(txt){
     dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
     ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length,
     entrada:_xt(ide,'tpNF') === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
-    producao:xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); }) };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
+    producao:xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); }), xprods:xprods };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
 }
 // texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
 function _blobTxt(b){ var t = b.getDataAsString('UTF-8'); if (/encoding=["']ISO-8859-1["']/i.test(t.slice(0,120))) t = b.getDataAsString('ISO-8859-1'); return t.replace(/^﻿/,''); }
@@ -957,7 +957,7 @@ function processarXmlNfe(txt, origem){
   var fora = !vendaProd && cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
   var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
-    'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora };
+    'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora, 'ITENS':(n.xprods || []).slice(0, 8).join(' | ').slice(0, 300) };   // v313
   if (vendaProd){ vals['TIPO'] = 'VENDA PRODUTOR'; vals['PRODUTOR'] = emitProd ? n.cnpj : n.dest; vals['CNPJ EMITENTE'] = emitProd ? n.dest : n.cnpj; vals['FORNECEDOR'] = emitProd ? n.destNome : n.fornecedor; }   // FORNECEDOR/CNPJ = comprador
   var stRow = row ? S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase() : '';
   if (row && stRow === 'RECEBIDA SEM XML'){            // caminhão chegou antes do XML: a nota casa sozinha com o recebimento
@@ -1102,7 +1102,7 @@ function nfeLista_(status){
     if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
     var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), produtor:_doc_(o[_hkey('PRODUTOR')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),   // v286: produtor (destinatário) na lista
       emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
-      capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]), ia:iaParse_(o[_hkey('IA')]) };   // v290
+      capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]), ia:iaParse_(o[_hkey('IA')]), xprods:S(o[_hkey('ITENS')]).split(' | ').filter(Boolean) };   // v290 · v313: itens
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
     if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
@@ -1295,8 +1295,9 @@ var FIN_TPAG_ = { '01':'Dinheiro','02':'Cheque','03':'Cartão de crédito','04':
   '14':'Duplicata mercantil','15':'Boleto','16':'Depósito bancário','17':'PIX','18':'Transferência','19':'Carteira digital','90':'Sem pagamento','99':'Outros' };
 function _finVal_(v){ return (v instanceof Date) ? _fmtD(v) : (typeof v === 'number' ? v : S(v)); }
 function _finLer_(name, cols, keys){ return _ler_(name, cols).map(function(o){ var x = {}; keys.forEach(function(k, i){ x[k] = _finVal_(o[cols[i]]); }); return x; }); }
+function _extratoAte_(){ var out = {}; try { var m = configAppMapa_(); Object.keys(m).forEach(function(k){ if (k.indexOf('EXTRATO ATE ') === 0) out[k.slice(12)] = S(m[k]).slice(0, 10); }); } catch (e) {} return out; }   // v313
 function readFinanceiro(){
-  return { produtores:_finLer_(FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS), imoveis:_finLer_(FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS),
+  return { extratoAte:_extratoAte_(), produtores:_finLer_(FIN_PROD_SHEET, FIN_PROD_COLS, FIN_PROD_KEYS), imoveis:_finLer_(FIN_IMOV_SHEET, FIN_IMOV_COLS, FIN_IMOV_KEYS),
     contas:_finLer_(FIN_CONTA_SHEET, FIN_CONTA_COLS, FIN_CONTA_KEYS), titulos:_finLer_(FIN_TIT_SHEET, FIN_TIT_COLS, FIN_TIT_KEYS),
     baixas:_finLer_(FIN_BAIXA_SHEET, FIN_BAIXA_COLS, FIN_BAIXA_KEYS), contrapartes:_finLer_(FIN_CP_SHEET, FIN_CP_COLS, FIN_CP_KEYS),
     contador:finContador_(), lcdprGerado:finLcdprGerado_(), extratoBanco:bancoExtratoLer_(), regrasBanco:sh(BANCO_REGRA_SHEET) ? _finLer_(BANCO_REGRA_SHEET, BANCO_REGRA_COLS, BANCO_REGRA_KEYS) : [], fechamentos:sh(FECH_SHEET) ? _finLer_(FECH_SHEET, FECH_COLS, FECH_KEYS) : [] };   // v291 · v292
@@ -1349,6 +1350,7 @@ function conciliaGrava_(p, acc){
   if (linhas.length) _finUpsert_(BANCO_SHEET, BANCO_COLS, BANCO_KEYS, linhas);
   var regras = (p.regras || []).filter(function(r){ return S(r.contem).length >= 3; }).map(function(r){ return { contem:S(r.contem).toUpperCase().slice(0, 60), tipo:S(r.tipo), categoria:S(r.categoria), participanteNome:S(r.participanteNome).slice(0, 80), doc:_doc_(r.doc), quem:quem }; });   // v310: doc
   if (regras.length) _finUpsert_(BANCO_REGRA_SHEET, BANCO_REGRA_COLS, BANCO_REGRA_KEYS, regras);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(S(p.ate))){ try { var jaAte = S(configAppMapa_()['EXTRATO ATE ' + conta.toUpperCase()]); if (!jaAte || S(p.ate) > jaAte) configAppGravar_('EXTRATO ATE ' + conta.toUpperCase(), S(p.ate), 'até que data o extrato desta conta já foi importado (checklist do fechamento)'); } catch (e) {} }   // v313
   n.rows = linhas.length + regras.length; return n;
 }
 // v291: sugestão de categoria pela IA para históricos sem regra (uma chamada para o lote). Sem chave: devolve vazio.

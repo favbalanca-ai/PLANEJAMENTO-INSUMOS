@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão do Administrativo, fase 5 — refinamentos (v313)** — (1) o sino 🔔 passa a listar títulos vencidos (em
+  atraso) e os que vencem em 7 dias, com atalho para o Financeiro; (2) com mais de um produtor e sem filtro, a aba
+  Títulos mostra um resumo **por produtor** (em aberto, vencidos, 7 dias, a receber); tocar filtra; (3) **baixa em
+  lote**: checkbox nas linhas em aberto → "Baixar N selecionado(s)" → data e conta únicas → um pedido só
+  (`__baixa` com várias baixas, cada uma com o saldo cheio); (4) rascunhos de título e de baixa ficam guardados no
+  aparelho por 2 dias (`planejamento_fin_rascunho`) e voltam ao reabrir a tela; (5) o checklist do fechamento usa a
+  data final do extrato importado (`EXTRATO ATE <conta>` na CONFIG APP, gravado na conciliação a partir do DTEND)
+  em vez do último lançamento; (6) a captura grava os itens do XML na coluna ITENS da NFE RECEBIDAS: o cartão da caixa
+  de entrada mostra os 3 primeiros e a busca os encontra antes da IA.
 - **"Venda do produtor" só com NF-e de entrada de verdade (v312)** — uma nota de fornecedor emitida com CFOP 1xxx
   (erro comum de ERP, como o 1662 da v307) e destinatário produtor era marcada "Venda do produtor" na captura e no app.
   Agora a contranota do comprador precisa ser NF-e de **entrada** (`tpNF = 0`); CFOP 1xxx numa nota de saída é compra.

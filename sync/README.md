@@ -132,6 +132,12 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Fase 5 (v313)
+
+- NFE RECEBIDAS ganha a coluna **ITENS** (até 8 descrições do XML, gravadas na captura); `nfeLista_` devolve `xprods`.
+- `conciliaGrava_` aceita `ate` (data final do extrato) e grava `EXTRATO ATE <CONTA>` na CONFIG APP; `readFinanceiro`
+  devolve `extratoAte` (por conta) para o checklist do fechamento.
+
 ## Venda do produtor: regra (v312)
 
 - `nfeEhVendaProd_(n, cfg, origem)`: produtor cadastrado emitindo, balança, CPF vendendo só grão, ou **NF-e de entrada
