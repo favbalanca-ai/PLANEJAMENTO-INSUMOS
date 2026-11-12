@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-313';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-314';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1772,7 +1772,7 @@ function nfeLerXml(txt){
   return { chave:(prot&&_nt(prot,'chNFe'))||String(inf.getAttribute('Id')||'').replace(/^NFe/,''), temProt:!!prot, cstat:prot?_nt(prot,'cStat'):'',
     nNF:_nt(ide,'nNF'), serie:_nt(ide,'serie'), emissao:(_nt(ide,'dhEmi')||_nt(ide,'dEmi')).slice(0,10),
     cnpj:(_nt(emit,'CNPJ')||_nt(emit,'CPF')).replace(/\D/g,''), fornecedor:_nt(emit,'xNome'), vNF:_nn(_nx(inf,'ICMSTot'),'vNF'), ref:_nt(ide,'refNFe'), itens,
-    dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''), destNome:_nt(dest,'xNome'), tpNF:_nt(ide,'tpNF'),   // produtor destinatário · tpNF 0 = nota de entrada (contranota do comprador, v277)
+    dest:(_nt(dest,'CNPJ')||_nt(dest,'CPF')).replace(/\D/g,''), destNome:_nt(dest,'xNome'), tpNF:_nt(ide,'tpNF'), natOp:_nt(ide,'natOp'),   // produtor destinatário · tpNF 0 = nota de entrada (contranota do comprador, v277) · v314: natureza da operação ("Remessa de troca")
     dups:[...inf.getElementsByTagNameNS('*','dup')].map(d=>({n:_nt(d,'nDup'), venc:_nt(d,'dVenc').slice(0,10), valor:_nn(d,'vDup')})).filter(d=>d.valor>0),   // parcelas (v273)
     pag:[...inf.getElementsByTagNameNS('*','detPag')].map(d=>({t:_nt(d,'tPag'), v:_nn(d,'vPag')})) };
 }
@@ -1800,11 +1800,20 @@ const CFOP_NOME={101:'venda de produção do estabelecimento',102:'venda de merc
   551:'venda de bem do ativo imobilizado',552:'transferência de bem do ativo imobilizado',553:'devolução de compra de bem para o ativo imobilizado',554:'remessa de bem do ativo imobilizado para uso fora do estabelecimento',555:'devolução de bem do ativo imobilizado de terceiro',556:'devolução de compra de material de uso ou consumo',557:'transferência de material de uso ou consumo',
   651:'venda de combustível/lubrificante de produção para industrialização',652:'venda de combustível/lubrificante de produção para comercialização',653:'venda de combustível/lubrificante de produção a consumidor final',654:'venda de combustível/lubrificante adquirido para industrialização',655:'venda de combustível/lubrificante adquirido para comercialização',656:'venda de combustível/lubrificante adquirido a consumidor final',657:'remessa de combustível/lubrificante para venda fora do estabelecimento',658:'transferência de combustível/lubrificante de produção',659:'transferência de combustível/lubrificante adquirido',660:'devolução de compra de combustível/lubrificante para industrialização',661:'devolução de compra de combustível/lubrificante para comercialização',662:'devolução de compra de combustível/lubrificante para consumo',663:'remessa de combustível/lubrificante para armazenagem',664:'retorno de combustível/lubrificante recebido para armazenagem',665:'retorno simbólico de combustível/lubrificante para armazenagem',666:'remessa por conta e ordem de combustível/lubrificante',667:'venda de combustível/lubrificante a consumidor final em outra UF',
   901:'remessa para industrialização por encomenda',902:'retorno de mercadoria utilizada na industrialização por encomenda',903:'retorno de mercadoria recebida para industrialização e não aplicada',905:'remessa para depósito fechado ou armazém geral',906:'retorno de mercadoria depositada',910:'remessa em bonificação, doação ou brinde',911:'remessa de amostra grátis',912:'remessa para demonstração',913:'retorno de mercadoria recebida para demonstração',914:'remessa de mercadoria para exposição ou feira',915:'remessa para conserto ou reparo',916:'retorno de mercadoria recebida para conserto ou reparo',917:'remessa em consignação mercantil',918:'devolução de mercadoria recebida em consignação',919:'devolução simbólica de consignação',920:'remessa de vasilhame ou sacaria',921:'devolução de vasilhame ou sacaria',922:'simples faturamento — venda para entrega futura',924:'remessa para industrialização por conta e ordem',925:'retorno de mercadoria recebida para industrialização por conta e ordem',927:'baixa de estoque por perda, roubo ou deterioração',929:'lançamento de operação com cupom fiscal',933:'prestação de serviço tributada pelo ISSQN',934:'remessa simbólica de mercadoria depositada',949:'outra saída de mercadoria não especificada'};
-const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',COMBUSTIVEL:'Compra de combustível / lubrificante',ATIVO:'Bem do ativo (máquina, equipamento)',CONSUMO:'Material de uso e consumo',BONIFICACAO:'Bonificação / amostra',DEMONSTRACAO:'Demonstração',CONSERTO:'Conserto / serviço',INDUSTRIALIZACAO:'Industrialização (remessa/retorno)',DEVOLUCAO:'Devolução',ENERGIA:'Energia elétrica',SERVICO:'Comunicação / frete',VASILHAME:'Consignação / vasilhame',OUTRA:'Outra operação',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};
+const NFE_TIPO={VENDA:'Venda',FATURAMENTO:'Faturamento (entrega futura)',REMESSA:'Remessa (entrega futura)',COMBUSTIVEL:'Compra de combustível / lubrificante',ATIVO:'Bem do ativo (máquina, equipamento)',CONSUMO:'Material de uso e consumo',BONIFICACAO:'Bonificação / amostra',DEMONSTRACAO:'Demonstração',CONSERTO:'Conserto / serviço',INDUSTRIALIZACAO:'Industrialização (remessa/retorno)',DEVOLUCAO:'Devolução',ENERGIA:'Energia elétrica',SERVICO:'Comunicação / frete',VASILHAME:'Consignação / vasilhame',OUTRA:'Outra operação',TROCA:'Reposição do fornecedor (troca)',RETORNO:'Mercadoria voltando ao fornecedor',VENDA_PROD:'Venda do produtor','VENDA PRODUTOR':'Venda do produtor'};   // v314: TROCA / RETORNO
 const NFE_TIPO_ORD=['FATURAMENTO','REMESSA','VENDA','COMBUSTIVEL','ATIVO','CONSUMO','BONIFICACAO','INDUSTRIALIZACAO','CONSERTO','DEVOLUCAO','DEMONSTRACAO','VASILHAME','ENERGIA','SERVICO'];
 function nfeTipoCfop(cfop){ const c=String(cfop||'').replace(/\D/g,''); if(!/^[1-7]\d{3}$/.test(c)) return 'OUTRA'; const f=c.slice(1); for(const [re,t] of CFOP_TAB) if(re.test(f)) return t; return 'OUTRA'; }
 function nfeTipoNota(itens){ const t=itens.map(i=>nfeTipoCfop(i.cfop)); for(const k of NFE_TIPO_ORD) if(t.includes(k)) return k; return 'OUTRA'; }
-function nfeCfopNome(cfop){ const c=String(cfop||'').replace(/\D/g,''); return CFOP_NOME[+c.slice(1)]||''; }
+// v314: algum item tem CFOP de compra/venda (x101–x125, x401–x405, entrega futura)? Só esses valem como contranota do comprador
+function nfeCfopCompra(n){ const its=(n&&n.itens)||[]; return !!its.length && its.some(i=>['VENDA','FATURAMENTO','REMESSA'].includes(nfeTipoCfop(i.cfop))); }
+// v314: tipo da NOTA — além do CFOP dos itens, olha se é NF-e de entrada (tpNF 0) e a natureza da operação.
+// Nota de ENTRADA de terceiro sem CFOP de compra (ex.: 2949 "remessa de troca/entrada") = fornecedor recebendo mercadoria de volta.
+// Nota de saída com CFOP x949 e natureza "troca/reposição/garantia" = reposição do fornecedor.
+function nfeTipoDaNota(n){ const t=nfeTipoNota((n&&n.itens)||[]);
+  if(n && n.tpNF==='0' && !nfeCfopCompra(n) && !nfeItensProducao(n)) return 'RETORNO';
+  if(t==='OUTRA' && /troca|reposi|substitui|garantia/i.test(String((n&&n.natOp)||''))) return 'TROCA';
+  return t; }
+function nfeCfopNome(cfop){ const c=String(cfop||'').replace(/\D/g,''); const n=CFOP_NOME[+c.slice(1)]||''; return (/^[123]/.test(c)&&n)?n.replace(/^outra saída/,'outra entrada').replace(/^remessa/,'entrada'):n; }   // v314: 1949/2949 é "outra ENTRADA"
 function nfeCfopsTxt(itens){ return [...new Set((itens||[]).map(i=>i.cfop).filter(Boolean))].map(c=>{ const n=nfeCfopNome(c); return n?`${c} — ${n}`:c; }).join(' · '); }
 // o que cada tipo significa para a fazenda: entra no estoque? aviso da conferência; destino sugerido dos itens
 const NFE_TIPO_INFO={
@@ -1820,7 +1829,10 @@ const NFE_TIPO_INFO={
   ENERGIA:{entra:false,ignorar:true,cls:'warn',txt:'💡 <b>Conta de energia elétrica</b>. Não entra no estoque; lance no <b>Financeiro</b> (Títulos) se quiser controlar o pagamento.'},
   SERVICO:{entra:false,ignorar:true,cls:'warn',txt:'📡 <b>Comunicação ou frete</b>. Não entra no estoque; lance no <b>Financeiro</b> se quiser controlar o pagamento.'},
   VASILHAME:{entra:false,ignorar:true,cls:'warn',txt:'📦 <b>Consignação, vasilhame ou sacaria</b>. Não é compra: itens já marcados para ignorar.'},
-  OUTRA:{entra:false,cls:'warn',txt:'⚠️ <b>Outra operação</b> — não é venda nem remessa (ex.: perda, depósito, exposição). Confira se deve mesmo entrar no estoque.'} };
+  OUTRA:{entra:false,cls:'warn',txt:'⚠️ <b>Outra operação</b> — não é venda nem remessa (ex.: perda, depósito, exposição). Confira se deve mesmo entrar no estoque.'},
+  // v314: troca de lote/produto com o fornecedor — a nota de SAÍDA traz o produto novo; a nota de ENTRADA que o fornecedor emite é o produto velho voltando
+  TROCA:{entra:true,cls:'info',txt:'🔁 <b>Reposição do fornecedor (troca)</b>: o produto novo entra no estoque com o preço da nota, <b>sem cobrança</b> (não vira título a pagar). Confira se o lote antigo já <b>saiu</b> do estoque — a nota de "troca/entrada" que o fornecedor emite depois é a saída dele.'},
+  RETORNO:{entra:false,ignorar:true,cls:'warn',txt:'↪️ <b>Mercadoria voltando ao fornecedor</b>: NF-e de <b>entrada</b> que o fornecedor emitiu para receber de volta o produto (troca, devolução). <b>Nada entra no estoque</b> e não é venda do produtor: itens já marcados para ignorar. Se o produto velho já tinha entrado, lance a <b>saída</b> dele no Estoque.'} };
 function nfeTipoAvisoHtml(n){ const I=NFE_TIPO_INFO[n.tipo]; if(!I||!I.txt) return ''; return `<div class="nfe-aviso ${I.cls||'info'}">${I.txt} <span class="mut">CFOP ${esc(nfeCfopsTxt(n.itens))}</span></div>`; }
 // destino sugerido para um item só pelo CFOP (antes da descrição): '' quando o CFOP não diz nada
 function nfeDestPorCfop(it){ const t=nfeTipoCfop(it.cfop), x=String(it.xprod||''); if(t==='COMBUSTIVEL') return /diesel|arla|s-?10\b|s-?500|gasolina|etanol|querosene/i.test(x)?'tanque':'maquina'; if(t==='ATIVO'||t==='CONSERTO') return 'maquina'; if(t==='CONSUMO') return 'oficina'; return ''; }
@@ -1836,9 +1848,9 @@ const _RX_GRAOS=/\b(SOJA|MILHO|FEIJ[AÃ]O|LARANJA|SORGO|TRIGO|ALGOD[AÃ]O|ARROZ|
 function nfeItensProducao(n){ const its=n.itens||[]; return !!its.length && its.every(i=>_RX_GRAOS.test(i.xprod||'')&&!_RX_NAO_GRAO.test(i.xprod||'')); }
 function nfeNotaEntrada(n){ const its=n.itens||[]; return n.tpNF==='0' || (!!its.length && its.every(i=>/^[12]/.test(String(i.cfop||'')))); }   // contranota: tpNF 0 ou CFOP 1xxx/2xxx
 function nfeEhVenda(n){ const prods=nfeProdutoresDocs(), pf=String(n.cnpj||'').length===11;
-  if(prods.includes(n.cnpj)) return true; if(n.tpNF==='0' && prods.includes(n.dest)) return true;   // v312: contranota = NF-e de ENTRADA (tpNF 0); CFOP 1xxx numa nota de saída é erro do fornecedor, não venda
+  if(prods.includes(n.cnpj)) return true; if(n.tpNF==='0' && prods.includes(n.dest) && nfeCfopCompra(n)) return true;   // v312: contranota = NF-e de ENTRADA (tpNF 0); CFOP 1xxx numa nota de saída é erro do fornecedor, não venda · v314: e com CFOP de compra (2949 "troca/entrada" é o fornecedor recebendo produto de volta)
   if(nfeItensProducao(n) && (n.tpNF==='0' || pf)) return true;   // soja, milho, feijão, laranja… entrando no comprador ou saindo de um CPF
-  if(!prods.length) return n.tpNF==='0' || (pf && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
+  if(!prods.length) return (n.tpNF==='0' && nfeCfopCompra(n)) || (pf && (n.itens||[]).some(i=>/^[567]/.test(String(i.cfop||''))));   // sem cadastro: entrada do comprador, ou PF vendendo
   return false; }
 const VENDA_CULT=[['SOJA',/\bSOJA\b/i],['MILHO',/\bMILHO\b/i],['SORGO',/\bSORGO\b/i],['TRIGO',/\bTRIGO\b/i],['FEIJ',/FEIJ/i],['LARANJA',/LARANJA|CITR/i],['BRAQ',/BRAQ|BRACH/i],['ALGOD',/ALGOD/i],['ARROZ',/\bARROZ\b/i],['GIRASSOL',/GIRASSOL/i],['AVEIA',/\bAVEIA\b/i],['MILHETO',/MILHETO/i]];
 // v289: a venda é por CULTURA (soja, milho, feijão, laranja…), não por empreendimento — a colheita de vários talhões vai para um armazém só;
@@ -1967,6 +1979,7 @@ function nfeSugereProduto(xprod){ const xt=new Set(_nfeTok(xprod)); if(!xt.size)
 function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(it.vprod-it.vdesc+it.vfrete+it.voutro+it.vipi+it.vst)/q:0; }
 // ---- estado de cada item na conferência ----
 function nfeItemInicial(nota,it){
+  if(nota.tipo==='RETORNO') return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v314: mercadoria voltando ao fornecedor — nada entra
   const dp=deparaDe(nota.cnpj,it.cprod);
   if(dp && nfeDestManut(dp.destino)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:false,fator:1,ok:true,dest:dp.destino,maq:dp.maquina||nfeMaqPadrao(dp.destino,nota.cnpj),tipoMaq:dp.tipoGasto||nfeTipoGuess(dp.destino,it.xprod)});   // v276/v285: memória "→ máquina / oficina / benfeitoria"
   const det=nfeDetectaPecas(nota), idx=(nota.itens||[]).indexOf(it), sugP=nfeSugereProduto(it.xprod), pecaSug=det.itens[idx]||((det.forn&&!sugP&&!(dp&&PROD[dp.produto]))?'maquina':'');   // fornecedor de peças: item que não parece insumo conhecido vai para máquina · v285: oficina/benfeitoria pela descrição
@@ -2055,7 +2068,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     const ja=nfeJaEntrou(nota.chave);
     if(ja && !opts.reclass) throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)}) — para corrigir, use "Reclassificar" na lista de compras`);
     if(!nota.itens.length) throw new Error('a nota não tem itens');
-    nota.tipo=nfeTipoNota(nota.itens); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha
+    nota.tipo=nfeTipoDaNota(nota); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha · v314: tpNF + natureza
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
     if(!opts.reclass && !opts.compra && (nfeEhVenda(nota) || (nota.ia&&nota.ia.tipo==='venda'&&+nota.ia.confianca>=NFE_IA_MIN))){ nota.tipo='VENDA_PROD'; nfeVendaPrep(nfeImport); if(nota.ia&&nota.ia.cultura&&!nfeImport.venda.cultura){ nfeImport.venda.cultura=nota.ia.cultura; nfeImport.venda.safra=nfeVendaSafra(nota.ia.cultura); } }   // v277: receita do produtor · v290: IA
     nfeSugereCatalogo();   // itens sem parecido no portfólio: sugestão pelo catálogo MAPA (assíncrono)
@@ -2484,6 +2497,7 @@ function nfeConferirHtml(){
       <span class="spacer"></span>
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
+      ${(n.tipo==='RETORNO'&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn btn-primary btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="Mercadoria voltando ao fornecedor: a nota sai da lista sem entrar no estoque">🚫 Ignorar esta nota</button>`:''}
       ${imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''}>♻️ Regravar entrada (substitui a anterior)</button>`
         : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>`
         : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' disabled':''}>📑 Registrar contrato (a entregar)</button>`
@@ -10477,6 +10491,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeCancelar'){ nfeImport=null; route(); }
     else if(a.act==='nfeConferirSrv'){ nfeConferirServidor(a.chave); }
     else if(a.act==='nfeIgnorar'){ nfeIgnorar(a.chave); }
+    else if(a.act==='nfeIgnorarNota'){ const ch=a.chave; nfeIgnorar(ch); if(!((NFE_LISTA&&NFE_LISTA.notas)||[]).some(x=>x.chave===ch)){ nfeImport=null; route(); } }   // v314: da conferência de uma nota de retorno — volta para a caixa de entrada (#/entradas)
     else if(a.act==='recDiv'){ const it=REC.itens[+a.i]; if(it){ it.div={tipo:'FALTA', qtdNota:'', ficou:false, foto:'', obs:''}; route({keepScroll:true}); } }
     else if(a.act==='recDivDel'){ const it=REC.itens[+a.i]; if(it){ it.div=null; route({keepScroll:true}); } }
     else if(a.act==='pendAtualizar'){ PEND.lista=null; route({keepScroll:true}); pendCarregar(); }
@@ -10504,7 +10519,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='expDesfazer'){ expDesfazer(); } else if(a.act==='expLimpar'){ expLimpar(); } else if(a.act==='expCor'){ expCor(a.c); }
     else if(a.act==='expSalvar'){ expSalvar(); } else if(a.act==='expCancelarEd'){ expCancelarEd(); }
     else if(a.act==='expEditar'){ expEditar(a.id); } else if(a.act==='expVer'){ expVer(a.id); } else if(a.act==='expMostrar'){ expMostrar(a.id); } else if(a.act==='expMostrarTodos'){ expMostrarTodos(a.id); } else if(a.act==='expOcultarTodos'){ expOcultarTodos(a.id); } else if(a.act==='expKml'){ expKml(a.id); } else if(a.act==='expDel'){ expRemover(a.id); }
-    else if(a.act==='nfeVendaNao'){ if(nfeImport&&nfeImport.venda){ const imp=nfeImport; imp.venda=null; imp.nota.tipo=nfeTipoNota(imp.nota.itens); route({keepScroll:true}); toast('Tratando como compra');
+    else if(a.act==='nfeVendaNao'){ if(nfeImport&&nfeImport.venda){ const imp=nfeImport; imp.venda=null; imp.nota.tipo=nfeTipoDaNota(imp.nota); route({keepScroll:true}); toast('Tratando como compra');
         if(nfeServerOk()&&imp.origem==='planilha') nfePost({__nfeVenda:{chave:imp.nota.chave, desfazer:true, tipo:imp.nota.tipo}}).then(r=>{ if(r&&!r.fail){ imp.itens=imp.nota.itens.map(it=>nfeItemInicial(imp.nota,it)); if(nfeImport===imp) route({keepScroll:true}); } }).catch(()=>{}); } }   // v309: a planilha volta fornecedor/CNPJ do XML
     else if(a.act==='nfeReabrirStatus'){ nfeReabrirStatus(a.chave); }
     else if(a.act==='nfeEstornar'){ if(ask('Estornar a entrada desta nota no estoque? A compra sai do razão (fica a lápide) e a nota continua cancelada.')){ excluirCompra(a.chave); toast('Entrada estornada'); } }

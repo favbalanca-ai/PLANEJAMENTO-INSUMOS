@@ -71,6 +71,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Troca e devolução com o fornecedor (v314)** — caso real das notas da AGROPLACE: o fornecedor trocou um lote de
+  foliar e emitiu (a) uma nota de **saída** CFOP 6949 "Remessa de troca" com o lote novo e (b) uma **NF-e de entrada**
+  (`tpNF = 0`) CFOP 2949 "Remessa de troca/entrada" para receber o lote velho de volta. A (b) era marcada "Venda do
+  produtor" (nota de entrada + produtor destinatário). Agora: (1) a contranota do comprador precisa ter **CFOP de
+  compra** (x101–x125, x401–x405, entrega futura — `nfeCfopCompra`); NF-e de entrada de terceiro sem esse CFOP vira o
+  tipo novo **RETORNO** ("Mercadoria voltando ao fornecedor"): não é venda, nada entra no estoque, itens já marcados
+  Ignorar, botão **Ignorar esta nota** na conferência (`nfeTipoDaNota`); (2) nota de saída com CFOP x949 e natureza
+  "troca/reposição/substituição/garantia" vira o tipo **TROCA** ("Reposição do fornecedor"): entra no estoque com o preço
+  da nota, sem título a pagar; (3) o app lê a natureza da operação (`natOp`) do XML e o nome do CFOP 1949/2949 passa a
+  ser "outra **entrada**"; (4) na planilha, nota RETORNO/TROCA ou com "sem pagamento" (tPag 90) e sem parcela não gera
+  título no Financeiro, e a captura reavalia as notas A CLASSIFICAR marcadas VENDA PRODUTOR ou OUTRA.
 - **Revisão do Administrativo, fase 5 — refinamentos (v313)** — (1) o sino 🔔 passa a listar títulos vencidos (em
   atraso) e os que vencem em 7 dias, com atalho para o Financeiro; (2) com mais de um produtor e sem filtro, a aba
   Títulos mostra um resumo **por produtor** (em aberto, vencidos, 7 dias, a receber); tocar filtra; (3) **baixa em
