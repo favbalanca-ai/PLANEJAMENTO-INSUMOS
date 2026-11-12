@@ -1685,6 +1685,9 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oc-th img{width:100%;height:100%;object-fit:cover}
 .oc-th .icon-btn{position:absolute;top:3px;right:3px;width:24px;height:24px;min-width:24px;min-height:24px;padding:0;font-size:12px;background:rgba(255,255,255,.9)}
 .oc-th-pend i{position:absolute;bottom:3px;right:4px;font-style:normal;font-size:14px}
+.oc-th-pend.err{outline:2px solid #c0392b;outline-offset:-2px}   /* v324: foto não aceita pela planilha */
+.oc-fpend{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+.oc-fpend small{flex-basis:100%}
 .oc-prev .oc-th{width:92px;height:92px}
 .oc-f{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--ink);margin:10px 0}
 .oc-f .txt,.oc-f .sel,.oc-f textarea,.oc-f input[type=date]{width:100%;font-weight:400}

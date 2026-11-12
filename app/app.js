@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-323';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-324';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6374,14 +6374,18 @@ async function fotoSubir(url, p){
   let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64}})); }catch(e){ return 'rede'; }
   if(r&&r.foto&&r.foto.url) return r.foto;
   const n=(_fotoTent[p.nome]=(_fotoTent[p.nome]||0)+1), m=((r&&r.msgs)||[]).filter(Boolean).join(' · ')||(r&&r.foto&&r.foto.erro)||'a planilha não devolveu o link da foto';
-  if(n>=3){ syncLog(`✖ ${p.nome}: ${m} — foto descartada depois de 3 tentativas`); toast(`Uma foto não foi aceita pela planilha e foi descartada (${p.nome})`); return 'recusada'; }
+  // v324: NÃO descarta — a foto só existe neste aparelho. Depois de 3 respostas sem link ela fica PARADA (⚠ no registro,
+  // com "Reenviar fotos" e "Compartilhar fotos"); o envio automático pula as paradas até você mandar tentar de novo
+  if(n>=3){ p.parada=m; syncLog(`✖ ${p.nome}: ${m} — foto parada (abra o registro em Ocorrências: Reenviar fotos / Compartilhar fotos)`); toast(`Uma foto não foi aceita pela planilha: ${m} — veja o registro em Ocorrências`); return 'parada'; }
   syncLog(`⚠ ${p.nome}: ${m} — tentativa ${n} de 3`); return 'rede';
 }
-async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length||syncKeepalive) return;   // keepalive (saindo do app) não aceita corpo grande: a foto fica p/ a próxima
+async function ocorFotosEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length||syncKeepalive) return;   // keepalive (saindo do app) não aceita corpo grande: a foto fica p/ a próxima
   fotoEnviando=true;
   try{ for(const p of fotoPend.slice()){ const rec=OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
+      if(p.parada){ if(!opts.forcar) continue; delete p.parada; delete _fotoTent[p.nome]; }   // parada: só com "Reenviar fotos"
       const r=await fotoSubir(url, p);
       if(r==='rede') break;                                                  // sem sinal: tenta de novo na próxima sincronização
+      if(r==='parada'){ saveFotoPend(); continue; }
       if(r==='recusada'){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
       rec.fotos=(rec.fotos||[]).concat([{url:r.url, id:r.id||''}]); rec._u=tsAgora();
       fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); lsSet(OCOR_KEY, JSON.stringify(OCOR)) } }
@@ -6913,11 +6917,13 @@ function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.mist
 function mistSig(){ return sigHash(JSON.stringify((MIST&&MIST.reg)||{})); }
 function scheduleMistPush(){ loteAgendar('__mistura'); }
 // fotos da avaliação → Drive (pasta "Fotos do Campo"), uma por vez; cada uma que chega vira link no registro
-async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length||syncKeepalive) return;
+async function mistFotosEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length||syncKeepalive) return;
   mistFotoEnviando=true;
   try{ for(const p of mistFotoPend.slice()){ const rec=MIST.reg[p.id]; if(!rec||rec.del||!rec.aval){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
-      const r=await fotoSubir(url, p);   // v323: vazia/recusada sai da fila; sem sinal fica
+      if(p.parada){ if(!opts.forcar) continue; delete p.parada; delete _fotoTent[p.nome]; }
+      const r=await fotoSubir(url, p);   // v323: vazia sai da fila; sem sinal fica; v324: parada fica (⚠) até reenviar
       if(r==='rede') break;
+      if(r==='parada'){ saveMistFoto(); continue; }
       if(r==='recusada'){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
       rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.url, id:r.id||''}]); rec._u=tsAgora();
       mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); lsSet(MIST_KEY, JSON.stringify(MIST)) } }
@@ -7011,8 +7017,16 @@ function ocFalta(f){ const x=[]; if(!String(f.ativ||'').trim()) x.push('atividad
   if(f.tipo==='solo'){ if(!String(f.situacao||'').trim()) x.push('situação'); if(!String(f.acao||'').trim()) x.push('ação'); }
   return x; }
 function ocFotoThumb(r){ const sub=(r.fotos||[]).map(fo=>`<a class="oc-th" href="${esc(fo.url)}" target="_blank" rel="noopener" title="Abrir a foto">${fo.id?`<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(fo.id)}&sz=w240" alt="foto" loading="lazy" onerror="this.replaceWith(document.createTextNode('📷'))">`:'📷'}</a>`).join('');
-  const pend=fotoPend.filter(p=>p.ocId===r.id).map(p=>`<span class="oc-th oc-th-pend" title="Foto aguardando envio"><img src="${p.dataUrl}" alt="foto"><i>⏳</i></span>`).join('');
+  const pend=fotoPend.filter(p=>p.ocId===r.id).map(p=>`<span class="oc-th oc-th-pend${p.parada?' err':''}" title="${esc(p.parada?'Foto não aceita pela planilha: '+p.parada:'Foto aguardando envio')}"><img src="${p.dataUrl}" alt="foto"><i>${p.parada?'⚠':'⏳'}</i></span>`).join('');
   return sub+pend; }
+// v324: fotos ainda só neste aparelho — reenviar à mão (também as paradas) ou compartilhar (WhatsApp etc.)
+function ocFotoRetry(id){ fotoPend.filter(p=>p.ocId===id).forEach(p=>{ delete p.parada; delete _fotoTent[p.nome]; }); saveFotoPend();
+  if(!syncUrl()){ toast('Configure a sincronização primeiro'); return; } toast('Reenviando as fotos…'); ocorFotosEnviar({forcar:true}).then(()=>{ const n=fotoPend.filter(p=>p.ocId===id).length; toast(n?`${n} foto(s) ainda não subiram — veja o log em Sincronizar`:'Fotos enviadas ao Drive'); route({keepScroll:true}); }); }
+async function ocFotoShare(id){ const r=OCOR.reg[id], ps=fotoPend.filter(p=>p.ocId===id); if(!r||!ps.length) return;
+  const files=ps.map(p=>{ try{ return _dataUrlFile(p.dataUrl, p.nome); }catch(e){ return null; } }).filter(Boolean), txt=ocShareTexto(r);
+  try{ if(navigator.share && files.length && navigator.canShare && navigator.canShare({files})){ await navigator.share({text:txt, files}); return; } }catch(e){ if(e&&e.name==='AbortError') return; }
+  files.forEach(f=>{ const u=URL.createObjectURL(f), a=document.createElement('a'); a.href=u; a.download=f.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u), 5000); });
+  toast(files.length?`${files.length} foto(s) baixada(s) neste aparelho`:'Não consegui preparar as fotos'); }
 function ocResumo(r){ const T=OC_TIPOS[r.tipo]||{};
   return [r.tipo==='climatica'?r.evento:'', r.situacao, r.acao||r.texto, r.tipo==='climatica'&&r.estadio?'estádio '+r.estadio:'',
     r.tipo==='climatica'&&r.ini?('período '+fmtDataBR(r.ini).slice(0,5)+(r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim).slice(0,5):'')):''].filter(Boolean).join(' · ')||T.lbl||''; }
@@ -7020,7 +7034,9 @@ function ocCard(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao), nf=(r.
   return `<div class="oc-card"><span class="na-ico ${T.cls||''}">${T.ico||'📝'}</span><div class="oc-tx">
       <div><b>${esc(T.lbl||r.tipo)}${r.tipo==='climatica'&&r.evento?' · '+esc(r.evento):''}</b> <span class="mut">${esc(fmtDataBR(r.data).slice(0,5))} · ${esc(t?tNome(t):r.talhaoNome||r.talhao)}${r.quem?' · '+esc(r.quem):''}</span></div>
       <div class="oc-res">${esc(ocResumo(r))}</div>${r.tarefaId?'<div class="mut" style="font-size:11.5px">✅ tarefa criada no quadro de Tarefas</div>':''}
-      ${nf?`<div class="oc-ths">${ocFotoThumb(r)}</div>`:''}</div>
+      ${nf?`<div class="oc-ths">${ocFotoThumb(r)}</div>`:''}
+      ${fotoPend.some(p=>p.ocId===r.id)?`<div class="oc-fpend"><small class="mut">${fotoPend.some(p=>p.ocId===r.id&&p.parada)?'⚠ foto(s) não aceita(s) pela planilha — ainda só neste aparelho':'⏳ foto(s) ainda só neste aparelho (sobem quando houver sinal)'}</small>
+        <button class="btn btn-outline btn-sm" data-act="ocFotoRetry" data-id="${esc(r.id)}">↻ Reenviar fotos</button><button class="btn btn-outline btn-sm" data-act="ocFotoShare" data-id="${esc(r.id)}" title="Mandar as fotos por WhatsApp ou salvar no aparelho">📤 Compartilhar fotos</button></div>`:''}</div>
     <button class="icon-btn del" data-act="ocDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`; }
 function ocTog(l,k,f){ return `<label class="st-tog"><span>${l}</span><input type="checkbox" data-oc="${k}"${f[k]?' checked':''}><i></i></label>`; }
 function ocTxt(l,k,f,o){ o=o||{}; return `<label class="oc-f"><span>${l} <i class="af-req">*</i></span>${o.area?`<textarea class="txt" rows="3" data-oc="${k}" placeholder="${esc(o.ph||l)}">${esc(f[k]||'')}</textarea>`:`<input class="txt" data-oc="${k}" value="${esc(f[k]||'')}" placeholder="${esc(o.ph||l)}">`}</label>`; }
@@ -10400,6 +10416,8 @@ document.addEventListener('click',e=>{
     else if(/^prTec/.test(a.act)){ prTecAcao(a); return; }
     else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
+    else if(a.act==='ocFotoRetry'){ ocFotoRetry(a.id); return; }
+    else if(a.act==='ocFotoShare'){ ocFotoShare(a.id); return; }
     else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
     else if(a.act==='naVoltar'){ novaAcaoOpen(a.id); return; }
     else if(a.act==='navMais'){ e.preventDefault(); navMaisOpen(); return; }
