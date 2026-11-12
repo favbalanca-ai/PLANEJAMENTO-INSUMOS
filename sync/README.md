@@ -132,6 +132,14 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Fotos e erros do doPost (v323)
+
+- `__campoFoto` sem link (`driveArquivo_` devolve `{url:'', erro}`) agora responde `fail:1` com `msgs:['foto: …']`
+  — antes era `ok 0` sem motivo e o app reenviava a foto para sempre.
+- Exceção dentro do `doPost` / `gravaUm_` (`catch`) conta como falha (`fail++`, `erro na planilha: …`). Antes a
+  resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
+  também responde `fail:1`.
+
 ## Desfazer recebimento (v319)
 
 - `nfeReabrir_` aceita `recebida:true` (com `forcar`) para notas RECEBIDA / RECEBIDA SEM XML: além do que a v309 já

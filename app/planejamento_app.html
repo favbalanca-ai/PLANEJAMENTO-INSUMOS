@@ -2739,7 +2739,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-322';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-323';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5647,7 +5647,8 @@ function recCanhotoHtml(){
 // reduz a foto (máx. 1280 px, JPEG 70%) antes de mandar — cabe no celular com sinal fraco
 function recFotoReduzir(file){ return new Promise((res,rej)=>{ const img=new Image(), url=URL.createObjectURL(file);
   img.onload=()=>{ const k=Math.min(1,1280/Math.max(img.width,img.height)), c=document.createElement('canvas'); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
-    c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); res(c.toDataURL('image/jpeg',0.7)); };
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url); const d=c.toDataURL('image/jpeg',0.7);
+    if(!c.width||!c.height||String(d).length<200) rej(new Error('foto vazia')); else res(d); };   // v323: "data:," (canvas vazio) não entra na fila
   img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('não consegui ler a foto')); }; img.src=url; }); }
 async function recFotoEnviar(dataUrl, nome){ if(!dataUrl) return '';
   try{ const r=await nfePost({__nfeFoto:{nome, mime:'image/jpeg', b64:String(dataUrl).split(',')[1]||''}}); return (r&&r.foto&&r.foto.url)||''; }catch(e){ return ''; } }
@@ -9100,12 +9101,26 @@ function ocorSig(){ return sigHash(JSON.stringify((OCOR&&OCOR.reg)||{})); }
 function ocorServerOk(){ return !!(DATA && DATA.ocorrencias_app && typeof DATA.ocorrencias_app==='object'); }
 function scheduleOcorPush(){ loteAgendar('__ocorrencia'); }
 // sobe as fotos da fila, uma por vez; cada uma que chega vira link no registro
-async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length) return;
+// v323: sobe UMA foto. Devolve {url,id}; 'rede' (sem sinal: fica na fila e tenta na próxima sincronização);
+// ou 'recusada' (foto vazia, ou a planilha respondeu 3 vezes sem o link): sai da fila — antes ficava em loop para sempre,
+// mandando a foto de novo a cada sincronização e segurando todo o resto no celular com sinal fraco.
+const _fotoTent={};
+async function fotoSubir(url, p){
+  const b64=String(p.dataUrl||'').split(',')[1]||'';
+  if(!b64){ syncLog(`✖ ${p.nome}: foto vazia (o celular não conseguiu ler a imagem) — descartada`); return 'recusada'; }
+  let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64}})); }catch(e){ return 'rede'; }
+  if(r&&r.foto&&r.foto.url) return r.foto;
+  const n=(_fotoTent[p.nome]=(_fotoTent[p.nome]||0)+1), m=((r&&r.msgs)||[]).filter(Boolean).join(' · ')||(r&&r.foto&&r.foto.erro)||'a planilha não devolveu o link da foto';
+  if(n>=3){ syncLog(`✖ ${p.nome}: ${m} — foto descartada depois de 3 tentativas`); toast(`Uma foto não foi aceita pela planilha e foi descartada (${p.nome})`); return 'recusada'; }
+  syncLog(`⚠ ${p.nome}: ${m} — tentativa ${n} de 3`); return 'rede';
+}
+async function ocorFotosEnviar(){ const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length||syncKeepalive) return;   // keepalive (saindo do app) não aceita corpo grande: a foto fica p/ a próxima
   fotoEnviando=true;
   try{ for(const p of fotoPend.slice()){ const rec=OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
-      let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
-      if(!(r&&r.foto&&r.foto.url)) break;                                  // sem sinal: tenta de novo na próxima sincronização
-      rec.fotos=(rec.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=tsAgora();
+      const r=await fotoSubir(url, p);
+      if(r==='rede') break;                                                  // sem sinal: tenta de novo na próxima sincronização
+      if(r==='recusada'){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
+      rec.fotos=(rec.fotos||[]).concat([{url:r.url, id:r.id||''}]); rec._u=tsAgora();
       fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); lsSet(OCOR_KEY, JSON.stringify(OCOR)) } }
   finally{ fotoEnviando=false; }
   if(document.body.dataset.view==='ocorrencia') route({keepScroll:true});
@@ -9635,12 +9650,13 @@ function mistServerOk(){ return !!(DATA && DATA.misturas_app && typeof DATA.mist
 function mistSig(){ return sigHash(JSON.stringify((MIST&&MIST.reg)||{})); }
 function scheduleMistPush(){ loteAgendar('__mistura'); }
 // fotos da avaliação → Drive (pasta "Fotos do Campo"), uma por vez; cada uma que chega vira link no registro
-async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length) return;
+async function mistFotosEnviar(){ const url=syncUrl(); if(!url||!mistServerOk()||mistFotoEnviando||!mistFotoPend.length||syncKeepalive) return;
   mistFotoEnviando=true;
   try{ for(const p of mistFotoPend.slice()){ const rec=MIST.reg[p.id]; if(!rec||rec.del||!rec.aval){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
-      let r=null; try{ r=await syncPost(url, JSON.stringify({__campoFoto:{nome:p.nome, mime:'image/jpeg', b64:String(p.dataUrl).split(',')[1]||''}})); }catch(e){ r=null; }
-      if(!(r&&r.foto&&r.foto.url)) break;
-      rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.foto.url, id:r.foto.id||''}]); rec._u=tsAgora();
+      const r=await fotoSubir(url, p);   // v323: vazia/recusada sai da fila; sem sinal fica
+      if(r==='rede') break;
+      if(r==='recusada'){ mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); continue; }
+      rec.aval.fotos=(rec.aval.fotos||[]).concat([{url:r.url, id:r.id||''}]); rec._u=tsAgora();
       mistFotoPend=mistFotoPend.filter(x=>x!==p); saveMistFoto(); lsSet(MIST_KEY, JSON.stringify(MIST)) } }
   finally{ mistFotoEnviando=false; }
   if(document.body.dataset.view==='misturas') route({keepScroll:true});
@@ -14331,12 +14347,17 @@ async function syncGet(url, opts){
 }
 // checagem leve: pergunta só o "hash" dos dados (resposta minúscula, servidor usa cache)
 async function getServerHash(url){
-  const t0=Date.now();
-  try{
-    const bust=(url.indexOf('?')<0?'?':'&')+'h=1&t='+Date.now();
-    const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},45000);
-    const j=await r.json(); if(j && j.ok===false && j.erro) syncLogAdd('down', 'Checar mudanças', t0, false, j.erro); return (j&&j.hash)||null;
-  }catch(e){ syncLogAdd('down', 'Checar mudanças', t0, false, syncLogErr(e)); return null; }
+  const t0=Date.now(); let lastErr=null;
+  // v323: 2 tentativas — no iPhone, o 1º pedido logo depois de voltar do segundo plano falha na hora ("Load failed");
+  // sem a 2ª tentativa o app desistia da checagem leve e baixava a planilha inteira (lento no campo)
+  for(let attempt=0; attempt<2; attempt++){
+    try{
+      const bust=(url.indexOf('?')<0?'?':'&')+'h=1&t='+Date.now();
+      const r=await syncFetch(url+bust,{method:'GET',cache:'no-store',redirect:'follow'},45000);
+      const j=await r.json(); if(j && j.ok===false && j.erro) syncLogAdd('down', 'Checar mudanças', t0, false, j.erro); return (j&&j.hash)||null;
+    }catch(e){ lastErr=e; if(attempt===0 && navigator.onLine!==false) await new Promise(res=>setTimeout(res,1500)); else break; }
+  }
+  syncLogAdd('down', 'Checar mudanças', t0, false, syncLogErr(lastErr)+(navigator.onLine===false?'':' (2 tentativas)')); return null;
 }
 async function syncPull(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }

@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Fotos do campo sem loop e sincronização no campo (v323)** — uma foto que a planilha aceitava mas devolvia sem link
+  (`ok 0`) ficava na fila para sempre e era reenviada a cada sincronização, segurando todo o resto no celular com
+  sinal fraco. `fotoSubir` (usada por ocorrências e misturas) descarta foto vazia na hora e, se a planilha responder
+  3 vezes sem o link, descarta com aviso no log/toast; sem sinal a foto continua na fila. Saindo do app (`keepalive`)
+  a foto não é enviada (o navegador recusa corpo grande nesse modo). `recFotoReduzir` rejeita canvas vazio
+  (`data:,`). `getServerHash` ("Checar mudanças") tenta 2 vezes: no iPhone o 1º pedido depois de voltar do segundo
+  plano falha na hora e o app baixava a planilha inteira à toa.
 - **Edição presa de produto fora do portfólio (v322)** — estoque/pedido/custo inicial de um produto que não está mais
   no portfólio do app (sumiu de Preços ou foi renomeado) fazia a planilha responder `produto não encontrado` a cada
   envio. `edicoesOrfas` agora segura essas edições (`edicaoProdutoOrfa`), como já fazia com talhões sem aba; a tela
