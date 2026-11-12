@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Foto do campo nunca é descartada (v324)** — a foto só existe no aparelho que tirou; depois de 3 respostas da
+  planilha sem o link ela fica **parada** (`p.parada` = motivo, ⚠ na miniatura) e o envio automático pula as paradas.
+  No cartão da ocorrência com foto pendente: **↻ Reenviar fotos** (`ocFotoRetry`, limpa a marca e chama
+  `ocorFotosEnviar({forcar:true})`) e **📤 Compartilhar fotos** (`ocFotoShare`: `navigator.share` com os arquivos,
+  senão baixa no aparelho). Só foto vazia (`data:,`) continua sendo descartada.
 - **Fotos do campo sem loop e sincronização no campo (v323)** — uma foto que a planilha aceitava mas devolvia sem link
   (`ok 0`) ficava na fila para sempre e era reenviada a cada sincronização, segurando todo o resto no celular com
   sinal fraco. `fotoSubir` (usada por ocorrências e misturas) descarta foto vazia na hora e, se a planilha responder
