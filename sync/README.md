@@ -132,6 +132,18 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Troca e devolução com o fornecedor (v314)
+
+- `nfeLerGs_` devolve `natOp` (natureza da operação) e `cfopCompra` (algum item com CFOP de venda/compra, faturamento
+  ou remessa). `nfeTipoNotaCompleto_`: NF-e de **entrada** (`tpNF 0`) de terceiro sem CFOP de compra e sem ser só grão →
+  TIPO **RETORNO** (fornecedor recebendo mercadoria de volta: troca, devolução); saída x949 com natureza
+  "troca/reposição/substituição/garantia" → TIPO **TROCA**.
+- `nfeEhVendaProd_`: a contranota (`tpNF 0` + produtor destinatário) só vale com `cfopCompra` (objeto sem o campo
+  mantém a regra da v312). Entrada só de grão continua venda.
+- `finTitulosDaNota_`: RETORNO/TROCA não geram título; XML "sem pagamento" (tPag 90) sem parcela também não.
+- `nfeReavaliarVendas_` passa a reler também as notas A CLASSIFICAR com TIPO OUTRA (podem virar TROCA/RETORNO) e grava
+  o motivo na OBS. A IA recebe `natureza_operacao`.
+
 ## Fase 5 (v313)
 
 - NFE RECEBIDAS ganha a coluna **ITENS** (até 8 descrições do XML, gravadas na captura); `nfeLista_` devolve `xprods`.

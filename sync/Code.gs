@@ -765,6 +765,13 @@ function nfeTipoCfopGs_(cfop){ var c = S(cfop).replace(/\D/g,''); if (!/^[1-7]\d
   for (var i = 0; i < CFOP_TAB_.length; i++) if (CFOP_TAB_[i][0].test(f)) return CFOP_TAB_[i][1];
   return 'OUTRA'; }
 function nfeTipoNotaGs_(tipos){ for (var i = 0; i < NFE_TIPO_ORD_.length; i++) if (tipos.indexOf(NFE_TIPO_ORD_[i]) >= 0) return NFE_TIPO_ORD_[i]; return 'OUTRA'; }
+// v314: tipo da NOTA além do CFOP dos itens (mesma regra do app, nfeTipoDaNota). NF-e de ENTRADA de terceiro sem CFOP de compra
+// (ex.: 2949 "remessa de troca/entrada") = fornecedor recebendo mercadoria de volta → RETORNO; saída x949 com natureza
+// "troca/reposição/garantia" → TROCA (reposição sem cobrança).
+function nfeTipoNotaCompleto_(tipoCfop, tpNF, cfopCompra, producao, natOp){
+  if (tpNF === '0' && !cfopCompra && !producao) return 'RETORNO';
+  if (tipoCfop === 'OUTRA' && /troca|reposi|substitui|garantia/i.test(S(natOp))) return 'TROCA';
+  return tipoCfop; }
 // v304: o arquivo não é NF-e de produto — diz O QUE ele é, para a pessoa entender por que não entrou
 function nfeTipoOutro_(root){ var rn = S(root.getName()), tem = function(n){ return rn === n || !!_xfirst(root, n); };
   if (tem('infCte') || tem('infCTe') || /^cte/i.test(rn)) return 'CT-e (conhecimento de frete) — o app só trata NF-e de produto';
@@ -781,8 +788,8 @@ function nfeEhGrao_(x){ x = S(x); return RX_GRAO_.test(x) && !RX_NAO_GRAO_.test(
 // CFOP 1xxx numa nota de SAÍDA (tpNF 1) é erro do ERP do fornecedor (ex.: 1662 numa venda de lubrificante) — é compra.
 function nfeEhVendaProd_(n, cfg, origem){
   var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança' || (n.producao && n.tpNF !== '0' && !n.entrada && /^\d{11}$/.test(n.cnpj));   // produtor emitindo · balança · CPF vendendo grão
-  var entradaReal = n.tpNF === '0';
-  return !!(emitProd || (entradaReal && (cfg.produtores.indexOf(n.dest) >= 0 || n.producao)));
+  var entradaReal = n.tpNF === '0' && (n.cfopCompra == null ? true : !!n.cfopCompra);   // v314: 2949 "troca/entrada" não é contranota — é o fornecedor recebendo produto de volta
+  return !!(emitProd || (entradaReal && (cfg.produtores.indexOf(n.dest) >= 0 || n.producao)) || (n.tpNF === '0' && n.producao));
 }
 function nfeLerGs_(txt){
   var root = XmlService.parse(txt).getRootElement();
@@ -796,14 +803,17 @@ function nfeLerGs_(txt){
   var dets = _xall(inf,'det'), tipos = dets.map(function(d){ return nfeTipoCfopGs_(_xt(d,'CFOP')); });
   var cfops = dets.map(function(d){ return S(_xt(d,'CFOP')); }), xprods = dets.map(function(d){ return S(_xt(d,'xProd')); });   // v288
   var tipo = nfeTipoNotaGs_(tipos);   // v307
+  var natOp = _xt(ide,'natOp'), tpNF = _xt(ide,'tpNF'), cfopCompra = tipos.some(function(t){ return t === 'VENDA' || t === 'FATURAMENTO' || t === 'REMESSA'; });   // v314
+  var producao = xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); });
+  tipo = nfeTipoNotaCompleto_(tipo, tpNF, cfopCompra, producao, natOp);   // v314: RETORNO / TROCA
   var idAttr = inf.getAttribute('Id');
   return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
     nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
     cnpj:(_xt(emit,'CNPJ') || _xt(emit,'CPF')).replace(/\D/g,''), fornecedor:_xt(emit,'xNome'),
     dest:(_xt(dest,'CNPJ') || _xt(dest,'CPF')).replace(/\D/g,''), destNome:_xt(dest,'xNome'), tpNF:_xt(ide,'tpNF'), vNF:parseFloat(_xt(_xfirst(inf,'ICMSTot'),'vNF')) || 0,
-    ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length,
-    entrada:_xt(ide,'tpNF') === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
-    producao:xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); }), xprods:xprods };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
+    ref:_xt(ide,'refNFe'), tipo:tipo, itens:tipos.length, natOp:natOp, cfopCompra:cfopCompra,   // v314
+    entrada:tpNF === '0' || (cfops.length > 0 && cfops.every(function(c){ return /^[12]/.test(c); })),   // contranota do comprador
+    producao:producao, xprods:xprods };   // v288: só produtos que a fazenda produz · v312: "SEMENTE DE MILHO" não é produção
 }
 // texto do arquivo respeitando a codificação declarada (UTF-8 ou ISO-8859-1)
 function _blobTxt(b){ var t = b.getDataAsString('UTF-8'); if (/encoding=["']ISO-8859-1["']/i.test(t.slice(0,120))) t = b.getDataAsString('ISO-8859-1'); return t.replace(/^﻿/,''); }
@@ -903,10 +913,15 @@ function nfeReavaliarVendas_(){
   var s = sh(NFE_IDX_SHEET); if (!s || s.getLastRow() < 2) return 0;
   var cfg = nfeConfig_(), t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), n = 0, lidas = 0;
   s.getRange(2, 1, s.getLastRow() - 1, t.ncol).getValues().forEach(function(r, i){
-    if (lidas >= 15 || S(r[t.col('STATUS')]).toUpperCase() !== 'A CLASSIFICAR' || S(r[t.col('TIPO')]).toUpperCase() !== 'VENDA PRODUTOR' || S(r[t.col('ORIGEM')]) === 'balança') return;
+    var tipoAtual = S(r[t.col('TIPO')]).toUpperCase();
+    if (lidas >= 15 || S(r[t.col('STATUS')]).toUpperCase() !== 'A CLASSIFICAR' || (tipoAtual !== 'VENDA PRODUTOR' && tipoAtual !== 'OUTRA') || S(r[t.col('ORIGEM')]) === 'balança') return;   // v314: OUTRA pode virar TROCA/RETORNO
     var fid = S(r[t.col('FILE ID')]); if (!fid) return; lidas++;
     try { var nx = nfeLerGs_(_blobTxt(DriveApp.getFileById(fid).getBlob())); if (!nx || nx.erro || nfeEhVendaProd_(nx, cfg, S(r[t.col('ORIGEM')]))) return;
-      _setCells_(t, i + 2, { 'TIPO':nx.tipo || 'OUTRA', 'PRODUTOR':nx.dest, 'CNPJ EMITENTE':nx.cnpj, 'FORNECEDOR':nx.fornecedor, 'OBS':'era "venda do produtor" pela regra antiga — é compra (nota de saída do fornecedor)' }); n++; } catch (e) {} });
+      var novo = nx.tipo || 'OUTRA'; if (tipoAtual === 'OUTRA' && novo === 'OUTRA') return;
+      var obs = novo === 'RETORNO' ? 'era "' + (tipoAtual === 'OUTRA' ? 'outra operação' : 'venda do produtor') + '" — é mercadoria voltando ao fornecedor (NF-e de entrada do fornecedor, troca/devolução): nada entra no estoque'
+        : novo === 'TROCA' ? 'era "outra operação" — é reposição do fornecedor (troca), sem cobrança'
+        : 'era "venda do produtor" pela regra antiga — é compra (nota de saída do fornecedor)';
+      _setCells_(t, i + 2, { 'TIPO':novo, 'PRODUTOR':nx.dest, 'CNPJ EMITENTE':nx.cnpj, 'FORNECEDOR':nx.fornecedor, 'OBS':obs }); n++; } catch (e) {} });
   return n;
 }
 function nfeReavaliarIgnoradas_(){
@@ -1471,10 +1486,12 @@ function finTitulosDaNota_(chave, dupsApp, pagApp, categoria, tipoTit){
   var o = _rowObj(t, t.s.getRange(row, 1, 1, t.ncol).getValues()[0]), g = function(h){ return o[_hkey(h)]; };
   var st = S(g('STATUS')).toUpperCase(), tipoNota = S(g('TIPO')).toUpperCase();
   if (tipoNota === 'REMESSA') return 0;   // remessa de entrega futura: o dinheiro é da nota de faturamento
+  if (tipoNota === 'RETORNO' || tipoNota === 'TROCA') return 0;   // v314: troca/devolução com o fornecedor: ninguém paga nada
   var xmlId = S(g('FILE ID')), info = { dups:[], pag:[] };
   if (xmlId){ try { info = finDupsGs_(_blobTxt(DriveApp.getFileById(xmlId).getBlob())); } catch (e) {} }
   if (!info.dups.length && dupsApp && dupsApp.length) info.dups = dupsApp.map(function(d){ return { n:S(d.n), venc:S(d.venc).slice(0,10), valor:N(d.valor) }; });
   if (!info.pag.length && pagApp && pagApp.length) info.pag = pagApp;
+  if (!info.dups.filter(function(d){ return d.valor > 0; }).length && info.pag.length && info.pag.every(function(p){ return S(p.t) === '90'; })) return 0;   // v314: XML diz "sem pagamento" (tPag 90) e não tem parcela: bonificação, troca… não vira título
   var emissao = _fmtD(g('EMISSÃO')), vNF = N(g('VALOR')), forma = finFormaPgto_(info.pag);
   var dups = info.dups.filter(function(d){ return d.valor > 0; });
   var semParc = !dups.length; if (semParc) dups = [{ n:'1', venc:emissao, valor:vNF }];
@@ -1634,7 +1651,7 @@ function nfeIaClassificar_(chave, forcar){
       candidatos:c.map(function(p){ return p.produto + ' [' + S(p.un) + (p.classe ? ' · ' + p.classe : '') + ']'; }),
       memoria:m ? { destino:m.destino || (m.ignorar ? 'ignorar' : 'estoque'), produto:m.produto || '', fator:m.fator, maquina:m.maquina || '', tipoGasto:m.tipoGasto || '' } : null }; });
   var dados = { fornecedor:n.fornecedor, cnpj_emitente:n.cnpj, destinatario:n.destNome, emitente_e_produtor_da_fazenda:ehProdutor, destinatario_e_produtor_da_fazenda:destProdutor,
-    nota_de_entrada_tpNF0:n.tpNF === '0', valor_nota:n.vNF, tipo_pelo_cfop:n.tipo, itens:linhas, /* v308: sem o CPF do produtor */ maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
+    nota_de_entrada_tpNF0:n.tpNF === '0', natureza_operacao:n.natOp || '', valor_nota:n.vNF, tipo_pelo_cfop:n.tipo, itens:linhas, /* v308: sem o CPF do produtor */ maquinas_da_fazenda:Object.keys(maqs).slice(0, 60), benfeitorias_ja_usadas:Object.keys(benf).slice(0, 40), culturas:IA_CULTURAS };
   var system = 'Você classifica notas fiscais (NF-e) de uma fazenda de grãos no Brasil para um sistema de estoque e contabilidade. Responda SOMENTE com JSON válido, sem comentários nem markdown.\n' +
     'Regras: tipo = compra_insumo (insumo agrícola: sementes, fertilizantes, defensivos, corretivos, adjuvantes), venda (a fazenda vende sua produção: soja, milho, feijão, laranja etc.; a nota pode ser emitida pelo produtor ou ser contranota de ENTRADA do comprador), pecas (peça, pneu, óleo, filtro ou serviço de uma máquina), oficina (ferramenta, consumível, EPI de uso geral), benfeitoria (material de construção, cerca, elétrica, hidráulica, obra), servico (serviço sem máquina), outra.\n' +
     'Por item: destino = estoque (insumo que entra no estoque; escolha "produto" EXATAMENTE como um dos candidatos, ou deixe vazio se nenhum candidato for o mesmo produto), maquina (informe "maquina" com um nome da lista maquinas_da_fazenda quando der; "tipoGasto" entre Peça, Pneu, Óleo/lubrificante, Serviço/mão de obra, Combustível, Frete, Outro), oficina ("tipoGasto" entre Ferramenta, Consumível, EPI, Outro), benfeitoria ("maquina" = nome da benfeitoria, reaproveite benfeitorias_ja_usadas quando for a mesma; "tipoGasto" entre Construção, Reforma, Elétrica, Hidráulica, Outro), tanque (óleo diesel, Arla 32 ou outro combustível a granel para o tanque da fazenda; "tipoGasto" Combustível ou Arla 32), ignorar (palete, embalagem, brinde, frete destacado).\n' +

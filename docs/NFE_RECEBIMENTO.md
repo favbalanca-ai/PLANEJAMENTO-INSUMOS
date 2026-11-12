@@ -134,6 +134,14 @@ conserto, devolução, demonstração, vasilhame, energia, serviço; senão OUTR
 | 301–307, 351–360 | SERVICO | Itens **Ignorar**; dica Financeiro |
 | 917–921 | VASILHAME | Itens **Ignorar** |
 | demais (949, 927, 905…) | OUTRA | Aviso; confirmar antes de entrar no estoque |
+| x949 de **saída** com natureza "troca/reposição/garantia" (v314) | TROCA | Reposição do fornecedor: entra no estoque, **sem título** |
+| NF-e de **entrada** (`tpNF 0`) de terceiro **sem CFOP de compra** (v314) | RETORNO | Mercadoria voltando ao fornecedor: nada entra, itens Ignorar, botão "Ignorar esta nota", **sem título** |
+
+Desde a v314 o tipo da nota também olha o `tpNF` e a natureza da operação (`natOp`): `nfeTipoDaNota` no app,
+`nfeTipoNotaCompleto_` no Code.gs. A **contranota do comprador** ("venda do produtor") exige NF-e de entrada **com
+CFOP de compra** (x101–x125, x401–x405, x116/x117/x922); uma NF-e de entrada 2949 "remessa de troca/entrada" emitida
+pelo fornecedor é o produto velho voltando para ele, não venda. Nota com `tPag 90` (sem pagamento) e sem parcela não
+gera título no Financeiro.
 
 A conferência mostra o **nome** de cada CFOP (`CFOP_NOME`), um aviso por tipo (`NFE_TIPO_INFO`) e, ao confirmar um
 tipo que "não entra" com item marcado para o estoque, pede confirmação. A IA recebe `tipo_pelo_cfop` como pista.
