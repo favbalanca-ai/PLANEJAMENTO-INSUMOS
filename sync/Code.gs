@@ -551,20 +551,22 @@ function movDeleteBySources_(ids){
 // soma ENTRADA e SAÍDA por produto no razão (fonte COMPARTILHADA entre aparelhos: todo
 // aparelho puxa isto e vê o mesmo saldo, não importa quem registrou a compra/aprovou a recom).
 function readMovimentacao(){
-  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {}, nfe = {};
-  if (!s) return { entradas:ent, saidas:sai, nfe:nfe };
-  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai, nfe:nfe };
+  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {}, nfe = {}, devol = [];
+  if (!s) return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
+  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
   var v = s.getRange(2, 1, last - 1, 6).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM
   for (var i = 0; i < v.length; i++){
-    var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]);
+    var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]), org = S(v[i][5]);
     // NF-e que já deu entrada: etiqueta [#chave de 44 dígitos] no ORIGEM (o app bloqueia importar de novo)
-    var mk = S(v[i][5]).match(/\[#(\d{44})\]/);
-    if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
+    var mk = org.match(/\[#(\d{44})\]/), dia = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
+    if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = dia;
     if (!prod || !qtd) continue;
     if (tipo.indexOf('ENTRADA') === 0) ent[prod] = (ent[prod] || 0) + qtd;
-    else if (tipo.indexOf('SA') === 0) sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
+    else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
+      if (mk && /^Devolu/i.test(org)){ var mn = org.match(/NF-e (\S+)/), mf = org.match(/NF-e \S+ · ([^\[]*)\[/);   // v316: devolução ao fornecedor (NF-e de troca/entrada)
+        devol.push({ chave:mk[1], data:dia, produto:prod, un:S(v[i][3]), qtd:qtd, nNF:mn ? mn[1] : '', forn:mf ? S(mf[1]) : '', origem:org.replace(/\s*\[#[^\]]+\]/, '') }); } }
   }
-  return { entradas:ent, saidas:sai, nfe:nfe };
+  return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
 }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){ movDeleteBySources_([id]); }
@@ -1168,6 +1170,11 @@ function nfeClassifica_(c){
   try { if (['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0) finTitulosDaNota_(S(c.chave), c.dups, c.pag, S(c.categoria)); else if (st === 'IGNORADA'){ finCancelaTitulos_(S(c.chave), 'nota ignorada'); try { movDeleteBySources_([S(c.chave)]); } catch (e2) {} } }   // v273 (v276: categoria Manutenção) · v309: ignorar tira a entrada do razão
   catch (e) { Logger.log('títulos da nota ' + c.chave + ': ' + e); }
   var ne = 0; if (c.entrada && S(c.entrada.id)) try { ne = (writeCompraApp(c.entrada) || {}).rows || 0; } catch (e) { Logger.log('entrada da nota ' + c.chave + ': ' + e); }   // v309: entrada no razão no mesmo pedido
+  if (st === 'DEVOLVIDA'){   // v316: mercadoria voltando ao fornecedor — SAÍDA no razão com a etiqueta da nota; entrada errada (mesma etiqueta) e compra do COMPRAS APP somem
+    try { finCancelaTitulos_(S(c.chave), 'devolução ao fornecedor'); } catch (e) {}
+    try { var cm = readMapApp('COMPRAS APP'); if (cm && cm[S(c.chave)] && !cm[S(c.chave)].del) writeCompraApp({ id:S(c.chave), del:true, itens:[], _u:Date.now() }); } catch (e) { Logger.log('compra da devolução ' + c.chave + ': ' + e); }
+    try { var sd = c.saida || { itens:[] }; sd.id = S(c.chave); if (!S(sd.origem)) sd.origem = 'Devolução ao fornecedor · NF-e ' + S(t.s.getRange(row, t.col('Nº') + 1).getValue()); ne += (writeSaida(sd) || {}).rows || 0; } catch (e) { Logger.log('saída da devolução ' + c.chave + ': ' + e); }
+  }
   return { rows:n + 1 + ne };
 }
 // ---- FASE 3: entrega futura (contratos = notas de FATURAMENTO) ----
@@ -1744,7 +1751,7 @@ function writeSaida(sd){
   movDeleteBySource(sd.id);                            // limpa saídas anteriores dessa recom
   var when = new Date();
   if (sd.data && /^\d{4}-\d{2}-\d{2}/.test(String(sd.data))) when = new Date(String(sd.data).slice(0,10) + 'T12:00:00');
-  var origem = 'Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : '') + ' [#' + S(sd.id) + ']', rows = [];
+  var origem = (S(sd.origem) || ('Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : ''))) + ' [#' + S(sd.id) + ']', rows = [];   // v316: devolução ao fornecedor usa origem própria
   for (var i = 0; i < itens.length; i++){ var it = itens[i];
     if (!S(it.produto) || !(N(it.real) > 0)) continue;
     var vt = _vt_(it.custo, it.real);   // v272: custo médio na data da aplicação (calculado pelo app)

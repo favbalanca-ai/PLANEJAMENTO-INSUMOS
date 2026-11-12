@@ -2731,7 +2731,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-315';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-316';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4560,8 +4560,8 @@ const NFE_TIPO_INFO={
   VASILHAME:{entra:false,ignorar:true,cls:'warn',txt:'📦 <b>Consignação, vasilhame ou sacaria</b>. Não é compra: itens já marcados para ignorar.'},
   OUTRA:{entra:false,cls:'warn',txt:'⚠️ <b>Outra operação</b> — não é venda nem remessa (ex.: perda, depósito, exposição). Confira se deve mesmo entrar no estoque.'},
   // v314: troca de lote/produto com o fornecedor — a nota de SAÍDA traz o produto novo; a nota de ENTRADA que o fornecedor emite é o produto velho voltando
-  TROCA:{entra:false,ignorar:true,cls:'warn',txt:'🔁 <b>Reposição do fornecedor (troca)</b>, sem cobrança. A troca é <b>neutra</b>: o lote velho já está no estoque e o novo só toma o lugar dele — itens já marcados para ignorar (o app não lança saída avulsa). Se o produto velho <b>nunca</b> entrou no estoque, desmarque "Ignorar" e dê entrada. Não vira título a pagar.'},   // v315: neutra
-  RETORNO:{entra:false,ignorar:true,cls:'warn',txt:'↪️ <b>Mercadoria voltando ao fornecedor</b>: NF-e de <b>entrada</b> que o fornecedor emitiu para receber de volta o produto (troca, devolução). <b>Nada entra no estoque</b> e não é venda do produtor: itens já marcados para ignorar. Se o produto velho já tinha entrado, lance a <b>saída</b> dele no Estoque.'} };
+  TROCA:{entra:true,cls:'info',txt:'🔁 <b>Reposição do fornecedor (troca)</b>, sem cobrança: o lote novo <b>entra</b> no estoque com o preço da nota (não vira título a pagar). O lote velho sai pela NF-e de <b>troca/entrada</b> que o fornecedor emite — confira essa nota e confirme a devolução.'},   // v316: entrada + saída, cada uma pela sua nota
+  RETORNO:{entra:false,saida:true,cls:'warn',txt:'↪️ <b>Mercadoria voltando ao fornecedor</b>: NF-e de <b>entrada</b> que o fornecedor emitiu para receber de volta o produto (troca, devolução). Não é venda do produtor e nada entra: ao confirmar, cada item vira uma <b>saída</b> do estoque (razão MOVIMENTAÇÃO ESTOQUE, etiqueta da nota) pelo custo médio do dia. Se o produto nunca entrou, use "Ignorar esta nota".'} };
 function nfeTipoAvisoHtml(n){ const I=NFE_TIPO_INFO[n.tipo]; if(!I||!I.txt) return ''; return `<div class="nfe-aviso ${I.cls||'info'}">${I.txt} <span class="mut">CFOP ${esc(nfeCfopsTxt(n.itens))}</span></div>`; }
 // destino sugerido para um item só pelo CFOP (antes da descrição): '' quando o CFOP não diz nada
 function nfeDestPorCfop(it){ const t=nfeTipoCfop(it.cfop), x=String(it.xprod||''); if(t==='COMBUSTIVEL') return /diesel|arla|s-?10\b|s-?500|gasolina|etanol|querosene/i.test(x)?'tanque':'maquina'; if(t==='ATIVO'||t==='CONSERTO') return 'maquina'; if(t==='CONSUMO') return 'oficina'; return ''; }
@@ -4708,7 +4708,6 @@ function nfeSugereProduto(xprod){ const xt=new Set(_nfeTok(xprod)); if(!xt.size)
 function nfeCustoReal(it,fator){ const q=(+it.qcom||0)*(+fator||0); return q>0?(it.vprod-it.vdesc+it.vfrete+it.voutro+it.vipi+it.vst)/q:0; }
 // ---- estado de cada item na conferência ----
 function nfeItemInicial(nota,it){
-  if(nota.tipo==='RETORNO'||nota.tipo==='TROCA') return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v314: mercadoria voltando ao fornecedor — nada entra · v315: troca é neutra
   const dp=deparaDe(nota.cnpj,it.cprod);
   if(dp && nfeDestManut(dp.destino)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:false,fator:1,ok:true,dest:dp.destino,maq:dp.maquina||nfeMaqPadrao(dp.destino,nota.cnpj),tipoMaq:dp.tipoGasto||nfeTipoGuess(dp.destino,it.xprod)});   // v276/v285: memória "→ máquina / oficina / benfeitoria"
   const det=nfeDetectaPecas(nota), idx=(nota.itens||[]).indexOf(it), sugP=nfeSugereProduto(it.xprod), pecaSug=det.itens[idx]||((det.forn&&!sugP&&!(dp&&PROD[dp.produto]))?'maquina':'');   // fornecedor de peças: item que não parece insumo conhecido vai para máquina · v285: oficina/benfeitoria pela descrição
@@ -4795,7 +4794,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     if(nota.cstat!=='100') throw new Error(`nota não autorizada pela SEFAZ (cStat ${nota.cstat||'—'})`);
     if(!nfeChaveOk(nota.chave)) throw new Error('chave de acesso inválida (dígito verificador não confere)');
     const ja=nfeJaEntrou(nota.chave);
-    if(ja && !opts.reclass) throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)}) — para corrigir, use "Reclassificar" na lista de compras`);
+    if(ja && !opts.reclass && nfeTipoDaNota(nota)!=='RETORNO') throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)}) — para corrigir, use "Reclassificar" na lista de compras`);   // v316: nota de devolução recebida por engano abre para confirmar a devolução
     if(!nota.itens.length) throw new Error('a nota não tem itens');
     nota.tipo=nfeTipoDaNota(nota); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha · v314: tpNF + natureza
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
@@ -5089,8 +5088,10 @@ function nfeConfirmar(modo){
   const imp=nfeImport; if(!imp) return; const n=imp.nota, srv=nfeServerOk();
   modo = modo || 'entrada';
   if(n.tipo==='FATURAMENTO' && modo!=='contrato'){ toast(srv?'Nota de faturamento: use "Registrar contrato".':'Nota de faturamento (entrega futura) não entra no estoque. Importe a nota de remessa quando a mercadoria sair.'); return; }
-  if(modo!=='entrada' && !srv){ toast('Em trânsito e contratos precisam da NF-e ligada (token + Code.gs novo)'); return; }
+  if(modo!=='entrada' && !srv){ toast('Em trânsito, contratos e devoluções precisam da NF-e ligada (token + Code.gs novo)'); return; }
   if(!imp.itens.every(nfeResolvido)){ toast('Resolva todos os itens (produto do app e fator, ou Ignorar)'); return; }
+  if(modo==='devolucao'){ if(n.tipo!=='RETORNO'){ toast('Só a NF-e de troca/devolução do fornecedor lança saída'); return; } return nfeConfirmarDevolucao(imp); }   // v316
+  if(n.tipo==='RETORNO'){ toast('Mercadoria voltando ao fornecedor: use "Confirmar devolução" (saída) ou "Ignorar esta nota"'); return; }
   if(imp.reclass && modo!=='entrada'){ toast('Reclassificar só regrava a entrada'); return; }
   const ja=imp.reclass?'':nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
   { const I=NFE_TIPO_INFO[n.tipo]; if(I && !I.entra && n.tipo!=='FATURAMENTO' && itensEstoque(imp) && !confirm(`Esta nota é "${NFE_TIPO[n.tipo]||n.tipo}" (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}): normalmente não entra no estoque de insumos.\n\nTem ${itensEstoque(imp)} item(ns) marcado(s) para o estoque. Continuar mesmo assim?`)) return; }   // v307
@@ -5138,6 +5139,28 @@ function nfeConfirmar(modo){
   if(rec && !srv) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });   // v309: com a NF-e ligada a entrada já foi junto da classificação
   pushDeParaNfe();
 }
+// v316: NF-e de troca/devolução do fornecedor → SAÍDA dos itens no razão (etiqueta [#chave], idempotente) e status DEVOLVIDA.
+// Se esta nota tinha sido recebida como compra por engano (razão com ENTRADA [#chave]), a planilha apaga a entrada e a
+// compra do COMPRAS APP no mesmo pedido; aqui a compra local sai da lista.
+function nfeConfirmarDevolucao(imp){
+  const n=imp.nota, itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&i.produto&&+i.qtd>0);
+  if(!usados.length){ toast('Todos os itens estão marcados como Ignorar — use "Ignorar esta nota"'); return; }
+  const falta=usados.filter(i=>saldoEstoqueDe(i.produto)+1e-6<i.qtd);
+  if(falta.length && !confirm('⚠ Saída maior que o saldo em estoque:\n'+falta.map(i=>`• ${i.produto}: devolve ${num(i.qtd)} ${i.un||''} · saldo ${num(saldoEstoqueDe(i.produto))}`).join('\n')+'\n\nO saldo vai ficar negativo. Continuar mesmo assim?')) return;
+  const data=imp.data||_hojeISO();
+  const saida={ id:n.chave, data, origem:`Devolução ao fornecedor · NF-e ${n.nNF||''} · ${n.fornecedor||''}`.trim(), operador:(sessUsuario()||{}).nome||'app',
+    itens:usados.map(i=>({produto:i.produto, un:i.un||(PROD[i.produto]||{}).un||'', real:+i.qtd, custo:+(custoMedioDe(i.produto)||0).toFixed(4)})) };
+  const i0=(COMPRAS.registros||[]).findIndex(x=>x.id===n.chave);   // entrada errada desta nota: sai daqui; a planilha apaga no mesmo pedido
+  if(i0>=0){ const old=COMPRAS.registros[i0]; COMPRAS.registros.splice(i0,1);
+    const ex=comprasExcluidas().filter(e=>e.id!==n.chave); ex.push({id:n.chave, _u:tsAgora(), ok:true, srv:!!old.pushed, itens:old.pushed?(old.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null}); COMPRAS.excluidas=ex.slice(-300); saveCompras(); }
+  nfeSalvarDePara(imp);
+  const cl={chave:n.chave, status:'DEVOLVIDA', data, por:'app', xml:imp.origem==='arquivo'?imp.xml:'', itens:itensP, saida, obs:`devolução ao fornecedor: ${usados.length} produto(s) saíram do estoque`};
+  (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+  if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
+  nfeImport=null; route(); updateEditBadge(); pushDeParaNfe();
+  toast(`Devolução da NF-e ${n.nNF} registrada: ${usados.length} produto(s) saem do estoque`);
+}
+function saldoEstoqueDe(p){ try{ return (estoqueDe(p)||0)+(estoqueEntradas()[p]||0)-(estoqueSaidas()[p]||0); }catch(e){ return 0; } }
 // ---- contratos (fase 3) ----
 let NFE_CONTRATOS=null;   // {ts, lista:[…], erro}
 function nfeContratosCarregar(force){
@@ -5190,7 +5213,7 @@ function nfeConferirHtml(){
     return `<div class="nfe-it st-${st}">
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
       <div class="nfe-it-sub">cód. ${esc(it.cprod)} · <span title="${esc(nfeCfopNome(it.cfop))}">CFOP ${esc(it.cfop)}${nfeCfopNome(it.cfop)?` <span class="mut">(${esc(nfeCfopNome(it.cfop))})</span>`:''}</span> · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
-      ${it.ignorar?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${!nfeDestManut(it.dest)?' checked':''}> 📦 Insumo (estoque)</label>${Object.keys(NFE_DEST).map(k=>`<label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="${k}"${it.dest===k?' checked':''}> ${NFE_DEST[k].ico} ${NFE_DEST[k].lbl}</label>`).join('')}</div>`}
+      ${(it.ignorar||n.tipo==='RETORNO')?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${!nfeDestManut(it.dest)?' checked':''}> 📦 Insumo (estoque)</label>${Object.keys(NFE_DEST).map(k=>`<label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="${k}"${it.dest===k?' checked':''}> ${NFE_DEST[k].ico} ${NFE_DEST[k].lbl}</label>`).join('')}</div>`}
       ${it.ignorar?'':nfeDestManut(it.dest)?`<div class="nfe-it-map nfe-it-maq">
         ${it.dest==='maquina'?`<label class="nfe-prod">Máquina ou bem<input list="maqlist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="trator, pulverizador, caminhonete, outro bem…"></label>`
           :it.dest==='benfeitoria'?`<label class="nfe-prod">Benfeitoria<input list="benflist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="galpão, cerca, curral, casa, estrada…"></label>`
@@ -5201,8 +5224,9 @@ function nfeConferirHtml(){
       </div>`:`<div class="nfe-it-map">
         <label class="nfe-prod">Produto do app<span class="agp-row"><input list="prodlist" class="txt" data-nfi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="escolha o produto…"><button type="button" class="btn btn-outline btn-sm" data-act="nfiMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button><button type="button" class="btn btn-outline btn-sm" data-act="nfiNovo" data-i="${i}" title="Cadastrar este item como produto novo no portfólio">➕</button></span></label>
         <label class="nfe-fat">Fator<input class="cell" inputmode="decimal" data-nfi="fator" data-i="${i}" value="${+it.fator||''}" title="quanto 1 ${esc(it.ucom)} vale na unidade do app"></label>
-        <div class="nfe-kv"><small>Entra no estoque</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
-        <div class="nfe-kv"><small>Custo real</small><b>${c>0?brl(c):'—'}${un(it)?'/'+esc(un(it)):''}</b><span class="${dif==null?'':(dif>5?'up':(dif<-5?'down':''))}">${ref>0?(dif!=null?`${dif>=0?'+':''}${nf1.format(dif)}% vs ref. ${brl(ref)}`:`ref. ${brl(ref)}`):'sem preço de referência'}</span></div>
+        <div class="nfe-kv"><small>${n.tipo==='RETORNO'?'Sai do estoque':'Entra no estoque'}</small><b>${num(q)} ${esc(un(it)||'')}</b><span>${num(it.qcom)} ${esc(it.ucom)} × ${nf2.format(+it.fator||0)}</span></div>
+        ${n.tipo==='RETORNO'?`<div class="nfe-kv"><small>Custo da saída</small><b>${it.produto?brl(custoMedioDe(it.produto)):'—'}${un(it)?'/'+esc(un(it)):''}</b><span>custo médio atual · saldo ${it.produto?num(saldoEstoqueDe(it.produto)):'—'} ${esc(un(it)||'')}</span></div>`
+        :`<div class="nfe-kv"><small>Custo real</small><b>${c>0?brl(c):'—'}${un(it)?'/'+esc(un(it)):''}</b><span class="${dif==null?'':(dif>5?'up':(dif<-5?'down':''))}">${ref>0?(dif!=null?`${dif>=0?'+':''}${nf1.format(dif)}% vs ref. ${brl(ref)}`:`ref. ${brl(ref)}`):'sem preço de referência'}</span></div>`}
       </div>`}
       ${st==='novo'&&it.catSug?`<div class="nfe-catsug">🏛️ Catálogo MAPA sugere: <b>${esc(it.catSug.marca)}</b> <span class="ag-cl">${esc(it.catSug.classe)}</span> <button class="btn btn-outline btn-sm" data-act="nfiMapaUsar" data-i="${i}" title="Usa este produto (e cadastra no portfólio se faltar)">✓ Usar</button></div>`:''}
       <div class="nfe-it-act">${st==='sug'?`<button class="btn btn-outline btn-sm" data-act="nfeAceitar" data-i="${i}">✓ Aceitar sugestão</button>`:''}
@@ -5226,14 +5250,15 @@ function nfeConferirHtml(){
       <span class="spacer"></span>
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
-      ${((n.tipo==='RETORNO'||n.tipo==='TROCA')&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn btn-primary btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="${n.tipo==='TROCA'?'Troca neutra: a nota sai da lista sem mexer no estoque':'Mercadoria voltando ao fornecedor: a nota sai da lista sem entrar no estoque'}">🚫 Ignorar esta nota</button>`:''}
-      ${imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''}>♻️ Regravar entrada (substitui a anterior)</button>`
+      ${(n.tipo==='RETORNO'&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn btn-outline btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="O produto nunca entrou no estoque: a nota sai da lista sem mexer no estoque">🚫 Ignorar esta nota</button>`:''}
+      ${n.tipo==='RETORNO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="devolucao"${(pend||!srv)?' disabled':''} title="Lança a SAÍDA dos itens no estoque (razão da planilha, etiqueta da nota)${imp.reclass?' e tira a entrada errada desta nota':''}">↩ Confirmar devolução (saída do estoque)</button>`
+        : imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''}>♻️ Regravar entrada (substitui a anterior)</button>`
         : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>`
         : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' disabled':''}>📑 Registrar contrato (a entregar)</button>`
         : `<button class="btn btn-outline btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''} title="A mercadoria já está na fazenda: dá entrada no estoque agora">📦 Já chegou — dar entrada</button>
            <button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="transito"${pend?' disabled':''} title="Fica EM TRÂNSITO até o operador receber na fazenda (Receber nota)">🚚 Confirmar e pôr em trânsito</button>`}
     </div>
-    <p class="mut nfe-hint">${fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
+    <p class="mut nfe-hint">${n.tipo==='RETORNO'?(!srv?'Devolução precisa da NF-e ligada à planilha (token + Code.gs).':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. <b>Confirmar devolução</b>: cada item sai do estoque pelo custo médio do dia; a nota fica como DEVOLVIDA na planilha.'):fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
   </div>`;
 }
 /* ================= NF-e (fase 4): RECEBER NOTA na fazenda — câmera lê a chave do DANFE =================
@@ -5785,6 +5810,8 @@ function exportEstoquePDF(){
 // entradas: compras registradas no app (COMPRAS APP). O que estiver na planilha além disso aparece como "sem origem aqui".
 function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimentacao)||{};
   const sai=[]; talhoesAll().forEach(t=>usoProdutosDe(t).forEach(l=>{ if(l.produto===prod) sai.push(Object.assign({tal:tNome(t)}, l)); }));
+  { const S=custoMedioCalc().saida; (mov.devol||[]).forEach(d=>{ if(d.produto!==prod||!(+d.qtd>0)) return; const cm=S['dev|'+d.chave+'|'+prod], c=cm!=null?cm:custoMedioDe(prod);
+      sai.push({data:d.data||'', tal:'—', op:'Devolução ao fornecedor', origem:`NF-e ${d.nNF||''}${d.forn?' · '+d.forn:''}`.trim(), qtd:+d.qtd, custo:c, valorReal:+d.qtd*c}); }); }   // v316
   sai.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, pu:+it.preco||0, nfe:!!c.nfe}); }));
   ent.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
@@ -5807,7 +5834,7 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
         ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.forn), esc(l.nf)+(l.nfe?' <small class="mut">NF-e</small>':''), `<b class="num">${fmtDose(l.qtd)}</b>`, l.pu>0?`<span class="num">${brl(l.pu)}</span>`:`<span class="pill cm-ref" title="compra sem preço: vale o preço de referência">ref.</span>`])).join('')}
         ${Math.abs(difE)>=0.0005?row([`<span class="mut">—</span>`,`<i>${difE>0?'lançado em outro aparelho ou direto na planilha':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difE>0?'':'−'}${fmtDose(Math.abs(difE))}</b>`,'']):''}
         ${!ent.length&&Math.abs(difE)<0.0005?'<tr><td colspan="5" class="mut" style="padding:8px 10px">Nenhuma entrada.</td></tr>':''}</tbody></table>
-      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito e das recomendações aprovadas; entradas, das compras registradas. Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota; VALOR UNIT e VALOR TOTAL, o custo).</p>
+      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito, das recomendações aprovadas e das devoluções ao fornecedor (NF-e de troca/entrada); entradas, das compras registradas. Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota; VALOR UNIT e VALOR TOTAL, o custo).</p>
     </div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov); }
 function filterEstoque(){
@@ -11464,6 +11491,7 @@ function _custoMedioCalc(){
   ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ const p=it.produto, q=+it.qtd||0; if(!p||!(q>0)) return;
     const pu=+it.preco||0; push(p,{t:'E', data:_isISO(c.data)?String(c.data).slice(0,10):'', qtd:q, pu:pu>0?pu:precoDe(p), ref:!(pu>0), forn:c.fornecedor||'', nf:c.nf||'', nfe:!!c.nfe, ord:1}); }));
   talhoesAll().forEach(t=>_usoProdutosRaw(t).forEach(l=>push(l.produto,{t:'S', data:l.data||'', qtd:+l.qtd||0, k:_cmKeySaida(l,t.id), tal:t.id, op:l.op, origem:l.origem, ord:2})));
+  (((DATA&&DATA.movimentacao)||{}).devol||[]).forEach(d=>{ if(d.produto&&+d.qtd>0) push(d.produto,{t:'S', data:d.data||'', qtd:+d.qtd, k:'dev|'+d.chave+'|'+d.produto, op:'Devolução', origem:d.origem||'Devolução ao fornecedor', ord:2, dev:true}); });   // v316: devoluções ao fornecedor (NF-e)
   const prods=new Set(Object.keys(ev)); (DATA.produtos||[]).forEach(p=>{ if(p.produto && estoqueDe(p.produto)) prods.add(p.produto); });
   const out={}, saida={}, cmpD=(a,b)=>(a.data||'9999-99-99').localeCompare(b.data||'9999-99-99')||a.ord-b.ord;
   prods.forEach(p=>{
