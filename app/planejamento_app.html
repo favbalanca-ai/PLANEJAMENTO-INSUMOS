@@ -2739,7 +2739,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-320';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-321';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9331,7 +9331,7 @@ V.insumos=function(){
   const rows=recentes.map(it=>{ const fv=precoFinal(it,'vista'), temB=bulaTem(bulaDe(it.produto)); return `<div class="nfe-row"><div class="nfe-row-main"><b>${esc(it.produto)}</b><span class="nfe-tipo">${esc(it.classe||'sem classe')}</span>
       <div class="mut">${esc(it.un||'—')}${it.empresa?` · ${esc(it.empresa)}`:''} · ${fv>0?`R$ ${fmtn(fv)}`:'sem preço'} · ${esc(fmtDataBR(new Date(+it.criado).toISOString().slice(0,10)))}</div></div>
       <div class="nfe-row-act"><button class="btn btn-outline btn-sm" data-act="insEditar" data-prod="${esc(it.produto)}" title="Abrir na lista de Preços">💲 Preços</button><button class="btn btn-outline btn-sm${temB?' on':''}" data-act="bulaAbrir" data-prod="${esc(it.produto)}">📘 ${temB?'Bula':'Cadastrar bula'}</button></div></div>`; }).join('');
-  return `<div class="panel"><div class="panel-head"><h2>➕ Cadastrar insumo</h2><span class="sub">entra no portfólio da safra <b>${esc(PRECOS.atual)}</b> (lista de Preços) e já pode ser usado em notas, compras, estoque e recomendações</span></div>
+  return `<div class="panel"><div class="panel-head"><h2>➕ Cadastrar insumo</h2><span class="sub">entra no portfólio da safra <b>${esc(PRECOS.atual)}</b> (lista de Preços) e já pode ser usado em notas, compras, estoque e recomendações · na planilha, a linha na aba <b>PORTIFÓLIO</b> é criada sozinha na primeira vez que o insumo for usado no planejamento (estoque, pedido ou operação)</span></div>
     <div class="ins-form">
       <label class="ins-wide">Nome do insumo<span class="agp-row"><input class="txt" data-insf="nome" value="${esc(F.nome)}" placeholder="como vai aparecer no app (ex.: GLIFOSATO 480 SL)" autocomplete="off"><button type="button" class="btn btn-outline btn-sm" data-act="insMapa" title="Preencher pelo catálogo MAPA (defensivo registrado ou cultivar): nome, classe, fabricante, unidade e bula">🏛️ Catálogo MAPA</button></span>
         ${ja?`<small class="ins-aviso err">⚠ <b>${esc(ja)}</b> já está no portfólio — não vai duplicar. <a class="link" data-act="insEditar" data-prod="${esc(ja)}">Abrir em Preços</a></small>`:F.p?`<small class="ins-aviso ok">🏛️ Do catálogo MAPA: ${esc(F.p.ia||'')} · reg. ${esc(F.p.r||'')} — a bula entra junto</small>`:F.cultivar?`<small class="ins-aviso ok">🌱 Cultivar ${esc(F.cultivar)} (SIGEF)</small>`:''}</label>
@@ -14210,7 +14210,21 @@ function buildFieldEdits(){
       plano: snapshotPlano(t.id) }); });
   // talhões excluídos no app (que existem na planilha) -> exclui lá (linha + aba)
   for(const id in (OV.talhaoRemoved||{})){ if(OV.talhaoRemoved[id] && isBase(id)) eds.push({type:'deltalhao', talhao:id}); }
+  // v321: produto que só existe em Preços (aba Cadastrar insumos / "Novo produto") ainda não tem linha na aba PORTIFÓLIO.
+  // Cria a linha ANTES (addprod, na frente da lista) — senão a planilha responde "produto não encontrado" em loop.
+  const novos=addprodPendentes(eds);
+  if(novos.length) eds.unshift(...novos);
   return eds;
+}
+// produtos citados nas edições que ainda não têm linha no PORTIFÓLIO (sintéticos do módulo Preços ou que a planilha disse não achar)
+let _addprodForce=new Set();
+function addprodPendentes(eds){
+  const nomes=new Set(), ref=nm=>{ if(!nm) return; const p=PROD[nm]; if(p&&(p._precos||_addprodForce.has(nm))) nomes.add(nm); };
+  eds.forEach(e=>{ if(e.type==='itemprod') ref(e.to);
+    else if(e.type==='reorderops') (e.ops||[]).forEach(o=>(o.itens||[]).forEach(i=>ref(i.produto)));
+    else if(e.type==='addtalhao'){ const pl=e.plano||{}; ['principal','safrinha'].forEach(s=>(pl[s]||[]).forEach(o=>(o.itens||[]).forEach(i=>ref(i.produto)))); }
+    else ref(e.produto); });
+  return [...nomes].map(nm=>{ const p=PROD[nm]||{}; return {type:'addprod', empresa:p.empresa||'', classe:p.classe||'', produto:nm, value:+p.preco>0?+(+p.preco).toFixed(2):''}; });
 }
 function applyPulledData(d, raw){
   DATA=d; dadosDaPlanilha=true; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';   // produtos novos: mergePrecosProdutos refaz
@@ -14415,6 +14429,10 @@ async function syncPush(opts){
       ok+=(pr.ok||0); fail+=(pr.fail||0); if(pr.msgs&&pr.msgs.length) msgs=msgs.concat(pr.msgs);
     }
     const res={ok,fail,msgs};
+    // v321: autoconserto — a planilha não achou o produto no PORTIFÓLIO, mas ele existe no app: cria a linha (addprod) e reenvia UMA vez
+    if(res.fail && !opts._retry){ const falt=[]; (res.msgs||[]).forEach(m=>{ const mm=/produto não encontrado: (.+?)\s*$/.exec(String(m)); const nm=mm&&mm[1].trim(); if(nm&&PROD[nm]&&!_addprodForce.has(nm)) falt.push(nm); });
+      if(falt.length){ falt.forEach(nm=>_addprodForce.add(nm)); syncLog('↻ Sem linha no PORTIFÓLIO: '+falt.join(', ')+' — criando e reenviando…'); syncBusy=false; return syncPush(Object.assign({},opts,{_retry:true})); } }
+    if(res.fail===0) _addprodForce.clear();
     lastPushSig=sig; lastPushOk=(res.fail===0);   // se houve falha, permite novo reenvio depois
     addHist('push', res.fail===0, `${res.ok} gravadas, ${res.fail} falhas`);
     if(!opts.auto) syncLog(`✔ Enviado: ${res.ok} gravadas, ${res.fail} falhas.`+((res.msgs&&res.msgs.length)?' ['+res.msgs.slice(0,3).join(' | ')+']':''));
