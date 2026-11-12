@@ -1146,18 +1146,30 @@ function nfeReabrir_(r){
   try { nfeRepararChaves_(); } catch (e) {}
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, S(r && r.chave)); if (!row) return { rows:0, erro:'nota não encontrada' };
   var st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase();
-  var podeForcar = r && r.forcar && (st === 'EM TRÂNSITO' || st === 'A ENTREGAR');   // v309: classificada errada antes de chegar
-  if (st !== 'IGNORADA' && !podeForcar) return { rows:0, erro:'a nota está ' + (st || 'sem status') + ' — só IGNORADA, EM TRÂNSITO ou A ENTREGAR podem ser reabertas' };
+  var recebida = st === 'RECEBIDA' || st === 'RECEBIDA SEM XML';
+  var podeForcar = r && r.forcar && (st === 'EM TRÂNSITO' || st === 'A ENTREGAR' || (recebida && r.recebida));   // v309: classificada errada antes de chegar · v319: recebida por engano (desfazer recebimento)
+  if (st !== 'IGNORADA' && !podeForcar) return { rows:0, erro:'a nota está ' + (st || 'sem status') + ' — só IGNORADA, EM TRÂNSITO ou A ENTREGAR podem ser reabertas' + (recebida ? ' (recebida: use "Desfazer recebimento")' : '') };
   var obs = S(t.s.getRange(row, t.col('OBS') + 1).getValue()), chave = S(r.chave);
-  if (podeForcar){   // desfaz o que a classificação criou: itens, títulos em aberto, apropriações, entrada no razão, contrato
+  if (podeForcar){   // desfaz o que a classificação criou: itens, títulos em aberto, apropriações, entrada no razão, contrato · v319: compra do COMPRAS APP, tanque, recebimento
     try { var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS), s = ti.s, last = s.getLastRow(); if (last >= 2){ var v = s.getRange(2, ti.col('CHAVE') + 1, last - 1, 1).getValues(), apagar = []; for (var i = 0; i < v.length; i++) if (S(v[i][0]) === chave) apagar.push(i + 2); _delLinhas_(s, apagar); } } catch (e) {}
-    try { finCancelaTitulos_(chave, 'nota reaberta'); } catch (e) {}
+    try { finCancelaTitulos_(chave, recebida ? 'recebimento desfeito no app' : 'nota reaberta'); } catch (e) {}
     try { if (sh(MANUT_SHEET)) manutGrava_(chave, [], {}); } catch (e) {}
+    try { var cm = readMapApp('COMPRAS APP'); if (cm && cm[chave] && !cm[chave].del) writeCompraApp({ id:chave, del:true, itens:[], _u:Date.now() }); } catch (e) { Logger.log('compra ' + chave + ': ' + e); }   // v319: apaga a compra (e o razão pela etiqueta)
     try { movDeleteBySources_([chave]); } catch (e) {}
+    try { abastDaNotaApaga_(chave); } catch (e) {}   // v319: diesel/Arla que esta nota pôs no tanque
     var ref = S(t.s.getRange(row, t.col('CHAVE REFERENCIADA') + 1).getValue());
-    _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'OBS':'reaberta no app (estava ' + st.toLowerCase() + ')' + (obs ? ' · antes: ' + obs : '') });
+    var vals = { 'STATUS':'A CLASSIFICAR', 'OBS':(recebida ? 'recebimento desfeito no app (estava ' : 'reaberta no app (estava ') + st.toLowerCase() + ')' + (obs ? ' · antes: ' + obs : '') };
+    if (recebida){ vals['RECEBIDA EM'] = ''; vals['RECEBIDA POR'] = ''; }
+    // v319: relê o XML — depósito, retorno de depósito ou estorno já ficam IGNORADAS com o motivo (e ligadas à nota de venda)
+    var fid = S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()), out = { rows:1, status:'A CLASSIFICAR', obs:vals['OBS'] };
+    if (fid) try { var nx = nfeLerGs_(_blobTxt(DriveApp.getFileById(fid).getBlob()));
+      if (nx && !nx.erro){ var novo = nx.tipo || 'OUTRA'; vals['TIPO'] = novo;
+        if (NFE_TIPO_NOTA_IGN_[novo]){ vals['STATUS'] = 'IGNORADA'; vals['OBS'] = nfeAutoIgnora_(nx);
+          if (novo === 'ESTORNO') try { nfeMarcaEstornada_(t, nx); } catch (e5) {} else try { var lg = nfeArmazemLiga_(t, nx); if (lg) vals['CHAVE REFERENCIADA'] = lg; } catch (e6) {} }
+        out.status = vals['STATUS']; out.obs = vals['OBS']; out.tipo = novo; } } catch (e) { Logger.log('reler ' + chave + ': ' + e); }
+    _setCells_(t, row, vals);
     try { if (st === 'A ENTREGAR') _atualizaContrato_(chave); else if (ref) _atualizaContrato_(ref); } catch (e) {}
-    return { rows:1 }; }
+    return out; }
   _setCells_(t, row, { 'STATUS':'A CLASSIFICAR', 'OBS':'reaberta no app' + (obs ? ' (antes: ' + obs + ')' : '') });
   return { rows:1 };
 }
@@ -2819,7 +2831,7 @@ function gravaUm_(payload, acc, cfg, out){
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
       else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
       else if (payload.__nfeProdutor){ var np = nfeAddProdutor_(payload.__nfeProdutor); out.ok = np.rows; if (np.erro){ out.fail = 1; out.msgs.push(np.erro); } }
-      else if (payload.__nfeReabrir){ var ra = nfeReabrir_(payload.__nfeReabrir); out.ok = ra.rows; if (ra.erro){ out.fail = 1; out.msgs.push(ra.erro); } }
+      else if (payload.__nfeReabrir){ var ra = nfeReabrir_(payload.__nfeReabrir); out.ok = ra.rows; if (ra.erro){ out.fail = 1; out.msgs.push(ra.erro); } else if (ra.status) out.reabrir = { status:ra.status, obs:ra.obs, tipo:ra.tipo }; }   // v319: o app mostra o que a nota virou
       else if (payload.__nfeVenda){ var vd = nfeVenda_(payload.__nfeVenda, acc); out.ok = vd.rows; if (vd.erro){ out.fail = 1; out.msgs.push(vd.erro); } }   // v277
       else if (payload.__nfeClassifica){ var nc = nfeClassifica_(payload.__nfeClassifica); out.ok = nc.rows; if (nc.erro){ out.fail = 1; out.msgs.push(nc.erro); } }
       else if (payload.__nfeUpload){ out.nfe = processarXmlNfe(S(payload.__nfeUpload.xml), 'app'); out.ok = 1; }   // (a trava do doPost já protege)

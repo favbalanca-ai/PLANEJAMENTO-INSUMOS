@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Desfazer recebimento (v319)** — nota recebida por engano como compra (caso real: as notas de depósito e de retorno
+  do armazém da Bravo, recebidas como compra do Cruiser) ganha o botão **↩ Desfazer recebimento** na lista de compras
+  (admin, NF-e ligada; nas duas vistas). Na planilha, `__nfeReabrir{forcar, recebida}` desfaz tudo de uma vez: entrada no
+  razão, compra no COMPRAS APP, itens, títulos em aberto (cancelados com o motivo), apropriações e diesel no tanque;
+  limpa RECEBIDA EM/POR e **relê o XML**: depósito, retorno de depósito ou estorno já ficam IGNORADAS com o motivo e
+  ligadas à nota de venda; o resto volta para "a classificar". O app tira a compra do aparelho (sem reenviar a
+  exclusão) e mostra no toast o que a nota virou (`nfeDesfazerRecebimento`).
 - **Fluxo do armazém geral (v318)** — a compra entregue via armazém segue as notas: (1) a **nota de venda** do
   fornecedor com entrega num terceiro (`entrega` ≠ destinatário) mostra o aviso "Entrega no armazém X: confirme e ponha
   em trânsito" (`nfeEntregaTerceiro`/`nfeEntregaHtml`); (2) a nota de **depósito** do armazém fica IGNORADA e anota na

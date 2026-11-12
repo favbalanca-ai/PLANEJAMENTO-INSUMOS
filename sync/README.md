@@ -132,6 +132,14 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Desfazer recebimento (v319)
+
+- `nfeReabrir_` aceita `recebida:true` (com `forcar`) para notas RECEBIDA / RECEBIDA SEM XML: além do que a v309 já
+  desfazia (itens, títulos em aberto, apropriações, razão, contrato), apaga a compra do COMPRAS APP
+  (`writeCompraApp({id, del:true})`), o diesel do tanque (`abastDaNotaApaga_`) e limpa RECEBIDA EM/POR. Depois relê o
+  XML (`nfeLerGs_`): tipo em `NFE_TIPO_NOTA_IGN_` → STATUS IGNORADA com `nfeAutoIgnora_` e ligação (`nfeArmazemLiga_`
+  / `nfeMarcaEstornada_`); senão A CLASSIFICAR com o TIPO atualizado. `doPost` devolve `reabrir:{status, obs, tipo}`.
+
 ## Fluxo do armazém geral (v318)
 
 - `nfeLerGs_` devolve `entregaDoc`/`entregaNome` (bloco `entrega`) e `autXml` (CNPJs autorizados).
