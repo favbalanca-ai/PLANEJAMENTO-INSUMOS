@@ -2730,7 +2730,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-312';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-313';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5021,7 +5021,7 @@ function nfeListaHtml(){
       :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:'');
     return `<div class="nfe-row${cls}" data-busca="${esc(nfeBuscaTxt(nt, tipoTxt))}">
       <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(tipoTxt)}</span>
-        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div>${ia}</div>
+        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div>${(nt.xprods&&nt.xprods.length)?`<div class="mut nfe-itens">📦 ${esc(nt.xprods.slice(0,3).join(' · '))}${nt.xprods.length>3?` +${nt.xprods.length-3}`:''}</div>`:''}${ia}</div>
       <div class="nfe-row-act">${R&&R.pronto?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
         :`<button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${venda?'🌾 Conferir venda':'Conferir'}</button>`}
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`; }).join('');
@@ -5813,7 +5813,7 @@ const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Par
 const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
 const FIN_SIT={vencido:['Vencido','neg'], d7:['Vence em 7 dias','warn'], d30:['Vence em 30 dias',''], aberto:['Aberto',''], pago:['Pago','ok'], cancelado:['Cancelado','off']};
 let FIN_UI={st:'aberto', prod:'', q:'', mes:''}, finDraft=null, CAD_EDIT=null;
-function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}, extratoBanco:f.extratoBanco||[], regrasBanco:f.regrasBanco||[], fechamentos:f.fechamentos||[]}; }   // v291: conciliação bancária · v292: fechamentos
+function FIN(){ const f=(DATA&&DATA.financeiro)||{}; return {extratoAte:f.extratoAte||{}, produtores:f.produtores||[], imoveis:f.imoveis||[], contas:f.contas||[], titulos:f.titulos||[], baixas:f.baixas||[], contrapartes:f.contrapartes||[], contador:f.contador||{}, lcdprGerado:f.lcdprGerado||{}, extratoBanco:f.extratoBanco||[], regrasBanco:f.regrasBanco||[], fechamentos:f.fechamentos||[]}; }   // v291: conciliação bancária · v292: fechamentos
 // ---- baixas (v274): abatido = valor pago − juros + desconto; saldo do título = valor − Σ abatidos ----
 function finBaixasDe(id){ return FIN().baixas.filter(b=>b.titulo===id).sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))); }
 const finAbatido=b=>(+b.valorPago||0)-(+b.juros||0)+(+b.desconto||0);
@@ -5871,7 +5871,8 @@ V.financeiro=function(){
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
   const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
-  const kpis=`<div class="kpi-grid">
+  finRascunhoRestaurar();
+  const kpis=finPorProdutorHtml(prods)+`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
     <div class="kpi${R.nV?' kpi-neg':''}"><div class="k-label">Vencidos</div><div class="k-value" style="color:var(--red)">${brl0(R.vencido)}</div><div class="k-sub">${R.nV} título(s)</div></div>
     <div class="kpi"><div class="k-label">Vencem em 7 dias</div><div class="k-value" style="color:var(--amber)">${brl0(R.d7)}</div><div class="k-sub">${R.n7} título(s), com os vencidos</div></div>
@@ -5884,13 +5885,14 @@ V.financeiro=function(){
   if(FIN_UI.view==='fechamento') return kpis+seg+finFechamentoHtml();   // v292: fechamento mensal
   const L=finLista(), hj=_hojeISO();
   const meses=[...new Set(F.titulos.map(t=>String(t.vencimento||'').slice(0,7)).filter(Boolean))].sort().reverse();
-  const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('');
+  const chips=[['aberto','Em aberto'],['vencido','Vencidos'],['7d','7 dias'],['pago','Pagos'],['cancelado','Cancelados'],['todos','Todos']].map(([k,l])=>`<button class="chip-f${FIN_UI.st===k?' on':''}" data-finst="${k}">${l}</button>`).join('')
+    +(FIN_SEL.size?`<button class="btn btn-primary btn-sm" data-act="finLoteAbrir" style="margin-left:8px">💳 Baixar ${FIN_SEL.size} selecionado(s)</button><button class="btn btn-outline btn-sm" data-act="finLoteLimpar">✕</button>`:'');   // v313: baixa em lote
   const rows=L.map(t=>{ const sit=finSit(t), [lbl,cls]=FIN_SIT[sit], pagar=String(t.tipo||'PAGAR').toUpperCase()==='PAGAR', d=finDias(t), manual=/^m:/.test(String(t.id));
     const bx=finBaixasDe(t.id), saldo=finSaldo(t), parcial=String(t.status||'').toUpperCase()==='PARCIAL'||(bx.length&&_finAberto(sit)), semConta=finSemConta(t), aberto=FIN_UI.open&&FIN_UI.open[t.id];
     const stTxt=sit==='pago'?(semConta?'Pago · sem conta':'Pago '+(t.dataPgto?_dtBRc(t.dataPgto):'')):(parcial?'Parcial · saldo '+brl(saldo):lbl);
     const sub=aberto?`<tr class="fin-bxs"><td colspan="7"><div class="fin-bx-list"><b>Baixas deste título</b>${bx.length?`<table><thead><tr><th>Data</th><th>Conta</th><th class="num">Valor pago</th><th class="num">Juros</th><th class="num">Desconto</th><th>Comprovante</th><th></th></tr></thead><tbody>${bx.map(b=>`<tr><td>${b.data?_dtBRc(b.data):'—'}</td><td>${esc(finContaNome(b.conta))}</td><td class="num"><b>${brl(+b.valorPago||0)}</b></td><td class="num">${+b.juros?brl(+b.juros):'·'}</td><td class="num">${+b.desconto?brl(+b.desconto):'·'}</td><td>${b.compensacao==='S'?'<span class="pill cm-ref">compensação</span> ':''}${b.comprovante?`<a class="link" href="${esc(b.comprovante)}" target="_blank" rel="noopener">📎 abrir</a>`:'<span class="mut">—</span>'}${b.obs?` <small class="mut">${esc(b.obs)}</small>`:''}</td><td><button class="icon-btn del" data-act="finBxDel" data-id="${esc(b.id)}" title="Excluir baixa">🗑</button></td></tr>`).join('')}</tbody></table>`:'<span class="mut">Nenhuma baixa registrada.</span>'}${semConta?'<div class="mut" style="margin-top:4px">Marcado como pago na versão anterior, sem conta bancária. Use <b>Completar baixa</b> para o Livro Caixa ter a conta.</div>':''}</div></td></tr>`:'';
     return `<tr class="fin-r" data-id="${esc(t.id)}">
-      <td class="num" data-th="Vencimento"><b class="fin-venc ${cls}">${t.vencimento?_dtBRc(t.vencimento):'—'}</b>${_finAberto(sit)&&d!=null&&d<=30?`<small>${d<0?`${-d} d de atraso`:(d===0?'vence hoje':`em ${d} d`)}</small>`:''}</td>
+      <td class="num" data-th="Vencimento">${_finAberto(sit)&&!semConta?`<input type="checkbox" class="fin-sel" data-finsel="${esc(t.id)}"${FIN_SEL.has(t.id)?' checked':''} title="Selecionar para baixar em lote"> `:''}<b class="fin-venc ${cls}">${t.vencimento?_dtBRc(t.vencimento):'—'}</b>${_finAberto(sit)&&d!=null&&d<=30?`<small>${d<0?`${-d} d de atraso`:(d===0?'vence hoje':`em ${d} d`)}</small>`:''}</td>
       <td class="c-full"><b>${esc(t.participanteNome||t.participante||'—')}</b> <span class="mut">${esc(String(t.docTipo||'').replace(/^\d\s*-\s*/,''))} ${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''}${!pagar?' · <b>a receber</b>':''}</span>${t.obs?`<div class="mut fin-obs">${esc(t.obs)}</div>`:''}${bx.length||semConta?`<a class="link fin-bx-tg" data-act="finBxToggle" data-id="${esc(t.id)}">${aberto?'▾':'▸'} ${bx.length?bx.length+' baixa(s)':'sem baixa'}</a>`:''}</td>
       <td data-th="Produtor">${esc(finProdNome(t.produtor))}</td>
       <td data-th="Categoria" class="c-more">${esc(t.categoria||'—')}${t.formaPgto?` <span class="mut">· ${esc(t.formaPgto)}</span>`:''}${t.imovel?` <span class="mut">· ${esc(t.imovel)}</span>`:''}</td>
@@ -5899,7 +5901,7 @@ V.financeiro=function(){
       <td class="fin-acts">${_finAberto(sit)?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Registrar o pagamento na conta do produtor">💳 Baixar</button>`:(semConta?`<button class="btn btn-primary btn-sm" data-act="finBaixar" data-id="${esc(t.id)}" title="Informar a conta deste pagamento">Completar baixa</button>`:((sit==='pago'&&!bx.length)||sit==='cancelado'?`<button class="btn btn-outline btn-sm" data-act="finReabrir" data-id="${esc(t.id)}" title="${sit==='cancelado'?'Cancelado por engano: volta a aberto':'Volta a aberto'}">Reabrir</button>`:''))}<button class="icon-btn" data-act="finEditar" data-id="${esc(t.id)}" title="Editar">✎</button>${manual?`<button class="icon-btn del" data-act="finDel" data-id="${esc(t.id)}" title="Excluir">🗑</button>`:(_finAberto(sit)&&!bx.length?`<button class="icon-btn" data-act="finCancelar" data-id="${esc(t.id)}" title="Cancelar este título (a nota continua)">✕</button>`:'')}</td></tr>${sub}`; }).join('');
   const total=L.reduce((s,t)=>s+(String(t.tipo||'PAGAR').toUpperCase()==='PAGAR'?1:-1)*(+t.valor||0),0);
   return kpis+seg+`
-  ${finBaixaFormHtml()}${finFormHtml()}
+  ${finLoteFormHtml()}${finBaixaFormHtml()}${finFormHtml()}
   <div class="toolbar"><div class="search"><input id="q-fin" value="${esc(FIN_UI.q)}" placeholder="Buscar fornecedor, nº, categoria…" autocomplete="off"></div>
     ${prods.length>1?`<select class="sel" id="fin-prod"><option value="">Todos os produtores</option>${prods.map(p=>`<option value="${esc(p.cpf)}"${p.cpf===FIN_UI.prod?' selected':''}>${esc(p.nome)}</option>`).join('')}</select>`:''}
     ${meses.length?`<select class="sel" id="fin-mes"><option value="">Todos os meses</option>${meses.map(m=>`<option value="${esc(m)}"${m===FIN_UI.mes?' selected':''}>${esc(_MESN[(+m.slice(5))-1]||m)}/${m.slice(0,4)}</option>`).join('')}</select>`:''}
@@ -5911,6 +5913,39 @@ V.financeiro=function(){
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Títulos ficam na aba <b>TÍTULOS</b> e cada pagamento na aba <b>BAIXAS</b> da planilha (todos os aparelhos). <b>Baixar</b> registra data, conta do produtor, valor pago, juros, desconto e comprovante; pode ser parcial. Abatido do título = valor pago − juros + desconto.</p>`;
 };
 // ---- formulário de baixa (v274) ----
+// ===== v313: baixa em LOTE (várias parcelas, mesma data e conta), resumo por produtor, rascunhos guardados =====
+const FIN_SEL=new Set(); let finLote=null, _loteBusy=false;
+function finPorProdutorHtml(prods){ if(!(prods&&prods.length>1)||FIN_UI.prod||FIN_UI.view!=='titulos') return '';
+  const rows=prods.map(p=>{ const R=finResumo(p.cpf); return {p, R}; }).filter(x=>x.R.nA||x.R.receber);
+  if(rows.length<2) return '';
+  return `<div class="panel"><div class="panel-head"><h2>👤 Por produtor</h2><span class="sub">toque para filtrar</span></div><div class="table-wrap"><table class="cards-sm"><thead><tr><th>Produtor</th><th class="num">Em aberto</th><th class="num">Vencidos</th><th class="num">7 dias</th><th class="num">A receber</th></tr></thead><tbody>
+    ${rows.map(({p,R})=>`<tr class="fin-pp" data-act="finProdFiltro" data-cpf="${esc(p.cpf)}" style="cursor:pointer"><td><b>${esc(p.nome||p.cpf)}</b></td><td class="num">${brl0(R.aberto)}<br><small class="mut">${R.nA}</small></td><td class="num" style="color:var(--red)">${R.nV?brl0(R.vencido):'—'}</td><td class="num" style="color:var(--amber)">${R.n7?brl0(R.d7):'—'}</td><td class="num">${R.receber?brl0(R.receber):'—'}</td></tr>`).join('')}</tbody></table></div></div>`; }
+function finLoteAbrir(){ const F=FIN(), ts=[...FIN_SEL].map(id=>F.titulos.find(t=>t.id===id)).filter(t=>t&&_finAberto(finSit(t))); if(!ts.length){ toast('Selecione títulos em aberto'); return; }
+  const prods=[...new Set(ts.map(t=>t.produtor||''))], contas=prods.length===1?finContasDe(prods[0]):F.contas.filter(c=>_finAtivo(c.ativa));
+  finLote={ids:ts.map(t=>t.id), data:_hojeISO(), conta:contas.length===1?contas[0].codigo:'', obs:'', contas}; finBaixa=null; route(); const el=document.getElementById('fin-lote-form'); if(el) el.scrollIntoView({block:'start'}); }
+function finLoteFormHtml(){ const L=finLote; if(!L) return ''; const F=FIN(), ts=L.ids.map(id=>F.titulos.find(t=>t.id===id)).filter(Boolean), tot=ts.reduce((s,t)=>s+finSaldo(t),0);
+  return `<div class="panel fin-bx-form" id="fin-lote-form"><div class="panel-head"><h2>💳 Baixar ${ts.length} título(s) de uma vez</h2><span class="sub">cada um com o saldo cheio · total ${brl(tot)}</span></div>
+    <div class="app-grid" style="padding:6px 14px">
+      <label>Data do pagamento<input class="cell" type="date" data-finlote="data" value="${esc(L.data)}"></label>
+      <label>Conta<select class="sel" data-finlote="conta"><option value="">— conta —</option>${L.contas.map(c=>`<option value="${esc(c.codigo)}"${c.codigo===L.conta?' selected':''}>${esc(finContaNome(c.codigo))}</option>`).join('')}</select></label>
+      <label>Observação<input class="txt" data-finlote="obs" value="${esc(L.obs||'')}" placeholder="opcional"></label></div>
+    <div class="table-wrap"><table class="cards-sm"><tbody>${ts.map(t=>`<tr><td class="c-full"><b>${esc(t.participanteNome||'—')}</b> <span class="mut">${esc(t.docNum||'')}${t.parcela?' · parc. '+esc(t.parcela):''} · venc. ${_dtBRc(t.vencimento)}</span></td><td class="num">${brl(finSaldo(t))}</td></tr>`).join('')}</tbody></table></div>
+    <div class="bulk-add" style="padding:0 14px 14px"><button class="btn btn-primary btn-sm" data-act="finLoteSalvar"${L.conta?'':' disabled'}>💾 Registrar ${ts.length} baixa(s)</button><button class="btn btn-outline btn-sm" data-act="finLoteCancelar">Cancelar</button><span class="mut" style="font-size:12px">juros/desconto diferentes? baixe esse título sozinho</span></div></div>`; }
+async function finLoteSalvar(){ const L=finLote; if(!L||_loteBusy) return; if(!_isISO(L.data)){ toast('Informe a data'); return; } if(!L.conta){ toast('Escolha a conta'); return; }
+  const F=FIN(), ts=L.ids.map(id=>F.titulos.find(t=>t.id===id)).filter(t=>t&&_finAberto(finSit(t))); if(!ts.length) return;
+  if(!ask(`Registrar ${ts.length} baixa(s) em ${_dtBRc(L.data)} na conta ${finContaNome(L.conta)}? Total ${brl(ts.reduce((s,t)=>s+finSaldo(t),0))}.`)) return;
+  const baixas=ts.map(t=>({id:'b:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), titulo:t.id, produtor:t.produtor||'', conta:L.conta, data:L.data, valorPago:+finSaldo(t).toFixed(2), juros:0, desconto:0, comprovante:'', obs:L.obs||''}));
+  _loteBusy=true; const btn=document.querySelector('[data-act="finLoteSalvar"]'); if(btn) btn.disabled=true;
+  try{ const r=await syncPost(syncUrl(), JSON.stringify({__baixa:{baixas}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); if(btn) btn.disabled=false; return; }
+    baixas.forEach(b=>{ if(!F.baixas.some(x=>x.id===b.id)) F.baixas.push(b); }); DATA.financeiro.baixas=F.baixas; ts.forEach(finAplicaStatus);
+    finLote=null; FIN_SEL.clear(); finRascunhoSalvar(); route({keepScroll:true}); toast(`${ts.length} título(s) quitado(s)`); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600); }
+  catch(e){ toast('Sem conexão com a planilha — tente de novo'); if(btn) btn.disabled=false; } finally { _loteBusy=false; } }
+// rascunhos de título e baixa (sem o comprovante) guardados no aparelho: trocar de app no celular não perde o que foi digitado
+const FIN_RASC_KEY='planejamento_fin_rascunho';
+function finRascunhoSalvar(){ try{ if(!finDraft&&!finBaixa){ localStorage.removeItem(FIN_RASC_KEY); return; } const b=finBaixa?Object.assign({}, finBaixa, {arq:null}):null; localStorage.setItem(FIN_RASC_KEY, JSON.stringify({draft:finDraft, baixa:b, ts:Date.now()})); }catch(e){} }
+let _finRascOk=false;
+function finRascunhoRestaurar(){ if(_finRascOk) return; _finRascOk=true; if(finDraft||finBaixa) return; try{ const r=JSON.parse(localStorage.getItem(FIN_RASC_KEY)||'null'); if(!r||!r.ts||Date.now()-r.ts>2*86400000) return;
+    if(r.draft) finDraft=r.draft; if(r.baixa && FIN().titulos.some(t=>t.id===r.baixa.tit)) finBaixa=r.baixa; if(finDraft||finBaixa) setTimeout(()=>toast('Continuando o que você estava preenchendo'),300); }catch(e){} }
 function finBaixaFormHtml(){ const B=finBaixa; if(!B) return ''; const t=FIN().titulos.find(x=>x.id===B.tit); if(!t){ finBaixa=null; return ''; }
   const pagar=String(t.tipo||'PAGAR').toUpperCase()==='PAGAR', contas=finContasDe(t.produtor), saldo=finSaldo(t), F=k=>`data-finbx="${k}"`;
   const semConta=finSemConta(t);
@@ -5949,7 +5984,7 @@ async function _finBaixaSalvar(B,t){
     const bx={id:B.id||('b:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)), titulo:t.id, produtor:t.produtor||'', conta:B.conta, data:B.data, valorPago:vp, juros:+(+B.juros||0).toFixed(2), desconto:+(+B.desconto||0).toFixed(2), comprovante:comp, obs:B.obs||''};
     const r=await syncPost(url, JSON.stringify({__baixa:{baixas:[bx]}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); const b2=document.querySelector('[data-act="finBaixaSalvar"]'); if(b2) b2.disabled=false; return; }
     const F=FIN(); if(!F.baixas.some(x=>x.id===bx.id)) F.baixas.push(bx); DATA.financeiro.baixas=F.baixas; finAplicaStatus(t);
-    finBaixa=null; FIN_UI.open=FIN_UI.open||{}; FIN_UI.open[t.id]=true; route({keepScroll:true}); toast(finSaldo(t)>0.004?`Baixa parcial registrada — saldo ${brl(finSaldo(t))}`:'Título quitado'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600);
+    finBaixa=null; finRascunhoSalvar(); FIN_UI.open=FIN_UI.open||{}; FIN_UI.open[t.id]=true; route({keepScroll:true}); toast(finSaldo(t)>0.004?`Baixa parcial registrada — saldo ${brl(finSaldo(t))}`:'Título quitado'); setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 600);
   }catch(e){ toast('Sem conexão com a planilha — tente de novo'); const b3=document.querySelector('[data-act="finBaixaSalvar"]'); if(b3) b3.disabled=false; } }
 // status local do título a partir das baixas (a planilha faz a mesma conta)
 function finAplicaStatus(t){ const bx=finBaixasDe(t.id), ab=bx.reduce((s,b)=>s+finAbatido(b),0); if(String(t.status||'').toUpperCase()==='CANCELADO') return;
@@ -6160,7 +6195,7 @@ async function bancoConfirmar(){ const B=BANCO; if(!B||!B.conta){ toast('Escolha
   const nNovos=itens.filter(i=>i.novo).length, semDoc=itens.filter(i=>i.novo&&!i.novo.participante).length;
   if(!ask(`Confirmar ${L.length} lançamento(s)?\n• ${itens.filter(i=>i.titulo).length} baixa(s) em títulos\n• ${nNovos} lançamento(s) avulso(s)${semDoc?` (${semDoc} sem CPF/CNPJ — o Livro Caixa vai pedir)`:''}\n• ${itens.filter(i=>i.ignorar).length} ignorado(s)${regras.length?`\n• ${regras.length} regra(s) nova(s) de categoria`:''}${pend.length?`\n• ${pend.length} sem decisão ficam pendentes`:''}${difs.length?`\n\n⚠ Valor pago diferente do saldo do título:\n${difs.join('\n')}`:''}`)) return;
   toast('Gravando conciliação…');
-  try{ const r=await syncPost(url, JSON.stringify({__concilia:{conta:B.conta, produtor:B.produtor||'', itens:itens.concat(pend), regras}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
+  try{ const r=await syncPost(url, JSON.stringify({__concilia:{conta:B.conta, produtor:B.produtor||'', ate:B.ate||'', itens:itens.concat(pend), regras}})); if(!postOk(r)){ toast('Não gravou na planilha'+((r&&r.msgs&&r.msgs[0])?': '+r.msgs[0]:'')); return; }
     bancoUltimaSalvar({conta:B.conta, produtor:B.produtor||'', ts:Date.now(), arquivo:B.arquivo||'', baixas:L.filter(l=>l.st!=='ign').map(l=>'bb:'+(B.conta+'|'+l.fitid).replace(/[^A-Za-z0-9|_.-]/g,'_')), titulos:itens.filter(i=>i.novo).map(i=>'bk:'+(B.conta+'|'+i.fitid).replace(/[^A-Za-z0-9|_.-]/g,'_')), linhas:L.map(l=>({fitid:l.fitid, data:l.data, valor:l.valor, historico:l.historico, doc:l.doc}))});   // v310: para desfazer
     const F=FIN(), hoje=_hojeISO(); DATA.financeiro.extratoBanco=F.extratoBanco||[];
     L.forEach(l=>{ const id=B.conta+'|'+l.fitid; const st=l.st==='ign'?'IGNORADO':'CONCILIADO'; const e=DATA.financeiro.extratoBanco.find(x=>x.id===id); if(e) Object.assign(e,{status:st, titulo:l.titulo||''}); else DATA.financeiro.extratoBanco.push({id, conta:B.conta, produtor:B.produtor||'', data:l.data, valor:l.valor, historico:l.historico, doc:l.doc, titulo:l.titulo||'', status:st}); l.st='ja'; l.ja={status:st, data:hoje}; });
@@ -6192,7 +6227,7 @@ function fechChecklist(cpf, mes){ const F=FIN(), P=fechPeriodo(mes), L=[], add=(
   const semConta=meus.filter(t=>finSemConta(t)&&String(t.dataPgto||'').slice(0,7)===mes);
   add(!semConta.length,'erro',semConta.length?`${semConta.length} título(s) marcado(s) como pago(s) sem conta no mês — use "Completar baixa"`:'Todo pagamento do mês tem conta','#/financeiro');
   const contas=F.contas.filter(c=>_finAtivo(c.ativa)&&(c.produtor===cpf||!c.produtor)&&!/caixa/i.test(c.tipo||''));
-  contas.forEach(c=>{ const linhas=(F.extratoBanco||[]).filter(x=>x.conta===c.codigo); const ult=linhas.filter(x=>x.status!=='PENDENTE').map(x=>String(x.data).slice(0,10)).sort().pop()||''; const pend=linhas.filter(x=>x.status==='PENDENTE'&&String(x.data).slice(0,7)===mes).length;
+  contas.forEach(c=>{ const linhas=(F.extratoBanco||[]).filter(x=>x.conta===c.codigo); let ult=linhas.filter(x=>x.status!=='PENDENTE').map(x=>String(x.data).slice(0,10)).sort().pop()||''; const ate=String((F.extratoAte||{})[String(c.codigo||'').toUpperCase()]||(F.extratoAte||{})[c.codigo]||'').slice(0,10); if(_isISO(ate)&&ate>ult) ult=ate;   // v313: data final do extrato importado (DTEND), não só o último lançamento const pend=linhas.filter(x=>x.status==='PENDENTE'&&String(x.data).slice(0,7)===mes).length;
     add(ult>=P.fim&&!pend,'aviso',ult>=P.fim?(pend?`${finContaNome(c.codigo)}: ${pend} lançamento(s) do extrato ainda pendente(s)`:`${finContaNome(c.codigo)}: extrato conciliado até ${_dtBRc(ult)}`):`${finContaNome(c.codigo)}: extrato ${ult?'conciliado só até '+_dtBRc(ult):'ainda não importado'} — importe até ${_dtBRc(P.fim)}`,'#/financeiro'); });
   const d=lcdprDados(cpf, P.ano, P.fim); const erros=[...new Set(d.pend.filter(x=>x.nivel==='erro').map(x=>x.msg))];
   if(erros.length) erros.slice(0,6).forEach(m=>add(false,'erro','LCDPR: '+m,'#/cadastros')); else add(true,'erro',`LCDPR de ${P.ano} até ${_dtBRc(P.fim)} sem pendências (${d.lanc.length} lançamento(s))`,'#/financeiro');
@@ -6288,7 +6323,7 @@ function finSalvar(){ const d=finDraft; if(!d) return;
   if(!d.participanteNome.trim()&&!d.participante.trim()){ toast('Informe o fornecedor (nome ou CPF/CNPJ)'); return; }
   const t=Object.assign({}, d, {id:d.id||('m:'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)), valor:+(+d.valor).toFixed(2), participante:String(d.participante||'').replace(/\D/g,'')});
   if(!d.id){ t.status='ABERTO'; t.origem='manual'; }
-  const bak=finDraft; finDraft=null;   // fecha o formulário já; volta se a planilha recusar
+  const bak=finDraft; finDraft=null; finRascunhoSalvar();   // fecha o formulário já; volta se a planilha recusar
   finPost([t], d.id?'Título atualizado':'Título registrado').then(ok=>{ if(!ok){ finDraft=bak; route({keepScroll:true}); } }); }
 /* ================= LIVRO CAIXA DIGITAL DO PRODUTOR RURAL — fase 4 (v275) =================
    Gera o arquivo .txt (um por produtor e ano) a partir dos cadastros, títulos e baixas. O LEIAUTE fica todo em
@@ -12379,6 +12414,9 @@ function notifItens(){ const g={conferir:[], semana:[], atraso:[]}; if(!DATA||!O
     campoOpsDoTalhao(t).forEach(o=>{ const r=realOf(o.key); if(r&&r.status==='parcial') g.conferir.push({tit:o.op.nome, sub:`${tNome(t)} · parcial: ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha — aplicar o restante ou encerrar`, go:'#/campo/'+encodeURIComponent(t.id), tal:t.id}); }); });
   ((RECOM&&RECOM.registros)||[]).forEach(r0=>{ if(r0.status!=='retorno') return; const t=findTalhao(r0.talhao); if(!fazOk(t)) return; const r=recomNorm(r0);
     g.conferir.push({tit:(r.nome||r.opNome||'Recomendação')+(r.tipo==='ts'?' (TS)':''), sub:`${tNome(t)} · retorno do operador${r.retorno&&r.retorno.quem?' ('+r.retorno.quem+')':''} — conferir e aprovar`, go:'#/recomendacao/'+encodeURIComponent(r.talhao), tal:r.talhao}); });
+  try{ if(DATA.financeiro && podeTela('financeiro')){ let nv=0, n7=0; FIN().titulos.forEach(t=>{ const sit=finSit(t); if(sit!=='vencido'&&sit!=='d7') return; const d=finDias(t), rec=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER';   // v313: vencimentos do Financeiro no sino
+      const it={tit:`💵 ${t.participanteNome||t.participante||'título'} · ${brl(finSaldo(t))}${rec?' (a receber)':''}`, sub:`${rec?'recebimento':'pagamento'} ${d<0?`vencido há ${-d} dia(s)`:d===0?'vence hoje':`vence em ${d} dia(s)`} · ${_dtBRc(t.vencimento)}${t.docNum?' · '+t.docNum:''}`, go:'#/financeiro', dd:d, tal:''};
+      if(sit==='vencido'){ if(nv++<20) g.atraso.push(it); } else if(n7++<20) g.semana.push(it); }); } }catch(e){}
   g.atraso.sort((a,b)=>a.dd-b.dd); g.semana.sort((a,b)=>a.dd-b.dd); return g; }
 function notifTotal(g){ return g.conferir.length+g.semana.length+g.atraso.length; }
 let _notifSig='';
@@ -12707,6 +12745,7 @@ function copiaMaquinas(srcId,dstId,plano){
 }
 
 document.addEventListener('change',e=>{
+  if(e.target.matches&&e.target.matches('[data-finsel]')){ const id=e.target.dataset.finsel; if(e.target.checked) FIN_SEL.add(id); else FIN_SEL.delete(id); route({keepScroll:true}); return; }   // v313: seleção p/ baixa em lote
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('input[data-sf="dist"]')){ const f=standFormAtual(); if(f){ f.dist=e.target.checked; route({keepScroll:true}); } return; }
   if(e.target.matches&&e.target.matches('[data-sf="nLin"]')){ const f=standFormAtual(); if(f){ const n=Math.max(1,Math.min(40,Math.round(numBR(e.target.value))||1)); if(n===f.linhas.length) return; while(f.linhas.length<n) f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); f.linhas.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
@@ -12827,7 +12866,7 @@ document.addEventListener('click',e=>{
   const fsf=e.target.closest('#fin-stf .chip-f');     // Financeiro: situação dos títulos (v273)
   if(fsf){ FIN_UI.st=fsf.dataset.finst||'aberto'; route({keepScroll:true}); return; }
   const fvw=e.target.closest('.fin-seg .chip-f');     // Financeiro: títulos × extrato por conta (v274)
-  if(fvw){ FIN_UI.view=fvw.dataset.finview||'titulos'; finBaixa=null; finDraft=null; route({keepScroll:true}); return; }
+  if(fvw){ FIN_UI.view=fvw.dataset.finview||'titulos'; finBaixa=null; finDraft=null; finLote=null; finRascunhoSalvar(); route({keepScroll:true}); return; }
   const tlf=e.target.closest('#tl-filter .chip-f');
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
@@ -13206,6 +13245,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='manutCsv'){ exportManutCsv(); }
     else if(a.act==='nfeAceitar'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it&&PROD[it.produto]){ it.ok=true; route({keepScroll:true}); } }
     else if(a.act==='nfeAceitarTodas'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeItemStatus(it)==='sug'&&PROD[it.produto]) it.ok=true; }); route({keepScroll:true}); } }
+    else if(a.act==='finLoteAbrir'){ finLoteAbrir(); } else if(a.act==='finLoteLimpar'){ FIN_SEL.clear(); route({keepScroll:true}); } else if(a.act==='finLoteSalvar'){ finLoteSalvar(); } else if(a.act==='finLoteCancelar'){ finLote=null; route({keepScroll:true}); }
+    else if(a.act==='finProdFiltro'){ FIN_UI.prod=a.cpf||''; route(); }
     else if(a.act==='finNovo'){ finDraft=finNovoDraft(); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); }
     else if(a.act==='finCancelarForm'){ finDraft=null; route({keepScroll:true}); }
     else if(a.act==='finSalvar'){ finSalvar(); }
@@ -13358,9 +13399,10 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
   if(e.target.id==='q-fin'){ FIN_UI.q=e.target.value; clearTimeout(window._finQT); window._finQT=setTimeout(()=>route({keepScroll:true}),250); return; }
-  if(e.target.matches('[data-finf]')){ if(finDraft){ const f=e.target.dataset.finf; finDraft[f]=(f==='valor')?_mmC(e.target.value):e.target.value; if(f==='tipo') route({keepScroll:true}); } return; }
+  if(e.target.matches('[data-finf]')){ if(finDraft){ const f=e.target.dataset.finf; finDraft[f]=(f==='valor')?_mmC(e.target.value):e.target.value; finRascunhoSalvar(); if(f==='tipo') route({keepScroll:true}); } return; }
+  if(e.target.matches('[data-finlote]')){ if(finLote){ const f=e.target.dataset.finlote; finLote[f]=e.target.value; if(f==='conta') route({keepScroll:true}); } return; }
   if(e.target.matches('[data-cadf]')){ if(CAD_EDIT){ const f=e.target.dataset.cadf; CAD_EDIT.item[f]=e.target.type==='checkbox'?(e.target.checked?'S':'N'):e.target.value; } return; }
-  if(e.target.matches('[data-finbx]')){ if(finBaixa){ const f=e.target.dataset.finbx; finBaixa[f]=/^(valorPago|juros|desconto)$/.test(f)?_mmC(e.target.value):e.target.value; const c=document.querySelector('#fin-bx-form .fin-bx-calc'); if(c&&/^(valorPago|juros|desconto)$/.test(f)){ const tmp=document.createElement('div'); tmp.innerHTML=finBaixaFormHtml(); const n=tmp.querySelector('.fin-bx-calc'); if(n) c.innerHTML=n.innerHTML; } } return; }
+  if(e.target.matches('[data-finbx]')){ if(finBaixa){ const f=e.target.dataset.finbx; finBaixa[f]=/^(valorPago|juros|desconto)$/.test(f)?_mmC(e.target.value):e.target.value; finRascunhoSalvar(); const c=document.querySelector('#fin-bx-form .fin-bx-calc'); if(c&&/^(valorPago|juros|desconto)$/.test(f)){ const tmp=document.createElement('div'); tmp.innerHTML=finBaixaFormHtml(); const n=tmp.querySelector('.fin-bx-calc'); if(n) c.innerHTML=n.innerHTML; } } return; }
   if(e.target.id==='q-tar'){ filterTarefas(); return; }
   if(e.target.id==='q-res'){ filterResultados(); return; }
   if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
