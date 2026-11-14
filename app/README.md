@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Cabeçalho fixo na tabela de Estoque (v325)** — ao rolar os insumos, os nomes das colunas (Inicial, Custo inicial,
+  Em pedido…) ficam visíveis logo abaixo da barra do topo. Como a tabela está numa caixa com rolagem lateral
+  (`.table-wrap`) e a rolagem vertical é da página/`.main`, o `position:sticky` do `<thead>` não funciona; `fixHdTick`
+  clona o cabeçalho numa camada fixa (`.fix-hd-box`) com as mesmas larguras de coluna, mostra quando o original some
+  para cima e acompanha a rolagem lateral (`translateX`). Vale para qualquer `<div class="table-wrap fix-hd">`.
 - **Foto do campo nunca é descartada (v324)** — a foto só existe no aparelho que tirou; depois de 3 respostas da
   planilha sem o link ela fica **parada** (`p.parada` = motivo, ⚠ na miniatura) e o envio automático pula as paradas.
   No cartão da ocorrência com foto pendente: **↻ Reenviar fotos** (`ocFotoRetry`, limpa a marca e chama

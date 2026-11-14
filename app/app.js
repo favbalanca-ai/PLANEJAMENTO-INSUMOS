@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-324';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-325';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3062,7 +3062,7 @@ V.estoque=function(){
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
-    <div class="table-wrap"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
+    <div class="table-wrap fix-hd"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||'<tr><td colspan="13" class="mut" style="padding:14px">Sem produtos.</td></tr>'}</tbody></table></div></div>
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.<br><b>Custo médio</b> = o que foi pago nas notas (custo real com frete e impostos) ponderado com o estoque inicial; o estoque inicial vale pelo <b>custo inicial</b> digitado, senão pela última nota, senão pelo preço de referência (<span class="pill cm-ref">ref.</span>).</p>`;
 };
@@ -9829,7 +9829,7 @@ function morphChildren(op, np){
   for(let i=b.length;i<a.length;i++) a[i].remove();
 }
 function morphInto(el, html){ const t=document.createElement('template'); t.innerHTML=html; morphChildren(el, t.content); }
-function route(opts){ _M=new Map(); _cmCache=null; try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} } }   // memória por render (ver memo); custo médio recalcula a cada tela
+function route(opts){ _M=new Map(); _cmCache=null; try{ return _route(opts); } finally{ _M=null; try{ notifAtualiza(); }catch(e){} try{ fixHdAgenda(); }catch(e){} } }   // memória por render (ver memo); custo médio recalcula a cada tela
 /* ================= AVISOS (sino na barra de cima, v253) =================
    Três grupos, calculados no aparelho a partir do que o app já sabe (sem planilha nova):
    · conferir → recomendações com retorno do operador esperando aprovação e operações parciais;
@@ -12156,6 +12156,30 @@ function flushOnLeave(){
   clearTimeout(pushTimer); syncKeepalive=true;
   Promise.resolve().then(()=>syncPush({auto:true})).catch(()=>{}).finally(()=>{ syncKeepalive=false; });
 }
+// ===== v325: cabeçalho FIXO das tabelas largas (Estoque) =====
+// A tabela fica numa caixa com rolagem lateral (.table-wrap) e a rolagem vertical é da página/.main — aí o
+// position:sticky do <thead> não pega. Solução: uma cópia do cabeçalho numa camada fixa logo abaixo da barra do
+// topo, que aparece quando o cabeçalho original some para cima e acompanha a rolagem lateral da tabela.
+// Usar: <div class="table-wrap fix-hd">…<table><thead>…</thead>…</table></div>
+let _fh=null, _fhRaf=0;
+function fixHdTick(){
+  const wrap=document.querySelector('.table-wrap.fix-hd'), tbl=wrap&&wrap.querySelector('table'), thead=tbl&&tbl.tHead;
+  if(!thead){ if(_fh){ _fh.box.remove(); _fh=null; } return; }
+  if(!_fh||_fh.wrap!==wrap||!_fh.box.isConnected){ if(_fh) _fh.box.remove(); const box=document.createElement('div'); box.className='fix-hd-box'; box.hidden=true; document.body.appendChild(box); _fh={wrap,box,inner:null,w:0,n:0}; }
+  const tb=document.querySelector('.topbar'), top=tb&&tb.offsetParent!==null?tb.getBoundingClientRect().bottom:0;
+  const r=wrap.getBoundingClientRect(), hr=thead.getBoundingClientRect();
+  if(!(hr.top<top && r.bottom>top+hr.height+30)){ _fh.box.hidden=true; return; }
+  const cells=[...thead.rows[0].cells];
+  if(!_fh.inner||_fh.w!==tbl.offsetWidth||_fh.n!==cells.length){   // (re)monta a cópia quando a largura/colunas mudam (rotação, zoom, filtro)
+    const c=document.createElement('table'); c.className=tbl.className; c.style.width=tbl.offsetWidth+'px'; c.style.tableLayout='fixed';
+    const th2=thead.cloneNode(true); c.appendChild(th2); [...th2.rows[0].cells].forEach((cell,i)=>{ cell.style.width=cells[i].getBoundingClientRect().width+'px'; cell.removeAttribute('id'); });
+    _fh.box.innerHTML=''; _fh.box.appendChild(c); _fh.inner=c; _fh.w=tbl.offsetWidth; _fh.n=cells.length; }
+  const b=_fh.box; b.style.top=top+'px'; b.style.left=r.left+'px'; b.style.width=r.width+'px'; b.hidden=false;
+  _fh.inner.style.transform=`translateX(${-wrap.scrollLeft}px)`;
+}
+function fixHdAgenda(){ if(_fhRaf) return; _fhRaf=requestAnimationFrame(()=>{ _fhRaf=0; try{ fixHdTick(); }catch(e){} }); }
+document.addEventListener('scroll', fixHdAgenda, true);   // captura: pega a rolagem da página, do .main (celular) e da própria tabela
+window.addEventListener('resize', fixHdAgenda);
 document.addEventListener('visibilitychange',()=>{
   try{ sigsSalvar(); }catch(e){}
   if(document.visibilityState==='hidden'){ lastHiddenTs=Date.now(); flushOnLeave(); return; }
