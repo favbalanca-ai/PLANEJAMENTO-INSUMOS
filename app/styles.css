@@ -351,6 +351,10 @@ tbody tr:last-child td{border-bottom:none}
 td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .tfoot td{font-weight:700;background:#f2f6f7;color:var(--ink);border-top:2px solid var(--line)}
 .table-wrap{overflow-x:auto}
+/* v325: cópia fixa do cabeçalho (ver fixHdTick no app.js) — fica logo abaixo da barra do topo, acima do conteúdo */
+.fix-hd-box{position:fixed;z-index:4;overflow:hidden;background:#f7f9fa;box-shadow:0 3px 8px rgba(0,0,0,.10);pointer-events:none}
+.fix-hd-box table{margin:0;will-change:transform}
+.fix-hd-box thead th{position:static;box-sizing:border-box;overflow:hidden;text-overflow:ellipsis}
 .cc-tbl{font-size:12px;white-space:nowrap}
 .cc-tbl th,.cc-tbl td{padding:7px 10px}
 .cc-tbl tfoot th{text-align:left;background:#f2f6f7;color:var(--ink);font-weight:700;border-top:2px solid var(--line);
