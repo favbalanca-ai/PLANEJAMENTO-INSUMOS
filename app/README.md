@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Stand na ficha do talhão = média das contagens (v327)** — `standResumoTalhao(tid)` faz a média de população,
+  pl/m, % da meta e CV de todas as contagens da safra (data ≥ plantio real); a linha "Stand" mostra "média de N
+  contagens · última dd/mm". Se só houver contagem com data anterior ao plantio, a linha avisa em vez de sumir. As
+  contagens também entram na lista "Ocorrências e aferições" da ficha (link para `#/stand`).
 - **Abrir a ocorrência pela ficha do talhão e pela Timeline (v326)** — tocar na anotação/ocorrência na ficha do
   talhão (Mapa), no cartão da Timeline ou na linha do Painel de Campo abre a folha `ocDetalheOpen(id)` com o
   texto, os campos, quem registrou, as fotos grandes (miniatura do Drive `sz=w800`, toque abre o arquivo), as fotos
