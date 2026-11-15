@@ -2635,7 +2635,8 @@ function currentJson(soCache){
 // ---- Arquivos do Drive para o app (Mapa → ☁️ Drive = contornos; NF-e → ☁️ Drive = XML): lista e entrega arquivos de UMA pasta.
 // contornos: pasta "Contornos" ao lado da planilha (ou CONFIG APP → PASTA CONTORNOS) — KML/KMZ/GeoJSON/ZIP/Shapefile.
 // nfe: a pasta NFe da CONFIG NFE (PASTA NFE; com Entrada / XML / Rejeitados) — só .xml. O app lê como se fosse do aparelho.
-var DRIVE_TIPOS_ = { contornos:{ ext:/\.(kml|kmz|geojson|json|zip|shp|dbf|prj|cpg)$/i, maxMB:20 }, nfe:{ ext:/\.xml$/i, maxMB:5 } };
+var DRIVE_TIPOS_ = { contornos:{ ext:/\.(kml|kmz|geojson|json|zip|shp|dbf|prj|cpg)$/i, maxMB:20 }, nfe:{ ext:/\.xml$/i, maxMB:5 },
+  fotos:{ ext:/\.(jpe?g|png|webp|heic)$/i, maxMB:8 } };   // v333: fotos do campo (o navegador não consegue baixar do Drive direto — CORS — p/ compartilhar como arquivo)
 function contornosPasta_(){
   var id = S(configAppMapa_()['PASTA CONTORNOS']).replace(/[^A-Za-z0-9_-]/g, '');
   if (id){ try { return DriveApp.getFolderById(id); } catch (e) {} }
@@ -2643,6 +2644,7 @@ function contornosPasta_(){
   return _pasta(base, 'Contornos');
 }
 function drivePasta_(tipo){
+  if (tipo === 'fotos'){ var arq = DriveApp.getFileById(ss().getId()), pais = arq.getParents(), base = pais.hasNext() ? pais.next() : DriveApp.getRootFolder(); return _pasta(base, 'Fotos do Campo'); }   // v333
   if (tipo !== 'nfe') return contornosPasta_();
   var cfg = nfeConfig_(); if (cfg.pasta){ try { return DriveApp.getFolderById(cfg.pasta); } catch (e) {} }
   return _pasta(DriveApp.getRootFolder(), 'NFe');
@@ -2716,7 +2718,7 @@ function doGet_(e){
   if (e && e.parameter && e.parameter.acao){
     var p = e.parameter;
     if (p.acao === 'drive_lista' || p.acao === 'drive_arquivo'){   // arquivos do Drive (contornos / xml da NF-e)
-      var dTipo = p.tipo === 'nfe' ? 'nfe' : 'contornos', dOk;
+      var dTipo = p.tipo === 'nfe' ? 'nfe' : p.tipo === 'fotos' ? 'fotos' : 'contornos', dOk;   // v333: fotos do campo (mesma regra dos contornos)
       if (dTipo === 'nfe') dOk = nfeTokenOk_(p.token) || (acc && acc.u && _temMod_(acc, ['admin']));   // mesma regra das ações da NF-e
       else dOk = nfeTokenOk_(p.token) || (acc && acc.u && _temMod_(acc, ['campo', 'admin'])) || (!(acc && acc.erro) && !loginCfg_().exigido);
       if (!dOk) return json({ ok:false, erro:(acc && acc.erro) || (dTipo === 'nfe' ? 'token da NF-e inválido ou NF-e não configurada (Sincronizar → Token da NF-e) — ou entre como administrador' : 'entre com seu login para ler o Drive') });

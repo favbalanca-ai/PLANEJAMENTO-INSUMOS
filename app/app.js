@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-332';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-333';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7142,7 +7142,11 @@ async function ocCompartilharPrep(id){ const r=OCOR.reg[id]; if(!r) return; cons
   fotoPend.filter(p=>p.ocId===id).forEach(p=>{ try{ files.push(_dataUrlFile(p.dataUrl, p.nome)); }catch(e){} });
   const doDrive=(r.fotos||[]).filter(f=>f&&f.id).slice(0,8);
   if(podeArq && doDrive.length){ if(btn){ btn.disabled=true; btn.textContent='⏳ baixando fotos…'; }
-    for(const f of doDrive){ try{ const ctrl=('AbortController' in window)?new AbortController():null; const to=ctrl?setTimeout(()=>ctrl.abort(),10000):null;
+    for(const f of doDrive){ let ok=false;
+      // v333: pela PLANILHA (doGet drive_arquivo tipo=fotos) — o navegador não consegue baixar do Drive direto (CORS); no iPhone falhava e iam só os links
+      if(syncUrl()){ try{ const j=await driveGet({acao:'drive_arquivo', tipo:'fotos', id:f.id, nome:'foto'}); if(j&&j.ok&&j.b64){ const fl=_b64File(j.b64, `foto-${files.length+1}.jpg`, 'image/jpeg'); if(fl&&fl.size>1000){ files.push(fl); ok=true; } } }catch(e){} }
+      if(ok) continue;
+      try{ const ctrl=('AbortController' in window)?new AbortController():null; const to=ctrl?setTimeout(()=>ctrl.abort(),10000):null;   // Code.gs antigo: tenta direto (funciona em alguns navegadores)
       const resp=await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1600`, ctrl?{signal:ctrl.signal}:{}); if(to) clearTimeout(to);
       if(resp.ok){ const bl=await resp.blob(); if(bl.size>1000) files.push(new File([bl], `foto-${files.length+1}.jpg`, {type:bl.type||'image/jpeg'})); } }catch(e){} } }
   // v332: cabeçalho nas fotos — faixa com tipo · talhão · data · quem em cada foto (encaminhada sozinha, a foto continua
@@ -7155,6 +7159,7 @@ async function ocCompartilharPrep(id){ const r=OCOR.reg[id]; if(!r) return; cons
   const b2=document.querySelector(`[data-act="ocCompartilhar"][data-id="${CSS.escape(id)}"]`);
   if(_ocShare.files.length){ const nf=_ocShare.files.filter(f=>f.name!=='capa.jpg').length; if(b2){ b2.disabled=false; b2.dataset.act='ocCompartilharGo'; b2.textContent=`📤 Enviar (capa + ${nf} foto${nf>1?'s':''})`; } toast('Fotos prontas — toque em Enviar'); }
   else { if(b2){ b2.disabled=false; b2.textContent='📤 Compartilhar'; } if(doDrive.length && podeArq) toast('Não consegui baixar as fotos — vão os links'); ocCompartilharGo(); } }
+function _b64File(b64, nome, type){ try{ const bin=atob(String(b64||'').replace(/^data:[^,]*,/,'')), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i); return new File([arr], nome, {type:type||'application/octet-stream'}); }catch(e){ return null; } }
 // ---- v332: carimbo e capa (canvas) ----
 function _imgDe(file){ return new Promise((res,rej)=>{ const u=URL.createObjectURL(file), im=new Image(); im.onload=()=>{ URL.revokeObjectURL(u); res(im); }; im.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('imagem')); }; im.src=u; }); }
 function _canvasFile(c, nome){ return new Promise(res=>c.toBlob(b=>res(b?new File([b], nome, {type:'image/jpeg'}):null), 'image/jpeg', 0.86)); }
