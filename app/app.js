@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-329';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-330';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1710,20 +1710,6 @@ V.entradas=function(){
   return `${prodDatalist()}
   ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label><button class="btn btn-outline" data-act="driveOpen" data-tipo="nfe" title="Escolher o .xml da nota na pasta NFe do Google Drive (pela planilha)">☁️ Drive</button>
     <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. Para conferir o caminhão chegando, use <b>Receber nota</b>.</span></div>`}
-  <div class="panel"><div class="panel-head"><h2>Nova compra (entrada de estoque)</h2><span class="sub">digitada à mão — ou use “Importar XML da NF-e”</span></div>
-    <div class="app-grid" style="padding:12px 14px">
-      <label>Fornecedor<input class="txt" data-cmpf="fornecedor" value="${esc(d.fornecedor)}" placeholder="fornecedor"></label>
-      <label>Data<input type="date" data-cmpf="data" value="${esc(d.data)}"></label>
-      <label>Nota (NF)<input class="txt" data-cmpf="nf" value="${esc(d.nf)}" placeholder="nº da nota"></label>
-    </div>
-    <div class="table-wrap"><table><thead><tr><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Preço</th><th class="num">Valor</th><th></th></tr></thead>
-      <tbody>${draftRows}</tbody>
-      <tfoot class="tfoot"><tr><td colspan="4">Total da nota</td><td class="num" data-cmptot>${brl0(total)}</td><td></td></tr></tfoot></table></div>
-    <div style="padding:8px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-outline btn-sm" data-act="cmpAddItem">+ produto</button>
-      <input class="txt" data-cmpf="obs" value="${esc(d.obs)}" placeholder="Observações (opcional)" style="flex:1;min-width:160px">
-      <button class="btn btn-primary btn-sm" data-act="cmpSave">✅ Registrar entrada</button>
-    </div></div>
   <div class="panel cr-panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
       <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
     ${regs.length?`<div class="cr-bar"><div class="cr-seg"><button class="${cmpVisao!=='nota'?'on':''}" data-act="cmpVisao" data-v="produto">Por produto</button><button class="${cmpVisao==='nota'?'on':''}" data-act="cmpVisao" data-v="nota">Por nota</button></div>
@@ -3053,13 +3039,13 @@ V.estoque=function(){
   return `
   <div class="kpi-grid">
     <div class="kpi accent" title="saldo de cada produto × custo médio (o que foi pago nas notas)"><div class="k-label">Valor em estoque (custo real)</div><div class="k-value">${brl0(valReal)}</div><div class="k-sub">${nRef?`${nRef} produto(s) ainda a preço de referência · `:''}referência: ${brl0(valSaldo)}</div></div>
-    <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub">${podeTela('entradas')?`<a class="link" data-go="#/entradas">registrar compra →</a>`:''}</div></div>
+    <div class="kpi"><div class="k-label">Entradas (compras)</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub">${podeTela('entradas')?`<a class="link" data-go="#/entradas">ver notas →</a>`:''}</div></div>
     <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
     <label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📦 Nova compra</button></div>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque</h2><span class="sub">inicial + entradas − saídas = saldo</span></div>
     <div class="table-wrap fix-hd"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th><th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
