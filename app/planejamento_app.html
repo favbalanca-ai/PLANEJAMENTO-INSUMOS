@@ -2772,7 +2772,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-328';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-329';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -13159,8 +13159,8 @@ document.addEventListener('change',e=>{
   if(e.target.dataset && e.target.dataset.nfi!=null && nfeImport){ const it=nfeImport.itens[+e.target.dataset.i]; if(!it) return; const f=e.target.dataset.nfi;
     if(f==='ignorar'){ it.ignorar=e.target.checked; if(!it.ignorar && !PROD[it.produto]) it.ok=false; }
     else if(f==='dest'){ const d=e.target.value; it.dest=nfeDestManut(d)?d:'estoque'; if(nfeDestManut(d)){ it.maq=d==='oficina'?'Oficina':d==='tanque'?'Tanque da fazenda':(d==='maquina'?(nfeMaqUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-maq-all')||{}).value||''):(nfeBenfUltima(nfeImport.nota.cnpj)||(document.getElementById('nfe-benf-all')||{}).value||'')); it.tipoMaq=nfeTipoGuess(d,it.xprod); } }   // v276/v285
-    else if(f==='maq'){ it.maq=e.target.value.trim(); return; }
-    else if(f==='tipoMaq'){ it.tipoMaq=e.target.value; return; }
+    else if(f==='maq'){ it.maq=e.target.value.trim(); }        // v329: sem "return": redesenha p/ liberar "Já chegou" / "Pôr em trânsito" assim que a máquina é digitada
+    else if(f==='tipoMaq'){ it.tipoMaq=e.target.value; }
     else if(f==='fator'){ it.fator=_mmC(e.target.value); it.fatorEdit=true; }
     else if(f==='produto'){ const v=e.target.value.trim(); if(v && !PROD[v]){ toast('Produto não encontrado no portfólio — escolha da lista'); }
       it.produto=PROD[v]?v:''; it.ok=!!PROD[v]; if(it.fonte==='auto') it.fonte='manual';

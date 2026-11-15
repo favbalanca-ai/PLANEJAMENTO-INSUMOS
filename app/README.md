@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Item apropriado liberava a nota só depois de mexer em outro campo (v329)** — na conferência da NF-e, digitar a
+  máquina/benfeitoria (`data-nfi="maq"`) ou trocar o tipo do gasto saía do handler com `return` antes do
+  `recRerender()`, então "Já chegou" e "Pôr em trânsito" ficavam travados com "Falta resolver 1 item". Agora redesenha.
 - **Coordenadas, Monitoramento sincronizado e mapa de calor (v328)**
   - Ocorrências/anotações: o formulário pega a posição do celular sozinho ao abrir (`ocCaptureGPS`, 1 tentativa) e tem o
     botão **📍 Pegar posição**; o registro guarda `lat/lng/acc` (vai para a planilha com o resto), o cartão e a folha
