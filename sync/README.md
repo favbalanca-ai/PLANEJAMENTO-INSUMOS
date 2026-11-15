@@ -132,6 +132,16 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Foto/PDF do app não subia para o Drive (v326)
+
+- Havia **duas funções `driveArquivo_`**: a que grava arquivo do app no Drive (foto do campo, bula em PDF) e, desde a
+  v255, a que LÊ um arquivo da pasta do Drive (folha ☁️ Drive). No Apps Script a última declaração vence, então
+  `campoFoto_`/`bulaArquivo_` caíam na função de leitura e voltavam `arquivo não encontrado no Drive` (o app via `ok 0`).
+  A de leitura virou `driveArquivoLer_`. Foto da nota (`nfeFoto_`) e comprovante (`finArquivo_`) não passavam por ela.
+- `__bulaArquivo`, `__finArquivo` e `__nfeFoto` sem link agora respondem `fail:1` com o motivo, como `__campoFoto`.
+- Regra: **não repetir nome de função** no `Code.gs` (`grep -oE "^function [A-Za-z0-9_]+" sync/Code.gs | sort | uniq -d`
+  tem que vir vazio).
+
 ## Fotos e erros do doPost (v323)
 
 - `__campoFoto` sem link (`driveArquivo_` devolve `{url:'', erro}`) agora responde `fail:1` com `msgs:['foto: …']`
