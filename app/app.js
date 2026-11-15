@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-327';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-328';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5809,7 +5809,26 @@ function campoProgress(filtro){
 const MONIT_KEY='planejamento_monitoramento';
 let MONIT=null, _monitGPS=null;
 function loadMonit(){ try{ const d=JSON.parse(localStorage.getItem(MONIT_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveMonit(){ lsSet(MONIT_KEY, JSON.stringify(MONIT)) }
+function saveMonit(){ lsSet(MONIT_KEY, JSON.stringify(MONIT)); scheduleMonitPush(); }
+// v328: registros vivos (os excluídos ficam com del:true para não voltarem de outro aparelho)
+function monitLista(){ return ((MONIT&&MONIT.registros)||[]).filter(r=>r&&!r.del); }
+// ---- v328: sincronização (aba "MONITORAMENTO APP"; só envia se o Code.gs já tiver o ramo __monit) ----
+let lastMonitSig='';
+function monitMapa(){ const m={}; ((MONIT&&MONIT.registros)||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); return m; }
+function monitSig(){ return sigHash(JSON.stringify(monitMapa())); }
+function monitServerOk(){ return !!(DATA && DATA.monit_app && typeof DATA.monit_app==='object'); }
+function scheduleMonitPush(){ loteAgendar('__monit'); }
+function monitApplyPulled(map){
+  if(!map || typeof map!=='object' || !MONIT) return false;
+  let changed=false; const idx={}; MONIT.registros.forEach((r,i)=>{ if(r&&r.id) idx[r.id]=i; });
+  for(const k in map){ const inc=map[k]; if(!inc || typeof inc!=='object') continue;
+    const i=idx[k], loc=i!=null?MONIT.registros[i]:null, iu=+inc._u||0, lu=+(loc&&(loc._u||loc.ts))||0;
+    if(!loc){ MONIT.registros.push(inc); changed=true; } else if(iu>lu){ MONIT.registros[i]=inc; changed=true; } }
+  const pend=monitSig()!==lastMonitSig && !!lastMonitSig;
+  if(changed){ lsSet(MONIT_KEY, JSON.stringify(MONIT)); if(!pend) lastMonitSig=monitSig(); }
+  if(pend) scheduleMonitPush();
+  return changed;
+}
 const fmtData=s=>{ if(!s) return ''; const p=String(s).split('-'); return p.length===3?`${p[2]}/${p[1]}/${p[0]}`:s; };
 const MONIT_ALVOS=['Lagarta-do-cartucho','Lagarta-da-soja','Helicoverpa','Percevejo-marrom','Percevejo-verde','Mosca-branca','Tripes','Ácaro-rajado','Ferrugem-asiática','Mancha-alvo','Mancha-parda','Antracnose','Oídio','Cercospora','Mofo-branco','Buva','Capim-amargoso','Caruru','Corda-de-viola','Trapoeraba','Picão-preto','Falha de stand'];
 const MONIT_CAT={praga:{lbl:'Praga',cls:'mc-praga'},doenca:{lbl:'Doença',cls:'mc-doenca'},daninha:{lbl:'Daninha',cls:'mc-daninha'},outro:{lbl:'Outro',cls:'mc-outro'}};
@@ -5829,14 +5848,15 @@ function monitSave(talhao){
   const g=id=>{ const el=document.getElementById(id); return el?el.value.trim():''; };
   const alvo=g('monit-alvo');
   if(!alvo){ toast('Informe o alvo (praga/doença/daninha)'); return; }
+  const t=findTalhao(talhao), u=sessUsuario();
   MONIT.registros.push({
     id:'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),
-    talhao, data:g('monit-data')||new Date().toISOString().slice(0,10),
+    talhao, talhaoNome:t?tNome(t):talhao, data:g('monit-data')||new Date().toISOString().slice(0,10),
     categoria:g('monit-cat')||'praga', alvo,
     nivel:g('monit-nivel'), unidade:g('monit-unid'), limiar:g('monit-limiar'),
     acao:g('monit-acao'), eficacia:g('monit-efic'), obs:g('monit-obs'),
     lat:_monitGPS?_monitGPS.lat:null, lng:_monitGPS?_monitGPS.lng:null, acc:_monitGPS?_monitGPS.acc:null,
-    ts:Date.now()
+    quem:(u&&u.nome)||'', ts:Date.now(), _u:tsAgora()   // v328: quem + carimbo p/ sincronizar
   });
   saveMonit(); _monitGPS=null; route(); toast('Registro salvo');
 }
@@ -5845,8 +5865,8 @@ V.monitoramento=function(arg){
   if(!all.length) return `<div class="empty">Nenhum talhão para monitorar.</div>`;
   const selId=(arg&&all.some(t=>t.id===arg))?arg:all[0].id;
   const t=all.find(x=>x.id===selId);
-  const regs=MONIT.registros.filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  const tOpt=all.map(x=>{ const n=MONIT.registros.filter(r=>r.talhao===x.id).length;
+  const regs=monitLista().filter(r=>r.talhao===selId).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  const tOpt=all.map(x=>{ const n=monitLista().filter(r=>r.talhao===x.id).length;
     return `<option value="${esc(x.id)}"${x.id===selId?' selected':''}>${esc(tNome(x))}${n?` — ${n} reg.`:''}</option>`; }).join('');
   const hoje=new Date().toISOString().slice(0,10);
   const cards=regs.map(r=>{
@@ -5907,7 +5927,9 @@ V.monitoramento=function(arg){
   <div class="panel"><div class="panel-head"><h2>Histórico</h2><span class="sub">${regs.length} registro(s)</span></div>
     <div class="monit-list">${cards}</div>
   </div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Os registros ficam salvos <b>no aparelho</b>. Em breve: sincronizar com a planilha e ver no mapa.</p>`;
+  ${!syncUrl()?'<p class="lt-aviso">Sincronização não configurada: os registros ficam só neste aparelho.</p>':
+    !monitServerOk()?'<p class="lt-aviso">⚠️ Ainda <b>não vão para a planilha</b>: cole o <b>Code.gs</b> novo e crie uma <b>Nova versão</b> (aba “MONITORAMENTO APP”). Até lá ficam neste aparelho e sobem depois.</p>':
+    '<p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">🔄 Registros sincronizados entre os aparelhos (aba MONITORAMENTO APP). Com GPS capturado, entram no <b>Mapa</b> e no <b>mapa de calor</b> do talhão.</p>'}`;
 };
 
 /* ================= CHUVA (registro pluviométrico) ================= */
@@ -7007,7 +7029,18 @@ V.misturas=function(){
 function ocFormNovo(tipo,tid){ const t=findTalhao(tid), seq=t?talSafraAtual(t):'principal', hj=_hojeISO();
   const est=t?estadioEm(estadiosDe(t,seq),hj):null;
   return {tipo, talhao:tid, data:hj, ativ:t?((seq==='safrinha'?empSafDe(t):empDe(t))||''):'', evento:'', situacao:'', acao:'', texto:'',
-    estadio:est?`${est.cod} ${est.desc}`:'', ini:hj, fim:hj, tarefa:false, compartilhar:false, fotos:[]}; }
+    estadio:est?`${est.cod} ${est.desc}`:'', ini:hj, fim:hj, tarefa:false, compartilhar:false, fotos:[], lat:null, lng:null, acc:null, gpsSt:'', gpsTent:false}; }   // v328: posição GPS
+// v328: posição do celular no formulário de ocorrência — automática ao abrir (1 tentativa) e pelo botão 📍
+function ocCaptureGPS(f, auto){ f=f||ocFormAtual(); if(!f) return;
+  const st=()=>{ const el=document.getElementById('oc-gps'); if(el) el.innerHTML=ocGpsHtml(f); };
+  if(!('geolocation' in navigator)){ f.gpsSt='GPS não suportado neste aparelho'; st(); return; }
+  f.gpsTent=true; f.gpsSt='📍 obtendo localização…'; st();
+  navigator.geolocation.getCurrentPosition(p=>{ const cur=ocFormAtual(); if(cur!==f) return;
+    f.lat=+p.coords.latitude.toFixed(6); f.lng=+p.coords.longitude.toFixed(6); f.acc=Math.round(p.coords.accuracy||0); f.gpsSt=''; st(); },
+    err=>{ f.gpsSt=auto?'sem posição (toque em 📍 para tentar de novo)':'✖ não consegui o GPS ('+((err&&err.message)||'')+'). Permita o acesso à localização.'; st(); },
+    {enableHighAccuracy:true, timeout:auto?8000:15000, maximumAge:auto?60000:0}); }
+function ocGpsHtml(f){ return (f.lat!=null&&f.lng!=null)?`📍 <b>${f.lat}, ${f.lng}</b> <span class="mut">(±${f.acc||0} m)</span> · <a href="https://maps.google.com/?q=${f.lat},${f.lng}" target="_blank" rel="noopener">ver</a>`:`<span class="mut">${esc(f.gpsSt||'GPS não capturado')}</span>`; }
+function ocGpsLink(r){ return (r&&r.lat!=null&&r.lng!=null)?`<a href="https://maps.google.com/?q=${r.lat},${r.lng}" target="_blank" rel="noopener" class="monit-gpslink" title="Abrir no Google Maps">📍 ${r.lat}, ${r.lng}${r.acc?` <span class="mut">(±${r.acc} m)</span>`:''}</a>`:''; }
 function ocFormDe(tipo,tid){ const k=tipo+'|'+tid; if(!ocForm[k]) ocForm[k]=ocFormNovo(tipo,tid); return ocForm[k]; }
 function ocFormAtual(){ const [tp,tid]=decodeURIComponent(String(location.hash.split('/')[2]||'')).split('~'); return OC_TIPOS[tp]?ocFormDe(tp,tid||afTal):null; }
 function ocFalta(f){ const x=[]; if(!String(f.ativ||'').trim()) x.push('atividade');
@@ -7033,7 +7066,7 @@ function ocResumo(r){ const T=OC_TIPOS[r.tipo]||{};
 function ocCard(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao), nf=(r.fotos||[]).length+fotoPend.filter(p=>p.ocId===r.id).length;
   return `<div class="oc-card"><span class="na-ico ${T.cls||''}">${T.ico||'📝'}</span><div class="oc-tx">
       <div><b>${esc(T.lbl||r.tipo)}${r.tipo==='climatica'&&r.evento?' · '+esc(r.evento):''}</b> <span class="mut">${esc(fmtDataBR(r.data).slice(0,5))} · ${esc(t?tNome(t):r.talhaoNome||r.talhao)}${r.quem?' · '+esc(r.quem):''}</span></div>
-      <div class="oc-res">${esc(ocResumo(r))}</div>${r.tarefaId?'<div class="mut" style="font-size:11.5px">✅ tarefa criada no quadro de Tarefas</div>':''}
+      <div class="oc-res">${esc(ocResumo(r))}</div>${r.tarefaId?'<div class="mut" style="font-size:11.5px">✅ tarefa criada no quadro de Tarefas</div>':''}${ocGpsLink(r)?`<div style="font-size:12px">${ocGpsLink(r)}</div>`:''}
       ${nf?`<div class="oc-ths">${ocFotoThumb(r)}</div>`:''}
       ${ocFotoPendHtml(r)}</div>
     <button class="icon-btn del" data-act="ocDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`; }
@@ -7055,6 +7088,7 @@ function ocDetalheOpen(id){ const r=OCOR&&OCOR.reg[id]; if(!r){ toast('Registro 
     ${fotos?`<div class="oc-ths oc-big">${fotos}</div>`:'<p class="mut" style="text-align:center">Sem fotos.</p>'}
     ${ocFotoPendHtml(r)}
     ${r.tarefaId?'<p class="mut" style="font-size:12px">✅ tarefa criada no quadro de Tarefas</p>':''}
+    ${ocGpsLink(r)?`<p style="font-size:12.5px;margin:6px 0">${ocGpsLink(r)}${_map&&location.hash.indexOf('#/mapa')===0?` · <a class="link" data-act="ocVerNoMapa" data-id="${esc(r.id)}">ver no mapa</a>`:''}</p>`:''}
     <div class="tf-btns"><a class="btn btn-outline btn-sm" data-go="#/ocorrencia/${esc(r.tipo)}~${encodeURIComponent(r.talhao)}">📝 Ocorrências do talhão</a><a class="btn btn-outline btn-sm" href="https://wa.me/?text=${encodeURIComponent(ocShareTexto(r))}" target="_blank" rel="noopener">📤 Compartilhar</a></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function ocTog(l,k,f){ return `<label class="st-tog"><span>${l}</span><input type="checkbox" data-oc="${k}"${f[k]?' checked':''}><i></i></label>`; }
@@ -7076,6 +7110,7 @@ V.ocorrencia=function(arg){
       <div class="panel"><div class="panel-head"><h2>Registros do talhão</h2><span class="sub">${regsTal.length}</span></div>${regsTal.map(ocCard).join('')||'<p class="mut" style="padding:14px">Nenhum registro ainda.</p>'}</div>${aviso}`;
   }
   const T=OC_TIPOS[tipo], f=ocFormDe(tipo,tid), fe=estadiosDe(t,talSafraAtual(t));
+  if(!f.gpsTent && f.lat==null){ f.gpsTent=true; setTimeout(()=>ocCaptureGPS(f,true), 50); }   // v328: pega a posição sozinho ao abrir (1 vez)
   const estSel=(fe.list||[]).length?`<select class="sel" data-oc="estadio"><option value="">Selecione</option>${fe.list.map(s=>{ const v=`${s.cod} ${s.desc}`; return `<option${v===f.estadio?' selected':''}>${esc(v)}</option>`; }).join('')}${f.estadio&&!fe.list.some(s=>`${s.cod} ${s.desc}`===f.estadio)?`<option selected>${esc(f.estadio)}</option>`:''}</select>`
     :`<input class="txt" data-oc="estadio" value="${esc(f.estadio)}" placeholder="ex.: V6, R5.2">`;
   const campos={
@@ -7095,6 +7130,7 @@ V.ocorrencia=function(arg){
       <label class="oc-f"><span>Data</span><input type="date" data-oc="data" value="${esc(f.data)}"></label>
       ${ocTxt('Atividade','ativ',f,{ph:'ex.: SORGO - SEM SORGO NUGRAIN 430 P MAX'})}
       ${campos}
+      <div class="oc-gpsrow"><button type="button" class="btn btn-outline btn-sm" data-act="ocGPS">📍 Pegar posição</button><span id="oc-gps" class="mut" style="font-size:12px">${ocGpsHtml(f)}</span></div>
       ${ocTog('Compartilhar','compartilhar',f)}
       <div class="af-falta" id="oc-falta">${(x=>x.length?'Falta: '+x.join(', '):'')(ocFalta(f))}</div>
       <div class="af-acts"><button class="btn btn-ghost btn-sm" data-act="ocLimpar">Limpar</button><span class="spacer"></span><button class="btn btn-primary" data-act="ocSalvar">💾 Salvar</button></div>
@@ -7115,6 +7151,7 @@ function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f
   if(falta.length){ toast('Falta: '+falta.join(', ')); return; }
   const now=Date.now(), id='oc'+now.toString(36)+Math.random().toString(36).slice(2,6), t=findTalhao(f.talhao), u=sessUsuario();
   const rec={id, tipo:f.tipo, talhao:f.talhao, talhaoNome:t?tNome(t):f.talhao, data:f.data||_hojeISO(), ativ:f.ativ.trim(), quem:(u&&u.nome)||'', fotos:[], ts:now, _u:tsAgora()};
+  if(f.lat!=null&&f.lng!=null){ rec.lat=f.lat; rec.lng=f.lng; rec.acc=f.acc||null; }   // v328: posição GPS (vai para a planilha e para o mapa)
   if(f.tipo==='anotacao') rec.texto=f.texto.trim();
   if(f.tipo==='climatica') Object.assign(rec,{evento:f.evento, situacao:f.situacao.trim(), estadio:f.estadio, ini:f.ini, fim:f.fim});
   if(f.tipo==='manutencao') rec.acao=f.acao.trim();
@@ -7355,6 +7392,8 @@ function talFichaOpen(tid){
     ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-act="ocAbrir" data-id="${esc(r.id)}" title="Abrir o registro">${T.ico||'📝'} ${esc(ocResumo(r))}${nf?` · 📷 ${nf}`:''} ›</a>`}); });   // v326: toque abre o registro com as fotos
   Object.values((AFER&&AFER.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=AF_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📏'} ${esc(T.lbl||'Aferição')}${r.resumo?' · '+esc(r.resumo):''}`}); });
   standLista().filter(r=>r.talhao===tid).forEach(r=>ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-go="#/stand/${id}" title="Abrir as contagens de stand">🌱 Contagem de stand · ${r.pop!=null?nf0.format(r.pop)+' pl/ha':''}${r.pctMeta!=null?` · ${r.pctMeta}% da meta`:''}${r.quem?` · ${esc(r.quem)}`:''} ›</a>`}));   // v327
+  monitLista().filter(r=>r.talhao===tid).forEach(r=>{ const nv=_numc(r.nivel), lmr=_numc(r.limiar), acima=(nv!=null&&lmr!=null&&nv>=lmr);   // v328: monitoramento (pragas/doenças/daninhas)
+    ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-go="#/monitoramento/${id}" title="Abrir o monitoramento do talhão">${{praga:'🐛',doenca:'🍂',daninha:'🌿'}[r.categoria]||'🔎'} ${esc(r.alvo||(MONIT_CAT[r.categoria]||{}).lbl||'Monitoramento')}${r.nivel?` · nível ${esc(r.nivel)}${r.limiar?' / '+esc(r.limiar):''}`:''}${acima?' · <b style="color:#b00020">acima do limiar</b>':''}${r.lat!=null?' · 📍':''}${r.quem?` · ${esc(r.quem)}`:''} ›</a>`}); });
   ev.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const evHtml=ev.length?ev.slice(0,6).map(x=>`<div class="tf-ev"><span class="tf-data">${x.data?fmtData(x.data):'—'}</span><span>${x.html}</span></div>`).join('')+(ev.length>6?`<p class="mut tf-vazio">+${ev.length-6} na Timeline</p>`:''):'<p class="mut tf-vazio">Nenhuma ocorrência ou aferição.</p>';
   const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
@@ -8417,8 +8456,9 @@ async function mapaInit(){
   const el=document.getElementById('mapa-canvas'); if(!el) return;
   let L; try{ L=await loadLeaflet(); }catch(e){
     el.innerHTML='<div class="mut" style="padding:26px;text-align:center">🌐 O mapa precisa de internet para carregar. Sem conexão, use os links 📍 de cada registro na tela de Monitoramento.</div>'; return; }
-  const pts=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null);
+  const pts=monitLista().filter(r=>r.lat!=null&&r.lng!=null);
   if(_map){ try{ _map.stop(); }catch(e){} try{ _map.remove(); }catch(e){} _map=null; }   // para animação pendente antes de tirar o mapa antigo
+  MAPA_CALOR.layers=[]; MAPA_CALOR.pontos=[];
   _map=L.map(el).setView(pts.length?[pts[0].lat,pts[0].lng]:[-15.78,-47.93], pts.length?14:4);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {maxZoom:19, attribution:'Esri World Imagery'}).addTo(_map);
@@ -8441,16 +8481,75 @@ async function mapaInit(){
   });
   // v283: experimentos ficam OCULTOS no mapa; só aparecem os escolhidos na ficha do talhão (👁️) — e continuam depois de redesenhar
   MAPA_EXP.layers={}; [...MAPA_EXP.ids].forEach(id=>{ if(!expById(id)) MAPA_EXP.ids.delete(id); else expMapaDesenha(id); });
+  // v328: mapa de calor (por baixo dos pontos) quando está ligado
+  if(MAPA_CALOR.on){ try{ calorDesenhar(); }catch(e){} }
   pts.forEach(r=>{
-    const c=MONIT_CATCOLOR[r.categoria]||'#64757d';
-    L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
-      .bindPopup(`<b>${esc(r.alvo||'—')}</b><br>${esc((MONIT_CAT[r.categoria]||{}).lbl||'')} · ${esc(fmtData(r.data))}<br>Nível ${esc(r.nivel||'—')} · limiar ${esc(r.limiar||'—')}`);
-    bounds.push([r.lat,r.lng]);
+    const c=MONIT_CATCOLOR[r.categoria]||'#64757d', t=findTalhao(r.talhao);
+    const nv=_numc(r.nivel), lm=_numc(r.limiar), acima=(nv!=null&&lm!=null&&nv>=lm);
+    const mk=L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
+      .bindPopup(`<b>${esc(r.alvo||'—')}</b>${acima?' <span style="color:#b00020">⚠️ acima do limiar</span>':''}<br>${esc((MONIT_CAT[r.categoria]||{}).lbl||'')} · ${esc(fmtData(r.data))}${r.quem?' · '+esc(r.quem):''}<br>Nível ${esc(r.nivel||'—')}${r.unidade?' '+esc(r.unidade):''} · limiar ${esc(r.limiar||'—')}${r.acao?`<br>Ação: ${esc(r.acao)}`:''}${r.obs?`<br><span class="mut">${esc(r.obs)}</span>`:''}<br><a class="link" data-go="#/monitoramento/${encodeURIComponent(r.talhao)}">Abrir o monitoramento${t?' de '+esc(tNome(t)):''} ›</a>`);
+    MAPA_CALOR.pontos.push(mk); bounds.push([r.lat,r.lng]);
   });
+  // v328: anotações/ocorrências com posição: ícone do tipo; tocar abre o registro (texto + fotos)
+  ocorLista().filter(r=>r.lat!=null&&r.lng!=null).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}; if(oqFaz){ const t=findTalhao(r.talhao); if(t&&!fazOk(t)) return; }
+    const mk=L.marker([r.lat,r.lng],{icon:L.divIcon({className:'mapa-pt-wrap',html:`<div class="mapa-pt" title="${esc(T.lbl||'')}">${T.ico||'📝'}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).addTo(_map);
+    mk.on('click', ()=>ocDetalheOpen(r.id)); MAPA_CALOR.pontos.push(mk); bounds.push([r.lat,r.lng]); });
   if(bounds.length>1){ try{ _map.fitBounds(bounds,{padding:[30,30]}); }catch(e){} }
   else if(bounds.length===1){ _map.setView(bounds[0],15); }
   setTimeout(()=>{ try{ _map.invalidateSize(); }catch(e){} }, 120);
 }
+// ===== v328: MAPA DE CALOR de pragas, doenças e daninhas — dentro do contorno de cada talhão =====
+// Grade de células (20–40 m conforme o tamanho do talhão), só as que caem dentro do limite. Cada célula soma os registros
+// de Monitoramento com GPS ao redor (peso gaussiano, raio ~50 m), pesados por nível ÷ limiar (acima do limiar pesa mais).
+// Cor: amarelo (baixa) → laranja (no limiar) → vermelho (acima). Toque na célula: quantos registros, alvos, nível médio.
+const CALOR_KEY='planejamento_mapa_calor';
+const MAPA_CALOR=Object.assign({on:false, cat:'', alvo:'', dias:30, layers:[], pontos:[], info:null}, (()=>{ try{ return JSON.parse(localStorage.getItem(CALOR_KEY))||{}; }catch(e){ return {}; } })());
+function calorSalvar(){ lsSet(CALOR_KEY, JSON.stringify({on:MAPA_CALOR.on, cat:MAPA_CALOR.cat, alvo:MAPA_CALOR.alvo, dias:MAPA_CALOR.dias})); }
+function calorPontos(){ const hj=_hojeISO(), de=MAPA_CALOR.dias>0?(()=>{ const d=new Date(hj+'T12:00:00'); d.setDate(d.getDate()-MAPA_CALOR.dias); return d.toISOString().slice(0,10); })():'';
+  return monitLista().filter(r=>r.lat!=null&&r.lng!=null && (!MAPA_CALOR.cat||r.categoria===MAPA_CALOR.cat) && (!MAPA_CALOR.alvo||r.alvo===MAPA_CALOR.alvo) && (!de||String(r.data||'').slice(0,10)>=de)); }
+function calorPeso(r){ const nv=_numc(r.nivel), lm=_numc(r.limiar); if(nv!=null&&lm!=null&&lm>0) return Math.max(0.15, nv/lm); if(nv!=null&&nv>0) return 1; return 0.6; }   // sem nível: presença conta um pouco
+function calorCor(v){ return v<.25?'#ffffb2':v<.5?'#fecc5c':v<.75?'#fd8d3c':v<1?'#f03b20':'#bd0026'; }
+function calorCelula(ha){ return ha<=60?20:ha<=150?30:40; }   // m — talhão grande, célula maior (mantém o mapa leve)
+function calorLimpar(){ (MAPA_CALOR.layers||[]).forEach(l=>{ try{ _map.removeLayer(l); }catch(e){} }); MAPA_CALOR.layers=[]; MAPA_CALOR.info=null; }
+function calorDesenhar(){ const L=window.L; if(!_map||!L) return; calorLimpar();
+  const pts=calorPontos(), lims=limitesAll(), rend=L.canvas({padding:0.5}); let nCel=0, nTal=0, max=0; const usados=new Set();
+  if(!pts.length){ MAPA_CALOR.info={pts:0,tal:0,cel:0}; calorStatus(); return; }
+  Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords||!lm.coords[0]) return; if(oqFaz&&t&&!fazOk(t)) return;
+    const anel=lm.coords[0], lats=anel.map(p=>p[0]), lngs=anel.map(p=>p[1]), la0=Math.min(...lats), la1=Math.max(...lats), ln0=Math.min(...lngs), ln1=Math.max(...lngs);
+    const cosL=Math.cos((la0+la1)/2*Math.PI/180), cel=calorCelula(lm.ha||limAreaHa(lm.coords)), dLat=cel/111320, dLng=cel/(111320*cosL), sig=50, r2max=(2.5*sig)*(2.5*sig);
+    // só pontos perto deste talhão (até 150 m da caixa) — o resto não influencia
+    const perto=pts.filter(p=>p.lat>=la0-0.0015&&p.lat<=la1+0.0015&&p.lng>=ln0-0.002&&p.lng<=ln1+0.002); if(!perto.length) return;
+    let temCel=false;
+    for(let la=la0; la<la1; la+=dLat) for(let ln=ln0; ln<ln1; ln+=dLng){ const cl=la+dLat/2, cn=ln+dLng/2; if(!pontoNoAnel(cl,cn,anel)) continue;
+      let s=0; const regs=[];
+      perto.forEach(p=>{ const dy=(p.lat-cl)*111320, dx=(p.lng-cn)*111320*cosL, d2=dx*dx+dy*dy; if(d2>r2max) return; const w=Math.exp(-d2/(2*sig*sig)); s+=w*calorPeso(p); regs.push(p); });
+      if(s<0.06) continue; const v=Math.min(1.2,s); if(v>max) max=v; temCel=true; nCel++; regs.forEach(p=>usados.add(p.id));
+      const rc=L.rectangle([[la,ln],[la+dLat,ln+dLng]],{renderer:rend,stroke:false,fillColor:calorCor(v),fillOpacity:.72,interactive:true}).addTo(_map);
+      rc.on('click', ()=>calorPopup(rc, tid, regs, v, cel)); MAPA_CALOR.layers.push(rc); }
+    if(temCel) nTal++; });
+  MAPA_CALOR.pontos.forEach(m=>{ try{ m.bringToFront&&m.bringToFront(); }catch(e){} });
+  MAPA_CALOR.info={pts:usados.size, tal:nTal, cel:nCel, fora:pts.length-usados.size}; calorStatus(); }
+function calorPopup(rc, tid, regs, v, cel){ const L=window.L, t=findTalhao(tid), uniq=[...new Map(regs.map(r=>[r.id,r])).values()].sort((a,b)=>String(b.data||'').localeCompare(String(a.data||'')));
+  const porAlvo={}; uniq.forEach(r=>{ const k=r.alvo||'—'; (porAlvo[k]=porAlvo[k]||[]).push(r); });
+  const linhas=Object.keys(porAlvo).map(k=>{ const rs=porAlvo[k], nv=rs.map(r=>_numc(r.nivel)).filter(x=>x!=null), lm=rs.map(r=>_numc(r.limiar)).filter(x=>x!=null);
+    const mN=nv.length?nv.reduce((s,x)=>s+x,0)/nv.length:null, mL=lm.length?lm.reduce((s,x)=>s+x,0)/lm.length:null;
+    return `${esc(k)} <b>×${rs.length}</b>${mN!=null?` · nível médio <b>${nf1.format(mN)}</b>${mL!=null?` / limiar ${nf1.format(mL)}${mN>=mL?' — <span style="color:#b00020">acima</span>':''}`:''}`:''}`; }).join('<br>');
+  const ult=uniq.slice(0,3).map(r=>fmtData(r.data).slice(0,5)+(r.quem?' ('+esc(r.quem)+')':'')).join(' · ');
+  L.popup({maxWidth:280}).setLatLng(rc.getBounds().getCenter()).setContent(`<b>🔥 ${esc(t?tNome(t):tid)} · célula de ${cel} m</b> · ${v>=1?'<span style="color:#b00020">acima do limiar</span>':v>=.5?'perto do limiar':'pressão baixa'}<br>${uniq.length} registro(s)${MAPA_CALOR.dias>0?` nos últimos ${MAPA_CALOR.dias} dias`:' na safra'}<br>${linhas}<br><span class="mut">Últimos: ${ult}</span><br><a class="link" data-go="#/monitoramento/${encodeURIComponent(tid)}">Ver os registros ›</a>`).openOn(_map); }
+function calorStatus(){ const el=document.getElementById('calor-st'); if(!el) return; const i=MAPA_CALOR.info;
+  el.textContent=!i?'':!i.pts&&!i.cel?'nenhum registro com GPS no filtro':`${i.pts} registro(s) · ${i.tal} talhão(ões) · ${i.cel} células${i.fora?` · ${i.fora} fora de contorno`:''}`; }
+function calorCtrHtml(){ const c=MAPA_CALOR, alvos=[...new Set(monitLista().filter(r=>r.lat!=null).map(r=>r.alvo).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+  return `<div id="calor-ctr" class="ndvi-ctr calor-ctr"${c.on?'':' hidden'}>
+    <label>categoria<select class="sel" data-calor="cat"><option value="">todas</option>${Object.keys(MONIT_CAT).map(k=>`<option value="${k}"${c.cat===k?' selected':''}>${MONIT_CAT[k].lbl}</option>`).join('')}</select></label>
+    <label>alvo<select class="sel" data-calor="alvo"><option value="">todos</option>${alvos.map(a=>`<option${c.alvo===a?' selected':''}>${esc(a)}</option>`).join('')}</select></label>
+    <label>período<select class="sel" data-calor="dias">${[[30,'30 dias'],[60,'60 dias'],[90,'90 dias'],[0,'safra toda']].map(([d,l])=>`<option value="${d}"${+c.dias===d?' selected':''}>${l}</option>`).join('')}</select></label>
+    <span id="calor-st" class="mut"></span></div>`; }
+function calorToggle(){ MAPA_CALOR.on=!MAPA_CALOR.on; calorSalvar();
+  const b=document.querySelector('[data-act="mapaCalor"]'); if(b){ b.classList.toggle('on',MAPA_CALOR.on); b.setAttribute('aria-pressed',String(MAPA_CALOR.on)); }
+  const ctr=document.getElementById('calor-ctr'), leg=document.getElementById('calor-leg'); if(ctr) ctr.hidden=!MAPA_CALOR.on; if(leg) leg.hidden=!MAPA_CALOR.on;
+  if(MAPA_CALOR.on){ calorDesenhar(); const i=MAPA_CALOR.info; if(i&&!i.cel) toast(i.pts||monitLista().some(r=>r.lat!=null)?'Nenhum registro com GPS dentro de um contorno neste filtro':'Nenhum registro de Monitoramento com GPS ainda — capture o GPS ao registrar'); }
+  else calorLimpar(); }
+document.addEventListener('change', e=>{ const el=e.target; if(!(el.dataset&&el.dataset.calor)) return; const k=el.dataset.calor; MAPA_CALOR[k]=k==='dias'?+el.value:el.value; calorSalvar(); if(MAPA_CALOR.on) calorDesenhar(); });
 // ---- POSIÇÃO DO CELULAR no mapa: botão "Seguir" liga/desliga o acompanhamento (watchPosition); ponto azul + círculo
 // de precisão; segue você no mapa. Funciona sem internet (os limites e o ponto são desenhados no aparelho; só o
 // fundo de satélite precisa de rede). A escolha fica guardada no aparelho.
@@ -8619,7 +8718,7 @@ const CAMPO_TIPOS={ operacao:{lbl:'Operação',ico:'✅',cor:'#2e7d32'}, aplicac
 // lista unificada de eventos de campo (mais recentes primeiro)
 function camposEventos(){
   const ev=[];
-  (MONIT&&MONIT.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'monitoramento',talhao:r.talhao,
+  monitLista().forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'monitoramento',talhao:r.talhao,
     titulo:(r.categoria?_capf(r.categoria):'Monitoramento'), resumo:[r.alvo, r.nivel?('nível '+r.nivel+(r.unidade?' '+r.unidade:'')):'', r.acao].filter(Boolean).join(' · ')}));
   (CHUVA&&CHUVA.registros||[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'chuva',talhao:'',
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
@@ -9170,7 +9269,7 @@ function exportCampoCsv(){
   download('relatorio_campo.csv', '﻿'+linhas.join('\r\n'), 'text/csv');
 }
 V.mapa=function(){
-  const n=MONIT.registros.filter(r=>r.lat!=null&&r.lng!=null).length;
+  const n=monitLista().filter(r=>r.lat!=null&&r.lng!=null).length, nOc=ocorLista().filter(r=>r.lat!=null&&r.lng!=null).length;
   const tals=fazTalhoes(), lims=limitesAll(), comLim=tals.filter(t=>lims[t.id]), semLim=tals.filter(t=>!lims[t.id]);   // v250: fazenda escolhida
   const tOpts=sel=>`<option value="">— não importar —</option>`+tals.map(t=>`<option value="${esc(t.id)}"${t.id===sel?' selected':''}>${esc(tNome(t))} (${num(areaDe(t))} ha)</option>`).join('');
   const imp=_limImport?`<div class="panel lim-imp"><div class="panel-head"><h2>📥 Conferir importação</h2><span class="sub">${esc(_limImport.arquivo)}</span></div>
@@ -9191,7 +9290,7 @@ V.mapa=function(){
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(id)}" title="Remover este contorno">🗑️ Remover</button></div></div>`; }).join('');
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
-  return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento</span>
+  return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento${nOc?` · ${nOc} anotação(ões)`:''}</span>
       <div class="spacer"></div>${fazSelectHtml('faz-mapa')}
       <div class="mapa-tools"><button class="btn btn-outline btn-sm mapa-tools-btn" data-act="mapaTools" aria-expanded="false" aria-haspopup="true" title="Importar, Drive, Seguir, NDVI, nomes">🧰 Ferramentas <span class="mt-seta">▾</span></button>
       <div class="mapa-menu" role="menu" hidden>
@@ -9200,11 +9299,14 @@ V.mapa=function(){
       <button class="btn btn-outline btn-sm" data-act="driveOpen" data-tipo="contornos" title="Importar contornos da pasta Contornos do Google Drive (ao lado da planilha)">☁️ Drive</button>
       <button class="btn btn-outline btn-sm mapa-seguir${geoSeguirOn()?' on':''}" data-act="mapaLoc" aria-pressed="${geoSeguirOn()}" title="Mostrar e acompanhar a posição do celular no mapa (funciona sem internet)">${geoSeguirOn()?'📍 Seguindo':'📍 Seguir'}</button>
       <button class="btn btn-outline btn-sm mapa-ndvi${(ndviCfg().on&&ndviCfg().inst)?' on':''}" data-act="mapaNdvi" aria-pressed="${!!(ndviCfg().on&&ndviCfg().inst)}" title="Camada NDVI do Sentinel-2 (Copernicus)">🛰️ NDVI</button>
-      <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button></div></div></div>
+      <button class="btn btn-outline btn-sm mapa-nomes${mapaNomesOn()?' on':''}" data-act="mapaNomes" aria-pressed="${mapaNomesOn()}" title="Mostrar ou esconder o nome dos talhões no mapa">${mapaNomesOn()?'🏷️ Ocultar nomes':'🏷️ Mostrar nomes'}</button>
+      <button class="btn btn-outline btn-sm mapa-calor${MAPA_CALOR.on?' on':''}" data-act="mapaCalor" aria-pressed="${MAPA_CALOR.on}" title="Mapa de calor de pragas, doenças e daninhas dentro do contorno dos talhões (pelo GPS dos registros de Monitoramento)">🔥 Calor</button></div></div></div>
+    ${calorCtrHtml()}
     <div class="mapa-wrap"><div id="mapa-canvas" class="mapa-canvas${mapaNomesOn()?'':' mapa-sem-nome'}"></div>
       <span id="mapa-geo-st" class="mapa-geo-st" hidden></span>
       <button class="mapa-fab" data-act="mapaFab" title="Nova Ação no talhão onde você está">＋</button>
-      <div id="ndvi-leg" class="ndvi-leg"${(ndviCfg().on&&ndviCfg().inst)?'':' hidden'}><span>NDVI</span><i></i><small>baixo</small><small style="margin-left:auto">alto</small></div></div>
+      <div id="ndvi-leg" class="ndvi-leg"${(ndviCfg().on&&ndviCfg().inst)?'':' hidden'}><span>NDVI</span><i></i><small>baixo</small><small style="margin-left:auto">alto</small></div>
+      <div id="calor-leg" class="ndvi-leg calor-leg"${MAPA_CALOR.on?'':' hidden'}><span>🔥</span><i></i><small>baixa</small><small style="margin:0 auto">no limiar</small><small>acima do limiar</small></div></div>
     ${(()=>{ const c=ndviCfg(); return `<div id="ndvi-ctr" class="ndvi-ctr"${(c.on&&c.inst)?'':' hidden'}><label>até<input type="date" class="txt" data-ndvi="fim" value="${esc(c.fim||_hojeISO())}"></label>
       <label>janela<select class="sel" data-ndvi="dias">${[7,15,30,60,90].map(d=>`<option value="${d}"${+c.dias===d?' selected':''}>${d} dias</option>`).join('')}</select></label>
       <label>nuvem ≤<select class="sel" data-ndvi="maxcc">${[10,20,30,50,80].map(d=>`<option value="${d}"${+c.maxcc===d?' selected':''}>${d}%</option>`).join('')}</select></label>
@@ -9216,7 +9318,8 @@ V.mapa=function(){
       <p class="mut" style="font-size:11px;padding:0 14px 10px">O ID fica só neste aparelho (como a URL da planilha). Cota grátis do Copernicus: milhares de imagens por mês, mais que suficiente para a fazenda.</p></details>`; })()}
     <div class="mapa-leg">${legCult}${legCult?'<span class="mapa-sep"></span>':''}
       <span><i style="background:#b7791f"></i>Praga</span><span><i style="background:#b00020"></i>Doença</span>
-      <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span>
+      <span><i style="background:#2e7d32"></i>Daninha</span><span><i style="background:#64757d"></i>Outro</span><span>📝 Anotação</span>
+      <span class="mut">toque num ponto ou numa célula do calor para abrir</span>
     </div></div>
   <div class="panel"><div class="panel-head"><h2>Limites dos talhões</h2><span class="sub">${comLim.length}/${tals.length} com contorno</span></div>
     ${!syncUrl()?`<p class="lt-aviso">Sincronização não configurada: os limites importados ficam só neste aparelho.</p>`:
@@ -10445,6 +10548,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
     else if(a.act==='ocAbrir'){ ocDetalheOpen(a.id); return; }
+    else if(a.act==='ocGPS'){ ocCaptureGPS(null,false); return; }
+    else if(a.act==='ocVerNoMapa'){ const r=OCOR.reg[a.id]; novaAcaoFechar(); if(r&&_map&&r.lat!=null){ try{ _map.setView([r.lat,r.lng], Math.max(_map.getZoom(),17)); }catch(e){} } return; }
+    else if(a.act==='mapaCalor'){ calorToggle(); return; }
     else if(a.act==='ocFotoRetry'){ ocFotoRetry(a.id); return; }
     else if(a.act==='ocFotoShare'){ ocFotoShare(a.id); return; }
     else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
@@ -10526,7 +10632,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='prSyncPush'){ precosPush({}); }
     else if(a.act==='monitGPS'){ monitCaptureGPS(); }
     else if(a.act==='monitSave'){ monitSave(a.t); }
-    else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ MONIT.registros=MONIT.registros.filter(r=>r.id!==a.id); saveMonit(); route(); toast('Registro removido'); } }
+    else if(a.act==='monitDel'){ if(ask('Remover este registro de monitoramento?')){ const r=MONIT.registros.find(x=>x.id===a.id); if(r){ r.del=true; r._u=tsAgora(); } saveMonit(); route(); toast('Registro removido'); } }   // v328: marca del (sincroniza a exclusão)
     else if(a.act==='mapaTools'){ mapaToolsToggle(); }
     else if(a.act==='mapaLoc'){ mapaLocate(); }
     else if(a.act==='mapaFab'){ mapaFab(); return; }
@@ -11310,6 +11416,7 @@ const LOTE_TIPOS={
   __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
   __stand:       { lbl:'Stand',         ok:()=>standServerOk(),   dados:()=>standMapa(),         sig:()=>standSig(),     last:()=>lastStandSig,     set:v=>{ lastStandSig=v; } },
   __ocorrencia:  { lbl:'Ocorrências',   ok:()=>ocorServerOk(),    dados:()=>(OCOR.reg||{}),      sig:()=>ocorSig(),      last:()=>lastOcorSig,      set:v=>{ lastOcorSig=v; },  antes:()=>ocorFotosEnviar() },
+  __monit:       { lbl:'Monitoramento', ok:()=>monitServerOk(),   dados:()=>monitMapa(),         sig:()=>monitSig(),     last:()=>lastMonitSig,     set:v=>{ lastMonitSig=v; } },   // v328
   __mistura:     { lbl:'Misturas',      ok:()=>mistServerOk(),    dados:()=>(MIST.reg||{}),      sig:()=>mistSig(),      last:()=>lastMistSig,      set:v=>{ lastMistSig=v; },  antes:()=>mistFotosEnviar() },
   __bula:        { lbl:'Bulas',         ok:()=>bulasServerOk(),   dados:()=>(BULAS.reg||{}),     sig:()=>bulaSig(),      last:()=>lastBulaSig,      set:v=>{ lastBulaSig=v; },  antes:()=>bulaArqEnviar() },
   __produtividade:{ lbl:'Produtividade',ok:()=>prServerOk(),      dados:()=>(PRODE.reg||{}),     sig:()=>prSig(),        last:()=>lastPrSig,        set:v=>{ lastPrSig=v; } } };
@@ -11364,7 +11471,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -11575,6 +11682,7 @@ function applyPulledData(d, raw){
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
+  try{ monitApplyPulled(d.monit_app); }catch(e){}          // v328: monitoramento (pragas/doenças/daninhas)
   try{ bulaApplyPulled(d.bulas_app); }catch(e){}           // bulas dos produtos
   try{ mistApplyPulled(d.misturas_app); }catch(e){}         // misturas e eficácia
   try{ prApplyPulled(d.produtividade_app); }catch(e){}      // estimativas de produtividade

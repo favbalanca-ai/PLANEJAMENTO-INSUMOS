@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Coordenadas, Monitoramento sincronizado e mapa de calor (v328)**
+  - Ocorrências/anotações: o formulário pega a posição do celular sozinho ao abrir (`ocCaptureGPS`, 1 tentativa) e tem o
+    botão **📍 Pegar posição**; o registro guarda `lat/lng/acc` (vai para a planilha com o resto), o cartão e a folha
+    mostram o link 📍. No Mapa, cada anotação com posição vira um ponto com o ícone do tipo; tocar abre o registro.
+  - Monitoramento agora **sincroniza** (aba `MONITORAMENTO APP`, payload `__monit`, mesmo padrão das ocorrências:
+    `monitMapa/monitSig/monitApplyPulled`, `monitLista()` ignora `del`). Registro leva `quem` e `_u`; excluir marca `del`.
+  - **🔥 Calor** (menu Ferramentas do Mapa): grade de células (20/30/40 m conforme o tamanho do talhão) só dentro do
+    contorno; cada célula soma os registros de Monitoramento com GPS ao redor (peso gaussiano, raio ~50 m) pesados por
+    nível ÷ limiar. Amarelo = baixa, laranja = perto do limiar, vermelho = acima. Filtros de categoria, alvo e período
+    (30/60/90 dias, safra); escolha guardada no aparelho. Tocar na célula: registros, alvos, nível médio × limiar,
+    últimas datas e link para o Monitoramento. Pontos 🐛 ganharam link "Abrir o monitoramento".
+  - Ficha do talhão lista os monitoramentos (alerta "acima do limiar", 📍). Menu do Campo ganhou o atalho **Ocorrências**.
 - **Stand na ficha do talhão = média das contagens (v327)** — `standResumoTalhao(tid)` faz a média de população,
   pl/m, % da meta e CV de todas as contagens da safra (data ≥ plantio real); a linha "Stand" mostra "média de N
   contagens · última dd/mm". Se só houver contagem com data anterior ao plantio, a linha avisa em vez de sumir. As
