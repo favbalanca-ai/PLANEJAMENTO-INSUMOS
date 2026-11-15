@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-330';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-331';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7075,7 +7075,7 @@ function ocDetalheOpen(id){ const r=OCOR&&OCOR.reg[id]; if(!r){ toast('Registro 
     ${ocFotoPendHtml(r)}
     ${r.tarefaId?'<p class="mut" style="font-size:12px">✅ tarefa criada no quadro de Tarefas</p>':''}
     ${ocGpsLink(r)?`<p style="font-size:12.5px;margin:6px 0">${ocGpsLink(r)}${_map&&location.hash.indexOf('#/mapa')===0?` · <a class="link" data-act="ocVerNoMapa" data-id="${esc(r.id)}">ver no mapa</a>`:''}</p>`:''}
-    <div class="tf-btns"><a class="btn btn-outline btn-sm" data-go="#/ocorrencia/${esc(r.tipo)}~${encodeURIComponent(r.talhao)}">📝 Ocorrências do talhão</a><a class="btn btn-outline btn-sm" href="https://wa.me/?text=${encodeURIComponent(ocShareTexto(r))}" target="_blank" rel="noopener">📤 Compartilhar</a></div></div>`;
+    <div class="tf-btns"><a class="btn btn-outline btn-sm" data-go="#/ocorrencia/${esc(r.tipo)}~${encodeURIComponent(r.talhao)}">📝 Ocorrências do talhão</a><button class="btn btn-outline btn-sm" data-act="ocCompartilhar" data-id="${esc(r.id)}" title="Mandar texto e fotos por WhatsApp (as fotos vão como arquivo)">📤 Compartilhar</button></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function ocTog(l,k,f){ return `<label class="st-tog"><span>${l}</span><input type="checkbox" data-oc="${k}"${f[k]?' checked':''}><i></i></label>`; }
 function ocTxt(l,k,f,o){ o=o||{}; return `<label class="oc-f"><span>${l} <i class="af-req">*</i></span>${o.area?`<textarea class="txt" rows="3" data-oc="${k}" placeholder="${esc(o.ph||l)}">${esc(f[k]||'')}</textarea>`:`<input class="txt" data-oc="${k}" value="${esc(f[k]||'')}" placeholder="${esc(o.ph||l)}">`}</label>`; }
@@ -7130,7 +7130,29 @@ async function ocFotosAdd(files){ const f=ocFormAtual(); if(!f) return;
 function ocShareTexto(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao);
   return [`🌾 ${T.lbl||'Ocorrência'} — ${t?tNome(t):r.talhao} (${fmtDataBR(r.data)})`, r.ativ?`Atividade: ${r.ativ}`:'', r.evento?`Evento: ${r.evento}`:'',
     r.situacao?`Situação: ${r.situacao}`:'', r.acao?`Ação: ${r.acao}`:'', r.texto||'', r.estadio&&r.tipo==='climatica'?`Estádio: ${r.estadio}`:'',
-    r.tipo==='climatica'&&r.ini?`Período: ${fmtDataBR(r.ini)}${r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim):''}`:'', r.quem?`Registrado por ${r.quem}`:''].filter(Boolean).join('\n'); }
+    r.tipo==='climatica'&&r.ini?`Período: ${fmtDataBR(r.ini)}${r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim):''}`:'', r.quem?`Registrado por ${r.quem}`:'',
+    (r.lat!=null&&r.lng!=null)?`📍 https://maps.google.com/?q=${r.lat},${r.lng}`:'',
+    (r.fotos||[]).some(f=>f&&f.url)?'📷 Fotos:\n'+(r.fotos||[]).map(f=>f&&f.url).filter(Boolean).join('\n'):''].filter(Boolean).join('\n'); }   // v331: links das fotos e da posição vão no texto
+// v331: compartilhar um registro JÁ SALVO com as fotos como ARQUIVO (as do Drive são baixadas antes; as pendentes vêm do aparelho).
+// Em 2 toques: "Compartilhar" prepara (baixa) e vira "📤 Enviar (N fotos)"; o 2º toque chama o compartilhar do celular na hora
+// (o navegador só deixa compartilhar arquivo dentro do toque, sem esperar download no meio). Sem suporte: WhatsApp com os links.
+let _ocShare=null;
+async function ocCompartilharPrep(id){ const r=OCOR.reg[id]; if(!r) return; const btn=document.querySelector(`[data-act="ocCompartilhar"][data-id="${CSS.escape(id)}"]`);
+  const texto=ocShareTexto(r), files=[]; const podeArq=!!(navigator.share && navigator.canShare);
+  fotoPend.filter(p=>p.ocId===id).forEach(p=>{ try{ files.push(_dataUrlFile(p.dataUrl, p.nome)); }catch(e){} });
+  const doDrive=(r.fotos||[]).filter(f=>f&&f.id).slice(0,8);
+  if(podeArq && doDrive.length){ if(btn){ btn.disabled=true; btn.textContent='⏳ baixando fotos…'; }
+    for(const f of doDrive){ try{ const ctrl=('AbortController' in window)?new AbortController():null; const to=ctrl?setTimeout(()=>ctrl.abort(),10000):null;
+      const resp=await fetch(`https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1600`, ctrl?{signal:ctrl.signal}:{}); if(to) clearTimeout(to);
+      if(resp.ok){ const bl=await resp.blob(); if(bl.size>1000) files.push(new File([bl], `foto-${files.length+1}.jpg`, {type:bl.type||'image/jpeg'})); } }catch(e){} } }
+  _ocShare={id, texto, files:(podeArq && files.length && navigator.canShare({files}))?files:[]};
+  const b2=document.querySelector(`[data-act="ocCompartilhar"][data-id="${CSS.escape(id)}"]`);
+  if(_ocShare.files.length){ if(b2){ b2.disabled=false; b2.dataset.act='ocCompartilharGo'; b2.textContent=`📤 Enviar (${_ocShare.files.length} foto${_ocShare.files.length>1?'s':''})`; } toast('Fotos prontas — toque em Enviar'); }
+  else { if(b2){ b2.disabled=false; b2.textContent='📤 Compartilhar'; } if(doDrive.length && podeArq) toast('Não consegui baixar as fotos — vão os links'); ocCompartilharGo(); } }
+function ocCompartilharGo(){ const s=_ocShare; if(!s) return; const r=OCOR.reg[s.id];
+  if(s.files.length){ try{ navigator.share({text:s.texto, files:s.files}).catch(e=>{ if(!(e&&e.name==='AbortError')) window.open('https://wa.me/?text='+encodeURIComponent(s.texto),'_blank'); }); return; }catch(e){} }
+  if(navigator.share){ navigator.share({text:s.texto}).catch(e=>{ if(!(e&&e.name==='AbortError')) window.open('https://wa.me/?text='+encodeURIComponent(s.texto),'_blank'); }); return; }
+  window.open('https://wa.me/?text='+encodeURIComponent(s.texto),'_blank'); }
 function _dataUrlFile(u,nome){ const [h,b]=String(u).split(','), bin=atob(b||''), arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
   return new File([arr], nome, {type:(h.match(/data:([^;]+)/)||[])[1]||'image/jpeg'}); }
 function ocSalvar(){ const f=ocFormAtual(); if(!f) return; const falta=ocFalta(f);
@@ -10535,6 +10557,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
     else if(a.act==='ocAbrir'){ ocDetalheOpen(a.id); return; }
     else if(a.act==='ocGPS'){ ocCaptureGPS(null,false); return; }
+    else if(a.act==='ocCompartilhar'){ ocCompartilharPrep(a.id); return; }
+    else if(a.act==='ocCompartilharGo'){ ocCompartilharGo(); return; }
     else if(a.act==='ocVerNoMapa'){ const r=OCOR.reg[a.id]; novaAcaoFechar(); if(r&&_map&&r.lat!=null){ try{ _map.setView([r.lat,r.lng], Math.max(_map.getZoom(),17)); }catch(e){} } return; }
     else if(a.act==='mapaCalor'){ calorToggle(); return; }
     else if(a.act==='ocFotoRetry'){ ocFotoRetry(a.id); return; }

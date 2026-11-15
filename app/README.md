@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Compartilhar a ocorrência leva as fotos (v331)** — o botão Compartilhar da folha do registro era só um link do
+  WhatsApp com o texto. Agora `ocCompartilharPrep(id)` baixa as fotos do Drive (miniatura `sz=w1600`) e junta as
+  pendentes do aparelho; o botão vira **📤 Enviar (N fotos)** e o 2º toque chama `navigator.share` com os arquivos
+  (o navegador só aceita compartilhar arquivo dentro do toque, sem download no meio). Sem suporte a arquivos ou se o
+  download falhar: compartilha o texto, que agora traz os links das fotos e da posição 📍 (`ocShareTexto`).
 - **Sem "Nova compra digitada à mão" na tela Notas (v330)** — o painel de compra manual saiu da `#/entradas`; a entrada
   no estoque é só pela NF-e (Importar XML / Drive / Receber nota). A lista "Compras registradas" continua. O botão da
   tela Estoque virou "📥 Notas". As funções do rascunho (`compraDraft`, `cmpSave`…) ficaram no código, sem tela.
