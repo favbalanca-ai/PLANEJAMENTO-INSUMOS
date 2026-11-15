@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-326';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-327';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7331,11 +7331,12 @@ function talFichaOpen(tid){
   const st=estadioEm(estadiosDe(t,seq),hj), sem=tsSemDe(tid,seq), so=talStatusOps(t), sc=OPST[so.nivel];
   const dap=pl?Math.round((new Date(hj+'T00:00:00')-new Date(pl+'T00:00:00'))/86400000):null;
   const lin=(k,v)=>v?`<div class="tf-lin"><span>${k}</span><b>${v}</b></div>`:'';
-  const cult=culturaNome(emp), stand=standUltimo(tid);
+  const cult=culturaNome(emp), sr=standResumoTalhao(tid);   // v327: média das contagens da safra
   const resumo=lin('Empreendimento', esc(emp||'sem empreendimento')+(seq==='safrinha'?' <small class="mut">(2ª safra)</small>':''))
     +lin('Cultura', cult?esc(cult):'')
     +lin('Variedade', sem?esc(sem.produto):'')
-    +lin('Stand', stand?`<a class="link" data-go="#/stand/${id}" title="Abrir as contagens de stand deste talhão">${nf0.format(stand.pop||0)} pl/ha${stand.plm!=null?` <small class="mut">· ${nf1.format(stand.plm)} pl/m</small>`:''}${stand.pctMeta!=null?` <small class="mut">· ${stand.pctMeta}% da meta</small>`:''} <small class="mut">· ${fmtData(stand.data)}</small></a>`:'')
+    +lin('Stand', sr.n?`<a class="link" data-go="#/stand/${id}" title="Abrir as contagens de stand deste talhão">${nf0.format(Math.round(sr.pop||0))} pl/ha${sr.plm!=null?` <small class="mut">· ${nf1.format(sr.plm)} pl/m</small>`:''}${sr.pctMeta!=null?` <small class="mut">· ${Math.round(sr.pctMeta)}% da meta</small>`:''}${sr.n>1?` <small class="mut">· média de ${sr.n} contagens</small>`:''} <small class="mut">· ${sr.n>1?'última ':''}${fmtData(sr.data)}</small></a>`
+      :(sr.antes?`<a class="link mut" data-go="#/stand/${id}" title="Abrir as contagens de stand deste talhão">${sr.antes} contagem(ns) com data anterior ao plantio (${fmtData(sr.pl)}) — confira a data</a>`:''))
     +lin('Plantio', pl?`${fmtData(pl)}${dap!=null?` <small class="mut">· ${dap} DAP</small>`:''}`:(plPrev?`<span class="mut">previsto ${fmtData(plPrev)}</span>`:''))
     +lin('Estádio', st?`${esc(st.cod)} <small class="mut">${esc(st.desc||'')}</small>`:'')
     +lin('Operações', `${sc.ico} ${so.nivel==='late'?`${so.late.length} atrasada(s)`:esc(sc.lbl)}${so.prox?` <small class="mut">· próxima: ${esc(so.prox.nome)} ${fmtData(so.prox.dp)}</small>`:''}`);
@@ -7353,6 +7354,7 @@ function talFichaOpen(tid){
   const ev=[]; Object.values((OCOR&&OCOR.reg)||{}).forEach(r=>{ if(r.talhao!==tid||r.del) return; const T=OC_TIPOS[r.tipo]||{}; const nf=(r.fotos||[]).length+fotoPend.filter(p=>p.ocId===r.id).length;
     ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-act="ocAbrir" data-id="${esc(r.id)}" title="Abrir o registro">${T.ico||'📝'} ${esc(ocResumo(r))}${nf?` · 📷 ${nf}`:''} ›</a>`}); });   // v326: toque abre o registro com as fotos
   Object.values((AFER&&AFER.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=AF_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📏'} ${esc(T.lbl||'Aferição')}${r.resumo?' · '+esc(r.resumo):''}`}); });
+  standLista().filter(r=>r.talhao===tid).forEach(r=>ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-go="#/stand/${id}" title="Abrir as contagens de stand">🌱 Contagem de stand · ${r.pop!=null?nf0.format(r.pop)+' pl/ha':''}${r.pctMeta!=null?` · ${r.pctMeta}% da meta`:''}${r.quem?` · ${esc(r.quem)}`:''} ›</a>`}));   // v327
   ev.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const evHtml=ev.length?ev.slice(0,6).map(x=>`<div class="tf-ev"><span class="tf-data">${x.data?fmtData(x.data):'—'}</span><span>${x.html}</span></div>`).join('')+(ev.length>6?`<p class="mut tf-vazio">+${ev.length-6} na Timeline</p>`:''):'<p class="mut tf-vazio">Nenhuma ocorrência ou aferição.</p>';
   const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
@@ -8846,6 +8848,12 @@ function culturaNome(emp){ return CULT_NOME[culturaKey(emp)]||''; }
 // (contagem anterior ao plantio real da safra atual é de outra safra/teste e fica de fora)
 function standUltimo(tid){ const t=findTalhao(tid), pl=t?plantioRealDe(tid, talSafraAtual(t)):'';
   return ((STAND&&STAND.registros)||[]).filter(r=>r&&r.talhao===tid&&!r.del&&r.pop!=null&&!(pl&&String(r.data||'').slice(0,10)<pl)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0))[0]||null; }
+// v327: stand do talhão na safra atual = MÉDIA de todas as contagens feitas depois do plantio real (não só a última).
+// Devolve também quantas contagens ficaram de fora por serem anteriores ao plantio (explica o "não aparece").
+function standResumoTalhao(tid){ const t=findTalhao(tid), pl=t?plantioRealDe(tid, talSafraAtual(t)):'';
+  const todos=standLista().filter(r=>r.talhao===tid&&r.pop!=null), regs=todos.filter(r=>!(pl&&String(r.data||'').slice(0,10)<pl)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0));
+  const med=a=>{ const v=a.filter(x=>x!=null&&x!==''&&isFinite(+x)).map(Number); return v.length?v.reduce((s,x)=>s+x,0)/v.length:null; };
+  return {n:regs.length, pop:med(regs.map(r=>r.pop)), plm:med(regs.map(r=>r.plm)), pctMeta:med(regs.map(r=>r.pctMeta)), cv:med(regs.map(r=>r.cv)), data:regs.length?regs[0].data:'', regs, antes:todos.length-regs.length, pl}; }
 function culturaKey(emp){ const s=String(emp||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase();
   return /SOJA/.test(s)?'soja':/MILHO/.test(s)?'milho':/SORGO/.test(s)?'sorgo':/FEIJ/.test(s)?'feijao':/ALGOD/.test(s)?'algodao':/TRIGO/.test(s)?'trigo':/BRAQ|BRACH/.test(s)?'braquiaria':/LARANJA|CITR/.test(s)?'laranja':/ARROZ/.test(s)?'arroz':/GIRASSOL/.test(s)?'girassol':/AVEIA/.test(s)?'aveia':/MILHETO/.test(s)?'milheto':''; }   // v289: + laranja, arroz, girassol, aveia, milheto
 function _hojeISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
