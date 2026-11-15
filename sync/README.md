@@ -132,6 +132,13 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Fotos do campo pela planilha (v333)
+
+- `doGet ?acao=drive_arquivo&tipo=fotos&id=…` devolve a foto da pasta **Fotos do Campo** (ao lado da planilha) em
+  base64 (`DRIVE_TIPOS_.fotos`, até 8 MB, `drivePasta_('fotos')`). O app usa isso para compartilhar as fotos como
+  arquivo pelo WhatsApp: o navegador não consegue baixar do Drive direto (CORS). Mesma permissão dos contornos
+  (token da NF-e, sessão com módulo campo/admin, ou planilha sem login exigido).
+
 ## Monitoramento de pragas, doenças e daninhas (v328)
 
 - Aba nova **`MONITORAMENTO APP`** (`KEY|JSON|ATUALIZADO` + DATA, TALHÃO, CATEGORIA, ALVO, NÍVEL, UNIDADE, LIMIAR, AÇÃO,

@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Fotos do Drive baixadas pela planilha para compartilhar (v333)** — no iPhone o `fetch` direto do
+  `drive.google.com/thumbnail` falha (CORS) e o compartilhar caía no texto com links. Agora cada foto é pedida à
+  planilha (`driveGet({acao:'drive_arquivo', tipo:'fotos', id})` → base64 → `_b64File`); se o Code.gs for antigo,
+  tenta o download direto como antes. Precisa do Code.gs v333.
 - **Capa e cabeçalho nas fotos compartilhadas (v332)** — ao compartilhar, cada foto recebe uma faixa no alto com tipo ·
   talhão · data e quem/resumo (`ocFotoCarimbar`, canvas no tamanho original), e uma **capa** 1080×1080 com o texto
   completo (`ocCapaFile`) vai como 1º arquivo — no WhatsApp o cabeçalho aparece antes das fotos, e uma foto encaminhada
