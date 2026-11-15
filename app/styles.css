@@ -959,6 +959,14 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 /* Mapa (Leaflet) */
 .mapa-canvas{height:62vh;min-height:340px;width:100%;background:#dfe7ea;z-index:0}
 .mapa-leg{display:flex;flex-wrap:wrap;gap:8px 16px;padding:10px 16px;font-size:12px;color:var(--ink2);border-top:1px solid var(--line)}
+/* v328: pontos de anotação no mapa, mapa de calor (legenda e filtros) e GPS no formulário de ocorrência */
+.mapa-pt-wrap{background:none;border:0}
+.mapa-pt{width:26px;height:26px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.45);font-size:15px;line-height:26px;text-align:center;cursor:pointer}
+.calor-leg i{background:linear-gradient(90deg,#ffffb2,#fecc5c,#fd8d3c,#f03b20,#bd0026)!important}
+.calor-leg{top:44px!important}
+.calor-ctr label{font-size:12px}
+.oc-gpsrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:4px 0}
+.mapa-calor.on{background:#d84315;border-color:#d84315;color:#fff}
 .mapa-leg i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:middle;border:1px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
 .leaflet-popup-content{font-size:13px}
 /* Portfólio de Preços como LISTA agrupada por classe */
@@ -2372,6 +2380,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .chuva-obs{font-size:9.5px}
   .recom-prod{font-size:10.5px}
   .mapa-leg{font-size:9.5px}
+  .mapa-pt{font-size:12px}
+  .calor-ctr label{font-size:9.5px}
   .pr-grp{font-size:9.5px}
   .pr-emp{font-size:9.5px}
   .pr-cls{font-size:9.5px}

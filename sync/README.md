@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Monitoramento de pragas, doenças e daninhas (v328)
+
+- Aba nova **`MONITORAMENTO APP`** (`KEY|JSON|ATUALIZADO` + DATA, TALHÃO, CATEGORIA, ALVO, NÍVEL, UNIDADE, LIMIAR, AÇÃO,
+  EFICÁCIA, LAT, LNG, PRECISÃO (m), QUEM, OBS, REGISTRO), criada no primeiro envio. Payload `__monit` (`writeMonitApp`,
+  merge por chave/`_u`; excluídos ficam `del`). Chave de leitura `monit_app` (pacotes planejamento e campo; invalidada
+  pelo `__monit`). É a base do mapa de calor do app (lat/lng + nível/limiar).
+- As ocorrências (`OCORRENCIAS APP`) passam a trazer `lat/lng/acc` dentro do JSON quando o celular capturou a posição
+  (sem coluna nova).
+
 ## Foto/PDF do app não subia para o Drive (v326)
 
 - Havia **duas funções `driveArquivo_`**: a que grava arquivo do app no Drive (foto do campo, bula em PDF) e, desde a
