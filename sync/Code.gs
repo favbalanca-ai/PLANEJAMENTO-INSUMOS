@@ -2650,7 +2650,10 @@ function driveLista_(tipo){
   else out.sort(function(a, b){ return (a.pasta + '/' + a.nome).localeCompare(b.pasta + '/' + b.nome); });
   return { ok:true, pasta:{ id:pasta.getId(), nome:pasta.getName(), url:pasta.getUrl() }, arquivos:out.slice(0, 500) };
 }
-function driveArquivo_(tipo, id){
+// v326: era "driveArquivo_" — MESMO nome da função que GRAVA arquivo no Drive (linha ~394). No Apps Script a última
+// declaração vence: desde a v255 toda foto/PDF do app (foto do campo, bula, foto da nota, comprovante) caía aqui e voltava
+// "arquivo não encontrado no Drive" / ok 0. Renomeada para driveArquivoLer_.
+function driveArquivoLer_(tipo, id){
   var t = DRIVE_TIPOS_[tipo] || DRIVE_TIPOS_.contornos;
   id = S(id).replace(/[^A-Za-z0-9_-]/g, ''); if (!id) return { ok:false, erro:'arquivo não informado' };
   var pasta = drivePasta_(tipo), f; try { f = DriveApp.getFileById(id); } catch (e) { return { ok:false, erro:'arquivo não encontrado no Drive' }; }
@@ -2709,7 +2712,7 @@ function doGet_(e){
       if (dTipo === 'nfe') dOk = nfeTokenOk_(p.token) || (acc && acc.u && _temMod_(acc, ['admin']));   // mesma regra das ações da NF-e
       else dOk = nfeTokenOk_(p.token) || (acc && acc.u && _temMod_(acc, ['campo', 'admin'])) || (!(acc && acc.erro) && !loginCfg_().exigido);
       if (!dOk) return json({ ok:false, erro:(acc && acc.erro) || (dTipo === 'nfe' ? 'token da NF-e inválido ou NF-e não configurada (Sincronizar → Token da NF-e) — ou entre como administrador' : 'entre com seu login para ler o Drive') });
-      return json(p.acao === 'drive_lista' ? driveLista_(dTipo) : driveArquivo_(dTipo, p.id));
+      return json(p.acao === 'drive_lista' ? driveLista_(dTipo) : driveArquivoLer_(dTipo, p.id));
     }
     var sessOk = acc && acc.u && (acc.admin || acc.mods.admin);
     if (!nfeTokenOk_(p.token) && !sessOk) return json({ ok:false, erro:(acc && acc.erro) || 'token da NF-e inválido ou NF-e não configurada' });
@@ -2822,6 +2825,7 @@ function gravaUm_(payload, acc, cfg, out){
       var bi = bancoIa_(payload.__bancoIa); out.ok = 1; out.sug = bi.sug; out.semChave = !!bi.semChave; if (bi.erro) out.msgs.push(bi.erro);
     } else if (payload && payload.__finArquivo){    // comprovante da baixa → Drive
       out.arquivo = finArquivo_(payload.__finArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0;
+      if (!out.ok){ out.fail = 1; out.msgs.push('comprovante: ' + ((out.arquivo && out.arquivo.erro) || 'não gravou no Drive')); }   // v326
     } else if (payload && payload.__cadFin){        // cadastros do financeiro (produtores, imóveis, contas) — só ADMIN quando há login
       if (acc && acc.u && !acc.admin){ out.fail = 1; out.msgs.push('só administrador'); }
       else { var cg = cadFinGrava_(payload.__cadFin); out.ok = cg.rows; if (cg.erro){ out.fail = 1; out.msgs.push(cg.erro); } }
@@ -2829,7 +2833,8 @@ function gravaUm_(payload, acc, cfg, out){
       if (!nfeTokenOk_(payload.token) && !(_ACC_ && _ACC_.u)){ out.fail = 1; out.msgs.push('token da NF-e inválido'); }
       else if (payload.__recebimento){ var rb = nfeRecebimento_(payload.__recebimento); out.ok = rb.rows; if (rb.erro){ out.fail = 1; out.msgs.push(rb.erro); } }
       else if (payload.__pendencia && typeof nfePendencia_ === 'function'){ var pd = nfePendencia_(payload.__pendencia); out.ok = pd.rows; if (pd.erro){ out.fail = 1; out.msgs.push(pd.erro); } }
-      else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0; }
+      else if (payload.__nfeFoto && typeof nfeFoto_ === 'function'){ out.foto = nfeFoto_(payload.__nfeFoto); out.ok = out.foto && out.foto.url ? 1 : 0;
+        if (!out.ok){ out.fail = 1; out.msgs.push('foto da nota: ' + ((out.foto && out.foto.erro) || 'não gravou no Drive')); } }   // v326
       else if (payload.__nfeProdutor){ var np = nfeAddProdutor_(payload.__nfeProdutor); out.ok = np.rows; if (np.erro){ out.fail = 1; out.msgs.push(np.erro); } }
       else if (payload.__nfeReabrir){ var ra = nfeReabrir_(payload.__nfeReabrir); out.ok = ra.rows; if (ra.erro){ out.fail = 1; out.msgs.push(ra.erro); } else if (ra.status) out.reabrir = { status:ra.status, obs:ra.obs, tipo:ra.tipo }; }   // v319: o app mostra o que a nota virou
       else if (payload.__nfeVenda){ var vd = nfeVenda_(payload.__nfeVenda, acc); out.ok = vd.rows; if (vd.erro){ out.fail = 1; out.msgs.push(vd.erro); } }   // v277
@@ -2853,6 +2858,7 @@ function gravaUm_(payload, acc, cfg, out){
       if (out.arquivo && out.arquivo.url) out.ok = 1; else { out.fail = 1; out.msgs.push((out.arquivo && out.arquivo.erro) || 'não baixou'); }
     } else if (payload && payload.__bulaArquivo){     // bula / FISPQ em PDF → Drive (pasta "Bulas")
       out.arquivo = bulaArquivo_(payload.__bulaArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0; semCache = true;
+      if (!out.ok){ out.fail = 1; out.msgs.push('bula: ' + ((out.arquivo && out.arquivo.erro) || 'não gravou no Drive')); }   // v326: motivo no log do app
     } else if (payload && payload.__produtividade){   // estimativas de produtividade do Campo — merge por chave
       var pd = writeProdutividadeApp(payload.__produtividade); out.ok = pd.rows;
     } else if (payload && payload.__stand){           // contagens de stand do Campo — merge por chave
