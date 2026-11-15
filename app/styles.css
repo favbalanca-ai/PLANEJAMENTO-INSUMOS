@@ -1691,6 +1691,17 @@ body[data-embed] .content{padding:10px 10px 24px}
 .oc-th-pend i{position:absolute;bottom:3px;right:4px;font-style:normal;font-size:14px}
 .oc-th-pend.err{outline:2px solid #c0392b;outline-offset:-2px}   /* v324: foto não aceita pela planilha */
 .oc-fpend{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px}
+/* v326: abrir o registro da ocorrência pela ficha do talhão e pela Timeline */
+.lt-click{cursor:pointer}.lt-click:hover{box-shadow:0 0 0 2px #b7d3da inset}
+.lt-seta{margin-left:auto;color:var(--muted);font-size:18px;line-height:1}
+.oc-lnk{text-decoration:none;color:var(--ink)}.oc-lnk:hover{text-decoration:underline}
+.oc-det{padding:6px 16px 18px}
+.oc-det .na-h h3{display:flex;align-items:center;justify-content:center;gap:8px;margin:0}
+.oc-det-txt{font-size:15px;line-height:1.45;margin:4px 0 10px;white-space:pre-wrap}
+.oc-det-l{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:13px;margin:0 0 10px}
+.oc-ths.oc-big{gap:6px}
+.oc-ths.oc-big .oc-th{width:calc(50% - 3px);height:auto;aspect-ratio:1;font-size:16px;color:var(--ink2);font-weight:700}
+.oc-ths.oc-big .oc-th:only-child{width:100%;aspect-ratio:4/3}
 .oc-fpend small{flex-basis:100%}
 .oc-prev .oc-th{width:92px;height:92px}
 .oc-f{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:700;color:var(--ink);margin:10px 0}
@@ -2489,6 +2500,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .oc-th{font-size:21px}
   .oc-th .icon-btn{font-size:9.5px}
   .oc-th-pend i{font-size:11.5px}
+  .lt-seta{font-size:14.5px}
+  .oc-det-txt{font-size:12px}
+  .oc-det-l{font-size:10.5px}
+  .oc-ths.oc-big .oc-th{font-size:13px}
   .oc-f{font-size:10.5px}
   .oc-tx{font-size:11px}
   .oc-tx .mut{font-size:9.5px}

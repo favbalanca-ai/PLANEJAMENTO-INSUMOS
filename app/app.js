@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-325';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-326';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7035,9 +7035,28 @@ function ocCard(r){ const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao), nf=(r.
       <div><b>${esc(T.lbl||r.tipo)}${r.tipo==='climatica'&&r.evento?' · '+esc(r.evento):''}</b> <span class="mut">${esc(fmtDataBR(r.data).slice(0,5))} · ${esc(t?tNome(t):r.talhaoNome||r.talhao)}${r.quem?' · '+esc(r.quem):''}</span></div>
       <div class="oc-res">${esc(ocResumo(r))}</div>${r.tarefaId?'<div class="mut" style="font-size:11.5px">✅ tarefa criada no quadro de Tarefas</div>':''}
       ${nf?`<div class="oc-ths">${ocFotoThumb(r)}</div>`:''}
-      ${fotoPend.some(p=>p.ocId===r.id)?`<div class="oc-fpend"><small class="mut">${fotoPend.some(p=>p.ocId===r.id&&p.parada)?'⚠ foto(s) não aceita(s) pela planilha — ainda só neste aparelho':'⏳ foto(s) ainda só neste aparelho (sobem quando houver sinal)'}</small>
-        <button class="btn btn-outline btn-sm" data-act="ocFotoRetry" data-id="${esc(r.id)}">↻ Reenviar fotos</button><button class="btn btn-outline btn-sm" data-act="ocFotoShare" data-id="${esc(r.id)}" title="Mandar as fotos por WhatsApp ou salvar no aparelho">📤 Compartilhar fotos</button></div>`:''}</div>
+      ${ocFotoPendHtml(r)}</div>
     <button class="icon-btn del" data-act="ocDel" data-id="${esc(r.id)}" title="Excluir">🗑</button></div>`; }
+function ocFotoPendHtml(r){ if(!fotoPend.some(p=>p.ocId===r.id)) return '';
+  return `<div class="oc-fpend"><small class="mut">${fotoPend.some(p=>p.ocId===r.id&&p.parada)?'⚠ foto(s) não aceita(s) pela planilha — ainda só neste aparelho':'⏳ foto(s) ainda só neste aparelho (sobem quando houver sinal)'}</small>
+    <button class="btn btn-outline btn-sm" data-act="ocFotoRetry" data-id="${esc(r.id)}">↻ Reenviar fotos</button><button class="btn btn-outline btn-sm" data-act="ocFotoShare" data-id="${esc(r.id)}" title="Mandar as fotos por WhatsApp ou salvar no aparelho">📤 Compartilhar fotos</button></div>`; }
+// v326: folha com o registro completo (texto, fotos grandes, quem, quando) — abre ao tocar na ficha do talhão e na Timeline
+function ocDetalheOpen(id){ const r=OCOR&&OCOR.reg[id]; if(!r){ toast('Registro não encontrado neste aparelho'); return; }
+  novaAcaoFechar(); const T=OC_TIPOS[r.tipo]||{}, t=findTalhao(r.talhao);
+  const linhas=[['Atividade',r.ativ],['Evento',r.evento],['Situação',r.situacao],['Ação',r.acao],['Estádio',r.tipo==='climatica'?r.estadio:''],['Período',r.ini?fmtDataBR(r.ini)+(r.fim&&r.fim!==r.ini?' a '+fmtDataBR(r.fim):''):''],['Registrado por',r.quem]].filter(x=>x[1]);
+  const fotos=(r.fotos||[]).map(fo=>`<a class="oc-th" href="${esc(fo.url)}" target="_blank" rel="noopener" title="Abrir a foto no Drive">${fo.id?`<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(fo.id)}&sz=w800" alt="foto" loading="lazy" onerror="this.replaceWith(document.createTextNode('📷 abrir'))">`:'📷 abrir'}</a>`).join('')
+    +fotoPend.filter(p=>p.ocId===r.id).map(p=>`<span class="oc-th oc-th-pend${p.parada?' err':''}" title="${esc(p.parada?'Foto não aceita pela planilha: '+p.parada:'Foto aguardando envio')}"><img src="${p.dataUrl}" alt="foto"><i>${p.parada?'⚠':'⏳'}</i></span>`).join('');
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet oc-det" role="dialog"><div class="na-grab"></div>
+    <div class="na-h"><span></span><h3><span class="na-ico ${T.cls||''}">${T.ico||'📝'}</span> ${esc(T.lbl||r.tipo)}</h3><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="na-sub"><b>${esc(t?tNome(t):r.talhaoNome||r.talhao)}</b> · ${esc(fmtDataBR(r.data))}${r.quem?` · ${esc(r.quem)}`:''}</p>
+    ${r.texto?`<p class="oc-det-txt">${esc(r.texto)}</p>`:''}
+    ${linhas.length?`<div class="oc-det-l">${linhas.map(x=>`<span class="mut">${x[0]}</span><span>${esc(x[1])}</span>`).join('')}</div>`:''}
+    ${fotos?`<div class="oc-ths oc-big">${fotos}</div>`:'<p class="mut" style="text-align:center">Sem fotos.</p>'}
+    ${ocFotoPendHtml(r)}
+    ${r.tarefaId?'<p class="mut" style="font-size:12px">✅ tarefa criada no quadro de Tarefas</p>':''}
+    <div class="tf-btns"><a class="btn btn-outline btn-sm" data-go="#/ocorrencia/${esc(r.tipo)}~${encodeURIComponent(r.talhao)}">📝 Ocorrências do talhão</a><a class="btn btn-outline btn-sm" href="https://wa.me/?text=${encodeURIComponent(ocShareTexto(r))}" target="_blank" rel="noopener">📤 Compartilhar</a></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function ocTog(l,k,f){ return `<label class="st-tog"><span>${l}</span><input type="checkbox" data-oc="${k}"${f[k]?' checked':''}><i></i></label>`; }
 function ocTxt(l,k,f,o){ o=o||{}; return `<label class="oc-f"><span>${l} <i class="af-req">*</i></span>${o.area?`<textarea class="txt" rows="3" data-oc="${k}" placeholder="${esc(o.ph||l)}">${esc(f[k]||'')}</textarea>`:`<input class="txt" data-oc="${k}" value="${esc(f[k]||'')}" placeholder="${esc(o.ph||l)}">`}</label>`; }
 V.ocorrencia=function(arg){
@@ -7331,7 +7350,8 @@ function talFichaOpen(tid){
   const secs=Object.keys(TF_TIPOS).map(k=>{ const g=grupos[k].sort((a,b)=>(a.data||'9').localeCompare(b.data||'9'));
     return `<details class="tf-sec"><summary><h4>${TF_TIPOS[k].ico} ${TF_TIPOS[k].lbl}</h4><span class="mut">${g.length?g.length:'—'}</span></summary>${g.length?g.map(x=>x.html).join(''):'<p class="mut tf-vazio">Nenhum item.</p>'}</details>`; }).join('');
   // ocorrências e aferições recentes
-  const ev=[]; Object.values((OCOR&&OCOR.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=OC_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📝'} ${esc(ocResumo(r))}`}); });
+  const ev=[]; Object.values((OCOR&&OCOR.reg)||{}).forEach(r=>{ if(r.talhao!==tid||r.del) return; const T=OC_TIPOS[r.tipo]||{}; const nf=(r.fotos||[]).length+fotoPend.filter(p=>p.ocId===r.id).length;
+    ev.push({data:r.data||'', html:`<a class="link oc-lnk" data-act="ocAbrir" data-id="${esc(r.id)}" title="Abrir o registro">${T.ico||'📝'} ${esc(ocResumo(r))}${nf?` · 📷 ${nf}`:''} ›</a>`}); });   // v326: toque abre o registro com as fotos
   Object.values((AFER&&AFER.reg)||{}).forEach(r=>{ if(r.talhao!==tid) return; const T=AF_TIPOS[r.tipo]||{}; ev.push({data:r.data||'', html:`${T.ico||'📏'} ${esc(T.lbl||'Aferição')}${r.resumo?' · '+esc(r.resumo):''}`}); });
   ev.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const evHtml=ev.length?ev.slice(0,6).map(x=>`<div class="tf-ev"><span class="tf-data">${x.data?fmtData(x.data):'—'}</span><span>${x.html}</span></div>`).join('')+(ev.length>6?`<p class="mut tf-vazio">+${ev.length-6} na Timeline</p>`:''):'<p class="mut tf-vazio">Nenhuma ocorrência ou aferição.</p>';
@@ -8603,7 +8623,7 @@ function camposEventos(){
     titulo:(r.mm?r.mm+' mm':'Chuva')+(r.local?' · '+r.local:''), resumo:r.obs||''}));
   (PRODE?prLista():[]).forEach(r=>ev.push({ts:_tsC(r),data:r.data,tipo:'produtividade',talhao:r.talhao,
     titulo:`Estimativa de produtividade · ${afN(r.scHa,1)} sc/ha`, resumo:`${(r.plantas||[]).length} amostra(s) · ${afN(r.graosPl,1)} grãos/planta · PMS ${r.pms} g${r.estadio?' · '+r.estadio:''}`}));
-  (OCOR?ocorLista():[]).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}, nf=(r.fotos||[]).length; ev.push({ts:_tsC(r),data:r.data,tipo:'ocorrencia',talhao:r.talhao,
+  (OCOR?ocorLista():[]).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}, nf=(r.fotos||[]).length+fotoPend.filter(p=>p.ocId===r.id).length; ev.push({ts:_tsC(r),data:r.data,tipo:'ocorrencia',talhao:r.talhao,ocId:r.id,
     titulo:(T.lbl||'Ocorrência')+(r.tipo==='climatica'&&r.evento?' · '+r.evento:''), resumo:ocResumo(r)+(nf?` · 📷 ${nf} foto(s)`:'')}); });
   expTodos().forEach(x=>ev.push({ts:x.ts||_tsC(x),data:x.data,tipo:'experimento',talhao:x.talhao,
     titulo:`Experimento · ${x.nome||''}`, resumo:[(EXP_TIPOS[x.tipo]||EXP_TIPOS.outro).lbl, nf2.format(expHa(x))+' ha', x.obs||''].filter(Boolean).join(' · ')}));   // v278
@@ -8627,7 +8647,7 @@ function camposEventos(){
 }
 function tlRow(e){
   const ti=CAMPO_TIPOS[e.tipo]||{lbl:e.tipo,ico:'•',cor:'#8aa'};
-  return `<div class="tl-row">
+  return `<div class="tl-row${e.ocId?' lt-click':''}"${e.ocId?` data-act="ocAbrir" data-id="${esc(e.ocId)}" title="Abrir o registro"`:''}>
     <div class="tl-ico" style="background:${ti.cor}22;color:${ti.cor}">${ti.ico}</div>
     <div class="tl-body"><div class="tl-top"><b>${esc(e.titulo)}</b><span class="tl-date">${_dtBRc(e.data)||''}</span></div>
       <div class="tl-sub">${e.talhao?`<span class="tl-tal">${esc(_talNomeC(e.talhao))}</span>${e.resumo?' · ':''}`:''}${esc(e.resumo||'')}</div></div></div>`;
@@ -8752,7 +8772,7 @@ V.timeline = function(arg){
       const ref=`DAE ${dae||0}${done&&dp&&dp!==dt?` · previsto ${_dtBRc(dp)}`:''}`;
       it.push({tipo:done?'operacao':'prevista',data:dt,ord:2,titulo:o.op.nome,tag,ref,resumo:esc(prTxt),cls:done?'':canc?'fut':(dd!=null&&dd<0&&!and?'late':'fut'),
         estad:estadioEm(fe,dt)}); });
-    histAll.filter(e=>seqDoEv(e)===seq).forEach(e=>{ const ti=CAMPO_TIPOS[e.tipo]||{}; it.push({tipo:e.tipo,data:_isoEv(e),ord:3,titulo:e.titulo,resumo:esc(e.resumo||''),estad:estadioEm(fe,_isoEv(e))}); });
+    histAll.filter(e=>seqDoEv(e)===seq).forEach(e=>{ const ti=CAMPO_TIPOS[e.tipo]||{}; it.push({tipo:e.tipo,data:_isoEv(e),ord:3,titulo:e.titulo,resumo:esc(e.resumo||''),estad:estadioEm(fe,_isoEv(e)),ocId:e.ocId||''}); });
     const col=colheitaPrevDe(t.id,seq);
     if(col) it.push({tipo:'marco',data:col,ord:9,titulo:'🌾 Colheita estimada',resumo:`plantio ${fmtDataBR(pl)} + ${cicloDe(t.id,seq)} dias`,cls:col>hojeIso?'fut':''});
     const semData=it.filter(x=>!x.data), comData=it.filter(x=>x.data).sort((a,b)=>a.data.localeCompare(b.data)||a.ord-b.ord);
@@ -8768,7 +8788,7 @@ V.timeline = function(arg){
       return `<div class="tl-wrap lt-it ${x.cls||''}" data-tipo="${x.tipo}" data-search="${srch}">
         <div class="lt-date">${x.data?`<b>${_dtBRc(x.data).slice(0,5)}</b><span>${d!=null?`DAE ${d}`:''}</span>`:'<b>—</b>'}</div>
         <div class="lt-dot" style="background:${ti.cor}">${ti.ico}</div>
-        <div class="lt-card"><div class="lt-top"><b>${esc(x.titulo)}</b>${x.tag||''}</div>
+        <div class="lt-card${x.ocId?' lt-click':''}"${x.ocId?` data-act="ocAbrir" data-id="${esc(x.ocId)}" title="Abrir o registro"`:''}><div class="lt-top"><b>${esc(x.titulo)}</b>${x.tag||''}${x.ocId?'<span class="lt-seta">›</span>':''}</div>
           ${x.ref||x.estad?`<div class="lt-ref">${x.ref?esc(x.ref):''}${x.estad?`${x.ref?' · ':''}estádio ~${esc(x.estad.cod)}`:''}</div>`:''}
           ${x.resumo?`<div class="lt-sub">${x.resumo}</div>`:''}</div></div>`; };
     comData.forEach(x=>{ if(!hojePos && x.data>hojeIso){ h+=hojeRow(); hojePos=true; }
@@ -10416,6 +10436,7 @@ document.addEventListener('click',e=>{
     else if(/^prTec/.test(a.act)){ prTecAcao(a); return; }
     else if(a.act==='ocLimpar'){ const f=ocFormAtual(); if(f && confirm('Limpar este formulário?')){ ocForm[f.tipo+'|'+f.talhao]=ocFormNovo(f.tipo,f.talhao); route({keepScroll:true}); } return; }
     else if(a.act==='ocFotoDel'){ const f=ocFormAtual(); if(f){ f.fotos.splice(+a.i,1); route({keepScroll:true}); } return; }
+    else if(a.act==='ocAbrir'){ ocDetalheOpen(a.id); return; }
     else if(a.act==='ocFotoRetry'){ ocFotoRetry(a.id); return; }
     else if(a.act==='ocFotoShare'){ ocFotoShare(a.id); return; }
     else if(a.act==='ocDel'){ const r=OCOR.reg[a.id]; if(r && confirm('Excluir este registro?')){ r.del=true; r._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ocId!==a.id); saveFotoPend(); saveOcor(); route({keepScroll:true}); toast('Registro excluído'); } return; }
