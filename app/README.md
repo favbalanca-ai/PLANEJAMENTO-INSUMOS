@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Abrir a ocorrência pela ficha do talhão e pela Timeline (v326)** — tocar na anotação/ocorrência na ficha do
+  talhão (Mapa), no cartão da Timeline ou na linha do Painel de Campo abre a folha `ocDetalheOpen(id)` com o
+  texto, os campos, quem registrou, as fotos grandes (miniatura do Drive `sz=w800`, toque abre o arquivo), as fotos
+  ainda pendentes (⏳/⚠ com Reenviar/Compartilhar) e atalhos para a tela de Ocorrências do talhão e WhatsApp.
+  `camposEventos` leva `ocId`; o cartão ganha `data-act="ocAbrir"`.
 - **Cabeçalho fixo na tabela de Estoque (v325)** — ao rolar os insumos, os nomes das colunas (Inicial, Custo inicial,
   Em pedido…) ficam visíveis logo abaixo da barra do topo. Como a tabela está numa caixa com rolagem lateral
   (`.table-wrap`) e a rolagem vertical é da página/`.main`, o `position:sticky` do `<thead>` não funciona; `fixHdTick`
