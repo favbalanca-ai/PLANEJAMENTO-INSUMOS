@@ -132,6 +132,14 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Stand e aferições não sincronizavam (v336)
+
+- Em `APP_LER_`, as entradas `afericoes_app` e `stand_app` estavam no fim da linha de um comentário (`// v278: …`)
+  desde 6/11 e por isso não existiam: a planilha devolvia as duas partes `null`, o app entendia que as abas
+  `STAND APP` / `AFERICOES APP` não existiam e não enviava nem puxava contagens de stand e aferições. Corrigido.
+  Regra: comentário de fim de linha só depois do ÚLTIMO item da linha. Checagem rápida:
+  `grep -nE "//.*[a-z_]+_app:function" sync/Code.gs` tem que vir vazio.
+
 ## Preços mesclados por registro (v334)
 
 - `PREÇOS APP` ganhou as colunas **ATUALIZADO** (carimbo `_u` em ms) e **STATUS** (`EXCLUÍDO` = lápide).

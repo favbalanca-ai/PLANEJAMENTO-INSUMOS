@@ -114,7 +114,10 @@ var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','resul
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600, pesagem:600 };   // pesagem: planilha da balança (Pesagem v2), 10 min   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
-  limites_app:function(){ return readMapApp('LIMITES APP'); }, experimentos_app:function(){ return readMapApp('EXPERIMENTOS APP'); },   // v278: áreas de referência dentro do talhão afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
+  limites_app:function(){ return readMapApp('LIMITES APP'); }, experimentos_app:function(){ return readMapApp('EXPERIMENTOS APP'); },   // v278: áreas de referência dentro do talhão
+  // v336: estas duas linhas estavam DENTRO do comentário acima desde a v278 — a planilha devolvia afericoes_app e stand_app
+  // nulos, o app achava que as abas não existiam e não enviava nem puxava contagens de stand e aferições
+  afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
   ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, monit_app:function(){ return readMapApp(MONIT_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },   // v328: monitoramento (pragas/doenças/daninhas com GPS)
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
