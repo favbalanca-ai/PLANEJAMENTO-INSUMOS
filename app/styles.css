@@ -2111,6 +2111,19 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v340: checklist pré-uso */
+.ck-grupo{padding:0 14px 6px}.ck-grupo h4{margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.ck-item{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;margin-bottom:6px;background:var(--card)}
+.ck-item.ok{background:#f0faf3;border-color:#bfe3c9}.ck-item.prob{background:var(--red-soft);border-color:#f3b9b9}.ck-item.na{opacity:.65}
+.ck-nome{flex:1;min-width:140px;font-size:14px}.ck-bts{display:flex;gap:4px;margin-left:auto}
+.ck-bt{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 11px;font-size:13px;font-weight:600;color:var(--muted);min-height:36px}
+.ck-bt.ok.on{background:#2e7d32;border-color:#2e7d32;color:#fff}.ck-bt.prob.on{background:var(--red);border-color:var(--red);color:#fff}.ck-bt.na.on{background:#607d8b;border-color:#607d8b;color:#fff}
+.ck-item .ck-obs{flex-basis:100%;margin-top:2px}
+.ck-aviso{margin:0 14px 10px;padding:10px 12px;border-radius:12px;background:var(--red-soft);color:var(--red);font-weight:600;font-size:13px}
+.ck-hist{padding:0 14px 10px}.ck-ev{border:1px solid var(--line);border-radius:12px;margin-bottom:6px;background:var(--card)}.ck-ev summary{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;font-size:13.5px;flex-wrap:wrap}.ck-ev summary::-webkit-details-marker{display:none}
+.ck-ev .pill{white-space:nowrap}.ck-ev .pill.okk{background:#e3f5e8;color:#1b5e20;font-weight:700}.ck-ev .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}.ck-ev.reprovado{border-color:#f3b9b9}
+.ck-det{padding:0 12px 10px;font-size:13px}.ck-det ul{margin:4px 0;padding-left:18px}.ck-det p{margin:4px 0}.ck-det .bk-bar{padding:6px 0 0}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
 /* v339: documentos da máquina */
 .mq-docs{padding:0 14px 4px}.mq-docs .tf-ev{align-items:center}.mq-docs .pill{background:var(--line);white-space:nowrap}.mq-docs .pill.perto{background:#fff3cd;color:#8d6e00}.mq-docs .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}.mq-docs .icon-btn{margin-left:auto}
 /* v338: custo fixo no cadastro */
@@ -2632,6 +2645,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
+  .ck-grupo h4{font-size:9.5px}
+  .ck-nome{font-size:11.5px}
+  .ck-bt{font-size:10.5px}
+  .ck-aviso{font-size:10.5px}
+  .ck-ev summary{font-size:11px}
+  .ck-det{font-size:10.5px}
   .mq-fixo h4{font-size:10px}
   .mq-grafs h4{font-size:10px}
   .mq-ev{font-size:10.5px}
