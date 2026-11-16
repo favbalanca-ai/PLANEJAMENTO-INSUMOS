@@ -71,6 +71,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Nota de despesa — cantina, escritório, limpeza, veículos (v345)** — na conferência, "💳 Esta nota é despesa
+  (não entra no estoque)" (`nfeDespesaOn/Off`, `imp.despesa={categoria}`; categorias `NFE_DESP_CATS`). Com a nota
+  marcada, os itens recolhem num resumo e o botão vira "💳 Registrar despesa (R$ …)" (`nfeConfirmar('despesa')`):
+  a planilha recebe RECEBIDA com todos os itens IGNORAR, sem entrada no razão, `categoria` escolhida e obs "despesa:
+  …" — o título a pagar nasce nessa categoria (vencimento na emissão, forma de pagamento do XML). Sugestão automática
+  (`nfeDespesaSugerida`): fornecedor de alimentação (supermercado, padaria, açougue…), de escritório/limpeza
+  (papelaria, farmácia…) ou cupom fiscal (CFOP 5929/6929). Memória por fornecedor no de-para (`cnpj|*despesa`,
+  destino `despesa`, MÁQUINA = categoria): a próxima nota abre marcada e o cartão da caixa de entrada mostra "💳
+  Despesa · categoria" com **Aprovar** em um toque. `FIN_CATS` ganha Alimentação, Escritório / limpeza e Veículos.
+  Code.gs v345 (de-para aceita destino `despesa`; categorias na sugestão da IA do extrato).
 - **Pasta extra de XML (v344)** — a planilha passa a ler também outra pasta do Drive (linha `PASTA EXTRA` na CONFIG
   NFE; ex.: a pasta do ano onde a automação do e-mail salva os anexos em `2026/11/Geral/Notas Fiscais`). Só leitura:
   nada é movido; só subpastas e arquivos dos últimos `PASTA EXTRA DIAS` (60). O diagnóstico da pasta mostra
