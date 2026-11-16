@@ -2111,6 +2111,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v338: custo fixo no cadastro */
+.mq-fixo{margin:4px 0 0;border-top:1px dashed var(--line);padding-top:6px}.mq-fixo h4{margin:0 14px 2px;font-size:12.5px;color:var(--ink2)}
 /* v337: ficha da máquina */
 .mq-nome{cursor:pointer;color:var(--teal)}.mq-nome:hover{text-decoration:underline}
 .mq-ficha .tf-h h3{margin:0}
@@ -2628,6 +2630,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
+  .mq-fixo h4{font-size:10px}
   .mq-grafs h4{font-size:10px}
   .mq-ev{font-size:10.5px}
   .mq-ev-d{font-size:9.5px}

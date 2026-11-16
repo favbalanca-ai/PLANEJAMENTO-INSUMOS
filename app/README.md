@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Custo-hora completo (v338)** — o Cadastro ganhou o bloco **Custo fixo**: valor de compra, valor residual, vida
+  útil (h), seguro + licenciamento (R$/ano), operador (R$/mês) e uso esperado (h/mês, padrão 160). `maqCustoFixoH(m)`
+  = depreciação (compra − residual) ÷ vida útil + seguro ÷ (h/mês × 12) + operador ÷ h/mês. `maqCustos` passa a
+  devolver `custoHVar`, `fixoH`, `fixo` (parcelas), `fixos` (fixo × horas), `totalVar` e `custoH` = variável + fixo —
+  com isso o Painel, a ficha, os PDFs e o custo real das operações no Campo (`opMaqReal`) já usam o valor completo.
+  Campos guardados no JSON da aba MÁQUINAS APP (sem Code.gs novo).
 - **Ficha da máquina (v337)** — tocar no nome da máquina no Painel da frota ou no Cadastro abre `maqFichaOpen(id)`:
   resumo (grupo, horímetro, horas na safra, combustível, consumo × planejado, peças e serviços, custo-hora real ×
   planejado, próxima preventiva, alertas), botões Abastecer / Nova OS / PDF / Cadastro, **gráficos por mês** em SVG
