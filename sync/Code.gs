@@ -1919,49 +1919,68 @@ var PRECOS_DB_ID = '1-pNApvSfw9oUbfec5Tm7g-DEh9xCgupAEpjsZp7EBKg';
 function _precosDbId_(){ var v = ''; try { v = S(configAppMapa_()['BANCO PRECOS']); } catch (e) {} var m = v.match(/\/d\/([a-zA-Z0-9_-]{20,})/); if (m) return m[1]; if (v && !/^https?:/i.test(v)) return v; return PRECOS_DB_ID; }   // v311: CONFIG APP → BANCO PRECOS
 function precosSS(){ var id = _precosDbId_(); if (id){ try { return SpreadsheetApp.openById(id); } catch(e){} } return ss(); }
 function precosSheet(){ var b = precosSS(), s = b.getSheetByName(PRECOS_SHEET); if (!s) s = b.insertSheet(PRECOS_SHEET); return s; }
+// v334: cada linha leva ATUALIZADO (carimbo _u do aparelho que mexeu) e STATUS ('EXCLUÍDO' = lápide). Os registros
+// excluídos VOLTAM no pacote (del:true) para os outros aparelhos apagarem também; o app os ignora na tela.
+function _prKey_(s){ return String(s == null ? '' : s).toUpperCase().replace(/\s+/g, ' ').trim(); }
 function readPrecosSheet(){
   var s = precosSS().getSheetByName(PRECOS_SHEET); if (!s) return { safras:{} };
   var last = s.getLastRow(); if (last < 2) return { safras:{} };
-  var ncol = Math.min(10, s.getLastColumn());                         // 10ª coluna = UN (retrocompatível: 9 antes)
+  var ncol = Math.min(12, s.getLastColumn());                         // 10ª = UN, 11ª = ATUALIZADO, 12ª = STATUS (retrocompatível)
   var v = s.getRange(2, 1, last - 1, ncol).getValues(), safras = {};
   for (var i = 0; i < v.length; i++){
     var r = v[i], safra = S(r[0]), tipo = S(r[1]).toUpperCase();
     if (!safra) continue;
     var sf = safras[safra] || (safras[safra] = { refs:[], itens:[] });
+    var u = (typeof r[10] === 'number') ? r[10] : (parseFloat(r[10]) || 0), del = /EXCLU/i.test(S(r[11]));   // carimbo em ms (sem passar pelo N: número grande)
     if (tipo === 'REF'){
       if (!S(r[3]) && !S(r[4])) continue;
-      sf.refs.push({ classe:S(r[3]), produto:S(r[4]), vista:N(r[5]), prazo:N(r[6]) });
+      var rf = { classe:S(r[3]), produto:S(r[4]), vista:N(r[5]), prazo:N(r[6]) }; if (u) rf._u = u; if (del) rf.del = true;
+      sf.refs.push(rf);
     } else if (tipo === 'ITEM'){
       if (!S(r[4]) && !S(r[3])) continue;
       var dv = (r[5] === '' || r[5] == null) ? null : N(r[5]);         // preço à vista direto
       var dz = (r[6] === '' || r[6] == null) ? null : N(r[6]);         // preço a prazo direto
       var pv = (r[7] === '' || r[7] == null) ? null : N(r[7]) / 100;   // % -> fator
       var pp = (r[8] === '' || r[8] == null) ? null : N(r[8]) / 100;
-      sf.itens.push({ empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), un:S(r[9]||''), precoVista:dv, precoPrazo:dz, pct:pv, pctPrazo:pp });
+      var it = { empresa:S(r[2]), classe:S(r[3]), produto:S(r[4]), un:S(r[9]||''), precoVista:dv, precoPrazo:dz, pct:pv, pctPrazo:pp }; if (u) it._u = u; if (del) it.del = true;
+      sf.itens.push(it);
     }
   }
   return { safras:safras };
 }
+// v334: MESCLA por registro (antes regravava a lista inteira: dois aparelhos cadastrando, o último apagava o do outro).
+// Regra: por safra, item pela chave do PRODUTO e referência por CLASSE|PRODUTO; quem tem _u maior vence; registro que só a
+// planilha tem continua; exclusão só por lápide (excl do app: {chave: carimbo}) ou del:true. Lápides somem depois de 120 dias.
 function writePrecosSheet(precos){
-  var s = precosSheet();
-  var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO','UN']];
-  var safras = (precos && precos.safras) || {};
-  Object.keys(safras).forEach(function(nm){
-    var sf = safras[nm] || {};
-    (sf.refs || []).forEach(function(r){
-      rows.push([T_(nm), 'REF', '', T_(r.classe), T_(r.produto),
-        r.vista == null ? '' : N(r.vista), r.prazo == null ? '' : N(r.prazo), '', '', '']);
-    });
-    (sf.itens || []).forEach(function(it){
-      rows.push([T_(nm), 'ITEM', T_(it.empresa), T_(it.classe), T_(it.produto),
-        (it.precoVista == null || it.precoVista === '') ? '' : N(it.precoVista),
-        (it.precoPrazo == null || it.precoPrazo === '') ? '' : N(it.precoPrazo),
-        it.pct == null ? '' : N(it.pct * 100), it.pctPrazo == null ? '' : N(it.pctPrazo * 100), S(it.un || '')]);
-    });
+  var s = precosSheet(), cur = readPrecosSheet().safras, inc = (precos && precos.safras) || {}, agora = Date.now(), velho = agora - 120 * 86400000;
+  var mapas = {};   // safra -> { refs:{k:rec}, itens:{k:rec} }
+  var mp = function(nm){ return mapas[nm] || (mapas[nm] = { refs:{}, itens:{} }); };
+  var kRef = function(r){ return _prKey_(r.classe) + '|' + _prKey_(r.produto); }, kIt = function(it){ return _prKey_(it.produto); };
+  Object.keys(cur).forEach(function(nm){ var m = mp(nm); (cur[nm].refs || []).forEach(function(r){ var k = kRef(r); if (k !== '|') m.refs[k] = r; }); (cur[nm].itens || []).forEach(function(it){ var k = kIt(it); if (k) m.itens[k] = it; }); });
+  var mescla = function(dest, rec, k){ var c = dest[k], iu = +rec._u || 0, cu = c ? (+c._u || 0) : 0;
+    if (!c){ dest[k] = rec; return; }
+    if (iu > cu || (iu === cu && !rec.del)) dest[k] = rec;                       // mais novo vence; empate: o vivo vence a lápide
+  };
+  Object.keys(inc).forEach(function(nm){ var sf = inc[nm] || {}, m = mp(nm);
+    (sf.refs || []).forEach(function(r){ var k = kRef(r); if (k !== '|') mescla(m.refs, r, k); });
+    (sf.itens || []).forEach(function(it){ var k = kIt(it); if (k) mescla(m.itens, it, k); });
+    var ex = sf.excl || {};                                                     // lápides do app: {chave: carimbo}
+    Object.keys(ex.itens || {}).forEach(function(k){ var ts = +ex.itens[k] || 0, c = m.itens[k]; if (!c || ts >= (+c._u || 0)) m.itens[k] = { produto:(c && c.produto) || k, classe:(c && c.classe) || '', empresa:(c && c.empresa) || '', del:true, _u:ts || agora }; });
+    Object.keys(ex.refs || {}).forEach(function(k){ var ts = +ex.refs[k] || 0, c = m.refs[k], p = k.split('|'); if (!c || ts >= (+c._u || 0)) m.refs[k] = { classe:(c && c.classe) || p[0], produto:(c && c.produto) || p[1] || '', del:true, _u:ts || agora }; });
   });
-  regrava_(s, rows, 10);
+  var rows = [['SAFRA','TIPO','EMPRESA','CLASSE','PRODUTO','VISTA_RS','PRAZO_RS','PCT_VISTA','PCT_PRAZO','UN','ATUALIZADO','STATUS']], vivos = 0;
+  Object.keys(mapas).sort().forEach(function(nm){ var m = mapas[nm];
+    Object.keys(m.refs).sort().forEach(function(k){ var r = m.refs[k]; if (r.del && (+r._u || 0) < velho) return; if (!r.del) vivos++;
+      rows.push([T_(nm), 'REF', '', T_(r.classe), T_(r.produto), r.del || r.vista == null ? '' : N(r.vista), r.del || r.prazo == null ? '' : N(r.prazo), '', '', '', +r._u || '', r.del ? 'EXCLUÍDO' : '']); });
+    Object.keys(m.itens).sort().forEach(function(k){ var it = m.itens[k]; if (it.del && (+it._u || 0) < velho) return; if (!it.del) vivos++;
+      rows.push([T_(nm), 'ITEM', T_(it.empresa), T_(it.classe), T_(it.produto),
+        (it.del || it.precoVista == null || it.precoVista === '') ? '' : N(it.precoVista),
+        (it.del || it.precoPrazo == null || it.precoPrazo === '') ? '' : N(it.precoPrazo),
+        (it.del || it.pct == null) ? '' : N(it.pct * 100), (it.del || it.pctPrazo == null) ? '' : N(it.pctPrazo * 100), S(it.un || ''), +it._u || '', it.del ? 'EXCLUÍDO' : '']); });
+  });
+  regrava_(s, rows, 12);
   try { s.setFrozenRows(1); } catch (e) {}
-  return { rows: rows.length - 1 };
+  return { rows: vivos };
 }
 // Aba plana "PREÇOS" na PRÓPRIA planilha do planejamento: PRODUTO | À VISTA | A PRAZO | SAFRA.
 // É a lista que o PORTIFÓLIO busca por VLOOKUP LOCAL (sem IMPORTRANGE — mais robusto).

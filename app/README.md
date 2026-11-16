@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Preços: mescla por registro entre aparelhos (v334)** — antes o envio regravava a aba `PREÇOS APP` inteira e o
+  puxar substituía a lista local: dois celulares cadastrando, o último apagava o do outro (foi assim que o VERSATILIS
+  sumiu). Agora cada item/referência leva `_u` (carimbo posto em `savePrecos` comparando com a última foto,
+  `_precosSnap`) e as exclusões viram lápides em `safra.excl`; `precosApplyPulled` mescla por chave (produto /
+  classe|produto): o mais novo vence, registro só local continua, lápide mais nova apaga. Precisa do Code.gs v334.
 - **Fotos do Drive baixadas pela planilha para compartilhar (v333)** — no iPhone o `fetch` direto do
   `drive.google.com/thumbnail` falha (CORS) e o compartilhar caía no texto com links. Agora cada foto é pedida à
   planilha (`driveGet({acao:'drive_arquivo', tipo:'fotos', id})` → base64 → `_b64File`); se o Code.gs for antigo,
