@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão da tela Notas, fase 2 — limpeza e celular (v343)** — (1) saiu de vez o resto da compra digitada à mão
+  (`compraDraft`, `compraNovoDraft`, handlers `cmpMapa/cmpAddItem/cmpDelItem/cmpSave`, inputs `data-cmpf/cmpi`) e o
+  `nfeDriveOpen` sem uso; (2) os avisos da pasta (rejeitados, erros, busca parada, leitura parcial) ficam recolhidos
+  em "🛠 Diagnóstico da pasta" (`nfeDiagHtml`), que abre sozinho só com erro ou leitura em andamento; (3) instruções
+  técnicas ("rode setupNfe", "ANTHROPIC_KEY", "autorizarPermissoes") só para admin (`nfeEhAdmin`); operador vê "avise
+  o escritório"; (4) na conferência de nota de insumo cada item mostra só "📦 Insumo" + "outro destino ▸"
+  (`nfeDestMais` abre Máquina/Oficina/Benfeitoria/Tanque naquele item); nota de peças mostra os 5 direto;
+  (5) link "📂 Pasta NFe/Entrada" (`nfePastaLink`) no rodapé e no texto de lista vazia — a planilha devolve o id em
+  `nfe_lista` (`pasta`, Code.gs v343).
 - **Revisão da tela Notas, fase 1 — correções (v342)** — (1) o botão "♻️ Reclassificar" do alerta amarelo chamava
   uma ação inexistente (`nfeReclassificar`) e não respondia; (2) "↩ Estornar entrada" só para admin e avisa quando a
   compra não está no aparelho (`excluirCompra` devolve `false`) em vez de dizer "estornada"; (3) "Aprovar" e "Aprovar

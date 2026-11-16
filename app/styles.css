@@ -1282,6 +1282,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-vazio .nv-ico{font-size:26px;line-height:1}
 .nfe-vazio .mut{font-size:12px;margin-top:2px}
 .nfe-hist{border-top:1px solid var(--line,#e5e8ec);font-size:13px}
+.nfe-diag{border-top:0;border-bottom:1px solid var(--line,#e5e8ec)}.nfe-diag-body{padding-bottom:8px}.nfe-dest-mais{font-weight:600;font-size:12px}   /* v343 */
 .nfe-hist summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 14px;color:var(--muted,#667);font-size:12.5px;font-weight:600;user-select:none}
 .nfe-hist summary::-webkit-details-marker{display:none}
 .nfe-hist summary::after{content:'▾';margin-left:4px;transition:transform .15s}
@@ -2466,6 +2467,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .nfe-vazio .nv-ico{font-size:21px}
   .nfe-vazio .mut{font-size:9.5px}
   .nfe-hist{font-size:10.5px}
+  .nfe-dest-mais{font-size:9.5px}
   .nfe-hist summary{font-size:10px}
   .nfe-hist summary .nh-count{font-size:9.5px}
   .nh-doc{font-size:9.5px}

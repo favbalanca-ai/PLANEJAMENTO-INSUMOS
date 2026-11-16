@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-342';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-343';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1517,7 +1517,7 @@ function custoClasseHaSeqs(t, seqs){
 }
 /* ================= COMPRAS (entradas de estoque por nota) ================= */
 const COMPRAS_KEY='planejamento_compras';
-let COMPRAS=null, compraDraft=null;
+let COMPRAS=null;
 function loadCompras(){ try{ const d=JSON.parse(localStorage.getItem(COMPRAS_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
 function saveCompras(){ lsSet(COMPRAS_KEY, JSON.stringify(COMPRAS)); _cmCache=null; }
 // envia a compra para a planilha: ENTRADA na aba MOVIMENTAÇÃO ESTOQUE + o registro inteiro na aba COMPRAS APP
@@ -1640,7 +1640,6 @@ function pushSaidasPendentes(){
   // uma de cada vez: a planilha grava uma por vez (em paralelo davam "planilha ocupada")
   return tasks.reduce((p,f)=>p.then(()=>f().catch(()=>false)), Promise.resolve());
 }
-function compraNovoDraft(){ return {fornecedor:'', data:new Date().toISOString().slice(0,10), nf:'', obs:'', itens:[{produto:'',un:'',qtd:0,preco:0}]}; }
 function compraTotal(c){ return (c.itens||[]).reduce((a,it)=>a+(+it.qtd||0)*(+it.preco||0),0); }
 // entradas de estoque por produto. Fonte COMPARTILHADA = planilha (MOVIMENTAÇÃO ESTOQUE),
 // para que todos os aparelhos vejam as mesmas compras. Soma as compras deste aparelho ainda
@@ -1711,22 +1710,12 @@ document.addEventListener('input',e=>{ if(!(e.target.dataset&&e.target.dataset.f
   const a=_mmC(e.target.value)||0, tal=+i.dataset.tal||0, feita=+i.dataset.feita||0; i.innerHTML=finAreaInfo(a,tal,feita); if(enc) enc.hidden=!((feita+a)<tal-0.005); });
 document.addEventListener('click',e=>{ const w=document.getElementById('rcv-fabw'); if(w && w.classList.contains('open') && !w.contains(e.target)) w.classList.remove('open'); }, true);   // busca da Recomendação: filtra os cartões sem redesenhar
 document.addEventListener('input',e=>{ if(e.target.id==='agp-q'){ if(_agPick){ _agPick.q=e.target.value; clearTimeout(_agQTimer); _agQTimer=setTimeout(agPickRender,100); } return; } if(e.target.id==='ag-q') agrofitBusca(e.target.value); else if(e.target.id==='ag-qa'){ AGROFIT.qa=e.target.value; AGROFIT.limA=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitAlvosRefresh,120); } else if(e.target.id==='ag-qc'){ AGROFIT.qc=e.target.value; AGROFIT.limC=60; clearTimeout(_agQTimer); _agQTimer=setTimeout(agrofitCvRefresh,120); } });
-V.entradas=function(){
-  if(!compraDraft) compraDraft=compraNovoDraft();
-  const d=compraDraft;
-  const draftRows=d.itens.map((it,i)=>`<tr>
-    <td class="c-full"><span class="agp-row"><input list="prodlist" class="txt prod-in" data-cmpi="produto" data-i="${i}" value="${esc(it.produto)}" placeholder="produto"><button type="button" class="btn btn-outline btn-sm" data-act="cmpMapa" data-i="${i}" title="Escolher no catálogo MAPA (cria o produto no portfólio se faltar)">🏛️</button></span></td>
-    <td class="num"><input class="cell" inputmode="decimal" data-cmpi="qtd" data-i="${i}" value="${it.qtd||''}" placeholder="0"></td>
-    <td data-cmpu="${i}">${esc(it.un||(PROD[it.produto]&&PROD[it.produto].un)||'')}</td>
-    <td class="num"><input class="cell" inputmode="decimal" data-cmpi="preco" data-i="${i}" value="${it.preco||''}" placeholder="0"></td>
-    <td class="num" data-cmpv="${i}">${brl0((+it.qtd||0)*(+it.preco||0))}</td>
-    <td><button class="icon-btn del" data-act="cmpDelItem" data-i="${i}" title="Remover">🗑</button></td></tr>`).join('');
-  const total=compraTotal(d);
+V.entradas=function(){   // v343: o rascunho da compra digitada à mão (removida na v330) saiu daqui de vez
   const regs=(COMPRAS.registros||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0));
   const totGeral=regs.reduce((a,c)=>a+compraTotal(c),0);
   const cards=regs.length?(cmpVisao==='nota'?comprasPorNotaHtml(regs):comprasPorProdutoHtml(regs)):'';
   return `${prodDatalist()}
-  ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label><button class="btn btn-outline" data-act="driveOpen" data-tipo="nfe" title="Escolher o .xml da nota na pasta NFe do Google Drive (pela planilha)">☁️ Drive</button>
+  ${nfeImport?nfeConferirHtml():nfeListaHtml()+`<div class="nfe-import"><label class="btn btn-primary" style="cursor:pointer">📄 Importar XML da NF-e<input type="file" id="nfe-file" hidden></label><button class="btn btn-outline" data-act="driveOpen" data-tipo="nfe" title="Escolher o .xml da nota na pasta NFe do Google Drive (pela planilha)">☁️ Drive</button>${nfePastaLink()}
     <span class="mut">Escolha o <b>arquivo .xml</b> da nota (vem no e-mail do fornecedor ou baixado da SEFAZ): o app lê os itens, liga cada um a um produto (de-para) e dá entrada no estoque com o custo real. Para conferir o caminhão chegando, use <b>Receber nota</b>.</span></div>`}
   <div class="panel cr-panel"><div class="panel-head"><h2>Compras registradas</h2><span class="sub">${regs.length} nota(s) · ${brl0(totGeral)}</span>
       <div class="spacer"></div>${(syncUrl()&&regs.some(c=>!c.pushed))?`<button class="btn btn-outline btn-sm" data-act="cmpSync">⬆ Enviar à planilha (${regs.filter(c=>!c.pushed).length})</button>`:''}</div>
@@ -2130,7 +2119,7 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null, iaOn:!!(d&&d.iaOn)};   // v290: a planilha diz se a IA está ligada
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null, iaOn:!!(d&&d.iaOn), pasta:(d&&d.pasta)||null};   // v290: a planilha diz se a IA está ligada · v343: pasta NFe/Entrada
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
@@ -2148,15 +2137,24 @@ async function nfeCapturarAgora(){
   else if(!d) toast('Sem conexão com a planilha');
 }
 // resumo da última busca automática (vem da planilha): quando foi, o que achou, erros/rejeitados
+// v343: link da pasta NFe/Entrada do Drive (a planilha informa o id em nfe_lista) — para nunca haver dúvida de onde jogar o XML
+function nfePastaLink(){ const p=NFE_LISTA&&NFE_LISTA.pasta; if(!p||!p.entrada) return ''; return `<a class="btn btn-outline" href="https://drive.google.com/drive/folders/${encodeURIComponent(p.entrada)}" target="_blank" rel="noopener" title="Pasta ${esc(p.nome||'NFe')}/Entrada no Google Drive: os XML colocados aqui entram sozinhos">📂 Pasta NFe/Entrada</a>`; }
+function _nfeParado(c){ if(!c) return false; const min=(Date.now()-new Date(String(c.em).replace(' ','T')).getTime())/60000; return !isNaN(min)&&min>45; }
 function nfeCapturaHtml(c){
   if(!c) return '';
   const quando=new Date(String(c.em).replace(' ','T')), min=(Date.now()-quando.getTime())/60000;
   const hora=isNaN(min)?esc(c.em):quando.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-  const parado=!isNaN(min) && min>45;
+  const parado=!isNaN(min) && min>45, adm=nfeEhAdmin();
   return `${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
-    ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.</div>`:''}
+    ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. ${adm?'No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.':'Toque em Atualizar para buscar agora e avise o escritório.'}</div>`:''}
     ${nfeRejeitadasHtml(c)}${nfeErrosHtml(c)}`;
 }
+// v343: os avisos da pasta (rejeitados, erros, busca parada) ficam recolhidos num "diagnóstico" — abrem sozinhos só com erro de verdade
+let nfeDiagAberto=false;
+function nfeDiagHtml(c){ const h=nfeCapturaHtml(c); if(!h.trim()) return '';
+  const nRej=+c.totRej||(c.rejeitadas||[]).length, nErr=+c.totErr||(c.erros||[]).length, parado=_nfeParado(c), aberto=nfeDiagAberto||nErr>0||!!c.parcial;
+  const resumo=[nRej?`${nRej} rejeitado(s)`:'', nErr?`<b class="mq-ruim">${nErr} erro(s)</b>`:'', parado?'busca parada':'', c.parcial?'leitura em andamento':''].filter(Boolean).join(' · ');
+  return `<details class="nfe-hist nfe-diag"${aberto?' open':''}><summary data-act="nfeDiagToggle"><span>🛠 Diagnóstico da pasta</span><span class="nh-count">${resumo||'tudo certo'}</span></summary><div class="nfe-diag-body">${h}</div></details>`; }
 // v304: rejeitados agrupados por motivo (antes era uma linha por arquivo, todas iguais) + dica do que fazer
 function _nfeAgrupa(lista, re){ const g={}; (lista||[]).forEach(s=>{ const m=String(s).match(re); const arq=m?m[1]:'', mot=(m?m[2]:String(s)).trim(); (g[mot]=g[mot]||[]).push(arq); }); return g; }
 function _nfeGrupoHtml(g){ return Object.keys(g).sort((a,b)=>g[b].length-g[a].length).map(mot=>{ const arqs=g[mot].filter(Boolean);
@@ -2169,7 +2167,7 @@ function nfeErrosHtml(c){ const L=c.erros||[]; if(!L.length) return ''; const is
   const perm=L.filter(isPerm), outros=L.filter(s=>!isPerm(s)); let h='';
   if(perm.length){ const m=String(perm[0]).match(/\((\d+) arquivo\(s\) esperando/); const n=m?+m[1]:perm.length;
     h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">🔒 <b>A planilha está sem permissão para gravar no Drive.</b> ${n} arquivo(s) esperando na <b>NFe/Entrada</b> — eles entram sozinhos assim que a autorização for dada.<br>
-      <b>Como resolver:</b> abra o Apps Script da planilha, escolha a função <b>autorizarPermissoes</b> no menu de cima, clique em ▶ Executar e aceite tudo (Drive, internet, Gmail). Depois toque em <b>Atualizar</b> aqui.</div>`; }
+      ${nfeEhAdmin()?'<b>Como resolver:</b> abra o Apps Script da planilha, escolha a função <b>autorizarPermissoes</b> no menu de cima, clique em ▶ Executar e aceite tudo (Drive, internet, Gmail). Depois toque em <b>Atualizar</b> aqui.':'Avise o escritório: é uma autorização na planilha.'}</div>`; }   // v343: instrução técnica só para o administrador
   if(outros.length){ const g=_nfeAgrupa(outros,/^arquivo "(.+?)": (.*)$/s), tot=+c.totErr||L.length, acesso=outros.some(s=>/Access denied|outra conta/i.test(String(s)));
     h+=`<div class="nfe-aviso err" style="margin:8px 14px 0">⚠️ Erro na busca${tot>L.length?` (mostrando ${L.length} de ${tot})`:''} — o arquivo continua na NFe/Entrada e é tentado de novo:${_nfeGrupoHtml(g)}
       ${acesso?`<div class="mut" style="margin-top:6px">🔑 <b>"Access denied"</b> = o arquivo (ou a pasta) pertence a <b>outra conta do Google</b>, e a planilha só pode apagar o que é dela. No Drive, abra a NFe/Entrada, veja o dono do arquivo e apague-o à mão (ou peça à pessoa para copiar os XML em vez de mover). As notas já lidas não entram duas vezes.</div>`:''}</div>`; }
@@ -2187,7 +2185,7 @@ function nfeHistoricoHtml(L){
     return `<div class="nh-row"><span class="nh-st nh-${st[0]}">${esc(st[1])}</span>
       <span class="nh-nf">${p?`NF <b>${esc(p.nNF)}</b> <span class="nh-doc">${esc(nfeCnpjFmt(p.doc))}</span>`:`<span class="nh-doc">${esc(x.arq||'—')}</span>`}</span>
       <span class="nh-when">${quando(x.em)}</span>
-      <span class="nh-det" title="${esc(x.arq||'')}">${x.motivo?esc(x.motivo.replace(/^já estava na planilha/,'já estava na planilha')):esc(x.arq||'')}</span>${acao}</div>`; }).join('');
+      <span class="nh-det" title="${esc(x.arq||'')}">${x.motivo?esc(x.motivo):esc(x.arq||'')}</span>${acao}</div>`; }).join('');
   const temAcao=h.some(x=>ign[x.chave]&&x.status==='ignorada');
   return `<details class="nfe-hist"${(nfeHistAberto||temAcao)?' open':''}><summary data-act="nfeHistToggle"><span>🗂 Histórico de leitura da pasta</span><span class="nh-count">${h.length} arquivo(s)</span></summary><div class="nh-list">${it}</div></details>`;
 }
@@ -2365,14 +2363,15 @@ function nfeListaHtml(){
   const ORD=Object.keys(ST_LBL), cont=L.contagem||{};
   const chips=Object.keys(cont).filter(k=>cont[k]>0).sort((a,b)=>(ORD.indexOf(a)+99*(ORD.indexOf(a)<0))-(ORD.indexOf(b)+99*(ORD.indexOf(b)<0)))
     .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
-  const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta <b>NFe/Entrada</b> do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
+  const pl=L.pasta&&L.pasta.entrada?`<a class="link" href="https://drive.google.com/drive/folders/${encodeURIComponent(L.pasta.entrada)}" target="_blank" rel="noopener">NFe/Entrada</a>`:'<b>NFe/Entrada</b>';   // v343: link direto da pasta
+  const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta ${pl} do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
   const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }).length;
   if(NFE_UI.q) setTimeout(nfeAplicaBusca,0);   // v306: reaplica a busca depois de redesenhar
-  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:'🤖 IA desligada: coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha'} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
+  return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:`🤖 IA desligada${nfeEhAdmin()?': coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha':''}`} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
       <div class="spacer"></div>${prontas>1?`<button class="btn btn-primary btn-sm" data-act="nfeAprovarTodas" title="Aprova uma a uma as notas em que a IA reconheceu tudo">✅ Aprovar ${prontas} prontas</button>`:''}<button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
     <div class="nfe-stats">${c?`<span class="nfe-chip st-ult" title="${c.lidas} arquivo(s) lidos nessa leitura">🕒 Última leitura <b>${ult}</b></span>`:''}${chips}</div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
-    ${nfeCapturaHtml(c)}
+    ${nfeDiagHtml(c)}
     ${nN?`<div class="nfe-busca"><input id="nfe-q" class="txt" type="search" placeholder="🔎 Buscar fornecedor, nº da nota, CNPJ, produtor, valor, produto…" value="${esc(NFE_UI.q||'')}"><span class="mut" id="nfe-q-n"></span></div>`:''}
     ${rows||(L.erro?'':vazio)}
     ${nfeIgnoradasHtml(L)}
@@ -2537,7 +2536,7 @@ function nfeConferirHtml(){
     return `<div class="nfe-it st-${st}">
       <div class="nfe-it-top"><span class="nfe-chip st-${st}">${ico} ${lbl}</span><b>${esc(it.xprod)}</b></div>
       <div class="nfe-it-sub">cód. ${esc(it.cprod)} · <span title="${esc(nfeCfopNome(it.cfop))}">CFOP ${esc(it.cfop)}${nfeCfopNome(it.cfop)?` <span class="mut">(${esc(nfeCfopNome(it.cfop))})</span>`:''}</span> · ${num(it.qcom)} ${esc(it.ucom)} × ${brl(it.vun)} = <b>${brl(it.vprod)}</b>${extras?` · ${extras}`:''}</div>
-      ${(it.ignorar||n.tipo==='RETORNO')?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${!nfeDestManut(it.dest)?' checked':''}> 📦 Insumo (estoque)</label>${Object.keys(NFE_DEST).map(k=>`<label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="${k}"${it.dest===k?' checked':''}> ${NFE_DEST[k].ico} ${NFE_DEST[k].lbl}</label>`).join('')}</div>`}
+      ${(it.ignorar||n.tipo==='RETORNO')?'':`<div class="nfe-dest"><label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="estoque"${!nfeDestManut(it.dest)?' checked':''}> 📦 Insumo (estoque)</label>${(det.nota||nfeDestManut(it.dest)||it.destMais||det.itens[i])?Object.keys(NFE_DEST).map(k=>`<label><input type="radio" name="nfe-dest-${i}" data-nfi="dest" data-i="${i}" value="${k}"${it.dest===k?' checked':''}> ${NFE_DEST[k].ico} ${NFE_DEST[k].lbl}</label>`).join(''):`<a class="link nfe-dest-mais" data-act="nfeDestMais" data-i="${i}" title="Máquina, oficina, benfeitoria ou tanque de combustível">outro destino ▸</a>`}</div>`}
       ${it.ignorar?'':nfeDestManut(it.dest)?`<div class="nfe-it-map nfe-it-maq">
         ${it.dest==='maquina'?`<label class="nfe-prod">Máquina ou bem<input list="maqlist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="trator, pulverizador, caminhonete, outro bem…"></label>`
           :it.dest==='benfeitoria'?`<label class="nfe-prod">Benfeitoria<input list="benflist" class="txt" data-nfi="maq" data-i="${i}" value="${esc(it.maq||'')}" placeholder="galpão, cerca, curral, casa, estrada…"></label>`
@@ -8539,7 +8538,6 @@ function driveOpen(tipo){
     driveSheet(); }).catch(e=>{ if(_drv!==me) return; me.st='erro'; me.erro=syncLogErr(e)+' — confira se o Code.gs da planilha está na versão v255 ou mais nova'; driveSheet(); });
 }
 function limDriveOpen(){ driveOpen('contornos'); }
-function nfeDriveOpen(){ driveOpen('nfe'); }
 function driveSheetHtml(){ const d=_drv; if(!d) return '';
   const ext=n=>((String(n).match(/\.([^.]+)$/)||[])[1]||'').toLowerCase(), ico={kml:'🗺️',kmz:'🗺️',geojson:'🧩',json:'🧩',zip:'🗜️',shp:'📐',dbf:'📄',prj:'📄',cpg:'📄',xml:'🧾'};
   let corpo='';
@@ -11046,7 +11044,6 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfiNovo'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(!it) return; const n=nfeImport.nota||{};
       prodNovoOpen({nome:String(it.xprod||'').trim().toUpperCase(), un:nfeUnApp(it.ucom), empresa:agEmpresaCurta(n.fornecedor||''), dica:`Item da nota: ${it.xprod} (${it.ucom}).`, onOk:nome=>nfiMapaSet(it,nome)}); return; }
     else if(a.act==='prodNovoOk'){ prodNovoOk(); return; }
-    else if(a.act==='cmpMapa'){ const it=compraDraft&&compraDraft.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; it.un=(PROD[nome]||{}).un||it.un; route({keepScroll:true}); }); return; }
     else if(a.act==='recMapa'){ const it=REC.itens&&REC.itens[+a.i]; if(it) agPickProduto('', nome=>{ it.produto=nome; recRerender(); }); return; }
     else if(a.act==='monitAlvoMapa'){ const sel=document.getElementById('monit-talhao'), t=sel&&findTalhao(sel.value); const cult=t?agCulturaDe(talSafraAtual(t)==='safrinha'?empSafDe(t):empDe(t)):'';
       agPickOpen({tipo:'alvo', titulo:'Alvo (catálogo MAPA)', placeholder:'Nome popular ou científico…', cultura:cult, onPick:x=>{ const i=document.getElementById('monit-alvo'), c=document.getElementById('monit-cat'); if(i) i.value=x.a.n||x.a.c; if(c) c.value=agCatPorAlvo(x.a.t); }}); return; }
@@ -11076,14 +11073,6 @@ document.addEventListener('click',e=>{
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
     else if(a.act==='estToggleMov'){ estoqueSoMov=!estoqueSoMov; act.classList.toggle('on',estoqueSoMov); filterEstoque(); }
-    else if(a.act==='cmpAddItem'){ if(!compraDraft) compraDraft=compraNovoDraft(); compraDraft.itens.push({produto:'',un:'',qtd:0,preco:0}); route(); }
-    else if(a.act==='cmpDelItem'){ if(compraDraft){ compraDraft.itens.splice(+a.i,1); if(!compraDraft.itens.length) compraDraft.itens.push({produto:'',un:'',qtd:0,preco:0}); route(); } }
-    else if(a.act==='cmpSave'){ const d=compraDraft; if(!d||!(d.itens||[]).some(it=>it.produto&&(+it.qtd>0))){ toast('Adicione ao menos um produto com quantidade'); return; }
-      const itens=d.itens.filter(it=>it.produto&&(+it.qtd>0)).map(it=>({produto:it.produto, un:it.un||(PROD[it.produto]&&PROD[it.produto].un)||'', qtd:+it.qtd||0, preco:+it.preco||0}));
-      const rec={ id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), fornecedor:d.fornecedor||'', data:d.data||new Date().toISOString().slice(0,10), nf:d.nf||'', obs:d.obs||'', itens, pushed:false, ts:Date.now() };
-      COMPRAS.registros.push(rec); saveCompras(); compraDraft=null; pedidoAbater(rec.itens); route();
-      toast(syncUrl()?'Entrada registrada — enviando à planilha…':'Entrada registrada no estoque');
-      pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); }); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
     else if(a.act==='cmpVisao'){ cmpVisao=a.v==='nota'?'nota':'produto'; route({keepScroll:true}); }
@@ -11109,6 +11098,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeReclass'){ nfeReclassificar(a.chave); }
     else if(a.act==='nfeRecebToggle'){ nfeRecebAberto=!act.closest('details').open; if(nfeRecebAberto){ nfeRecebidasCarregar(true); } }
     else if(a.act==='nfeHistToggle'){ nfeHistAberto=!act.closest('details').open; }
+    else if(a.act==='nfeDiagToggle'){ nfeDiagAberto=!act.closest('details').open; }   // v343
+    else if(a.act==='nfeDestMais'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it){ it.destMais=true; route({keepScroll:true}); } return; }   // v343: mostra Máquina/Oficina/Benfeitoria/Tanque neste item
     else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }
@@ -11301,13 +11292,6 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-res'){ filterResultados(); return; }
   if(e.target.matches('[data-tarf]')){ if(tarefaDraft){ const f=e.target.dataset.tarf; tarefaDraft[f]= (f==='dias')?(parseInt(e.target.value,10)||''):e.target.value; } return; }
   if(e.target.matches('[data-eqf]')){ equipeDraft[e.target.dataset.eqf]=e.target.value; return; }
-  if(e.target.matches('[data-cmpf]')){ if(compraDraft) compraDraft[e.target.dataset.cmpf]=e.target.value; return; }
-  if(e.target.matches('[data-cmpi]')){ const i=+e.target.dataset.i, it=compraDraft&&compraDraft.itens[i]; if(it){ const f=e.target.dataset.cmpi;
-    if(f==='qtd'||f==='preco') it[f]=_mmC(e.target.value); else { it.produto=e.target.value.trim(); if(PROD[it.produto]) it.un=PROD[it.produto].un||it.un; }
-    // atualiza só a linha e o total (antes redesenhava a tela a cada letra e o campo perdia o foco)
-    const v=document.querySelector(`[data-cmpv="${i}"]`); if(v) v.textContent=brl0((+it.qtd||0)*(+it.preco||0));
-    const u=document.querySelector(`[data-cmpu="${i}"]`); if(u) u.textContent=it.un||(PROD[it.produto]&&PROD[it.produto].un)||'';
-    const tt=document.querySelector('[data-cmptot]'); if(tt) tt.textContent=brl0(compraTotal(compraDraft)); } return; }
 });
 // busca no Portfólio (Preços): filtra os itens e esconde os cabeçalhos de classe vazios
 function filterPrecos(){

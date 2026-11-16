@@ -1214,7 +1214,8 @@ function nfeLista_(status){
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
     if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
-  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign };
+  var pasta = null; try { var cfgL = nfeConfig_(); if (cfgL.pasta){ var pp = nfePastas_(cfgL); pasta = { raiz:cfgL.pasta, entrada:pp.entrada.getId(), nome:S(pp.raiz.getName()) }; } } catch (e) { pasta = null; }   // v343: o app mostra o link da NFe/Entrada
+  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign, pasta:pasta };
 }
 // v309: entradas no tanque feitas por uma NF-e (id abnf:<chave>:<item>) marcadas como apagadas
 function abastDaNotaApaga_(chave){ if (!sh(ABAST_SHEET)) return 0; var m = readMapApp(ABAST_SHEET), out = {}, n = 0, u = Date.now();
