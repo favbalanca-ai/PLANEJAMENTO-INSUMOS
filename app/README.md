@@ -71,6 +71,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Importar inventário do AgroGestão (v341)** — Cadastro de máquinas → "📥 Importar inventário (PDF)". Lê o
+  relatório "Inventário de Máquinas" no próprio aparelho (`invLerPdf`: pdf.js 3.11.174 do cdnjs, carregado só na
+  hora; texto por célula + faixas vermelhas = bens baixados) e monta a conferência (`invParsePaginas` acha as colunas
+  pelo cabeçalho ID · Máquina · Chassi · Ano · Tipo · Valor Novo · Data Aval. · Avaliação · Depreciação · Valor Atual;
+  junta nome quebrado em duas linhas). Casamento com o que já existe (`invCasar`): mesmo `#id` já importado, nome
+  igual ou parecido (≥ 2 palavras em comum e números do modelo iguais). Tabela com ☑, grupo (`INV_GRUPOS` →
+  `MAQ_GRUPOS_LISTA`) e "No app". `invGravar` → `maqCadSalvar`: nome, grupo, ano, identificação ("AgroGestão #id ·
+  chassi"), `valorCompra` = valor novo e `m.inv` {agId, chassi, tipo, valorNovo, dataAval, avaliacao, deprec,
+  valorAtual, baixada}; baixados entram inativos. Aparece no card do Cadastro, na ficha ("Inventário") e no KPI
+  "Valor da frota (inventário)" do Painel. Sem Code.gs novo.
 - **Checklist pré-uso do operador (v340)** — tela `#/checklist` (módulo Máquinas; máquina pelo seletor ou pelo QR
   da etiqueta). Itens por grupo (`CHECK_PADRAO`: Geral + os do grupo da máquina, ou a lista própria gravada no
   Cadastro em `m.checkItens`, um por linha), cada um com OK / Problema (com observação) / — (não se aplica), horímetro,
