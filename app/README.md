@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Preventivas por data e documentos (v339)** — item do plano aceita "a cada X horas", "a cada X dias" ou os dois
+  (`cadaH`, `cadaDias`, `ultData`/`criado`; vence o que chegar primeiro). `planoStatus` devolve `falta` (h), `faltaD`
+  (dias), `proxD` e `st`; `planoTxt` monta "faltam 130 h · faltam 12 dia(s)" / "vencida há…"; `planoCada` mostra
+  "250 h ou 6 mês(es)". **Documentos** no Cadastro (`m.docs`: licenciamento, seguro, IPVA, NR-12, laudo, garantia,
+  outro; vencimento, obs, link): `maqDocsStatus` (vencido / ≤ 30 dias / ok), listados na ficha e no PDF; alertas no
+  card do Painel (`maqAlertas`) e no sino (`notifItens`: atraso e semana, quem pode ver a frota). Tudo no JSON da aba
+  MÁQUINAS APP (sem Code.gs novo).
 - **Custo-hora completo (v338)** — o Cadastro ganhou o bloco **Custo fixo**: valor de compra, valor residual, vida
   útil (h), seguro + licenciamento (R$/ano), operador (R$/mês) e uso esperado (h/mês, padrão 160). `maqCustoFixoH(m)`
   = depreciação (compra − residual) ÷ vida útil + seguro ÷ (h/mês × 12) + operador ÷ h/mês. `maqCustos` passa a
