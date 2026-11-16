@@ -2128,6 +2128,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v337: ficha da máquina */
+.mq-nome{cursor:pointer;color:var(--teal)}.mq-nome:hover{text-decoration:underline}
+.mq-ficha .tf-h h3{margin:0}
+.mq-grafs{display:grid;gap:10px;margin:8px 0}.mq-grafs h4{margin:0 0 2px;font-size:12.5px;color:var(--ink2)}.mq-graf{width:100%;height:auto;display:block;background:#fbfcfd;border:1px solid var(--line);border-radius:8px}
+.mq-leg{display:flex;gap:12px;font-size:11px;color:var(--ink2);margin-top:3px}.mq-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.mq-hist{display:grid;gap:2px}.mq-ev{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-top:1px dashed var(--line);font-size:13px}.mq-ev.aberta{background:#fff8e1}
+.mq-ev-d{flex:0 0 46px;font-weight:700;color:var(--teal);font-size:12px;display:flex;flex-direction:column}.mq-ev-d small{font-weight:400;color:var(--muted)}
+.mq-ev-i{flex:0 0 20px;text-align:center}.mq-ev-t{flex:1;min-width:0;display:flex;flex-direction:column}.mq-ev-t small{font-size:11.5px}.mq-ev-v{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+@media (min-width:700px){ .mq-grafs{grid-template-columns:1fr 1fr} }
 .mq-alertas{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px}.mq-alertas li{padding:3px 0}.mq-alertas li.erro{color:var(--red);font-weight:700}.mq-alertas li.aviso{color:var(--amber)}
 .mq-escolha{display:flex;gap:10px;align-items:flex-end;padding:0 14px 12px;flex-wrap:wrap}.mq-form{display:flex;gap:10px;flex-wrap:wrap;padding:0 14px 8px}.mq-form label{display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:140px;flex:1}.mq-form .cell,.mq-form .txt,.mq-form .sel{width:100%}
 .mq-plano{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}.mq-plano .pill{background:var(--line)}.mq-plano .pill.perto{background:#fff3cd;color:#8d6e00}.mq-plano .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}
@@ -2636,6 +2645,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
+  .mq-grafs h4{font-size:10px}
+  .mq-ev{font-size:10.5px}
+  .mq-ev-d{font-size:9.5px}
+  .mq-ev-t small{font-size:9.5px}
   .mq-alertas{font-size:10px}
   .mq-form label{font-size:9.5px}
   .fech-list li{font-size:10.5px}
@@ -2772,7 +2785,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-335';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-337';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7480,10 +7493,60 @@ async function maqPdf(mid){ const html=mid?maqRelHtml(maqDe(mid)):frotaRelHtml()
 let MQ_UI={maq:'', osAberta:'', mostrarTodos:false, cadAberto:'', conjEdit:''};
 function maqSelectHtml(id, sel, ph){ return `<select class="sel" id="${id}"><option value="">${ph||'— máquina —'}</option>${maqTodas().map(m=>`<option value="${esc(m.id)}"${m.id===sel?' selected':''}>${esc(m.nome)}</option>`).join('')}</select>`; }
 const _alertHtml=(al)=>al.length?`<ul class="mq-alertas">${al.map(a=>`<li class="${a.nivel}">${a.nivel==='erro'?'⛔':'⚠️'} ${esc(a.txt)}</li>`).join('')}</ul>`:'';
+// ===== v337: FICHA DA MÁQUINA — folha com resumo, histórico unificado (abastecimentos, leituras, OS, peças das notas,
+// horas no Campo) e gráficos por mês (SVG puro). Abre ao tocar no nome da máquina no Painel da frota e no Cadastro. =====
+function maqHistorico(m){ const ev=[];
+  abastLista(m.id).filter(a=>a.tipo!=='entrada').forEach(a=>{ const k=abastConsumo(a), leit=a.tipo==='leitura';
+    ev.push({data:String(a.data||'').slice(0,10), hora:a.hora||'', tipo:leit?'leitura':'abast', ico:leit?'🕐':'⛽', titulo:leit?`Leitura do horímetro · ${numH(a.hor)} h`:`${numH(a.litros)} L ${esc(a.comb||'')} · ${a.origem==='posto'?'posto':'tanque'}`,
+      sub:[(!leit&&a.hor)?numH(a.hor)+' h':'', k?numH(k.lh)+' L/h':'', esc(a.operador||'')].filter(Boolean).join(' · '), valor:leit?0:abastCusto(a), litros:leit?0:(+a.litros||0), lh:k?k.lh:null}); });
+  osLista(m.id).forEach(o=>ev.push({data:String(o.dataAb||'').slice(0,10), tipo:'os', ico:'🔧', titulo:`OS ${esc(OS_TIPOS[o.tipo]||o.tipo)}: ${esc(o.desc||'')}`, sub:[esc((o.pecas||[]).map(p=>p.item).join('; ')), o.hor?numH(o.hor)+' h':'', o.status==='concluida'?'concluída':'<b>ABERTA</b>', esc(o.resp||'')].filter(Boolean).join(' · '), valor:osValor(o), aberta:o.status!=='concluida'}));
+  ((DATA&&DATA.manutencao)||[]).filter(r=>r.maquina&&maqId(r.maquina)===m.id&&!['oficina','benfeitoria','tanque'].includes(r.destino)).forEach(r=>ev.push({data:String(r.data||'').slice(0,10), tipo:'peca', ico:'🧾', titulo:`${esc(r.item||'peça')}${r.tipo?' · '+esc(r.tipo):''}`, sub:[esc(r.fornecedor||''), r.nf?'NF '+esc(r.nf):''].filter(Boolean).join(' · '), valor:+r.valor||0}));
+  const R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mm=maqDeConjunto(r.app.maq); if(!mm||mm.id!==m.id) continue; const h=durHoras(r.app.hIni,r.app.hFim); if(!(h>0)) continue; const tid=k.split('|')[0], t=findTalhao(tid);
+    ev.push({data:String(r.data||'').slice(0,10), tipo:'campo', ico:'🌱', titulo:`${numH(h)} h no talhão ${esc(t?tNome(t):tid)}`, sub:[(r.app.hIni&&r.app.hFim)?`${esc(r.app.hIni)}–${esc(r.app.hFim)}`:'', esc(r.app.operador||r.operador||'')].filter(Boolean).join(' · '), horas:h}); }
+  return ev.filter(e=>/^\d{4}-\d{2}-\d{2}$/.test(e.data)).sort((a,b)=>(b.data+(b.hora||'')).localeCompare(a.data+(a.hora||''))); }
+function maqPorMes(ev){ const M={}; ev.forEach(e=>{ const mk=e.data.slice(0,7); const o=M[mk]||(M[mk]={mes:mk, litros:0, comb:0, pecas:0, horas:0, lhs:[]});
+    if(e.tipo==='abast'){ o.litros+=e.litros||0; o.comb+=e.valor||0; if(e.lh) o.lhs.push(e.lh); } else if(e.tipo==='os'||e.tipo==='peca') o.pecas+=e.valor||0; else if(e.tipo==='campo') o.horas+=e.horas||0; });
+  return Object.values(M).sort((a,b)=>a.mes.localeCompare(b.mes)).slice(-12).map(o=>Object.assign(o,{lh:o.lhs.length?o.lhs.reduce((s,x)=>s+x,0)/o.lhs.length:0})); }
+// barras (empilhadas) por mês — sem biblioteca
+function maqGraficoSvg(meses, series, opts){ const W=360,H=150,pL=38,pB=20,pT=12,n=meses.length; if(!n) return '';
+  const tot=meses.map(o=>series.reduce((s,sr)=>s+(+o[sr.k]||0),0)), max=Math.max(1e-9,...tot), bw=(W-pL-6)/n, alt=H-pB-pT, fc=opts.fmtCurto||opts.fmt; let g='';
+  [0.5,1].forEach(f=>{ const y=(H-pB-f*alt).toFixed(1); g+=`<line x1="${pL}" x2="${W-4}" y1="${y}" y2="${y}" stroke="#e4ebee" stroke-dasharray="3 3"/><text x="${pL-4}" y="${(+y+3).toFixed(1)}" font-size="8" text-anchor="end" fill="#8a9aa0">${esc(String(fc(max*f)))}</text>`; });
+  meses.forEach((o,i)=>{ let y=H-pB; const x=pL+i*bw; series.forEach(sr=>{ const v=+o[sr.k]||0, h=v/max*alt; if(h>0){ g+=`<rect x="${(x+3).toFixed(1)}" y="${(y-h).toFixed(1)}" width="${Math.max(2,bw-6).toFixed(1)}" height="${h.toFixed(1)}" fill="${sr.cor}" rx="2"><title>${esc(sr.lbl)}: ${esc(String(opts.fmt(v)))}</title></rect>`; y-=h; } });
+    g+=`<text x="${(x+bw/2).toFixed(1)}" y="${H-6}" font-size="9" text-anchor="middle" fill="#5a6b72">${_MESN[(+o.mes.slice(5,7)||1)-1]}${o.mes.slice(2,4)!==String(new Date().getFullYear()).slice(2)?'/'+o.mes.slice(2,4):''}</text>`;
+    if(tot[i]>0) g+=`<text x="${(x+bw/2).toFixed(1)}" y="${(y-3).toFixed(1)}" font-size="8.5" font-weight="700" text-anchor="middle" fill="#16404d">${esc(String(fc(tot[i])))}</text>`; });
+  return `<svg viewBox="0 0 ${W} ${H}" class="mq-graf" role="img">${g}</svg>`; }
+const _kFmt=v=>v>=1000?(Math.round(v/100)/10).toFixed(1).replace('.',',')+'k':String(Math.round(v));
+function maqFichaOpen(id){ const m=maqDe(id); if(!m){ toast('Máquina não encontrada'); return; } novaAcaoFechar();
+  const c=maqCustos(m), al=maqAlertas(m), pl=planoStatus(m), hor=maqHorimetro(m), ev=maqHistorico(m), meses=maqPorMes(ev), ht=maqHorasPorTalhao(m);
+  const lin=(k,v)=>v?`<div class="tf-lin"><span>${k}</span><b>${v}</b></div>`:'';
+  const resumo=lin('Grupo', m.grupo?esc(m.grupo)+(m.ident?` <small class="mut">· ${esc(m.ident)}</small>`:''):'')+lin('Horímetro', hor?numH(hor)+' h':'')
+    +lin('Horas na safra', c.horas?numH(c.horas)+' h'+(c.horasHor?'':' <small class="mut">(horas do Campo)</small>'):'')
+    +lin('Combustível', c.litros?`${numH(c.litros)} L <small class="mut">· ${brl0(c.comb)}</small>`:'')
+    +lin('Consumo', c.lhReal?`<span class="${m.lh&&c.lhReal>m.lh*1.2?'mq-ruim':''}">${numH(c.lhReal)} L/h</span>${m.lh?` <small class="mut">· plan. ${numH(m.lh)}</small>`:''}`:'')
+    +lin('Peças e serviços', (c.pecas+c.os)?`${brl0(c.pecas+c.os)} <small class="mut">· notas ${brl0(c.pecas)} · OS ${brl0(c.os)}</small>`:'')
+    +lin('Custo-hora real', c.custoH?`<span class="${m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}">${brl(c.custoH)}/h</span>${m.rsHm?` <small class="mut">· plan. ${brl0(m.rsHm)}/h</small>`:''}`:'')
+    +lin('Próxima preventiva', pl[0]?`${esc(pl[0].p.nome)} · ${pl[0].falta<0?'<span class="mq-ruim">vencida há '+numH(-pl[0].falta)+' h</span>':'faltam '+numH(pl[0].falta)+' h'}`:'');
+  const graf=meses.length?`<div class="mq-grafs">
+      <div><h4>Combustível e peças por mês (R$)</h4>${maqGraficoSvg(meses,[{k:'comb',cor:'#1e88e5',lbl:'Combustível'},{k:'pecas',cor:'#fb8c00',lbl:'Peças e OS'}],{fmt:v=>brl0(v),fmtCurto:_kFmt})}<div class="mq-leg"><span><i style="background:#1e88e5"></i>Combustível</span><span><i style="background:#fb8c00"></i>Peças e OS</span></div></div>
+      ${meses.some(o=>o.litros)?`<div><h4>Litros abastecidos por mês</h4>${maqGraficoSvg(meses,[{k:'litros',cor:'#43a047',lbl:'Litros'}],{fmt:v=>numH(v)+' L',fmtCurto:_kFmt})}</div>`:''}
+      ${meses.some(o=>o.lh)?`<div><h4>Consumo médio por mês (L/h)${m.lh?` <small class="mut">· planejado ${numH(m.lh)}</small>`:''}</h4>${maqGraficoSvg(meses,[{k:'lh',cor:'#8e24aa',lbl:'L/h'}],{fmt:v=>numH(v)+' L/h',fmtCurto:v=>numH(v)})}</div>`:''}
+      ${meses.some(o=>o.horas)?`<div><h4>Horas no Campo por mês</h4>${maqGraficoSvg(meses,[{k:'horas',cor:'#00897b',lbl:'Horas'}],{fmt:v=>numH(v)+' h',fmtCurto:v=>numH(v)})}</div>`:''}</div>`:'';
+  const LIM=80, hist=ev.slice(0,LIM).map(e=>`<div class="mq-ev${e.aberta?' aberta':''}"><span class="mq-ev-d">${_dtBRc(e.data).slice(0,5)}${e.hora?`<small>${esc(e.hora)}</small>`:''}</span><span class="mq-ev-i">${e.ico}</span><div class="mq-ev-t"><b>${e.titulo}</b>${e.sub?`<small class="mut">${e.sub}</small>`:''}</div>${e.valor?`<span class="mq-ev-v">${brl0(e.valor)}</span>`:''}</div>`).join('');
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet tf-sheet mq-ficha" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>🚜 ${esc(m.nome)}</h3><span class="mut">${ev.length} registro(s) na safra${m.conjunto?' · conjunto da CUSTO OPERAÇÃO':''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <div class="tf-resumo">${resumo||'<p class="mut">Sem registros ainda: abasteça ou abra uma OS para começar o histórico.</p>'}</div>
+    ${_alertHtml(al)}
+    <div class="tf-btns"><a class="btn btn-primary btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 Nova OS</a><button class="btn btn-outline btn-sm" data-act="maqPdf" data-maq="${esc(m.id)}">📄 PDF</button><button class="btn btn-outline btn-sm" data-act="maqFichaCad" data-maq="${esc(m.id)}">🗂️ Cadastro</button></div>
+    ${graf}
+    ${ht.length?`<details class="tf-sec" open><summary><h4>🌱 Horas por talhão (Campo)</h4><span class="mut">${numH(ht.reduce((s,x)=>s+x.h,0))} h</span></summary>${ht.map(x=>`<div class="tf-ev"><span>${esc(x.talhao)}</span><span class="num" style="margin-left:auto"><b>${numH(x.h)} h</b>${c.custoH?` <small class="mut">· ${brl0(x.h*c.custoH)}</small>`:''}</span></div>`).join('')}</details>`:''}
+    ${pl.length?`<details class="tf-sec"><summary><h4>📅 Plano de preventivas</h4><span class="mut">${pl.length}</span></summary>${pl.map(x=>`<div class="tf-ev"><span>${esc(x.p.nome)} <small class="mut">a cada ${numH(x.p.cadaH)} h</small></span><span style="margin-left:auto">${x.st==='vencida'?'<b class="mq-ruim">vencida há '+numH(-x.falta)+' h</b>':x.st==='perto'?'<b style="color:var(--amber)">faltam '+numH(x.falta)+' h</b>':'faltam '+numH(x.falta)+' h'}</span></div>`).join('')}</details>`:''}
+    <details class="tf-sec" open><summary><h4>🕓 Histórico</h4><span class="mut">${ev.length}</span></summary><div class="mq-hist">${hist||'<p class="mut tf-vazio">Nenhum registro.</p>'}${ev.length>LIM?`<p class="mut tf-vazio">+${ev.length-LIM} registro(s) mais antigos — veja no PDF</p>`:''}</div></details></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
   const temDado=m=>abastLista(m.id).length||osLista(m.id).length||(m.plano||[]).length||maqHorimetro(m)>0; ms.sort((a,b)=>(temDado(b)?1:0)-(temDado(a)?1:0)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));   // quem tem registro aparece primeiro
   const rows=ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0];
-    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
+    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b class="mq-nome" data-act="maqFicha" data-maq="${esc(m.id)}" title="Abrir a ficha da máquina (histórico e gráficos)">${esc(m.nome)} ›</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
       <div class="rel-uso-kpis mq-kpis"><span><small>Horímetro</small>${hor?numH(hor)+' h':'—'}</span><span><small>Horas na safra</small>${c.horas?numH(c.horas)+' h':'—'}${!c.horasHor&&c.horasCampo?'<small class="mut" style="text-transform:none"> (Campo)</small>':''}</span><span><small>Combustível</small>${c.litros?`${numH(c.litros)} L · ${brl0(c.comb)}`:'—'}</span><span><small>Consumo</small>${c.lhReal?`${numH(c.lhReal)} L/h`:'—'}${m.lh?`<small class="mut" style="text-transform:none"> plan. ${numH(m.lh)}</small>`:''}</span><span><small>Peças · serviços</small>${brl0(c.pecas+c.os)}</span><span class="${c.custoH&&m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}"><small>Custo-hora real</small>${c.custoH?brl(c.custoH)+'/h':'—'}${m.rsHm?`<small class="mut" style="text-transform:none"> plan. ${brl0(m.rsHm)}</small>`:''}</span><span><small>Próxima preventiva</small>${prox?`${esc(prox.p.nome)} · ${prox.falta<0?'<b style="color:var(--red)">vencida</b>':'faltam '+numH(prox.falta)+' h'}`:'<span class="mut">sem plano</span>'}</span></div>
       ${(()=>{ const ht=maqHorasPorTalhao(m); return ht.length?`<div class="mq-talhoes mut">🌱 horas no Campo: ${ht.slice(0,5).map(x=>`${esc(x.talhao)} (${numH(x.h)} h)`).join(' · ')}${ht.length>5?' · …':''}</div>`:''; })()}${_alertHtml(al)}</div>`; }).join('');
   const tot=ms.reduce((s,m)=>{ const c=maqCustos(m); s.comb+=c.comb; s.pecas+=c.pecas+c.os; s.horas+=c.horas; s.litros+=c.litros; return s; },{comb:0,pecas:0,horas:0,litros:0}), nAl=ms.reduce((s,m)=>s+maqAlertas(m).length,0);
@@ -7564,7 +7627,7 @@ function osSalvar(mid, id){ const m=maqDe(mid); if(!m) return; const g=k=>(docum
   const prev=id?(OV.osMaq||{})[id]:null; const o=Object.assign({}, prev||{}, {id:id||undefined, maq:m.id, tipo:g('os-tipo')||'corretiva', planoId:g('os-plano')||'', dataAb:g('os-data')||_hojeISO(), hor:numBR(g('os-hor')), desc, pecas, moH:numBR(g('os-moH')), moValor:numBR(g('os-moV')), resp:g('os-resp'), status:g('os-status')||'concluida', dataFim:g('os-status')==='concluida'?(g('os-fim')||_hojeISO()):'', obs:g('os-obs')});
   osGravar(o); MQ_UI.osAberta=''; MQ_UI.osPlano=''; route(); toast(o.status==='concluida'?`OS ${OS_TIPOS[o.tipo]} registrada${o.planoId?' · plano atualizado':''}`:'OS aberta registrada'); }
 V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)||{}).filter(c=>c&&!c.del&&c.ativa===false);
-  const rows=ms.map(m=>{ const ab=MQ_UI.cadAberto===m.id; return `<div class="mq-card"><div class="mq-head"><b>${esc(m.nome)}</b><span class="mut">${esc(m.grupo||'')}${m.conjunto?' · conjunto da CUSTO OPERAÇÃO':''}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqCadAbrir" data-maq="${esc(m.id)}">${ab?'fechar':'editar'}</button></div>
+  const rows=ms.map(m=>{ const ab=MQ_UI.cadAberto===m.id; return `<div class="mq-card"><div class="mq-head"><b class="mq-nome" data-act="maqFicha" data-maq="${esc(m.id)}" title="Abrir a ficha da máquina">${esc(m.nome)} ›</b><span class="mut">${esc(m.grupo||'')}${m.conjunto?' · conjunto da CUSTO OPERAÇÃO':''}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqCadAbrir" data-maq="${esc(m.id)}">${ab?'fechar':'editar'}</button></div>
     ${ab?`<div class="mq-form"><label>Grupo<input class="txt" id="mc-grupo" value="${esc(m.grupo||'')}" list="mc-grupos"><datalist id="mc-grupos"><option value="Trator"><option value="Colheitadeira"><option value="Pulverizador"><option value="Plantadeira"><option value="Caminhão"><option value="Caminhonete"><option value="Implemento"><option value="Gerador / irrigação"></datalist></label><label>Ano<input class="cell" inputmode="numeric" id="mc-ano" value="${esc(m.ano||'')}"></label><label>Identificação (placa, chassi, frota)<input class="txt" id="mc-ident" value="${esc(m.ident||'')}"></label>
       <label>Horímetro inicial (h)<input class="cell" inputmode="decimal" id="mc-horIni" value="${m.horIni?numH(m.horIni):''}" title="Leitura na data em que começou a registrar no app"></label><label>Consumo esperado (L/h)<input class="cell" inputmode="decimal" id="mc-lh" value="${m.lh?numH(m.lh):''}"></label><label>Custo-hora planejado (R$/h)<input class="cell" inputmode="decimal" id="mc-rsHm" value="${m.rsHm?numH(m.rsHm):''}"></label>
       <label>Tanque da máquina (L)<input class="cell" inputmode="decimal" id="mc-tanque" value="${m.tanqueL?numH(m.tanqueL):''}"></label><label>Ativa<select class="sel" id="mc-ativa"><option value="1">Sim</option><option value="0">Não (sai das listas)</option></select></label><label style="flex-basis:100%">Observação<input class="txt" id="mc-obs" value="${esc(m.obs||'')}"></label></div>
@@ -13655,7 +13718,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='finEditar'){ const t=FIN().titulos.find(x=>x.id===a.id); if(t){ finDraft=Object.assign(finNovoDraft(), t, {valor:+t.valor||''}); route(); const el=document.getElementById('fin-form'); if(el) el.scrollIntoView({block:'start'}); } }
     else if(a.act==='finBaixar'){ finBaixarAbrir(a.id); }
     else if(a.act==='maqEtiquetas'){ maqEtiquetas(a.modo||'app'); } else if(a.act==='waLerTexto'){ waImportLer((document.getElementById('wa-txt')||{}).value||''); } else if(a.act==='waGravar'){ waGravar(); } else if(a.act==='waLimpar'){ WA_IMP=null; route({keepScroll:true}); }
-    else if(a.act==='maqWhatsSalvar'){ const n=((document.getElementById('mc-whats')||{}).value||'').replace(/\D/g,''); if(n&&!/^\d{10,13}$/.test(n)){ toast('Número inválido: DDD + número, só dígitos'); return; } OV.maqWa=n; saveOverrides(); cadPost('maquinas',{whats:n},'').then(ok=>{ if(!ok&&syncUrl()) toast('Número guardado neste aparelho; não gravou na planilha'); }); route({keepScroll:true}); toast(n?'Número salvo':'Número removido'); } else if(a.act==='qrScan'){ qrScanAbrir(); } else if(a.act==='qrScanFechar'){ qrScanFechar(); } else if(a.act==='maqPdf'){ maqPdf(a.maq||''); } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
+    else if(a.act==='maqWhatsSalvar'){ const n=((document.getElementById('mc-whats')||{}).value||'').replace(/\D/g,''); if(n&&!/^\d{10,13}$/.test(n)){ toast('Número inválido: DDD + número, só dígitos'); return; } OV.maqWa=n; saveOverrides(); cadPost('maquinas',{whats:n},'').then(ok=>{ if(!ok&&syncUrl()) toast('Número guardado neste aparelho; não gravou na planilha'); }); route({keepScroll:true}); toast(n?'Número salvo':'Número removido'); } else if(a.act==='qrScan'){ qrScanAbrir(); } else if(a.act==='qrScanFechar'){ qrScanFechar(); } else if(a.act==='maqPdf'){ maqPdf(a.maq||''); }
+    else if(a.act==='maqFicha'){ maqFichaOpen(a.maq); return; }
+    else if(a.act==='maqFichaCad'){ novaAcaoFechar(); MQ_UI.cadAberto=a.maq; location.hash='#/maqcad'; route({toTop:true}); return; } else if(a.act==='abastSalvar'){ abastSalvar(a.maq); } else if(a.act==='tanqueEntrada'){ tanqueEntrada(); } else if(a.act==='abastTodos'){ MQ_UI.mostrarTodos=true; route({keepScroll:true}); }
     else if(a.act==='abastExcluir'){ const x=(OV.abast||{})[a.id]; if(x&&ask('Excluir este registro?')){ x.del=1; x._u=tsAgora(); saveOverrides(); loteAgendar('__abastecimento'); route({keepScroll:true}); } }
     else if(a.act==='osSalvar'){ osSalvar(a.maq, a.id||''); } else if(a.act==='osEditar'){ const o=(OV.osMaq||{})[a.id]; if(o){ MQ_UI.maq=o.maq; MQ_UI.osAberta=o.id; route(); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); } } else if(a.act==='osCancelarEd'){ MQ_UI.osAberta=''; route({keepScroll:true}); }
     else if(a.act==='osExcluir'){ const o=(OV.osMaq||{})[a.id]; if(o&&ask('Excluir esta ordem de serviço?')){ o.del=1; o._u=tsAgora(); saveOverrides(); loteAgendar('__osMaq'); route({keepScroll:true}); } }
