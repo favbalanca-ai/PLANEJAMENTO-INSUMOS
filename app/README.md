@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **"Enviar agora" manda o conjunto inteiro (v335)** — o envio automático manda só o que mudou desde o último envio OK
+  (`loteDelta`); se um envio antigo falhou no meio, um registro podia ficar para trás (contagem de stand que não
+  chegou ao outro aparelho). O botão manual **Enviar agora** (`syncPush` não-auto → `loteEnviarTudo(true)`) agora
+  envia todos os registros de todos os tipos, ignorando o "já enviado"; a planilha mescla por chave/`_u`.
 - **Preços: mescla por registro entre aparelhos (v334)** — antes o envio regravava a aba `PREÇOS APP` inteira e o
   puxar substituía a lista local: dois celulares cadastrando, o último apagava o do outro (foi assim que o VERSATILIS
   sumiu). Agora cada item/referência leva `_u` (carimbo posto em `savePrecos` comparando com a última foto,
