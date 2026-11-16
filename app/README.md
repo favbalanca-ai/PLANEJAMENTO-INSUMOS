@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Pasta extra de XML (v344)** — a planilha passa a ler também outra pasta do Drive (linha `PASTA EXTRA` na CONFIG
+  NFE; ex.: a pasta do ano onde a automação do e-mail salva os anexos em `2026/11/Geral/Notas Fiscais`). Só leitura:
+  nada é movido; só subpastas e arquivos dos últimos `PASTA EXTRA DIAS` (60). O diagnóstico da pasta mostra
+  "📁 Pasta extra: N pasta(s) · N XML · N nova(s)" (`c.extra`). Code.gs v344.
 - **Revisão da tela Notas, fase 2 — limpeza e celular (v343)** — (1) saiu de vez o resto da compra digitada à mão
   (`compraDraft`, `compraNovoDraft`, handlers `cmpMapa/cmpAddItem/cmpDelItem/cmpSave`, inputs `data-cmpf/cmpi`) e o
   `nfeDriveOpen` sem uso; (2) os avisos da pasta (rejeitados, erros, busca parada, leitura parcial) ficam recolhidos

@@ -2815,7 +2815,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-343';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-344';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4960,13 +4960,14 @@ function nfeCapturaHtml(c){
   const parado=!isNaN(min) && min>45, adm=nfeEhAdmin();
   return `${c.parcial?`<div class="nfe-aviso info" style="margin:8px 14px 0">⏳ Ainda há arquivos para ler — a busca continua sozinha a cada 15 min (ou toque em Atualizar de novo).</div>`:''}
     ${parado?`<div class="nfe-aviso warn" style="margin:8px 14px 0">⏸ A busca automática (a cada 15 min) não roda desde ${hora}. ${adm?'No Apps Script, rode <b>setupNfe</b> de novo (recria o gatilho) — ou toque em Atualizar para buscar agora.':'Toque em Atualizar para buscar agora e avise o escritório.'}</div>`:''}
+    ${c.extra?`<div class="mut" style="margin:8px 14px 0;font-size:12px">📁 Pasta extra (anexos do e-mail): ${+c.extra.pastas||0} pasta(s) olhada(s) · ${+c.extra.xml||0} XML lido(s) · ${+c.extra.novas||0} nota(s) nova(s)</div>`:''}
     ${nfeRejeitadasHtml(c)}${nfeErrosHtml(c)}`;
 }
 // v343: os avisos da pasta (rejeitados, erros, busca parada) ficam recolhidos num "diagnóstico" — abrem sozinhos só com erro de verdade
 let nfeDiagAberto=false;
 function nfeDiagHtml(c){ const h=nfeCapturaHtml(c); if(!h.trim()) return '';
   const nRej=+c.totRej||(c.rejeitadas||[]).length, nErr=+c.totErr||(c.erros||[]).length, parado=_nfeParado(c), aberto=nfeDiagAberto||nErr>0||!!c.parcial;
-  const resumo=[nRej?`${nRej} rejeitado(s)`:'', nErr?`<b class="mq-ruim">${nErr} erro(s)</b>`:'', parado?'busca parada':'', c.parcial?'leitura em andamento':''].filter(Boolean).join(' · ');
+  const resumo=[nRej?`${nRej} rejeitado(s)`:'', nErr?`<b class="mq-ruim">${nErr} erro(s)</b>`:'', parado?'busca parada':'', c.parcial?'leitura em andamento':'', c.extra?`pasta extra: ${+c.extra.xml||0} XML`:''].filter(Boolean).join(' · ');   // v344: pasta extra
   return `<details class="nfe-hist nfe-diag"${aberto?' open':''}><summary data-act="nfeDiagToggle"><span>🛠 Diagnóstico da pasta</span><span class="nh-count">${resumo||'tudo certo'}</span></summary><div class="nfe-diag-body">${h}</div></details>`; }
 // v304: rejeitados agrupados por motivo (antes era uma linha por arquivo, todas iguais) + dica do que fazer
 function _nfeAgrupa(lista, re){ const g={}; (lista||[]).forEach(s=>{ const m=String(s).match(re); const arq=m?m[1]:'', mot=(m?m[2]:String(s)).trim(); (g[mot]=g[mot]||[]).push(arq); }); return g; }
