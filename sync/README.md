@@ -132,6 +132,20 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Pasta extra de XML (v344)
+
+- CONFIG NFE ganha `PASTA EXTRA` (ID ou link de outra pasta do Drive; pode repetir a linha) e `PASTA EXTRA DIAS` (60).
+  `setupNfe` cria as duas linhas se faltarem. Caso de uso: a pasta do ano (`2026`) onde a automação do e-mail salva os
+  anexos em `mês/Geral/Notas Fiscais`. A pasta precisa estar **compartilhada com a conta da planilha** (leitor basta).
+- `nfeLerPastasExtra_` (chamada por `capturarNfe` depois da NFe/Entrada): desce até 5 níveis, só em subpastas criadas
+  ou alteradas no prazo, lê `.xml`/`.zip` alterados no prazo e ainda não lidos (`NFE_ARQ_FEITOS`), com
+  `processarXmlNfe(txt, 'pasta extra')`. **Nunca move nem apaga** (os arquivos são da automação). Limite de 150 pastas por
+  busca; o que sobrar fica para a próxima (`parcial`). Sem acesso à pasta → erro "compartilhe a pasta com a conta desta
+  planilha".
+- `NFE_ARQ_FEITOS` passa a guardar 150 ids com hora em segundos: com 300 a propriedade passava de 9 KB e a gravação
+  falhava em silêncio (os arquivos de outra conta na Entrada eram relidos a cada 15 min — caíam como "duplicada").
+- A captura devolve `extra {pastas, xml, novas}` e `nfe_lista` traz `pasta.extra` (quantas pastas extras configuradas).
+
 ## Link da pasta NFe/Entrada no app (v343)
 
 - `nfe_lista` passa a devolver `pasta: {raiz, entrada, nome}` (ids do Drive, lidos de `nfeConfig_` + `nfePastas_`).

@@ -733,7 +733,7 @@ function nfeConfig_(){
   var cfg = nfeConfigLer_(); if (_NFE_MEMO_) _NFE_MEMO_.cfg = cfg; return cfg;
 }
 function nfeConfigLer_(){
-  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30, email:false }; if (!s) return cfg;
+  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30, email:false, extra:[], extraDias:60 }; if (!s) return cfg;   // v344: extra = pastas só de leitura
   var last = s.getLastRow(); if (last < 2) return cfg;
   var v = s.getRange(2,1,last-1,2).getValues();
   var ant = '';
@@ -743,7 +743,9 @@ function nfeConfigLer_(){
     if (k === 'TOKEN') cfg.token = val; else if (k === 'PASTANFE') cfg.pasta = val;
     else if (k === 'PRODUTOR' && val) cfg.produtores.push(_doc_(r[1]));
     else if (k === 'DIASCONTRATOPARADO' && val !== '') cfg.diasParado = N(val);
-    else if (k === 'LEREMAIL') cfg.email = /^(SIM|S|1|TRUE|X)$/i.test(val); });
+    else if (k === 'LEREMAIL') cfg.email = /^(SIM|S|1|TRUE|X)$/i.test(val);
+    else if (k === 'PASTAEXTRA' && val) val.split(/[,;\s]+/).forEach(function(x){ var m = String(x).match(/[-\w]{25,}/); if (m && cfg.extra.indexOf(m[0]) < 0) cfg.extra.push(m[0]); })   // aceita ID ou link, várias linhas
+    else if (k === 'PASTAEXTRADIAS' && val !== '') cfg.extraDias = N(val); });
   try { finProdutoresAtivos_().forEach(function(d){ if (cfg.produtores.indexOf(d) < 0) cfg.produtores.push(d); }); } catch (e) {}   // v273: aba PRODUTORES também conta
   return cfg;
 }
@@ -772,6 +774,9 @@ function setupNfe(){
   if (!tem) ScriptApp.newTrigger('capturarNfe').timeBased().everyMinutes(15).create();
   var temEmail = s.getLastRow() >= 2 && s.getRange(2,1,s.getLastRow()-1,1).getValues().some(function(r){ return _hkey(r[0]) === 'LEREMAIL'; });
   if (!temEmail) add('LER E-MAIL', 'NÃO', 'SIM = também busca os XML no Gmail. NÃO = só a pasta NFe/Entrada do Drive (você coloca os XML lá).');
+  var ks = s.getLastRow() >= 2 ? s.getRange(2,1,s.getLastRow()-1,1).getValues().map(function(r){ return _hkey(r[0]); }) : [];   // v344
+  if (ks.indexOf('PASTAEXTRA') < 0) add('PASTA EXTRA', '', 'Opcional: ID ou link de OUTRA pasta do Drive onde chegam XML (ex.: a pasta do ano onde o e-mail salva os anexos). Só lê, nunca move. Compartilhe a pasta com a conta desta planilha (leitor basta). Pode repetir a linha.');
+  if (ks.indexOf('PASTAEXTRADIAS') < 0) add('PASTA EXTRA DIAS', 60, 'Na pasta extra, só olha subpastas e arquivos dos últimos N dias.');
   return 'NF-e configurada: pastas, abas, token e gatilho de 15 min (lê a pasta NFe/Entrada).';
 }
 
@@ -1109,6 +1114,8 @@ function capturarNfe(maxMs){
         if (/permission|permiss/i.test(em) && !/Access denied/i.test(em)){ permFalta = true; var sobra = 1; while (it.hasNext()){ it.next(); sobra++; }   // v304: um aviso só, e para (todos iam falhar igual)
           erros.push('SEM PERMISSÃO no Drive (' + sobra + ' arquivo(s) esperando na NFe/Entrada): ' + em); break; }
         erros.push('arquivo "' + fnome + '": não consegui ' + passoAtual + ' — ' + em); } }   // fica na Entrada: tenta de novo na próxima
+    // v344: pastas extras (só leitura): a pasta do ano onde o e-mail salva os anexos, por exemplo
+    var ex = null; if (cfg.extra.length && !fimTempo() && !permFalta) try { ex = nfeLerPastasExtra_(cfg, passo, res, erros, fimTempo, feitos); if (ex.mudou) feitosMudou = true; if (ex.out.parcial) parcial = true; } catch (e){ erros.push('pasta extra: ' + e); }
     if (feitosMudou) _nfeFeitosSalva_(feitos);
     // v279: XML das NFAs emitidas pela balança (Pesagem v2) — entram como venda do produtor
     if (!fimTempo()) try { capturarNfaPesagem_(passo, res, fimTempo); } catch (e){ erros.push('balança: ' + e); }
@@ -1128,16 +1135,16 @@ function capturarNfe(maxMs){
     if (iaChave_()) res.forEach(function(r){ if (r.status !== 'nova' || !r.chave || fimTempo()) return; try { nfeIaClassificar_(r.chave); } catch (e){ erros.push('IA ' + r.chave.slice(-6) + ': ' + e); } });
   } finally {
     _NFE_MEMO_ = null;
-    _nfeCapturaSalva_(res, erros, parcial);
+    _nfeCapturaSalva_(res, erros, parcial, ex && ex.out);
     try { pr.deleteProperty('NFE_CAPTURANDO'); } catch (e) {}
     if (res.length || mexeu) cacheClearAppKeys_(NFE_KEYS_); }   // NF-e: só as chaves de NF-e/estoque do cache, e só se algo mudou
   // gatilho: aproveita e deixa a leitura da planilha pronta no cache → quem abrir o app não espera
   if (gatilho && Date.now() - t0 < 180000) try { currentJson(); } catch (e) {}
   return res;
 }
-function _nfeCapturaSalva_(res, erros, parcial){
+function _nfeCapturaSalva_(res, erros, parcial, extra){
   try {
-    var c = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial };
+    var c = { em:Utilities.formatDate(new Date(), tz_(), "yyyy-MM-dd'T'HH:mm"), lidas:res.length, novas:0, repetidas:0, ignoradas:0, rejeitadas:[], erros:(erros || []).slice(0,10), parcial:!!parcial, extra:extra ? { pastas:extra.pastas, xml:extra.xml, novas:extra.novas } : null };   // v344
     res.forEach(function(r){ if (r.status === 'nova' || r.status === 'casada') c.novas++; else if (r.status === 'duplicada') c.repetidas++;
       else if (r.status === 'ignorada') c.ignoradas++; else if (r.status === 'rejeitada') c.rejeitadas.push((r.arq ? r.arq + ': ' : '') + (r.motivo || '')); });
     c.totRej = c.rejeitadas.length; c.totErr = (erros || []).length; c.rejeitadas = c.rejeitadas.slice(0,20);   // v304: totais (a lista mostrada é um recorte)
@@ -1160,8 +1167,31 @@ function _nfeTiraDaEntrada_(f, destinoRej, p){
   try { p.entrada.removeFile(f); return ''; } catch (e) { erro = erro || String(e); }
   return erro.replace(/^(Error|Exception):\s*/g, '').replace(/^(Error|Exception):\s*/g, '').replace(/\s+/g, ' ').slice(0, 120); }
 function _nfeFeitos_(){ try { var m = JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_ARQ_FEITOS') || '{}'); return (m && typeof m === 'object') ? m : {}; } catch (e) { return {}; } }
-function _nfeFeitosSalva_(m){ try { var ks = Object.keys(m); if (ks.length > 300){ ks.sort(function(a, b){ return m[a] - m[b]; }); ks.slice(0, ks.length - 300).forEach(function(k){ delete m[k]; }); }
+// v344: guarda só os 150 mais recentes, com a hora em segundos — uma propriedade não pode passar de 9 KB (com 300 ids passava e a gravação falhava em silêncio)
+function _nfeFeitosSalva_(m){ try { var ks = Object.keys(m); ks.forEach(function(k){ if (m[k] > 1e11) m[k] = Math.round(m[k] / 1000); }); if (ks.length > 150){ ks.sort(function(a, b){ return m[a] - m[b]; }); ks.slice(0, ks.length - 150).forEach(function(k){ delete m[k]; }); }
   PropertiesService.getScriptProperties().setProperty('NFE_ARQ_FEITOS', JSON.stringify(m)); } catch (e) {} }
+// v344: pastas EXTRAS só de leitura (ex.: "2026" → "11" → "Geral" → "Notas Fiscais", onde a automação do e-mail salva os anexos).
+// Nunca move nem apaga: o arquivo lido entra em NFE_ARQ_FEITOS; nota repetida cai como "duplicada" pela chave de qualquer jeito.
+// Só desce em subpastas criadas/alteradas nos últimos PASTA EXTRA DIAS e só lê .xml/.zip alterados nesse prazo (limite de 150 pastas por busca).
+function nfeLerPastasExtra_(cfg, passo, res, erros, fimTempo, feitos){
+  var out = { pastas:0, xml:0, novas:0, parcial:false }, mudou = false;
+  var dias = cfg.extraDias > 0 ? cfg.extraDias : 60, corte = Date.now() - dias * 86400000, fila = [];
+  cfg.extra.forEach(function(id){ try { fila.push({ f:DriveApp.getFolderById(id), d:0 }); } catch (e){ erros.push('pasta extra ' + id.slice(0, 8) + '…: sem acesso — compartilhe a pasta com a conta desta planilha (como leitor) e confira o ID na CONFIG NFE'); } });
+  while (fila.length && out.pastas < 150 && !fimTempo()){ var it = fila.shift(), f = it.f; out.pastas++;
+    try {
+      var fs = f.getFiles();
+      while (fs.hasNext() && !fimTempo()){ var a = fs.next(), nome = S(a.getName()), fid = S(a.getId());
+        if (!/\.(xml|zip)$/i.test(nome) || feitos[fid]) continue;
+        if (a.getLastUpdated().getTime() < corte) continue;
+        out.xml++;
+        try { _nfeBlobs(a.getBlob()).forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta extra'); }); r.arq = nome; res.push(r); if (r.status === 'nova' || r.status === 'casada') out.novas++; }); }
+        catch (e){ erros.push('pasta extra, arquivo "' + nome + '": ' + e); continue; }   // fica para a próxima busca
+        feitos[fid] = Math.round(Date.now() / 1000); mudou = true; }
+      if (it.d < 5){ var sub = f.getFolders(); while (sub.hasNext()){ var sf = sub.next(); if (sf.getDateCreated().getTime() >= corte || sf.getLastUpdated().getTime() >= corte) fila.push({ f:sf, d:it.d + 1 }); } }
+    } catch (e){ erros.push('pasta extra "' + S(f.getName()) + '": ' + e); } }
+  if (fila.length || fimTempo()) out.parcial = true;
+  return { out:out, mudou:mudou };
+}
 function nfeCapturaHist_(){ try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('NFE_CAPTURA_HIST') || '[]'); } catch (e) { return []; } }
 // nota IGNORADA (ex.: destinatário fora da lista PRODUTOR) volta para "A CLASSIFICAR" pelo app
 function nfeReabrir_(r){
@@ -1214,7 +1244,7 @@ function nfeLista_(status){
     if (quer.indexOf(st) >= 0 || quer.indexOf('TODAS') >= 0) out.push(nota);
     if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
-  var pasta = null; try { var cfgL = nfeConfig_(); if (cfgL.pasta){ var pp = nfePastas_(cfgL); pasta = { raiz:cfgL.pasta, entrada:pp.entrada.getId(), nome:S(pp.raiz.getName()) }; } } catch (e) { pasta = null; }   // v343: o app mostra o link da NFe/Entrada
+  var pasta = null; try { var cfgL = nfeConfig_(); if (cfgL.pasta){ var pp = nfePastas_(cfgL); pasta = { raiz:cfgL.pasta, entrada:pp.entrada.getId(), nome:S(pp.raiz.getName()), extra:cfgL.extra.length }; } } catch (e) { pasta = null; }   // v343: o app mostra o link da NFe/Entrada · v344: nº de pastas extras
   return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign, pasta:pasta };
 }
 // v309: entradas no tanque feitas por uma NF-e (id abnf:<chave>:<item>) marcadas como apagadas
