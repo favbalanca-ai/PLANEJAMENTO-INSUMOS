@@ -1004,14 +1004,16 @@ function processarXmlNfe(txt, origem){
   if (n.cstat !== '100') return { status:'rejeitada', chave:n.chave, motivo:'nota não autorizada (cStat ' + n.cstat + ')' };
   if (!/^\d{44}$/.test(n.chave)) return { status:'rejeitada', motivo:'chave inválida' };
   var row = _nfeLinha_(t, n.chave);
-  if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue()))   // mesma nota 2× não duplica
-    return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' };
+  if (row && S(t.s.getRange(row, t.col('FILE ID') + 1).getValue())){   // mesma nota 2× não duplica
+    if (origem !== 'pdf' && S(t.s.getRange(row, t.col('ORIGEM') + 1).getValue()) === 'pdf') return nfeXmlSubstituiPdf_(t, row, n, txt, origem, pastas);   // v346: o XML oficial chegou depois do DANFE em PDF
+    return { status:'duplicada', chave:n.chave, motivo:'já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' }; }
+  if (origem === 'pdf' && row) return { status:'duplicada', chave:n.chave, motivo:'PDF: a nota já estava na planilha' };   // v346: linha sem XML (ex.: recebida sem XML) não é sobrescrita por um PDF
   // v277: VENDA DO PRODUTOR — nota emitida por um produtor cadastrado, ou contranota de ENTRADA (tpNF 0) do comprador com o produtor como destinatário
   var emitProd = cfg.produtores.indexOf(n.cnpj) >= 0 || origem === 'balança';
   var vendaProd = nfeEhVendaProd_(n, cfg, origem);   // v312: só NF-e de ENTRADA (tpNF 0) vale como contranota — CFOP 1xxx numa nota de saída do fornecedor é compra
   if (vendaProd && !emitProd && n.tpNF !== '0') emitProd = true;   // CPF vendendo grão (emitente é o produtor, mesmo sem cadastro)
   var fora = !vendaProd && cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0;
-  var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe');
+  var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, origem === 'pdf' ? 'danfe' : 'nfe');   // v346: o XML montado do PDF tem outro nome, para o oficial poder substituí-lo
   var vals = { 'CHAVE':n.chave, 'PRODUTOR':n.dest, 'CNPJ EMITENTE':n.cnpj, 'FORNECEDOR':n.fornecedor, 'Nº':n.nNF, 'SÉRIE':n.serie,
     'EMISSÃO':n.emissao, 'VALOR':n.vNF, 'TIPO':n.tipo, 'CHAVE REFERENCIADA':n.ref, 'FILE ID':fileId, 'ORIGEM':origem, 'CAPTURADA EM':agora, 'ITENS':(n.xprods || []).slice(0, 8).join(' | ').slice(0, 300) };   // v313
   if (vendaProd){ vals['TIPO'] = 'VENDA PRODUTOR'; vals['PRODUTOR'] = emitProd ? n.cnpj : n.dest; vals['CNPJ EMITENTE'] = emitProd ? n.dest : n.cnpj; vals['FORNECEDOR'] = emitProd ? n.destNome : n.fornecedor; }   // FORNECEDOR/CNPJ = comprador
@@ -1030,6 +1032,75 @@ function processarXmlNfe(txt, origem){
   _setCells_(t, row, vals);
   if (n.tipo === 'ESTORNO') try { nfeMarcaEstornada_(t, n); } catch (e) { Logger.log('estorno ' + n.chave + ': ' + e); }   // v317: a nota anulada ganha o alerta ⚠
   return { status: !vals['STATUS'] ? 'cancelada' : (vals['STATUS'] === 'IGNORADA' ? 'ignorada' : 'nova'), chave:n.chave, motivo:vals['OBS'] || '', dest:fora ? n.dest : '' };
+}
+// ===== v346: DANFE em PDF — a IA lê o PDF, a planilha monta um XML mínimo e ele segue o caminho normal (ORIGEM "pdf") =====
+function _dv44_(ch){ ch = S(ch); if (!/^\d{44}$/.test(ch) || ch.slice(20, 22) !== '55') return false; var s = 0, w = 2; for (var i = 42; i >= 0; i--){ s += (+ch[i]) * w; w = w === 9 ? 2 : w + 1; } var r = s % 11; return (r < 2 ? 0 : 11 - r) === +ch[43]; }
+function _xmlEsc_(v){ return S(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function _numIa_(v){ if (typeof v === 'number') return isFinite(v) ? v : 0; var s = S(v).replace(/[R$\s]/g, ''); if (/,\d{1,2}$/.test(s)) s = s.replace(/\./g, '').replace(',', '.'); var n = parseFloat(s); return isFinite(n) ? n : 0; }
+function _dataIa_(v){ v = S(v); var m = v.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/); if (m) return m[3] + '-' + m[2] + '-' + m[1]; m = v.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[0] : ''; }
+// a IA lê o PDF (documento) e devolve os campos da nota; devolve {erro} quando não dá
+function _danfeIa_(key, blob){
+  var b64; try { b64 = Utilities.base64Encode(blob.getBytes()); } catch (e) { return { erro:'não consegui ler o arquivo' }; }
+  var system = 'Você extrai os dados de um DANFE (documento auxiliar da NF-e brasileira) em PDF, de uma fazenda de grãos. Responda SOMENTE com JSON válido, sem comentários nem markdown. Números com ponto decimal, sem separador de milhar. Datas no formato AAAA-MM-DD. ' +
+    'Formato: {"chave":"44 dígitos","nNF":"","serie":"","emissao":"","natOp":"","tpNF":"saida|entrada","emitente":{"doc":"CNPJ ou CPF só dígitos","nome":""},"destinatario":{"doc":"só dígitos","nome":""},' +
+    '"itens":[{"n":1,"codigo":"","descricao":"","cfop":"","un":"","qtd":0,"vun":0,"vprod":0}],"total":0,"parcelas":[{"n":"","venc":"AAAA-MM-DD","valor":0}],"forma_pagamento":"dinheiro|cartao_credito|cartao_debito|pix|boleto|outro|sem_pagamento","obs":"informações complementares, até 300 caracteres"}. ' +
+    'Copie a chave de acesso exatamente (44 dígitos, pode vir com espaços). Se um campo não existir no PDF, deixe vazio ou 0. Liste TODOS os itens.';
+  var payload = { model:IA_MODELO, max_tokens:8000, temperature:0, system:system, messages:[{ role:'user', content:[{ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } }, { type:'text', text:'Extraia os dados deste DANFE.' }] }] };
+  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+  catch (e) { return { erro:'IA sem resposta: ' + e }; }
+  var code = resp.getResponseCode(), body = resp.getContentText();
+  if (code !== 200) return { erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 120) };
+  var d; try { var j = JSON.parse(body), texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); d = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
+  catch (e) { return { erro:'IA respondeu fora do formato' }; }
+  return _danfeSaneia_(d);
+}
+// só aceita o que faz sentido: chave com DV, itens com descrição, números válidos
+function _danfeSaneia_(d){ d = d && typeof d === 'object' ? d : {};
+  var chave = S(d.chave).replace(/\D/g, ''), em = d.emitente || {}, de = d.destinatario || {};
+  var itens = (Array.isArray(d.itens) ? d.itens : []).map(function(it, i){ it = it || {}; var qtd = _numIa_(it.qtd), vun = _numIa_(it.vun), vprod = _numIa_(it.vprod); if (!vprod && qtd && vun) vprod = +(qtd * vun).toFixed(2); if (!vun && qtd && vprod) vun = +(vprod / qtd).toFixed(4);
+    return { n:+it.n || (i + 1), codigo:S(it.codigo) || String(i + 1), descricao:S(it.descricao).slice(0, 120), cfop:S(it.cfop).replace(/\D/g, '').slice(0, 4) || '5102', un:S(it.un).toUpperCase().slice(0, 6) || 'UN', qtd:qtd || 1, vun:vun, vprod:vprod }; }).filter(function(it){ return it.descricao; });
+  var total = _numIa_(d.total); if (!total) total = +itens.reduce(function(s, it){ return s + it.vprod; }, 0).toFixed(2);
+  var parc = (Array.isArray(d.parcelas) ? d.parcelas : []).map(function(p, i){ p = p || {}; return { n:S(p.n) || String(i + 1), venc:_dataIa_(p.venc), valor:_numIa_(p.valor) }; }).filter(function(p){ return p.valor > 0 && p.venc; });
+  var TP = { dinheiro:'01', cartao_credito:'03', cartao_debito:'04', pix:'17', boleto:'15', outro:'99', sem_pagamento:'90' };
+  var out = { chave:chave, nNF:S(d.nNF).replace(/\D/g, ''), serie:S(d.serie).replace(/\D/g, ''), emissao:_dataIa_(d.emissao), natOp:S(d.natOp).slice(0, 60), tpNF:/entrada/i.test(S(d.tpNF)) ? '0' : '1',
+    cnpj:S(em.doc).replace(/\D/g, ''), fornecedor:S(em.nome).slice(0, 80), dest:S(de.doc).replace(/\D/g, ''), destNome:S(de.nome).slice(0, 80), itens:itens, total:total, parcelas:parc, tPag:TP[S(d.forma_pagamento)] || '', obs:S(d.obs).slice(0, 300) };
+  if (!itens.length) out.erro = 'a IA não encontrou itens no PDF';
+  return out;
+}
+// XML mínimo (nfeProc com protNFe cStat 100) a partir dos dados lidos — o parser do app e o da planilha leem igual ao oficial
+function _danfeXml_(d){
+  var ch = d.chave, cuf = ch.slice(0, 2), serie = String(+ch.slice(22, 25)), nNF = String(+ch.slice(25, 34)), cnpj = d.cnpj || ch.slice(6, 20).replace(/^0+/, '');
+  var emitTag = cnpj.length === 11 ? 'CPF' : 'CNPJ', destTag = d.dest.length === 11 ? 'CPF' : 'CNPJ', em = d.emissao || Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd');
+  var dets = d.itens.map(function(it){ return '<det nItem="' + it.n + '"><prod><cProd>' + _xmlEsc_(it.codigo) + '</cProd><xProd>' + _xmlEsc_(it.descricao) + '</xProd><CFOP>' + it.cfop + '</CFOP><uCom>' + _xmlEsc_(it.un) + '</uCom><qCom>' + it.qtd.toFixed(4) + '</qCom><vUnCom>' + it.vun.toFixed(4) + '</vUnCom><vProd>' + it.vprod.toFixed(2) + '</vProd></prod><imposto><ICMS><ICMS00><orig>0</orig></ICMS00></ICMS></imposto></det>'; }).join('');
+  var cobr = d.parcelas.length ? '<cobr>' + d.parcelas.map(function(p){ return '<dup><nDup>' + _xmlEsc_(p.n) + '</nDup><dVenc>' + p.venc + '</dVenc><vDup>' + p.valor.toFixed(2) + '</vDup></dup>'; }).join('') + '</cobr>' : '';
+  var pag = d.tPag ? '<pag><detPag><tPag>' + d.tPag + '</tPag><vPag>' + d.total.toFixed(2) + '</vPag></detPag></pag>' : '';
+  var cpl = 'DANFE em PDF lido por IA — confira os valores.' + (d.obs ? ' ' + d.obs : '');
+  return '<?xml version="1.0" encoding="UTF-8"?><nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe' + ch + '" versao="4.00"><ide><cUF>' + cuf + '</cUF><natOp>' + _xmlEsc_(d.natOp || 'VENDA') + '</natOp><mod>55</mod><serie>' + serie + '</serie><nNF>' + nNF + '</nNF><dhEmi>' + em + 'T12:00:00-03:00</dhEmi><tpNF>' + d.tpNF + '</tpNF><finNFe>1</finNFe></ide>' +
+    '<emit><' + emitTag + '>' + cnpj + '</' + emitTag + '><xNome>' + _xmlEsc_(d.fornecedor || 'FORNECEDOR (PDF)') + '</xNome></emit><dest><' + destTag + '>' + d.dest + '</' + destTag + '><xNome>' + _xmlEsc_(d.destNome) + '</xNome></dest>' + dets +
+    '<total><ICMSTot><vNF>' + d.total.toFixed(2) + '</vNF></ICMSTot></total>' + cobr + pag + '<infAdic><infCpl>' + _xmlEsc_(cpl) + '</infCpl></infAdic></infNFe></NFe><protNFe><infProt><chNFe>' + ch + '</chNFe><cStat>100</cStat></infProt></protNFe></nfeProc>';
+}
+// um PDF da pasta: chave no nome → já está? senão a IA lê → XML mínimo → processarXmlNfe(…, 'pdf'). Devolve o mesmo formato dos XML.
+function nfeLerPdf_(file, passo){
+  var nome = S(file.getName()), m = nome.match(/(\d{44})/), chN = (m && _dv44_(m[1])) ? m[1] : '';
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS);
+  if (chN){ var row = _nfeLinha_(t, chN); if (row) return { status:'duplicada', chave:chN, motivo:'PDF: a nota já estava na planilha (' + (S(t.s.getRange(row, t.col('STATUS') + 1).getValue()) || '—') + ')' }; }
+  var key = iaChave_(); if (!key) return { status:'rejeitada', chave:chN, motivo:'PDF: para ler o DANFE é preciso a IA ligada (ANTHROPIC_KEY nas Propriedades do Script)' };
+  var blob = file.getBlob(); try { if (blob.getBytes().length > 8 * 1024 * 1024) return { status:'rejeitada', motivo:'PDF maior que 8 MB' }; } catch (e) {}
+  var d = _danfeIa_(key, blob); if (d.erro) return { status:'rejeitada', chave:chN, motivo:'PDF: ' + d.erro };
+  var chave = _dv44_(d.chave) ? d.chave : chN; if (!chave) return { status:'rejeitada', motivo:'PDF sem chave de acesso legível (44 dígitos)' };
+  d.chave = chave;
+  var r = passo(function(){ return processarXmlNfe(_danfeXml_(d), 'pdf'); });
+  if (r.status === 'nova' || r.status === 'ignorada') r.motivo = (r.motivo ? r.motivo + ' · ' : '') + 'lido do DANFE em PDF pela IA — confira os valores';
+  return r;
+}
+// o XML oficial chegou depois do PDF: substitui o arquivo; a classificar → atualiza os dados; já recebida → só avisa se o total mudou
+function nfeXmlSubstituiPdf_(t, row, n, txt, origem, pastas){
+  var fileId = _salvaXml_(pastas, n.chave, n.emissao, txt, 'nfe'), st = S(t.s.getRange(row, t.col('STATUS') + 1).getValue()).toUpperCase(), vPdf = N(t.s.getRange(row, t.col('VALOR') + 1).getValue());
+  var vals = { 'FILE ID':fileId, 'ORIGEM':origem + ' (xml)' };
+  if (st === 'A CLASSIFICAR' || st === 'IGNORADA'){ vals['PRODUTOR'] = n.dest; vals['CNPJ EMITENTE'] = n.cnpj; vals['FORNECEDOR'] = n.fornecedor; vals['Nº'] = n.nNF; vals['SÉRIE'] = n.serie; vals['EMISSÃO'] = n.emissao; vals['VALOR'] = n.vNF; vals['TIPO'] = n.tipo; vals['CHAVE REFERENCIADA'] = n.ref; vals['ITENS'] = (n.xprods || []).slice(0, 8).join(' | ').slice(0, 300); vals['IA'] = ''; vals['IA EM'] = ''; vals['OBS'] = 'XML oficial substituiu o DANFE em PDF'; }
+  else vals['OBS'] = Math.abs(vPdf - n.vNF) > 0.01 ? '⚠ XML oficial com total ' + n.vNF.toFixed(2) + ' ≠ PDF ' + vPdf.toFixed(2) + ' — conferir (Reclassificar)' : 'XML oficial chegou depois do DANFE em PDF (valores iguais)';
+  _setCells_(t, row, vals);
+  return { status:'casada', chave:n.chave, motivo:vals['OBS'] };
 }
 // v317: motivo de IGNORADA para a nota que fica fora do estoque por natureza (estorno, depósito em armazém, retorno de depósito)
 // v318: armazém geral — acha a NF de VENDA do fornecedor que esta nota de depósito/retorno acompanha:
@@ -1104,7 +1175,8 @@ function capturarNfe(maxMs){
       var passoAtual = 'ler';
       try {
         var bs = _nfeBlobs(f.getBlob()), ok = bs.length > 0;
-        if (!bs.length) res.push({ status:'rejeitada', arq:fnome, motivo:'não é arquivo .xml nem .zip' });
+        if (!bs.length){ if (/\.pdf$/i.test(fnome)){ passoAtual = 'ler o PDF'; var rp = nfeLerPdf_(f, passo); rp.arq = fnome; res.push(rp); ok = rp.status !== 'rejeitada'; }   // v346: DANFE em PDF
+          else res.push({ status:'rejeitada', arq:fnome, motivo:'não é arquivo .xml, .zip nem .pdf' }); }
         passoAtual = 'gravar';
         bs.forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta'); }); r.arq = fnome; res.push(r); if (r.status === 'rejeitada') ok = false; });
         passoAtual = 'tirar da Entrada';
@@ -1182,10 +1254,11 @@ function nfeLerPastasExtra_(cfg, passo, res, erros, fimTempo, feitos){
     try {
       var fs = f.getFiles();
       while (fs.hasNext() && !fimTempo()){ var a = fs.next(), nome = S(a.getName()), fid = S(a.getId());
-        if (!/\.(xml|zip)$/i.test(nome) || feitos[fid]) continue;
+        if (!/\.(xml|zip|pdf)$/i.test(nome) || feitos[fid]) continue;
         if (a.getLastUpdated().getTime() < corte) continue;
         out.xml++;
-        try { _nfeBlobs(a.getBlob()).forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta extra'); }); r.arq = nome; res.push(r); if (r.status === 'nova' || r.status === 'casada') out.novas++; }); }
+        try { if (/\.pdf$/i.test(nome)){ var rp = nfeLerPdf_(a, passo); rp.arq = nome; res.push(rp); if (rp.status === 'nova') out.novas++; }   // v346: DANFE em PDF (só lê; o arquivo fica)
+          else _nfeBlobs(a.getBlob()).forEach(function(b){ var r = passo(function(){ return processarXmlNfe(_blobTxt(b), 'pasta extra'); }); r.arq = nome; res.push(r); if (r.status === 'nova' || r.status === 'casada') out.novas++; }); }
         catch (e){ erros.push('pasta extra, arquivo "' + nome + '": ' + e); continue; }   // fica para a próxima busca
         feitos[fid] = Math.round(Date.now() / 1000); mudou = true; }
       if (it.d < 5){ var sub = f.getFolders(); while (sub.hasNext()){ var sf = sub.next(); if (sf.getDateCreated().getTime() >= corte || sf.getLastUpdated().getTime() >= corte) fila.push({ f:sf, d:it.d + 1 }); } }

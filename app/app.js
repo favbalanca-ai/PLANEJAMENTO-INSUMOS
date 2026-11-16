@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-345';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-346';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2232,6 +2232,7 @@ async function _nfeAprovar(chave){
     const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
     if(!nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha', {ia:d.ia||nt.ia||null})) return;
     const imp=nfeImport; if(!imp) return;
+    if(nfeOrigemPdf(nt)||nfeNotaDePdf(imp.nota)){ toast('Nota lida do DANFE em PDF: confira os valores e confirme na tela'); return; }   // v346: fica aberta para conferência
     if(imp.venda){ if(!imp.venda.cultura){ toast('Escolha a cultura da venda'); return; } await nfeVendaOk(); return; }   // v308: espera gravar (Aprovar todas não para na venda)
     if(imp.despesa){ nfeConfirmar('despesa'); return; }   // v345: fornecedor lembrado como despesa → registra na categoria em um toque
     const pend=imp.itens.filter(i=>!nfeResolvido(i)).length; if(pend){ toast(`${pend} item(ns) precisam da sua decisão (em amarelo)`); return; }
@@ -2242,7 +2243,7 @@ async function _nfeAprovar(chave){
   }catch(e){ toast('NF-e: '+e.message); } }
 // aprova em sequência todas as notas prontas (uma por vez, esperando cada gravação)
 let _nfeAprovTodasBusy=false;
-async function nfeAprovarTodas(){ if(_nfeAprovTodasBusy){ toast('Já estou aprovando…'); return; } const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }); if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
+async function nfeAprovarTodas(){ if(_nfeAprovTodasBusy){ toast('Já estou aprovando…'); return; } const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); });   // v346: nota de PDF fica de fora if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
   _nfeAprovTodasBusy=true;
   try{ for(const nt of L){ await nfeAprovar(nt.chave); await new Promise(r=>setTimeout(r,800)); if(nfeImport) break; } }   // parou numa que precisa de decisão
   finally{ _nfeAprovTodasBusy=false; }
@@ -2351,17 +2352,18 @@ function nfeListaHtml(){
   const al=(L.alertas||[]).map(a=>{ const ob=String(a.obs||''); if(/CANCELADA/i.test(ob)) return `<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque. <button class="btn btn-outline btn-sm" data-act="nfeEstornar" data-chave="${esc(a.chave)}">↩ Estornar entrada</button></div>`;
     return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309 · v342: a ação chamava "nfeReclassificar", que não existe no roteador — o botão não respondia
   const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
-    const dm=deparaDe(String(nt.cnpj||''),'*despesa'), desp=dm&&dm.destino==='despesa'?dm:null;   // v345: fornecedor lembrado como despesa
+    const dm=deparaDe(String(nt.cnpj||''),'*despesa'), desp=dm&&dm.destino==='despesa'&&!nfeOrigemPdf(nt)?dm:null;   // v345: fornecedor lembrado como despesa · v346: nota de PDF sempre passa pela conferência
     if(desp) return `<div class="nfe-row ia-pronto" data-busca="${esc(nfeBuscaTxt(nt, 'Despesa '+(desp.maquina||'')))}"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-DESPESA">💳 Despesa · ${esc(desp.maquina||'Outros')}</span>
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}</div>${(nt.xprods&&nt.xprods.length)?`<div class="mut nfe-itens">📦 ${esc(nt.xprods.slice(0,3).join(' · '))}${nt.xprods.length>3?` +${nt.xprods.length-3}`:''}</div>`:''}<div class="nfe-ia"><span class="nfe-ia-ok">💳 lembrado: nota inteira é despesa, não entra no estoque</span></div></div>
         <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="Registra como despesa (${esc(desp.maquina||'Outros')}): a nota fica recebida e vira a pagar no Financeiro">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button><button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}">Ignorar</button></div></div>`;
-    const cls=R?(R.pronto?' ia-pronto':' ia-pend'):'', tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
-    const ia=R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
-      :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:'');
+    const pdf=nfeOrigemPdf(nt);   // v346: lida do DANFE em PDF pela IA — nunca aprova em um toque
+    const cls=(R&&!pdf)?(R.pronto?' ia-pronto':' ia-pend'):(pdf?' ia-pend':''), tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
+    const ia=(pdf?`<div class="nfe-ia"><span class="nfe-ia-pend">📄 lida do DANFE em PDF pela IA — confira os valores antes de confirmar</span></div>`:'')+(R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
+      :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:''));
     return `<div class="nfe-row${cls}" data-busca="${esc(nfeBuscaTxt(nt, tipoTxt))}">
       <div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(tipoTxt)}</span>
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}${nt.produtor?` · 👤 ${esc(nfeProdutorTxt(nt.produtor).nome)}`:''}${nt.obs?` · ${esc(nt.obs)}`:''}</div>${(nt.xprods&&nt.xprods.length)?`<div class="mut nfe-itens">📦 ${esc(nt.xprods.slice(0,3).join(' · '))}${nt.xprods.length>3?` +${nt.xprods.length-3}`:''}</div>`:''}${ia}</div>
-      <div class="nfe-row-act">${R&&R.pronto?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
+      <div class="nfe-row-act">${R&&R.pronto&&!pdf?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
         :`<button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${venda?'🌾 Conferir venda':'Conferir'}</button>`}
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`; }).join('');
   const nN=(L.notas||[]).length, c=L.captura;
@@ -2372,7 +2374,7 @@ function nfeListaHtml(){
     .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
   const pl=L.pasta&&L.pasta.entrada?`<a class="link" href="https://drive.google.com/drive/folders/${encodeURIComponent(L.pasta.entrada)}" target="_blank" rel="noopener">NFe/Entrada</a>`:'<b>NFe/Entrada</b>';   // v343: link direto da pasta
   const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta ${pl} do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
-  const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }).length;
+  const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); }).length;   // v346
   if(NFE_UI.q) setTimeout(nfeAplicaBusca,0);   // v306: reaplica a busca depois de redesenhar
   return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:`🤖 IA desligada${nfeEhAdmin()?': coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha':''}`} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
       <div class="spacer"></div>${prontas>1?`<button class="btn btn-primary btn-sm" data-act="nfeAprovarTodas" title="Aprova uma a uma as notas em que a IA reconheceu tudo">✅ Aprovar ${prontas} prontas</button>`:''}<button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
@@ -2385,6 +2387,9 @@ function nfeListaHtml(){
     ${nfeRecebidasHtml()}
     ${nfeHistoricoHtml(L)}</div>`;
 }
+// v346: nota que veio de um DANFE em PDF lido pela IA (ORIGEM "pdf" na planilha, ou XML montado com a marca no infCpl)
+function nfeOrigemPdf(nt){ return /^pdf\b/i.test(String((nt&&nt.origem)||'')) && !/\(xml\)/.test(String(nt.origem||'')); }
+function nfeNotaDePdf(n){ return /DANFE em PDF lido por IA/.test(String((n&&n.infCpl)||'')); }
 // v306: busca na caixa de entrada — texto do cartão + itens (xProd) + chave; sem acento e sem maiúscula
 let NFE_UI={q:''};
 function nfeBuscaTxt(nt, tipoTxt){ const its=(nt.itens||[]).concat(nt.xprods||[], (nt.ia&&nt.ia.itens)||[]).map(i=>typeof i==='string'?i:[i.xprod,i.produto,i.maquina].filter(Boolean).join(' ')).join(' '), prod=nt.produtor?nfeProdutorTxt(nt.produtor).nome:'';   // itens: do XML quando vierem + o que a IA reconheceu
@@ -2558,6 +2563,7 @@ function nfeConferirHtml(){
     : fat?`<div class="nfe-aviso err">🧾 <b>Nota de faturamento (entrega futura)</b> — CFOP ${esc(cfops)}. A mercadoria ainda não saiu: esta nota <b>não entra no estoque</b>. Importe a nota de <b>remessa</b> quando ela chegar. (Contratos de entrega futura: fase 3.)</div>`
     : n.tipo==='REMESSA'?`<div class="nfe-aviso info">🚚 <b>Remessa de entrega futura</b> — entra no estoque normalmente. (Para baixar o contrato, ligue a NF-e: token + Code.gs novo.)</div>`
     : nfeEntregaHtml(n)+nfeTipoAvisoHtml(n);   // v307: um aviso por tipo de CFOP (combustível, ativo, energia, devolução…) · v318: entrega no armazém
+  const pdfAviso=nfeNotaDePdf(n)?`<div class="nfe-aviso warn">📄 <b>Esta nota veio do DANFE em PDF</b>, lida pela IA: fornecedor, itens, quantidades e valores podem ter erro de leitura. Confira com o papel antes de confirmar. Quando o XML oficial chegar na pasta, ele substitui estes dados sozinho.${n.infCpl&&n.infCpl.length>45?` <span class="mut">${esc(n.infCpl.replace(/^DANFE em PDF lido por IA — confira os valores\.?\s*/,''))}</span>`:''}</div>`:'';   // v346
   const reclass=imp.reclass?`<div class="nfe-aviso warn">♻️ <b>Reclassificando</b> — esta nota já deu entrada${imp.reclass.data?` em <b>${esc(fmtDataBR(imp.reclass.data))}</b>`:''}. Corrija o produto ou o <b>fator</b> e confirme: a entrada anterior é <b>substituída</b> (estoque, razão e de-para) — nada duplica.</div>`:'';
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
   const det=nfeDetectaPecas(n), nMaq=imp.itens.filter(i=>nfeDestManut(i.dest)&&!i.ignorar).length, maqAll=nfeMaqUltima(n.cnpj), benfAll=nfeBenfUltima(n.cnpj);   // v276/v285
@@ -2602,7 +2608,7 @@ function nfeConferirHtml(){
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
-    ${reclass}${aviso}${semSrv}${iaBox}${(n.tipo!=='RETORNO'&&!imp.reclass)?nfeDespesaHtml(imp):''}${imp.despesa?'':pecas}${maqList}
+    ${pdfAviso}${reclass}${aviso}${semSrv}${iaBox}${(n.tipo!=='RETORNO'&&!imp.reclass)?nfeDespesaHtml(imp):''}${imp.despesa?'':pecas}${maqList}
     ${imp.despesa?`<div class="nfe-desp-itens mut">${imp.itens.map(it=>`<span>${esc(it.xprod)} <small>${num(it.qcom)} ${esc(it.ucom)} · ${brl(nfeItemValor(it))}</small></span>`).join('')}</div>`:`<div class="nfe-itens">${cards}</div>`}
     <div class="nfe-foot">
       <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>

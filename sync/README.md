@@ -132,6 +132,21 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## DANFE em PDF (v346)
+
+- `capturarNfe` (NFe/Entrada e pasta extra) aceita `.pdf`: `nfeLerPdf_`. Se o nome tem a chave (44 dígitos com DV) e
+  ela já está na NFE RECEBIDAS → "duplicada" sem gastar IA. Senão a IA (`_danfeIa_`: mesmo modelo, com o PDF como
+  `document` em base64, até 8 MB) devolve chave, nº, série, emissão, emitente, destinatário, itens, total, parcelas e
+  forma de pagamento; `_danfeSaneia_` confere DV, números BR, datas dd/mm/aaaa e descarta item sem descrição;
+  `_danfeXml_` monta um `nfeProc` mínimo (protNFe cStat 100, `infCpl` "DANFE em PDF lido por IA — confira os
+  valores. …") e `processarXmlNfe(xml, 'pdf')` segue o caminho normal. O arquivo vai para `NFe/XML/AAAA-MM/{chave}-danfe.xml`
+  (nome diferente do oficial). Sem `ANTHROPIC_KEY` ou sem chave/itens legíveis → Rejeitados com o motivo.
+- **XML oficial depois do PDF** (`nfeXmlSubstituiPdf_`): salva `{chave}-nfe.xml`, troca FILE ID e ORIGEM → "… (xml)".
+  A classificar/ignorada → atualiza fornecedor, nº, emissão, valor, tipo, itens e zera a IA (reclassifica com os dados
+  oficiais). Já recebida/em trânsito → só OBS: "⚠ XML oficial com total X ≠ PDF Y — conferir" (ou "valores iguais").
+  Devolve `casada`.
+- O app nunca aprova em um toque uma nota de ORIGEM "pdf".
+
 ## Nota de despesa (v345)
 
 - Nada novo no `doPost`: o app manda o `__nfeClassifica` de sempre com `status: RECEBIDA`, todos os itens `ignorar`,

@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **DANFE em PDF na pasta (v346)** — a planilha lê PDF da `NFe/Entrada` e da pasta extra com a IA e monta um XML
+  mínimo (ORIGEM "pdf", `infCpl` "DANFE em PDF lido por IA — confira os valores"). No app: cartão com a marca "📄
+  lida do DANFE em PDF" e **sem Aprovar em um toque** (`nfeOrigemPdf`); "Aprovar todas" e a contagem de prontas a
+  ignoram; `nfeAprovar` abre a conferência e para; a conferência mostra o aviso (`nfeNotaDePdf`, via `infCpl`), com as
+  observações do PDF. Quando o XML oficial chega, a planilha substitui os dados (ver `sync/README.md`). Code.gs v346.
 - **Nota de despesa — cantina, escritório, limpeza, veículos (v345)** — na conferência, "💳 Esta nota é despesa
   (não entra no estoque)" (`nfeDespesaOn/Off`, `imp.despesa={categoria}`; categorias `NFE_DESP_CATS`). Com a nota
   marcada, os itens recolhem num resumo e o botão vira "💳 Registrar despesa (R$ …)" (`nfeConfirmar('despesa')`):
