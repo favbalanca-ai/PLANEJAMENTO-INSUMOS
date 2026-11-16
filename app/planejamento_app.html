@@ -2772,7 +2772,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-334';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-335';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -14263,7 +14263,7 @@ async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) re
     for(const k of ks){ const T=LOTE_TIPOS[k]; if(T&&T.antes&&T.ok()){ try{ await T.antes(); }catch(e){} } }   // fotos/PDFs primeiro (viram link no registro)
     const itens=[], usados=[], sigs={};
     ks.forEach(k=>{ const T=LOTE_TIPOS[k]; if(!T) return; if(!T.ok()){ LOTE.pend.add(k); return; }   // aba ainda não confirmada pela planilha: fica para depois da puxada
-      const sg=T.sig(); if(sg===T.last()) return; sigs[k]=sg; itens.push({[k]:loteDelta(k, T.dados())}); usados.push(k); });
+      const sg=T.sig(); if(sg===T.last() && !opts.tudo) return; sigs[k]=sg; itens.push({[k]:opts.tudo?T.dados():loteDelta(k, T.dados())}); usados.push(k); });   // v335: tudo = manda o conjunto inteiro (botão Enviar agora)
     if(!itens.length){ syncBusy=false; setSyncStatus('ok'); return true; }
     const agora=tsAgora(); LOTE.nEnv++;
     let res;
@@ -14277,7 +14277,9 @@ async function loteEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url) re
   }catch(e){ syncBusy=false; setSyncStatus('err'); addHist('push',false,'Envio: '+(e&&e.message||'')); return false; }
 }
 // tudo o que estiver diferente do último envio, de uma vez (ao entrar/sair do app e no "Enviar agora")
-async function loteEnviarTudo(){ Object.keys(LOTE_TIPOS).forEach(k=>LOTE.pend.add(k)); return loteEnviar({agora:true}); }
+// v335: tudo=true (botão "Enviar agora") manda o conjunto INTEIRO de cada tipo, não só o que mudou desde o último envio —
+// rede de segurança p/ registro que ficou para trás (envio antigo que falhou no meio). A planilha mescla por chave/_u.
+async function loteEnviarTudo(tudo){ Object.keys(LOTE_TIPOS).forEach(k=>LOTE.pend.add(k)); return loteEnviar({agora:true, tudo:!!tudo}); }
 // as marcas "último envio" ficam guardadas no aparelho: ao reabrir o app, o que foi feito sem internet continua pendente
 // (antes, a primeira puxada carimbava tudo como enviado e a operação concluída offline ficava presa no celular)
 const SIGS_KEY='planejamento_sync_sigs';
@@ -14669,7 +14671,7 @@ async function syncPush(opts){
   opts=opts||{}; const url=syncUrl(); if(!url){ if(!opts.auto) toast('Configure a URL primeiro'); return; }
   // sobe primeiro as compras e as baixas (recom. aprovadas) que ficaram pendentes (ex.: feitas offline)
   try{ await pushComprasLote(); await pushSaidasPendentes(); }catch(e){}
-  try{ await loteEnviarTudo(); }catch(e){}   // registros do Campo (execução, ocorrências+fotos, misturas, bulas, stand, aferições, produtividade, limites, resultados, tarefas) num envio só
+  try{ await loteEnviarTudo(!opts.auto); }catch(e){}   // registros do Campo (execução, ocorrências+fotos, misturas, bulas, stand, aferições, produtividade, limites, resultados, tarefas) num envio só; manual = conjunto inteiro
   try{ if(deparaServerOk() && deparaPendentes().length) await pushDeParaNfe(); }catch(e){}   // NF-e: memória de-para
   try{ await nfeFlushPend(); }catch(e){}   // NF-e: classificações que ficaram na fila
   // ainda com a lista EMBUTIDA de talhões (data.json)? puxa a planilha antes: sem isso o app mandava edições
