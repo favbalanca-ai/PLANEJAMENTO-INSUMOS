@@ -670,7 +670,8 @@ function writeDeParaNfe(itens){
     var cnpj = S(it.cnpj).replace(/\D/g,''), cprod = S(it.cprod); if (!cnpj || !cprod) return;
     var vals = {}; vals['CNPJ EMITENTE'] = cnpj; vals['CPROD'] = cprod; vals['XPROD'] = T_(it.xprod); vals['PRODUTO APP'] = it.ignorar ? '' : T_(it.produto);
     vals['FATOR'] = N(it.fator) || 1; vals['IGNORAR'] = it.ignorar ? 'SIM' : ''; vals['ÚLTIMO CUSTO'] = N(it.custo) || '';
-    var mdest = _manutDest_(it.destino); vals['DESTINO'] = mdest ? S(it.destino).toLowerCase() : (it.ignorar ? '' : 'estoque'); vals['MÁQUINA'] = mdest ? T_(it.maquina) : ''; vals['TIPO GASTO'] = mdest ? T_(it.tipoGasto) : '';   // v285
+    var mdest = _manutDest_(it.destino), desp = S(it.destino).toLowerCase() === 'despesa';   // v345: cprod "*despesa" = a nota inteira deste fornecedor é despesa (MÁQUINA guarda a categoria)
+    vals['DESTINO'] = (mdest || desp) ? S(it.destino).toLowerCase() : (it.ignorar ? '' : 'estoque'); vals['MÁQUINA'] = (mdest || desp) ? T_(it.maquina) : ''; vals['TIPO GASTO'] = mdest ? T_(it.tipoGasto) : '';   // v285
     vals['CONFIRMADO POR'] = T_(it.por) || 'app'; vals['DATA'] = hoje;
     var i = rows[cnpj + '|' + cprod];
     if (i == null){ var a = []; for (var c = 0; c < d.ncol; c++) a.push(''); v.push(a); i = v.length - 1; rows[cnpj + '|' + cprod] = i; novos++; }
@@ -1506,7 +1507,7 @@ function conciliaGrava_(p, acc){
 }
 // v291: sugestão de categoria pela IA para históricos sem regra (uma chamada para o lote). Sem chave: devolve vazio.
 function bancoIa_(p){ var key = iaChave_(); if (!key) return { ok:false, semChave:true, sug:[] }; var itens = (p && p.itens || []).slice(0, 60); if (!itens.length) return { ok:true, sug:[] };
-  var cats = ['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Venda de grãos','Adiantamento','Outros'];
+  var cats = ['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Alimentação','Escritório / limpeza','Veículos','Venda de grãos','Adiantamento','Outros'];   // v345: despesas de consumo
   var system = 'Você classifica lançamentos de extrato bancário de uma fazenda de grãos no Brasil. Para cada item devolva a categoria (uma de: ' + cats.join(', ') + '), um nome curto da contraparte (empresa/pessoa/banco, sem números) e confianca 0-1. Valor negativo = saída (pagamento), positivo = entrada. Tarifas, pacotes de serviços e IOF → categoria Outros com nome "Tarifa bancária". Transferência entre contas do próprio produtor → categoria "Transferência". Responda SOMENTE JSON: {"itens":[{"i":0,"categoria":"","nome":"","confianca":0.0}]}';
   var payload = { model:IA_MODELO, max_tokens:1500, temperature:0, system:system, messages:[{ role:'user', content:JSON.stringify(itens.map(function(x, i){ return { i:i, historico:S(x.historico).slice(0, 120), valor:N(x.valor) }; })) }] };
   try { var resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true });

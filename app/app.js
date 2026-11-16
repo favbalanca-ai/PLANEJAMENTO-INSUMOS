@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-344';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-345';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2089,6 +2089,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     nota.tipo=nfeTipoDaNota(nota); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha · v314: tpNF + natureza
     nfeImport={nota, arquivo:nome, origem, data:(opts.reclass&&_isISO(ja))?String(ja).slice(0,10):_hojeISO(), lembrar:true, itens:nota.itens.map(it=>nfeItemInicial(nota,it))};
     if(!opts.reclass && !opts.compra && (nfeEhVenda(nota) || (nota.ia&&nota.ia.tipo==='venda'&&+nota.ia.confianca>=NFE_IA_MIN))){ nota.tipo='VENDA_PROD'; nfeVendaPrep(nfeImport); if(nota.ia&&nota.ia.cultura&&!nfeImport.venda.cultura){ nfeImport.venda.cultura=nota.ia.cultura; nfeImport.venda.safra=nfeVendaSafra(nota.ia.cultura); } }   // v277: receita do produtor · v290: IA
+    if(!nfeImport.venda && !opts.reclass){ const dm=deparaDe(nota.cnpj,'*despesa'); if(dm&&dm.destino==='despesa') nfeImport.despesa={categoria:dm.maquina||'Outros', fonte:'memoria'}; else { const sg=nfeDespesaSugerida(nota); if(sg) nfeImport.despSug=sg; } }   // v345: nota de despesa (cantina, escritório…)
     nfeSugereCatalogo();   // itens sem parecido no portfólio: sugestão pelo catálogo MAPA (assíncrono)
     if(opts.reclass) nfeImport.reclass={data:ja||'', recebidas:opts.recebidas||null};   // regrava a entrada desta nota (mesma chave = substitui, não duplica) · v309: quantidades recebidas
     // XML escolhido no aparelho também vai para o Drive + índice (NFE RECEBIDAS), se a NF-e estiver configurada
@@ -2232,6 +2233,7 @@ async function _nfeAprovar(chave){
     if(!nfeAbrirXml(d.xml, `NF-e ${nt.nNF||''} · ${nt.origem||'planilha'}`.trim(), 'planilha', {ia:d.ia||nt.ia||null})) return;
     const imp=nfeImport; if(!imp) return;
     if(imp.venda){ if(!imp.venda.cultura){ toast('Escolha a cultura da venda'); return; } await nfeVendaOk(); return; }   // v308: espera gravar (Aprovar todas não para na venda)
+    if(imp.despesa){ nfeConfirmar('despesa'); return; }   // v345: fornecedor lembrado como despesa → registra na categoria em um toque
     const pend=imp.itens.filter(i=>!nfeResolvido(i)).length; if(pend){ toast(`${pend} item(ns) precisam da sua decisão (em amarelo)`); return; }
     const n=imp.nota, itensP=nfeItensPayload(imp), soManut=itensP.every(i=>i.ignorar||nfeDestManut(i.dest));
     if(n.tipo==='REMESSA'){ if(imp.refP) await imp.refP; if(!imp.ref){ toast('Remessa sem contrato ligado — escolha o contrato e confirme'); return; } }   // v309: antes confirmava com ref vazio e apagava a referência do XML
@@ -2349,6 +2351,10 @@ function nfeListaHtml(){
   const al=(L.alertas||[]).map(a=>{ const ob=String(a.obs||''); if(/CANCELADA/i.test(ob)) return `<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque. <button class="btn btn-outline btn-sm" data-act="nfeEstornar" data-chave="${esc(a.chave)}">↩ Estornar entrada</button></div>`;
     return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309 · v342: a ação chamava "nfeReclassificar", que não existe no roteador — o botão não respondia
   const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
+    const dm=deparaDe(String(nt.cnpj||''),'*despesa'), desp=dm&&dm.destino==='despesa'?dm:null;   // v345: fornecedor lembrado como despesa
+    if(desp) return `<div class="nfe-row ia-pronto" data-busca="${esc(nfeBuscaTxt(nt, 'Despesa '+(desp.maquina||'')))}"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-DESPESA">💳 Despesa · ${esc(desp.maquina||'Outros')}</span>
+        <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}</div>${(nt.xprods&&nt.xprods.length)?`<div class="mut nfe-itens">📦 ${esc(nt.xprods.slice(0,3).join(' · '))}${nt.xprods.length>3?` +${nt.xprods.length-3}`:''}</div>`:''}<div class="nfe-ia"><span class="nfe-ia-ok">💳 lembrado: nota inteira é despesa, não entra no estoque</span></div></div>
+        <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="Registra como despesa (${esc(desp.maquina||'Outros')}): a nota fica recebida e vira a pagar no Financeiro">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button><button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}">Ignorar</button></div></div>`;
     const cls=R?(R.pronto?' ia-pronto':' ia-pend'):'', tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
     const ia=R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
       :(L.iaOn?`<div class="nfe-ia mut">🤖 ainda não classificada · <a class="link" data-act="nfeIaPedir" data-chave="${esc(nt.chave)}">classificar agora</a></div>`:'');
@@ -2400,7 +2406,25 @@ function nfeQtdItem(imp,i){ const f=+i.fator||0, rc=imp.reclass&&imp.reclass.rec
 function nfeItensPayload(imp){ return imp.itens.map(i=>{ const mq=!i.ignorar&&nfeDestManut(i.dest); return {n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:(i.ignorar||mq)?'':i.produto, fator:mq?1:(+i.fator||1),
   qtd:(i.ignorar||mq)?0:nfeQtdItem(imp,i), un:mq?'':((PROD[i.produto]||{}).un||''), custo:(i.ignorar||mq)?0:+nfeCustoItem(imp,i).toFixed(4), ignorar:!!i.ignorar,
   dest:mq?i.dest:'estoque', maq:mq?(i.dest==='oficina'?'Oficina':String(i.maq||'').trim()):'', tipoMaq:mq?(i.tipoMaq||nfeTiposDe(i.dest)[0]):'', valor:mq?nfeItemValor(i):0}; }); }   // v276/v285: dest/maq/tipoMaq/valor
+// ===== v345: NOTA DE DESPESA (cantina, escritório, limpeza, veículos…) — não entra no estoque; vira título a pagar na categoria =====
+const NFE_DESP_CATS=['Alimentação','Escritório / limpeza','Veículos','Manutenção','Serviços','Outros'];
+const _RX_FORN_DESP=/SUPERMERC|\bMERCADO\b|MERCEARIA|PADARIA|PANIFIC|A[CÇ]OUGUE|FRIGOR|RESTAURANT|LANCHON|HORTIFRUT|ATACAD|VAREJ|ALIMENT|BEBIDAS|PIZZ|CHURRASC|\bBAR\b|SORVET|CONFEIT|LATIC/i;
+const _RX_FORN_ESC=/PAPELARIA|LIVRARIA|INFORM[AÁ]TICA|GR[AÁ]FICA|IMPRESS|LIMPEZA|HIGIENE|FARM[AÁ]CIA|DROGARIA/i;
+const _RX_CFOP_CUPOM=/^[56]929$/;
+function nfeDespesaSugerida(n){ const f=String(n.fornecedor||''), cupom=(n.itens||[]).length&&n.itens.every(i=>_RX_CFOP_CUPOM.test(String(i.cfop||'')));
+  if(_RX_FORN_DESP.test(f)) return {categoria:'Alimentação', motivo:'fornecedor de alimentação'};
+  if(_RX_FORN_ESC.test(f)) return {categoria:'Escritório / limpeza', motivo:'fornecedor de escritório/limpeza'};
+  if(cupom) return {categoria:'Outros', motivo:'cupom fiscal (CFOP 5929)'};
+  return null; }
+function nfeDespesaOn(cat){ const imp=nfeImport; if(!imp||imp.venda) return; imp.despesa={categoria:cat||(imp.despSug&&imp.despSug.categoria)||'Outros', fonte:'pessoa'}; route({keepScroll:true}); }
+function nfeDespesaOff(){ const imp=nfeImport; if(!imp) return; delete imp.despesa; route({keepScroll:true}); }
+function nfeDespesaHtml(imp){ const n=imp.nota, d=imp.despesa, tot=+n.vNF||0;
+  if(d) return `<div class="nfe-aviso info nfe-desp">💳 <b>Nota de despesa</b> — não entra no estoque; vira um lançamento a pagar na categoria <select class="sel" id="nfe-desp-cat">${NFE_DESP_CATS.map(c=>`<option${c===d.categoria?' selected':''}>${esc(c)}</option>`).join('')}</select>${d.fonte==='memoria'?' <span class="mut">· lembrado deste fornecedor</span>':''}
+      <div class="mut" style="margin-top:6px">${n.itens.length} item(ns) · ${brl(tot)} · ${(()=>{ const pg=nfePagTxt(n); return pg.forma?`pagamento: ${esc(pg.forma)}${pg.parc&&pg.parc!=='sem parcelas no XML'?' · '+esc(pg.parc):''}`:'sem forma de pagamento no XML'; })()} · <a class="link" data-act="nfeDespesaOff">conferir item por item</a></div></div>`;
+  const sg=imp.despSug; if(!sg) return `<p class="mut nfe-desp-link">💳 <a class="link" data-act="nfeDespesaOn">Esta nota é despesa (cantina, escritório, limpeza…) — não entra no estoque</a></p>`;
+  return `<div class="nfe-aviso warn nfe-desp">💡 Parece <b>despesa de consumo</b> (${esc(sg.motivo)}). <select class="sel" id="nfe-desp-cat">${NFE_DESP_CATS.map(c=>`<option${c===sg.categoria?' selected':''}>${esc(c)}</option>`).join('')}</select> <button class="btn btn-primary btn-sm" data-act="nfeDespesaOn">💳 É despesa, não entra no estoque</button></div>`; }
 function nfeSalvarDePara(imp){ if(!imp.lembrar) return; const n=imp.nota, L=deparaLocal(), now=Date.now();
+  if(imp.despesa){ L[n.cnpj+'|*despesa']={cnpj:n.cnpj, cprod:'*despesa', xprod:'nota inteira = despesa', produto:'', fator:1, ignorar:true, custo:0, por:'app', pushed:false, _u:tsAgora(), destino:'despesa', maquina:imp.despesa.categoria, tipoGasto:''}; saveDeParaLocal(); return; }   // v345: memória por fornecedor
   imp.itens.forEach(i=>{ const mq=!i.ignorar&&nfeDestManut(i.dest); L[n.cnpj+'|'+i.cprod]={cnpj:n.cnpj, cprod:i.cprod, xprod:i.xprod, produto:(i.ignorar||mq)?'':i.produto, fator:mq?1:(+i.fator||1), ignorar:!!i.ignorar,
     custo:(i.ignorar||mq||n.tipo==='REMESSA')?0:+nfeCustoReal(i,i.fator).toFixed(4), por:'app', pushed:false, _u:tsAgora(),
     destino:mq?i.dest:(i.ignorar?'':'estoque'), maquina:mq?(i.dest==='oficina'?'Oficina':String(i.maq||'').trim()):'', tipoGasto:mq?(i.tipoMaq||nfeTiposDe(i.dest)[0]):''}; });   // remessa não mexe no último custo · v276/v285: destino máquina/oficina/benfeitoria
@@ -2411,6 +2435,18 @@ function nfeCategoriaManut(manut){ const vB=manut.filter(i=>i.dest==='benfeitori
 function nfeConfirmar(modo){
   const imp=nfeImport; if(!imp) return; const n=imp.nota, srv=nfeServerOk();
   modo = modo || 'entrada';
+  if(imp.despesa && modo!=='despesa'){ toast('Esta nota está marcada como despesa: use "Registrar despesa" (ou volte a conferir item por item)'); return; }
+  if(modo==='despesa'){   // v345: nota inteira é despesa — nada entra no estoque; a planilha grava RECEBIDA com itens IGNORAR e o título a pagar na categoria
+    if(!imp.despesa){ toast('Marque a nota como despesa primeiro'); return; }
+    if(!srv){ toast('Nota de despesa precisa da NF-e ligada à planilha (token + Code.gs): é lá que nasce o lançamento a pagar'); return; }
+    const ja2=nfeJaEntrou(n.chave); if(ja2){ toast(`Esta nota já deu entrada (${fmtDataBR(ja2)}) — use Reclassificar`); return; }
+    const cat=imp.despesa.categoria||'Outros', itD=imp.itens.map(i=>({n:i.n, cprod:i.cprod, xprod:i.xprod, cfop:i.cfop, ucom:i.ucom, qcom:i.qcom, produto:'', fator:1, qtd:0, un:'', custo:0, ignorar:true, dest:'', maq:'', valor:nfeItemValor(i)}));
+    nfeSalvarDePara(imp);
+    const cl={chave:n.chave, status:'RECEBIDA', data:imp.data||_hojeISO(), por:'app', xml:imp.origem==='arquivo'?imp.xml:'', itens:itD, dups:n.dups||[], pag:n.pag||[], categoria:cat, obs:`despesa: ${cat}`};
+    (imp.uploadP||Promise.resolve()).then(()=>nfeEnviarClassif(cl)).then(ok=>{ if(ok) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+    if(NFE_LISTA) NFE_LISTA.notas=(NFE_LISTA.notas||[]).filter(x=>x.chave!==n.chave);
+    nfeImport=null; route(); updateEditBadge(); pushDeParaNfe();
+    toast(`NF-e ${n.nNF} registrada como despesa (${cat}): ${brl(+n.vNF||0)} a pagar no Financeiro — nada entrou no estoque`); return; }
   if(n.tipo==='FATURAMENTO' && modo!=='contrato'){ toast(srv?'Nota de faturamento: use "Registrar contrato".':'Nota de faturamento (entrega futura) não entra no estoque. Importe a nota de remessa quando a mercadoria sair.'); return; }
   if(modo!=='entrada' && !srv){ toast('Em trânsito, contratos e devoluções precisam da NF-e ligada (token + Code.gs novo)'); return; }
   if(!imp.itens.every(nfeResolvido)){ toast('Resolva todos os itens (produto do app e fator, ou Ignorar)'); return; }
@@ -2566,8 +2602,8 @@ function nfeConferirHtml(){
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
-    ${reclass}${aviso}${semSrv}${iaBox}${pecas}${maqList}
-    <div class="nfe-itens">${cards}</div>
+    ${reclass}${aviso}${semSrv}${iaBox}${(n.tipo!=='RETORNO'&&!imp.reclass)?nfeDespesaHtml(imp):''}${imp.despesa?'':pecas}${maqList}
+    ${imp.despesa?`<div class="nfe-desp-itens mut">${imp.itens.map(it=>`<span>${esc(it.xprod)} <small>${num(it.qcom)} ${esc(it.ucom)} · ${brl(nfeItemValor(it))}</small></span>`).join('')}</div>`:`<div class="nfe-itens">${cards}</div>`}
     <div class="nfe-foot">
       <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>
       <label class="dem-only"><input type="checkbox" data-nff="lembrar"${imp.lembrar?' checked':''}> Lembrar de-para para este fornecedor</label>
@@ -2575,14 +2611,15 @@ function nfeConferirHtml(){
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
       ${((n.tipo==='RETORNO'||NFE_TIPO_NOTA_IGN[n.tipo])&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn ${NFE_TIPO_NOTA_IGN[n.tipo]?'btn-primary':'btn-outline'} btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="${NFE_TIPO_NOTA_IGN[n.tipo]?'Não é compra: a nota sai da lista sem mexer no estoque':'O produto nunca entrou no estoque: a nota sai da lista sem mexer no estoque'}">🚫 Ignorar esta nota</button>`:''}
-      ${n.tipo==='RETORNO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="devolucao"${!srv?' disabled':''}${pend?' data-falta="1"':''} title="Lança a SAÍDA dos itens no estoque (razão da planilha, etiqueta da nota)${imp.reclass?' e tira a entrada errada desta nota':''}">↩ Confirmar devolução (saída do estoque)</button>`
+      ${imp.despesa?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="despesa"${!srv?' disabled':''} title="Nada entra no estoque: a nota fica recebida e vira lançamento a pagar na categoria">💳 Registrar despesa (${brl(+n.vNF||0)})</button>`
+        : n.tipo==='RETORNO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="devolucao"${!srv?' disabled':''}${pend?' data-falta="1"':''} title="Lança a SAÍDA dos itens no estoque (razão da planilha, etiqueta da nota)${imp.reclass?' e tira a entrada errada desta nota':''}">↩ Confirmar devolução (saída do estoque)</button>`
         : imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' data-falta="1"':''}>♻️ Regravar entrada (substitui a anterior)</button>`
         : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${fat?' disabled':''}${pend?' data-falta="1"':''}>✅ Confirmar entrada no estoque</button>`
         : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' data-falta="1"':''}>📑 Registrar contrato (a entregar)</button>`
         : `<button class="btn btn-outline btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' data-falta="1"':''} title="A mercadoria já está na fazenda: dá entrada no estoque agora">📦 Já chegou — dar entrada</button>
            <button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="transito"${pend?' data-falta="1"':''} title="Fica EM TRÂNSITO até o operador receber na fazenda (Receber nota)">🚚 Confirmar e pôr em trânsito</button>`}
     </div>
-    <p class="mut nfe-hint">${n.tipo==='RETORNO'?(!srv?'Devolução precisa da NF-e ligada à planilha (token + Code.gs).':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. <b>Confirmar devolução</b>: cada item sai do estoque pelo custo médio do dia; a nota fica como DEVOLVIDA na planilha.'):fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
+    <p class="mut nfe-hint">${imp.despesa?(srv?`Despesa de <b>${esc(imp.despesa.categoria)}</b>: a nota fica recebida sem mexer no estoque e o valor entra no Financeiro como a pagar (vencimento na emissão; a conciliação bancária casa com o extrato).`:'Nota de despesa precisa da NF-e ligada à planilha (token + Code.gs).'):n.tipo==='RETORNO'?(!srv?'Devolução precisa da NF-e ligada à planilha (token + Code.gs).':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. <b>Confirmar devolução</b>: cada item sai do estoque pelo custo médio do dia; a nota fica como DEVOLVIDA na planilha.'):fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
   </div>`;
 }
 /* ================= NF-e (fase 4): RECEBER NOTA na fazenda — câmera lê a chave do DANFE =================
@@ -3179,7 +3216,7 @@ function filterEstoque(){
    Dados vêm da planilha (chave "financeiro": abas PRODUTORES, IMÓVEIS RURAIS, CONTAS BANCÁRIAS e TÍTULOS). Títulos de NF-e
    nascem na planilha quando a nota é classificada em Compras (parcelas do XML); manuais nascem aqui (__titulo).
    Cadastros: só ADMIN (__cadFin). O antigo Fluxo de Caixa (caderno local) foi aposentado: #/fluxocaixa abre o Financeiro. */
-const FIN_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Venda de grãos','Adiantamento','Outros'];
+const FIN_CATS=['Insumos','Sementes','Fertilizantes','Defensivos','Combustível','Manutenção','Mão de obra','Arrendamento','Serviços','Impostos','Financiamento','Energia','Frete','Alimentação','Escritório / limpeza','Veículos','Venda de grãos','Adiantamento','Outros'];   // v345: despesas de consumo (cantina, escritório, veículos)
 const FIN_DOC_TIPOS=['1 - Nota fiscal','2 - Fatura','3 - Recibo','4 - Contrato','5 - Folha de pagamento','6 - Outros'];
 const FIN_EXPL=['Exploração individual','Condomínio','Imóvel arrendado','Parceria','Comodato','Outros'];
 const FIN_CONTA_TIPOS=['Conta corrente','Poupança','Caixa (dinheiro)','Aplicação'];
@@ -10675,6 +10712,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
   if(e.target.id==='ab-maq'){ MQ_UI.maq=e.target.value; location.hash=e.target.value?'#/abastecimento/'+encodeURIComponent(e.target.value):'#/abastecimento'; return; }   // v295
   if(e.target.id==='ck-maq'){ MQ_UI.maq=e.target.value; CK_F=null; location.hash=e.target.value?'#/checklist/'+encodeURIComponent(e.target.value):'#/checklist'; return; }   // v340
+  if(e.target.id==='nfe-desp-cat'){ if(nfeImport&&nfeImport.despesa){ nfeImport.despesa.categoria=e.target.value; } return; }   // v345 (na sugestão, o valor é lido ao tocar no botão)
   if(e.target.id==='os-maq'){ MQ_UI.maq=e.target.value; MQ_UI.osAberta=''; location.hash=e.target.value?'#/manutencao/'+encodeURIComponent(e.target.value):'#/manutencao'; return; }
   if(e.target.id==='wa-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f){ const fr=new FileReader(); fr.onload=()=>waImportLer(String(fr.result||'')); fr.readAsText(f,'utf-8'); } return; }   // v299
   if(e.target.dataset && e.target.dataset.wa!=null && WA_IMP){ waCampo(e.target); return; }
@@ -11101,6 +11139,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='nfeHistToggle'){ nfeHistAberto=!act.closest('details').open; }
     else if(a.act==='nfeDiagToggle'){ nfeDiagAberto=!act.closest('details').open; }   // v343
     else if(a.act==='nfeDestMais'){ const it=nfeImport&&nfeImport.itens[+a.i]; if(it){ it.destMais=true; route({keepScroll:true}); } return; }   // v343: mostra Máquina/Oficina/Benfeitoria/Tanque neste item
+    else if(a.act==='nfeDespesaOn'){ nfeDespesaOn(((document.getElementById('nfe-desp-cat')||{}).value||'')); return; } else if(a.act==='nfeDespesaOff'){ nfeDespesaOff(); return; }   // v345
     else if(a.act==='nfeProdutor'){ nfeAddProdutor(a.doc); }
     else if(a.act==='nfeTokenSave'){ const v=($('#nfe-token').value||'').trim(); try{ if(v) localStorage.setItem(NFE_TOKEN_KEY,v); else localStorage.removeItem(NFE_TOKEN_KEY); }catch(e){} NFE_LISTA=null; toast(v?'Token da NF-e salvo':'Token removido'); route({keepScroll:true}); }
     else if(a.act==='nfeConfirmar'){ nfeConfirmar(a.modo); }

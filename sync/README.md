@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Nota de despesa (v345)
+
+- Nada novo no `doPost`: o app manda o `__nfeClassifica` de sempre com `status: RECEBIDA`, todos os itens `ignorar`,
+  `categoria` (Alimentação, Escritório / limpeza, Veículos…) e `obs: "despesa: …"`. `nfeClassifica_` grava os itens
+  como IGNORAR (nada entra no razão) e `finTitulosDaNota_` cria o título a pagar na categoria.
+- `writeDeParaNfe` aceita `destino: despesa` com `cprod: *despesa` (a nota inteira do fornecedor é despesa; a coluna
+  MÁQUINA guarda a categoria). `readDeParaNfe` já devolvia DESTINO/MÁQUINA.
+- A lista de categorias da sugestão de IA do extrato (`bancoIa_`) ganha Alimentação, Escritório / limpeza e Veículos.
+
 ## Pasta extra de XML (v344)
 
 - CONFIG NFE ganha `PASTA EXTRA` (ID ou link de outra pasta do Drive; pode repetir a linha) e `PASTA EXTRA DIAS` (60).
