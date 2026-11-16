@@ -132,6 +132,11 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Link da pasta NFe/Entrada no app (v343)
+
+- `nfe_lista` passa a devolver `pasta: {raiz, entrada, nome}` (ids do Drive, lidos de `nfeConfig_` + `nfePastas_`).
+  O app mostra "📂 Pasta NFe/Entrada" na tela Notas. Sem Code.gs novo o campo vem vazio e o app só esconde o link.
+
 ## Checklist pré-uso do operador (v340)
 
 - Aba nova **`CHECKLIST APP`** (`KEY|JSON|ATUALIZADO` + DATA, HORA, MÁQUINA, OPERADOR, HORÍMETRO, RESULTADO,
