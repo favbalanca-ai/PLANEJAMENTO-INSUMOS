@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Preços mesclados por registro (v334)
+
+- `PREÇOS APP` ganhou as colunas **ATUALIZADO** (carimbo `_u` em ms) e **STATUS** (`EXCLUÍDO` = lápide).
+  `writePrecosSheet` **mescla** o que chega com o que está na aba: por safra, item pela chave do produto e
+  referência por classe|produto (maiúsculas/espaços ignorados); `_u` maior vence; registro que só a aba tem continua;
+  exclusão só por lápide (`safra.excl = {itens:{chave:carimbo}, refs:{…}}` vindo do app, ou `del:true`). Lápides
+  com mais de 120 dias saem da aba. `readPrecosSheet` devolve `_u` e `del` (o app apaga o registro ao receber a
+  lápide mais nova). Planilha antiga (10 colunas) é lida normalmente.
+
 ## Fotos do campo pela planilha (v333)
 
 - `doGet ?acao=drive_arquivo&tipo=fotos&id=…` devolve a foto da pasta **Fotos do Campo** (ao lado da planilha) em

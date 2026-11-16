@@ -2772,7 +2772,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-333';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-334';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2787,7 +2787,24 @@ function loadPrecos(){
   const s=d.safras[d.atual]; s.refs=s.refs||[]; s.itens=s.itens||[];
   return d;
 }
-function savePrecos(){ PRECOS_VER++; lsSet(PRECOS_KEY, JSON.stringify(PRECOS));
+// v334: cada item/referência leva um carimbo _u (quando foi mexido neste aparelho) e as exclusões viram lápides em
+// safra.excl — a planilha e os outros aparelhos MESCLAM por registro (antes a lista inteira era substituída e um
+// aparelho apagava o que o outro cadastrou). O carimbo é posto aqui, comparando com a última foto salva (_precosSnap).
+let _precosSnap=null;
+const prKey=s=>String(s==null?'':s).toUpperCase().replace(/\s+/g,' ').trim();
+function _prSemU(o){ const c=Object.assign({},o); delete c._u; delete c.del; return JSON.stringify(c); }
+function _precosFoto(){ const f={}; Object.keys((PRECOS&&PRECOS.safras)||{}).forEach(nm=>{ const s=PRECOS.safras[nm]||{}, m={refs:{},itens:{}};
+  (s.refs||[]).forEach(r=>{ const k=prKey(r.classe)+'|'+prKey(r.produto); if(k!=='|') m.refs[k]=_prSemU(r); });
+  (s.itens||[]).forEach(it=>{ const k=prKey(it.produto); if(k) m.itens[k]=_prSemU(it); }); f[nm]=m; }); return f; }
+function _precosCarimba(){ if(!PRECOS||!PRECOS.safras) return; const snap=_precosSnap||{}, agora=tsAgora();
+  Object.keys(PRECOS.safras).forEach(nm=>{ const s=PRECOS.safras[nm]; if(!s) return; const sn=snap[nm]||{refs:{},itens:{}}; s.excl=s.excl||{refs:{},itens:{}}; const vistos={refs:{},itens:{}};
+    (s.refs||[]).forEach(r=>{ const k=prKey(r.classe)+'|'+prKey(r.produto); if(k==='|') return; vistos.refs[k]=1; if(sn.refs[k]!==_prSemU(r)||!r._u) r._u=agora; delete s.excl.refs[k]; });
+    (s.itens||[]).forEach(it=>{ const k=prKey(it.produto); if(!k) return; vistos.itens[k]=1; if(sn.itens[k]!==_prSemU(it)||!it._u) it._u=agora; delete s.excl.itens[k]; });
+    Object.keys(sn.refs).forEach(k=>{ if(!vistos.refs[k]) s.excl.refs[k]=agora; });   // sumiu da lista = excluído neste aparelho
+    Object.keys(sn.itens).forEach(k=>{ if(!vistos.itens[k]) s.excl.itens[k]=agora; }); });
+  _precosSnap=_precosFoto(); }
+function savePrecos(opts){ opts=opts||{}; if(!opts.semCarimbo) _precosCarimba(); else _precosSnap=_precosFoto();
+  PRECOS_VER++; lsSet(PRECOS_KEY, JSON.stringify(PRECOS));
   try{ if(typeof schedulePrecosPush==='function') schedulePrecosPush(); }catch(e){} }
 function safraAtual(){ return PRECOS.safras[PRECOS.atual]; }
 // fator (0,029) -> texto do campo de % (2,9), sem lixo de ponto flutuante
@@ -14726,18 +14743,27 @@ async function syncPush(opts){
    da verdade), ENVIAR grava o conjunto local na planilha. Auto: puxa ao abrir o
    módulo e envia (debounce) após editar, quando a sincronização automática está ligada. */
 let precosPushTimer=null, lastPrecosPushSig='';
+// v334: MESCLA por registro (antes substituía a lista inteira pela da planilha e apagava o que este aparelho tinha
+// cadastrado sem conseguir enviar). Quem tem _u maior vence; registro só local continua; lápide (del) mais nova apaga.
 function precosApplyPulled(pa){
   if(!pa||!pa.safras) return false;
   const keys=Object.keys(pa.safras);
   const hasContent=keys.some(k=>{ const s=pa.safras[k]||{}; return (s.refs&&s.refs.length)||(s.itens&&s.itens.length); });
   if(!hasContent) return false;            // planilha ainda sem preços: não apaga o que é local
-  PRECOS_VER++;
-  Object.keys(pa.safras).forEach(k=>{ const s=pa.safras[k]; s.refs=s.refs||[]; s.itens=s.itens||[]; });
-  const sig=JSON.stringify({atual:PRECOS.atual,safras:pa.safras});
-  if(sig===JSON.stringify({atual:PRECOS.atual,safras:PRECOS.safras})) { lastPrecosPushSig=JSON.stringify(PRECOS); return false; }
-  PRECOS.safras=pa.safras;
+  if(_precosSnap==null) _precosSnap=_precosFoto();
+  let mudou=false;
+  keys.forEach(nm=>{ const inc=pa.safras[nm]||{}; const s=PRECOS.safras[nm]||(PRECOS.safras[nm]={refs:[],itens:[]}); s.refs=s.refs||[]; s.itens=s.itens||[]; s.excl=s.excl||{refs:{},itens:{}};
+    const faz=(lista, chave, recs, exclMap)=>{ const idx={}; lista.forEach((r,i)=>{ const k=chave(r); if(k) idx[k]=i; }); const tirar=new Set();
+      (recs||[]).forEach(rec=>{ const k=chave(rec); if(!k||k==='|') return; const i=idx[k], loc=i!=null?lista[i]:null, iu=+rec._u||0, lu=loc?(+loc._u||0):0;
+        if(rec.del){ if(loc && iu>lu){ tirar.add(i); exclMap[k]=iu; mudou=true; } else if(!loc && (exclMap[k]||0)<iu) exclMap[k]=iu; return; }
+        if(!loc){ if((exclMap[k]||0)>iu) return; lista.push(rec); idx[k]=lista.length-1; mudou=true; }   // a lápide local é mais nova: fica apagado
+        else if(iu>lu){ lista[i]=rec; mudou=true; } });
+      if(tirar.size){ for(let i=lista.length-1;i>=0;i--) if(tirar.has(i)) lista.splice(i,1); } };
+    faz(s.refs, r=>prKey(r.classe)+'|'+prKey(r.produto), inc.refs, s.excl.refs);
+    faz(s.itens, it=>prKey(it.produto), inc.itens, s.excl.itens); });
   if(!PRECOS.atual||!PRECOS.safras[PRECOS.atual]) PRECOS.atual=keys.sort()[0];
-  savePrecos(); lastPrecosPushSig=JSON.stringify(PRECOS);   // evita reenviar o que acabou de chegar
+  if(!mudou){ lastPrecosPushSig=JSON.stringify(PRECOS); return false; }
+  savePrecos({semCarimbo:true}); lastPrecosPushSig=JSON.stringify(PRECOS);   // o que veio da planilha já tem carimbo; evita reenviar
   return true;
 }
 async function precosPull(opts){
@@ -15171,7 +15197,7 @@ async function checkNewVersion(){
 function boot(d){
   if(EMBED) document.body.dataset.embed=EMBED;
   DATA=d; PROD={}; d.produtos.forEach(p=>PROD[p.produto]=p); _mpKey='';
-  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} try{ conjMigrar(); }catch(e){} PRECOS=loadPrecos(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
+  loadOverrides(); try{ limparMaqPendentes(); }catch(e){} try{ conjMigrar(); }catch(e){} PRECOS=loadPrecos(); _precosSnap=_precosFoto(); MONIT=loadMonit(); CHUVA=loadChuva(); STAND=loadStand(); AFER=loadAfer(); OCOR=loadOcor(); fotoPend=[]; BULAS=loadBulas(); bulaArqPend=[]; MIST=loadMist(); mistFotoPend=[]; PRODE=loadProdE(); RECOM=loadRecom(); COMPRAS=loadCompras(); EQUIPE=loadEquipe(); TAREFAS=loadTarefas(); buildMaqIndex(); updateEditBadge();
   { const v=$('#app-ver'); if(v) v.textContent='v'+APP_VERSION; }
   window.addEventListener('hashchange',()=>route({toTop:true}));   // trocar de página rola pro topo; edições não
   applyModule();
