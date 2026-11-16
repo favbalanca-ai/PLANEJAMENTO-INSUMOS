@@ -132,6 +132,15 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   `maquinas.whats` (só dígitos). É o número que entra no QR das etiquetas; os abastecimentos importados da conversa
   sobem como os outros (`__abastecimento` / `__osMaq`, ids `wa:…`).
 
+## Checklist pré-uso do operador (v340)
+
+- Aba nova **`CHECKLIST APP`** (`KEY|JSON|ATUALIZADO` + DATA, HORA, MÁQUINA, OPERADOR, HORÍMETRO, RESULTADO,
+  PROBLEMAS, ITENS, OBS, OS, FOTOS, REGISTRO), criada no primeiro envio. Payload `__checklist` (`writeChecklistApp`,
+  merge por chave/`_u`; excluídos ficam `del` → REGISTRO "EXCLUÍDO"). Chave de leitura `checklist_app` (pacotes
+  **maquinas** e **campo**; invalidada pelo `__checklist`). Quem grava: módulos maquinas e campo.
+- `__campoFoto` passa a aceitar o módulo **maquinas** (fotos do checklist vão para a mesma pasta "Fotos do Campo").
+- A OS corretiva que o checklist abre sobe pelo `__osMaq` de sempre (campo `ckId` dentro do JSON).
+
 ## Stand e aferições não sincronizavam (v336)
 
 - Em `APP_LER_`, as entradas `afericoes_app` e `stand_app` estavam no fim da linha de um comentário (`// v278: …`)

@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Checklist pré-uso do operador (v340)** — tela `#/checklist` (módulo Máquinas; máquina pelo seletor ou pelo QR
+  da etiqueta). Itens por grupo (`CHECK_PADRAO`: Geral + os do grupo da máquina, ou a lista própria gravada no
+  Cadastro em `m.checkItens`, um por linha), cada um com OK / Problema (com observação) / — (não se aplica), horímetro,
+  observação geral e fotos (mesma fila `fotoPend`, agora com `ckId`, e o mesmo `__campoFoto`). **Concluir** grava
+  `OV.checkMaq[id]` (`resultado` aprovado/reprovado); item com problema abre **OS corretiva aberta** na hora
+  (`osGravar`, `desc` "Checklist pré-uso: …", `ckId`); o horímetro informado vira leitura (`ab-ck-<id>`).
+  Reprovado com a OS ainda aberta aparece como ⛔ na própria tela, no card do Painel (`maqAlertas`), na ficha
+  ("Último checklist" + histórico) e no sino (atraso). Sync: `LOTE_TIPOS.__checklist` → aba `CHECKLIST APP`
+  (`checklist_app`), merge por `_u`, excluídos com `del`. Precisa do Code.gs v340.
 - **Preventivas por data e documentos (v339)** — item do plano aceita "a cada X horas", "a cada X dias" ou os dois
   (`cadaH`, `cadaDias`, `ultData`/`criado`; vence o que chegar primeiro). `planoStatus` devolve `falta` (h), `faltaD`
   (dias), `proxD` e `st`; `planoTxt` monta "faltam 130 h · faltam 12 dia(s)" / "vencida há…"; `planoCada` mostra

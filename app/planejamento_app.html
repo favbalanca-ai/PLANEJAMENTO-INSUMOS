@@ -2128,6 +2128,19 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v340: checklist pré-uso */
+.ck-grupo{padding:0 14px 6px}.ck-grupo h4{margin:8px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.ck-item{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;margin-bottom:6px;background:var(--card)}
+.ck-item.ok{background:#f0faf3;border-color:#bfe3c9}.ck-item.prob{background:var(--red-soft);border-color:#f3b9b9}.ck-item.na{opacity:.65}
+.ck-nome{flex:1;min-width:140px;font-size:14px}.ck-bts{display:flex;gap:4px;margin-left:auto}
+.ck-bt{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 11px;font-size:13px;font-weight:600;color:var(--muted);min-height:36px}
+.ck-bt.ok.on{background:#2e7d32;border-color:#2e7d32;color:#fff}.ck-bt.prob.on{background:var(--red);border-color:var(--red);color:#fff}.ck-bt.na.on{background:#607d8b;border-color:#607d8b;color:#fff}
+.ck-item .ck-obs{flex-basis:100%;margin-top:2px}
+.ck-aviso{margin:0 14px 10px;padding:10px 12px;border-radius:12px;background:var(--red-soft);color:var(--red);font-weight:600;font-size:13px}
+.ck-hist{padding:0 14px 10px}.ck-ev{border:1px solid var(--line);border-radius:12px;margin-bottom:6px;background:var(--card)}.ck-ev summary{display:flex;align-items:center;gap:8px;padding:9px 12px;cursor:pointer;font-size:13.5px;flex-wrap:wrap}.ck-ev summary::-webkit-details-marker{display:none}
+.ck-ev .pill{white-space:nowrap}.ck-ev .pill.okk{background:#e3f5e8;color:#1b5e20;font-weight:700}.ck-ev .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}.ck-ev.reprovado{border-color:#f3b9b9}
+.ck-det{padding:0 12px 10px;font-size:13px}.ck-det ul{margin:4px 0;padding-left:18px}.ck-det p{margin:4px 0}.ck-det .bk-bar{padding:6px 0 0}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
 /* v339: documentos da máquina */
 .mq-docs{padding:0 14px 4px}.mq-docs .tf-ev{align-items:center}.mq-docs .pill{background:var(--line);white-space:nowrap}.mq-docs .pill.perto{background:#fff3cd;color:#8d6e00}.mq-docs .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}.mq-docs .icon-btn{margin-left:auto}
 /* v338: custo fixo no cadastro */
@@ -2649,6 +2662,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
+  .ck-grupo h4{font-size:9.5px}
+  .ck-nome{font-size:11.5px}
+  .ck-bt{font-size:10.5px}
+  .ck-aviso{font-size:10.5px}
+  .ck-ev summary{font-size:11px}
+  .ck-det{font-size:10.5px}
   .mq-fixo h4{font-size:10px}
   .mq-grafs h4{font-size:10px}
   .mq-ev{font-size:10.5px}
@@ -2713,6 +2732,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
       <a href="#/equipe" data-view="equipe" data-mod="tarefas"><span class="ico">👷</span><span class="lbl">Equipe</span><span class="lbl-s">Equipe</span></a>
       <a href="#/frota" data-view="frota" data-mod="maquinas"><span class="ico">🚜</span><span class="lbl">Painel da frota</span><span class="lbl-s">Frota</span></a>
       <a href="#/abastecimento" data-view="abastecimento" data-mod="maquinas"><span class="ico">⛽</span><span class="lbl">Abastecimento</span><span class="lbl-s">Abastec.</span></a>
+      <a href="#/checklist" data-view="checklist" data-mod="maquinas"><span class="ico">✅</span><span class="lbl">Checklist pré-uso</span><span class="lbl-s">Checklist</span></a>
       <a href="#/manutencao" data-view="manutencao" data-mod="maquinas"><span class="ico">🔧</span><span class="lbl">Manutenção</span><span class="lbl-s">Manut.</span></a>
       <a href="#/maquinas" data-view="maquinas" data-mod="maquinas" data-mais="maquinas"><span class="ico">⚙️</span><span class="lbl">Conjuntos e custo</span><span class="lbl-s">Conjuntos</span></a>
       <a href="#/maqcad" data-view="maqcad" data-mod="maquinas" data-mais="maquinas"><span class="ico">🗂️</span><span class="lbl">Cadastro</span><span class="lbl-s">Cadastro</span></a>
@@ -2790,7 +2810,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-339';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-340';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3230,7 +3250,7 @@ const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejament
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
   maquinas:'both', dre:'planejamento', resultados:'planejamento', campopainel:'campo', timeline:'campo', relatorios:'campo', misturas:'campo', catalogo:'both', campo:'campo', monitoramento:'campo', mapa:'campo', chuva:'campo', stand:'campo', afericao:'campo', ocorrencia:'campo', produtividade:'campo', recomendacao:'campo', experimento:'campo', sync:'both',
-  login:'both', conta:'both', usuarios:'both', frota:'maquinas', abastecimento:'maquinas', manutencao:'maquinas', maqcad:'maquinas' };   // v295
+  login:'both', conta:'both', usuarios:'both', frota:'maquinas', abastecimento:'maquinas', manutencao:'maquinas', maqcad:'maquinas', checklist:'maquinas' };   // v295 · v340: checklist
 /* ================= LOGIN / ACESSO (perfil ADMIN × OPERADOR, módulos e telas liberados) =================
    A sessão (chave assinada pela planilha) fica no aparelho; vai em TODO pedido à planilha (?s=…).
    A planilha é quem filtra os dados e recusa gravações fora da permissão — aqui só escondemos o que não é seu. */
@@ -7400,6 +7420,7 @@ function maqDocsHtml(m, editar){ const ds=maqDocsStatus(m); if(!ds.length&&!edit
   return `<div class="mq-docs">${ds.map(x=>`<div class="tf-ev"><span class="pill ${x.st==='vencido'?'vencida':x.st==='perto'?'perto':''}">${esc(x.d.tipo)}</span><span>${_dtBRc(x.d.venc)} · ${x.st==='vencido'?'<b class="mq-ruim">'+docTxt(x)+'</b>':x.st==='perto'?'<b style="color:var(--amber)">'+docTxt(x)+'</b>':docTxt(x)}${x.d.obs?` <small class="mut">· ${esc(x.d.obs)}</small>`:''}${x.d.link?` · <a class="link" href="${esc(x.d.link)}" target="_blank" rel="noopener">abrir</a>`:''}</span>${editar?`<button class="icon-btn del" data-act="maqDocDel" data-maq="${esc(m.id)}" data-id="${esc(x.d.id)}" title="Remover">🗑</button>`:''}</div>`).join('')||'<p class="mut" style="margin:0 14px 6px;font-size:12px">Nenhum documento ainda.</p>'}</div>`; }
 function maqAlertas(m){ const out=[]; planoStatus(m).forEach(x=>{ if(x.st==='vencida') out.push({nivel:'erro', txt:`${x.p.nome}: ${planoTxt(x)}${x.prox!=null?` (prevista em ${numH(x.prox)} h)`:''}`}); else if(x.st==='perto') out.push({nivel:'aviso', txt:`${x.p.nome}: ${planoTxt(x)}`}); });
   maqDocsStatus(m).forEach(x=>{ if(x.st==='vencido') out.push({nivel:'erro', txt:`${x.d.tipo} ${docTxt(x)} (${_dtBRc(x.d.venc)})`}); else if(x.st==='perto') out.push({nivel:'aviso', txt:`${x.d.tipo} ${docTxt(x)} (${_dtBRc(x.d.venc)})`}); });   // v339
+  const ck=checkUltimo(m); if(ck&&ck.bloqueia) out.push({nivel:'erro', txt:`Checklist ${_dtBRc(ck.c.data)} reprovado (OS aberta): ${(ck.c.itens||[]).filter(i=>i.st==='prob').map(i=>i.nome).join(', ')}`});   // v340
   const abertas=osLista(m.id).filter(o=>o.status!=='concluida'); abertas.forEach(o=>{ const dias=Math.round((Date.now()-new Date((o.dataAb||_hojeISO())+'T12:00:00'))/86400000); if(dias>7) out.push({nivel:'aviso', txt:`OS ${OS_TIPOS[o.tipo]||o.tipo} aberta há ${dias} dias: ${o.desc||''}`}); });
   const c=maqCustos(m); if(c.lhReal&&m.lh&&c.lhReal>m.lh*1.2) out.push({nivel:'aviso', txt:`consumo ${numH(c.lhReal)} L/h, ${Math.round((c.lhReal/m.lh-1)*100)}% acima do planejado (${numH(m.lh)} L/h)`});
   return out; }
@@ -7501,7 +7522,7 @@ async function qrScanAbrir(){ if(!(navigator.mediaDevices&&navigator.mediaDevice
 async function qrScanTick(cv){ const Q=QR_SCAN; if(!Q||Q.busy) return; const v=Q.ov.querySelector('#qr-video'); if(!v||v.readyState<2||!v.videoWidth) return; Q.busy=true;
   try{ let txt=''; if(Q.det){ const r=await Q.det.detect(v); if(r&&r[0]) txt=r[0].rawValue||''; }
     else if(Q.zw){ const sc=Math.min(1,800/v.videoWidth); cv.width=Math.round(v.videoWidth*sc); cv.height=Math.round(v.videoHeight*sc); const cx=cv.getContext('2d',{willReadFrequently:true}); cx.drawImage(v,0,0,cv.width,cv.height); const r=await Q.zw.readBarcodes(cx.getImageData(0,0,cv.width,cv.height),{formats:['QRCode'], tryHarder:false, maxNumberOfSymbols:1}); if(r&&r[0]) txt=r[0].text||''; }
-    if(txt){ const m=maqDoQr(txt); if(m){ qrScanFechar(); MQ_UI.maq=m.id; location.hash='#/abastecimento/'+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); try{ if(navigator.vibrate) navigator.vibrate(80); }catch(e){} } } }
+    if(txt){ const m=maqDoQr(txt); if(m){ qrScanFechar(); MQ_UI.maq=m.id; CK_F=null; location.hash=(document.body.dataset.view==='checklist'?'#/checklist/':'#/abastecimento/')+encodeURIComponent(m.id); toast(`🚜 ${m.nome}`); try{ if(navigator.vibrate) navigator.vibrate(80); }catch(e){} } } }   // v340: na tela do checklist fica nela
   catch(e){} finally{ if(QR_SCAN) QR_SCAN.busy=false; } }
 function qrScanFechar(){ const Q=QR_SCAN; QR_SCAN=null; if(!Q) return; clearInterval(Q.timer); try{ Q.stream.getTracks().forEach(t=>t.stop()); }catch(e){} Q.ov.remove(); }
 // ---- relatórios em PDF (v296): uma máquina ou a frota inteira ----
@@ -7534,6 +7555,7 @@ function maqHistorico(m){ const ev=[];
     ev.push({data:String(a.data||'').slice(0,10), hora:a.hora||'', tipo:leit?'leitura':'abast', ico:leit?'🕐':'⛽', titulo:leit?`Leitura do horímetro · ${numH(a.hor)} h`:`${numH(a.litros)} L ${esc(a.comb||'')} · ${a.origem==='posto'?'posto':'tanque'}`,
       sub:[(!leit&&a.hor)?numH(a.hor)+' h':'', k?numH(k.lh)+' L/h':'', esc(a.operador||'')].filter(Boolean).join(' · '), valor:leit?0:abastCusto(a), litros:leit?0:(+a.litros||0), lh:k?k.lh:null}); });
   osLista(m.id).forEach(o=>ev.push({data:String(o.dataAb||'').slice(0,10), tipo:'os', ico:'🔧', titulo:`OS ${esc(OS_TIPOS[o.tipo]||o.tipo)}: ${esc(o.desc||'')}`, sub:[esc((o.pecas||[]).map(p=>p.item).join('; ')), o.hor?numH(o.hor)+' h':'', o.status==='concluida'?'concluída':'<b>ABERTA</b>', esc(o.resp||'')].filter(Boolean).join(' · '), valor:osValor(o), aberta:o.status!=='concluida'}));
+  checkLista(m.id).forEach(c=>{ const pr=(c.itens||[]).filter(i=>i.st==='prob'); ev.push({data:String(c.data||'').slice(0,10), hora:c.hora||'', tipo:'check', ico:c.resultado==='reprovado'?'⚠️':'✅', titulo:`Checklist pré-uso ${c.resultado==='reprovado'?'<b class="mq-ruim">reprovado</b>':'aprovado'}`, sub:[esc(c.operador||''), c.hor?numH(c.hor)+' h':'', pr.length?esc(pr.map(i=>i.nome).join(', ')):''].filter(Boolean).join(' · '), valor:0}); });   // v340
   ((DATA&&DATA.manutencao)||[]).filter(r=>r.maquina&&maqId(r.maquina)===m.id&&!['oficina','benfeitoria','tanque'].includes(r.destino)).forEach(r=>ev.push({data:String(r.data||'').slice(0,10), tipo:'peca', ico:'🧾', titulo:`${esc(r.item||'peça')}${r.tipo?' · '+esc(r.tipo):''}`, sub:[esc(r.fornecedor||''), r.nf?'NF '+esc(r.nf):''].filter(Boolean).join(' · '), valor:+r.valor||0}));
   const R=(OV&&OV.realizado)||{}; for(const k in R){ const r=R[k]; if(!r||!r.app||!r.app.maq) continue; const mm=maqDeConjunto(r.app.maq); if(!mm||mm.id!==m.id) continue; const h=durHoras(r.app.hIni,r.app.hFim); if(!(h>0)) continue; const tid=k.split('|')[0], t=findTalhao(tid);
     ev.push({data:String(r.data||'').slice(0,10), tipo:'campo', ico:'🌱', titulo:`${numH(h)} h no talhão ${esc(t?tNome(t):tid)}`, sub:[(r.app.hIni&&r.app.hFim)?`${esc(r.app.hIni)}–${esc(r.app.hFim)}`:'', esc(r.app.operador||r.operador||'')].filter(Boolean).join(' · '), horas:h}); }
@@ -7561,7 +7583,8 @@ function maqFichaOpen(id){ const m=maqDe(id); if(!m){ toast('Máquina não encon
     +lin('Custo-hora real', c.custoH?`<span class="${m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}">${brl(c.custoH)}/h</span>${m.rsHm?` <small class="mut">· plan. ${brl0(m.rsHm)}/h</small>`:''}${c.fixoH?`<br><small class="mut">variável ${brl(c.custoHVar)} + fixo ${brl(c.fixoH)}</small>`:''}`:'')
     +lin('Custo fixo', c.fixoH?`${brl(c.fixoH)}/h <small class="mut">· depreciação ${brl(c.fixo.deprec)} · seguro ${brl(c.fixo.seguro)} · operador ${brl(c.fixo.operador)}</small>`:'<small class="mut">não informado — <a class="link" data-act="maqFichaCad" data-maq="'+esc(m.id)+'">preencher no Cadastro</a></small>')
     +lin('Próxima preventiva', pl[0]?`${esc(pl[0].p.nome)} · ${pl[0].st==='vencida'?'<span class="mq-ruim">'+planoTxt(pl[0])+'</span>':planoTxt(pl[0])}`:'')
-    +(()=>{ const ds=maqDocsStatus(m), pr=ds.find(x=>x.st!=='ok'); return lin('Documentos', ds.length?(pr?`<span class="${pr.st==='vencido'?'mq-ruim':''}">${esc(pr.d.tipo)} ${docTxt(pr)}</span>`:`${ds.length} em dia <small class="mut">· próximo: ${esc(ds[0].d.tipo)} ${_dtBRc(ds[0].d.venc)}</small>`):''); })();
+    +(()=>{ const ds=maqDocsStatus(m), pr=ds.find(x=>x.st!=='ok'); return lin('Documentos', ds.length?(pr?`<span class="${pr.st==='vencido'?'mq-ruim':''}">${esc(pr.d.tipo)} ${docTxt(pr)}</span>`:`${ds.length} em dia <small class="mut">· próximo: ${esc(ds[0].d.tipo)} ${_dtBRc(ds[0].d.venc)}</small>`):''); })()
+    +(()=>{ const u=checkUltimo(m); return lin('Último checklist', u?`${_dtBRc(u.c.data)} · ${u.c.resultado==='reprovado'?`<span class="${u.bloqueia?'mq-ruim':''}">reprovado${u.bloqueia?' (OS aberta)':' · OS concluída'}</span>`:'aprovado'} <small class="mut">· ${esc(u.c.operador||'')}</small>`:''); })();   // v340
   const graf=meses.length?`<div class="mq-grafs">
       <div><h4>Combustível e peças por mês (R$)</h4>${maqGraficoSvg(meses,[{k:'comb',cor:'#1e88e5',lbl:'Combustível'},{k:'pecas',cor:'#fb8c00',lbl:'Peças e OS'}],{fmt:v=>brl0(v),fmtCurto:_kFmt})}<div class="mq-leg"><span><i style="background:#1e88e5"></i>Combustível</span><span><i style="background:#fb8c00"></i>Peças e OS</span></div></div>
       ${meses.some(o=>o.litros)?`<div><h4>Litros abastecidos por mês</h4>${maqGraficoSvg(meses,[{k:'litros',cor:'#43a047',lbl:'Litros'}],{fmt:v=>numH(v)+' L',fmtCurto:_kFmt})}</div>`:''}
@@ -7663,6 +7686,68 @@ function osSalvar(mid, id){ const m=maqDe(mid); if(!m) return; const g=k=>(docum
   const pecasTxt=g('os-pecas').trim(), pecasV=numBR(g('os-pecasV')); const pecas=pecasTxt?pecasTxt.split(/;|\n/).map(s=>s.trim()).filter(Boolean).map((item,i,arr)=>({item, valor:i===0?pecasV:0})):(pecasV>0?[{item:'peças', valor:pecasV}]:[]);
   const prev=id?(OV.osMaq||{})[id]:null; const o=Object.assign({}, prev||{}, {id:id||undefined, maq:m.id, tipo:g('os-tipo')||'corretiva', planoId:g('os-plano')||'', dataAb:g('os-data')||_hojeISO(), hor:numBR(g('os-hor')), desc, pecas, moH:numBR(g('os-moH')), moValor:numBR(g('os-moV')), resp:g('os-resp'), status:g('os-status')||'concluida', dataFim:g('os-status')==='concluida'?(g('os-fim')||_hojeISO()):'', obs:g('os-obs')});
   osGravar(o); MQ_UI.osAberta=''; MQ_UI.osPlano=''; route(); toast(o.status==='concluida'?`OS ${OS_TIPOS[o.tipo]} registrada${o.planoId?' · plano atualizado':''}`:'OS aberta registrada'); }
+// ================= v340: CHECKLIST PRÉ-USO do operador =================
+// Registro {id, maq, maqNome, data, hora, hor, operador, itens:[{nome, grupo, st:'ok'|'prob'|'na', obs}], obs, resultado:'aprovado'|'reprovado', osId, fotos:[{url,id}], _u, del}
+// Fica em OV.checkMaq → aba CHECKLIST APP (payload __checklist, merge por id/_u). Item com problema abre OS corretiva na hora.
+let lastCheckSig='', CK_F=null;
+function checkSig(){ return sigHash(JSON.stringify((OV&&OV.checkMaq)||{})); }
+function checkServerOk(){ return !!(DATA && DATA.checklist_app && typeof DATA.checklist_app==='object'); }
+function checkApplyPulled(m){ return _mapApplyPulled('checkMaq', m, checkSig, ()=>lastCheckSig, v=>{ lastCheckSig=v; }, '__checklist'); }
+function checkLista(maqId_){ return Object.values((OV&&OV.checkMaq)||{}).filter(c=>c&&!c.del&&(!maqId_||c.maq===maqId_)).sort((a,b)=>String(b.data+(b.hora||'')).localeCompare(String(a.data+(a.hora||'')))||((+b._u||0)-(+a._u||0))); }
+// último checklist da máquina e se ainda bloqueia (reprovado com a OS corretiva aberta)
+function checkUltimo(m){ const c=checkLista(m.id)[0]; if(!c) return null; const os=c.osId?((OV&&OV.osMaq)||{})[c.osId]:null; return {c, os, bloqueia:c.resultado==='reprovado'&&(!os||os.status!=='concluida')}; }
+const CHECK_PADRAO={
+  'Geral':['Nível de óleo do motor','Água do radiador / arrefecimento','Vazamentos (óleo, água, diesel)','Pneus / rodado (pressão e desgaste)','Luzes, buzina e sinalização','Freios','Direção','Cinto de segurança','Extintor','Espelhos e vidros','Horímetro e painel','Limpeza da cabine','EPI do operador'],
+  'Trator':['Tomada de força (TDP) e proteção','Levante hidráulico e engate','Pinos, contrapinos e cardan'],
+  'Pulverizador':['Bicos e pontas (sem entupimento)','Filtros da calda','Mangueiras e conexões','Barras e articulações','Manômetro e bomba','Tanque de água limpa e EPI de calda'],
+  'Colheitadeira':['Plataforma e caracol','Correias e correntes','Facas e navalhas','Peneiras','Tanque graneleiro e tubo de descarga','Acúmulo de palha (risco de fogo)'],
+  'Plantadeira':['Discos de corte e sulcadores','Dosadores de semente e adubo','Mangueiras e condutores','Rodas compactadoras','Marcadores de linha'],
+  'Caminhão':['Documentos a bordo','Tacógrafo','Carga e amarração'],
+  'Avião agrícola':['Combustível e óleo','Hélice e superfícies','Sistema de aplicação','Check da aeronave (manual)'] };
+// itens a conferir: a lista própria da máquina (Cadastro → um por linha) ou o padrão (Geral + os do grupo)
+function checkItensDe(m){ const pr=String(m.checkItens||'').split(/\n|;/).map(s=>s.trim()).filter(Boolean); if(pr.length) return pr.map(nome=>({nome, grupo:'Itens da máquina'}));
+  const g=m.grupo||'', out=CHECK_PADRAO.Geral.map(nome=>({nome, grupo:'Geral'})); (CHECK_PADRAO[g]||[]).forEach(nome=>out.push({nome, grupo:g})); return out; }
+function checkPadraoTxt(m){ return checkItensDe(Object.assign({},m,{checkItens:''})).map(i=>i.nome).join('\n'); }
+function ckForm(m){ if(!CK_F||CK_F.maq!==m.id){ const u=sessUsuario(); CK_F={maq:m.id, data:_hojeISO(), operador:(u&&u.nome)||'', hor:'', itens:checkItensDe(m).map(it=>Object.assign({st:'',obs:''},it)), obs:'', fotos:[]}; } return CK_F; }
+// guarda o que está digitado antes de redesenhar (a tela redesenha a cada toque em OK/Problema)
+function ckHarvest(){ const f=CK_F; if(!f) return; const g=k=>document.getElementById(k); if(g('ck-oper')) f.operador=g('ck-oper').value; if(g('ck-data')) f.data=g('ck-data').value||f.data; if(g('ck-hor')) f.hor=g('ck-hor').value; if(g('ck-obs')) f.obs=g('ck-obs').value;
+  document.querySelectorAll('input.ck-obs[data-cki]').forEach(el=>{ const it=f.itens[+el.dataset.cki]; if(it) it.obs=el.value; }); }
+function ckSet(i, st){ const f=CK_F; if(!f||!f.itens[i]) return; ckHarvest(); f.itens[i].st=f.itens[i].st===st?'':st; route({keepScroll:true}); if(st==='prob'&&f.itens[i].st==='prob') setTimeout(()=>{ const el=document.querySelector(`input.ck-obs[data-cki="${i}"]`); if(el) el.focus(); },30); }
+function ckTodosOk(){ const f=CK_F; if(!f) return; ckHarvest(); f.itens.forEach(it=>{ if(!it.st) it.st='ok'; }); route({keepScroll:true}); }
+async function ckFotosAdd(files){ const f=CK_F; if(!f) return; ckHarvest(); for(const fl of [...files].slice(0,4)){ try{ f.fotos.push(await recFotoReduzir(fl)); }catch(e){ toast('Não consegui ler a foto'); } } route({keepScroll:true}); }
+function ckSalvar(mid){ const m=maqDe(mid), f=CK_F; if(!m||!f||f.maq!==mid) return; ckHarvest();
+  const falta=f.itens.filter(i=>!i.st); if(falta.length){ toast(`Faltam ${falta.length} item(ns): ${falta[0].nome}…`); return; }
+  f.operador=String(f.operador||'').trim(); if(!f.operador){ toast('Informe o operador'); return; }
+  const probs=f.itens.filter(i=>i.st==='prob'), id='ck'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), hor=numBR(f.hor), hora=new Date().toTimeString().slice(0,5), data=f.data||_hojeISO();
+  const rec={id, maq:m.id, maqNome:m.nome, data, hora, hor:hor>0?hor:0, operador:f.operador, itens:f.itens.map(i=>({nome:i.nome, grupo:i.grupo, st:i.st, obs:i.st==='prob'?String(i.obs||'').trim():''})), obs:String(f.obs||'').trim(), resultado:probs.length?'reprovado':'aprovado', osId:'', fotos:[], _u:tsAgora()};
+  if(rec.hor>0&&rec.hor>maqHorimetro(m)) abastGravar({id:'ab-ck-'+id, maq:m.id, data, hora, hor:rec.hor, litros:0, tipo:'leitura', comb:'', origem:'', valor:0, precoL:0, operador:f.operador, obs:'checklist'});   // horímetro do checklist vira leitura (antes da OS, que também carrega o horímetro)
+  if(probs.length){ const o=osGravar({maq:m.id, tipo:'corretiva', planoId:'', dataAb:data, hor:rec.hor, desc:'Checklist pré-uso: '+probs.map(p=>p.nome+(p.obs?' ('+p.obs+')':'')).join('; '), pecas:[], moH:0, moValor:0, resp:f.operador, status:'aberta', dataFim:'', obs:'aberta pelo checklist', ckId:id}); rec.osId=o.id; }
+  OV.checkMaq=OV.checkMaq||{}; OV.checkMaq[id]=rec; saveOverrides(); loteAgendar('__checklist');
+  f.fotos.forEach((d,i)=>fotoPend.push({ckId:id, nome:`checklist-${m.id.replace(/^m:/,'')}-${id}-${i+1}.jpg`, dataUrl:d})); if(f.fotos.length){ saveFotoPend(); ocorFotosEnviar(); }
+  CK_F=null; route({toTop:true}); toast(probs.length?`⚠️ Checklist reprovado: OS corretiva aberta (${probs.length} item(ns))`:'✅ Checklist aprovado — máquina liberada'); }
+function ckDel(id){ const c=(OV.checkMaq||{})[id]; if(!c) return; c.del=true; c._u=tsAgora(); fotoPend=fotoPend.filter(p=>p.ckId!==id); saveFotoPend(); saveOverrides(); loteAgendar('__checklist'); route({keepScroll:true}); toast('Checklist excluído'); }
+function ckFotosHtml(c){ const nf=(c.fotos||[]).length, pend=fotoPend.filter(p=>p.ckId===c.id); if(!nf&&!pend.length) return '';
+  return `<div class="oc-ths">${(c.fotos||[]).map(fo=>`<a class="oc-th" href="${esc(fo.url)}" target="_blank" rel="noopener" title="Abrir a foto no Drive">${fo.id?`<img src="https://drive.google.com/thumbnail?id=${encodeURIComponent(fo.id)}&sz=w800" alt="foto" loading="lazy" onerror="this.replaceWith(document.createTextNode('📷 abrir'))">`:'📷 abrir'}</a>`).join('')}${pend.map(p=>`<span class="oc-th oc-th-pend${p.parada?' err':''}" title="${esc(p.parada?'Foto não aceita pela planilha: '+p.parada:'Foto aguardando envio')}"><img src="${p.dataUrl}" alt="foto"><i>${p.parada?'⚠':'⏳'}</i></span>`).join('')}</div>`; }
+function ckHistHtml(maqId_){ const L=checkLista(maqId_).slice(0,60); if(!L.length) return `<p class="mut" style="padding:0 14px">Nenhum checklist${maqId_?' nesta máquina':''} ainda.</p>`;
+  return `<div class="panel"><div class="panel-head"><h2>Histórico${maqId_?'':' (todas as máquinas)'}</h2><span class="sub">${L.filter(c=>c.resultado==='reprovado').length} reprovado(s) de ${L.length}</span></div>
+    <div class="ck-hist">${L.map(c=>{ const mq=maqDe(c.maq), probs=(c.itens||[]).filter(i=>i.st==='prob'), na=(c.itens||[]).filter(i=>i.st==='na'), os=c.osId?((OV&&OV.osMaq)||{})[c.osId]:null, nf=(c.fotos||[]).length+fotoPend.filter(p=>p.ckId===c.id).length;
+      return `<details class="ck-ev ${esc(c.resultado)}"><summary><span class="pill ${c.resultado==='reprovado'?'vencida':'okk'}">${c.resultado==='reprovado'?'⚠ reprovado':'✔ aprovado'}</span><span><b>${_dtBRc(c.data)}${c.hora?' '+esc(c.hora):''}</b>${maqId_?'':` · ${esc(mq?mq.nome:c.maqNome||c.maq)}`} · ${esc(c.operador||'')}${c.hor?` · ${numH(c.hor)} h`:''}${probs.length?` · ${probs.length} problema(s)`:''}${nf?` · 📷 ${nf}`:''}${os?` · OS ${os.status==='concluida'?'concluída':'<b class="mq-ruim">aberta</b>'}`:''}</span></summary>
+        <div class="ck-det">${probs.length?`<ul>${probs.map(p=>`<li>⚠ ${esc(p.nome)}${p.obs?` — ${esc(p.obs)}`:''}</li>`).join('')}</ul>`:'<p class="mut">Todos os itens em ordem.</p>'}${na.length?`<p class="mut">Não se aplica: ${esc(na.map(i=>i.nome).join(', '))}</p>`:''}${c.obs?`<p>${esc(c.obs)}</p>`:''}${ckFotosHtml(c)}
+        <div class="bk-bar">${os?`<a class="link" data-go="#/manutencao/${encodeURIComponent(c.maq)}">ver OS →</a>`:''}<span class="spacer"></span><button class="icon-btn" data-act="ckDel" data-id="${esc(c.id)}" title="Excluir">🗑</button></div></div></details>`; }).join('')}</div></div>`; }
+V.checklist=function(arg){ if(arg){ MQ_UI.maq=decodeURIComponent(arg); } const m=MQ_UI.maq?maqDe(MQ_UI.maq):null;
+  const topo=`<div class="panel"><div class="panel-head"><h2>✅ Checklist pré-uso</h2><span class="sub">o operador confere a máquina antes de começar · item com problema vira OS corretiva na hora</span></div>
+    <div class="mq-escolha"><label class="faz-wrap" style="flex:1"><span>Máquina</span>${maqSelectHtml('ck-maq', m?m.id:'', '— escolha —')}</label><button class="btn btn-primary" data-act="qrScan" title="Abre a câmera e lê o QR Code colado na máquina">📷 Ler QR</button><label hidden><input type="file" id="ab-qr" accept="image/*" capture="environment"></label></div></div>`;
+  if(!m) return topo+ckHistHtml('');
+  const f=ckForm(m), hor=maqHorimetro(m), grupos=[...new Set(f.itens.map(i=>i.grupo))], nResp=f.itens.filter(i=>i.st).length, nProb=f.itens.filter(i=>i.st==='prob').length, ult=checkUltimo(m);
+  const form=`<div class="panel" id="ck-form"><div class="panel-head"><h2>${esc(m.nome)}</h2><span class="sub">${nResp}/${f.itens.length} itens conferidos${nProb?` · <b class="mq-ruim">${nProb} com problema</b>`:''}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="ckTodosOk" title="Marca OK nos itens ainda sem resposta">✔ Marcar todos OK</button></div>
+    ${ult&&ult.bloqueia?`<p class="ck-aviso">⛔ Último checklist (${_dtBRc(ult.c.data)}) reprovado e a OS corretiva ainda está aberta: ${esc((ult.c.itens||[]).filter(i=>i.st==='prob').map(i=>i.nome).join(', '))}. <a class="link" data-go="#/manutencao/${encodeURIComponent(m.id)}">ver OS →</a></p>`:''}
+    <div class="mq-form"><label>Operador<input class="txt" id="ck-oper" value="${esc(f.operador)}"></label><label>Data<input type="date" class="cell" id="ck-data" value="${esc(f.data)}"></label><label>Horímetro (h)<input class="cell" inputmode="decimal" id="ck-hor" value="${esc(f.hor)}" placeholder="${numH(hor)}"></label></div>
+    ${grupos.map(g=>`<div class="ck-grupo"><h4>${esc(g)}</h4>${f.itens.map((it,i)=>it.grupo!==g?'':`<div class="ck-item${it.st==='prob'?' prob':it.st==='ok'?' ok':it.st==='na'?' na':''}"><span class="ck-nome">${esc(it.nome)}</span><span class="ck-bts"><button class="ck-bt ok${it.st==='ok'?' on':''}" data-act="ckSet" data-i="${i}" data-st="ok" title="Em ordem">✔ OK</button><button class="ck-bt prob${it.st==='prob'?' on':''}" data-act="ckSet" data-i="${i}" data-st="prob" title="Com problema">⚠ Problema</button><button class="ck-bt na${it.st==='na'?' on':''}" data-act="ckSet" data-i="${i}" data-st="na" title="Não se aplica">—</button></span>${it.st==='prob'?`<input class="txt ck-obs" data-cki="${i}" value="${esc(it.obs)}" placeholder="o que está errado? (vai para a OS)">`:''}</div>`).join('')}</div>`).join('')}
+    <div class="mq-form"><label style="flex-basis:100%">Observação geral<input class="txt" id="ck-obs" value="${esc(f.obs)}"></label></div>
+    <div style="padding:0 14px"><div class="oc-fotos"><label class="oc-fbtn">📷<span>Tirar foto</span><input type="file" accept="image/*" capture="environment" data-ckfoto hidden></label><label class="oc-fbtn">🖼️<span>Selecionar imagem</span><input type="file" accept="image/*" multiple data-ckfoto hidden></label></div>
+    ${f.fotos.length?`<div class="oc-ths oc-prev">${f.fotos.map((u,i)=>`<span class="oc-th"><img src="${u}" alt="foto"><button class="icon-btn" data-act="ckFotoDel" data-i="${i}" title="Tirar esta foto">✕</button></span>`).join('')}</div>`:''}</div>
+    <div class="bk-bar"><button class="btn ${nProb?'btn-danger':'btn-primary'}" data-act="ckSalvar" data-maq="${esc(m.id)}">${nProb?'⚠️ Concluir — máquina com problema':'✅ Concluir checklist'}</button><span class="mut">${nProb?'abre uma OS corretiva com os itens marcados':'todos os itens precisam de resposta (OK, Problema ou —)'}</span></div></div>`;
+  return topo+form+ckHistHtml(m.id); };
 V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)||{}).filter(c=>c&&!c.del&&c.ativa===false);
   const rows=ms.map(m=>{ const ab=MQ_UI.cadAberto===m.id; return `<div class="mq-card"><div class="mq-head"><b class="mq-nome" data-act="maqFicha" data-maq="${esc(m.id)}" title="Abrir a ficha da máquina">${esc(m.nome)} ›</b><span class="mut">${esc(m.grupo||'')}${m.conjunto?' · conjunto da CUSTO OPERAÇÃO':''}</span><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqCadAbrir" data-maq="${esc(m.id)}">${ab?'fechar':'editar'}</button></div>
     ${ab?`<div class="mq-form"><label>Grupo<input class="txt" id="mc-grupo" value="${esc(m.grupo||'')}" list="mc-grupos"><datalist id="mc-grupos"><option value="Trator"><option value="Colheitadeira"><option value="Pulverizador"><option value="Plantadeira"><option value="Caminhão"><option value="Caminhonete"><option value="Implemento"><option value="Gerador / irrigação"></datalist></label><label>Ano<input class="cell" inputmode="numeric" id="mc-ano" value="${esc(m.ano||'')}"></label><label>Identificação (placa, chassi, frota)<input class="txt" id="mc-ident" value="${esc(m.ident||'')}"></label>
@@ -7674,7 +7759,9 @@ V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)
       <p class="mut" style="font-size:12px;margin:0 14px 6px">${fx.total?`Custo fixo: <b>${brl(fx.total)}/h</b> = depreciação ${brl(fx.deprec)} + seguro/licenciamento ${brl(fx.seguro)} + operador ${brl(fx.operador)} (com ${numH(fx.horasMes)} h/mês)`:'Preencha para o custo-hora real incluir depreciação, seguro e operador — hoje ele conta só combustível, peças e serviços.'}</p></div>
       <div class="mq-fixo"><h4>📄 Documentos e vencimentos</h4>${maqDocsHtml(m,true)}
       <div class="mq-form"><label>Documento<select class="sel" id="md-tipo">${MAQ_DOC_TIPOS.map(t=>`<option>${t}</option>`).join('')}</select></label><label>Vencimento<input type="date" class="cell" id="md-venc"></label><label>Observação<input class="txt" id="md-obs" placeholder="apólice, nº, corretora…"></label><label>Link (opcional)<input class="txt" id="md-link" placeholder="PDF no Drive"></label></div>
-      <div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="maqDocAdd" data-maq="${esc(m.id)}">➕ Adicionar documento</button><span class="mut">o app avisa 30 dias antes e quando vence (Painel da frota e sino)</span></div></div>`; })()}
+      <div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="maqDocAdd" data-maq="${esc(m.id)}">➕ Adicionar documento</button><span class="mut">o app avisa 30 dias antes e quando vence (Painel da frota e sino)</span></div></div>
+      <div class="mq-fixo"><h4>✅ Itens do checklist pré-uso</h4><p class="mut" style="font-size:12px;margin:0 14px 6px">Um item por linha. Em branco, o app usa a lista padrão do grupo <b>${esc(m.grupo||'Máquina')}</b> (${checkItensDe(Object.assign({},m,{checkItens:''})).length} itens).</p>
+      <div class="mq-form"><label style="flex-basis:100%">Itens<textarea class="txt" id="mc-checkItens" rows="4" placeholder="${esc(checkPadraoTxt(m))}">${esc(m.checkItens||'')}</textarea></label></div></div>`; })()}
       <div class="bk-bar"><button class="btn btn-primary btn-sm" data-act="maqCadSalvar" data-maq="${esc(m.id)}">💾 Salvar</button><span class="mut">QR Code desta máquina: <code>MAQ:${esc(m.id)}</code>${maqWhats()?` · <a class="link" data-act="maqEtiquetas" data-modo="whats">etiquetas WhatsApp</a>`:''} · <a class="link" data-act="maqEtiquetas" data-modo="app">etiquetas app</a></span></div>`:''}</div>`; }).join('');
   return `<div class="panel"><div class="panel-head"><h2>🗂️ Cadastro de máquinas</h2><span class="sub">máquinas e implementos da CUSTO OPERAÇÃO, das notas e as cadastradas aqui</span><div class="spacer"></div>${maqWhats()?`<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="whats">🏷️ Etiquetas WhatsApp</button>`:''}<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="app">🏷️ Etiquetas App</button></div>
     <div class="mq-form"><label style="flex:1">WhatsApp que recebe os abastecimentos (DDD + número)<input class="txt" inputmode="tel" id="mc-whats" value="${esc(maqWhats())}" placeholder="ex.: 62999990000"></label><label><span>&nbsp;</span><button class="btn btn-outline btn-sm" data-act="maqWhatsSalvar">💾 Salvar número</button></label></div>
@@ -7683,7 +7770,8 @@ V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)
     <div class="mq-list">${rows||'<p class="mut" style="padding:14px">Nenhuma máquina.</p>'}</div>
     ${inativas.length?`<p class="mut" style="font-size:12px;padding:0 14px">Inativas: ${inativas.map(c=>`${esc(c.nome)} <a class="link" data-act="maqCadReativar" data-maq="${esc(c.id)}">reativar</a>`).join(' · ')}</p>`:''}`; };
 function maqCadSalvarForm(mid){ const g=k=>(document.getElementById(k)||{}).value||''; maqCadSalvar(mid,{grupo:g('mc-grupo'), ano:g('mc-ano'), ident:g('mc-ident'), horIni:numBR(g('mc-horIni')), lh:numBR(g('mc-lh')), rsHm:numBR(g('mc-rsHm')), tanqueL:numBR(g('mc-tanque')), ativa:g('mc-ativa')!=='0', obs:g('mc-obs'),
-    valorCompra:numBR(g('mc-valorCompra')), valorResidual:numBR(g('mc-valorResidual')), vidaH:numBR(g('mc-vidaH')), seguroAno:numBR(g('mc-seguroAno')), operadorMes:numBR(g('mc-operadorMes')), horasMes:numBR(g('mc-horasMes'))});   // v338: custo fixo
+    valorCompra:numBR(g('mc-valorCompra')), valorResidual:numBR(g('mc-valorResidual')), vidaH:numBR(g('mc-vidaH')), seguroAno:numBR(g('mc-seguroAno')), operadorMes:numBR(g('mc-operadorMes')), horasMes:numBR(g('mc-horasMes')),   // v338: custo fixo
+    checkItens:g('mc-checkItens').trim()});   // v340: itens próprios do checklist
   MQ_UI.cadAberto=''; route({keepScroll:true}); const fx=maqCustoFixoH(maqDe(mid)||{}); toast('Máquina salva'+(fx.total?` · custo fixo ${brl(fx.total)}/h`:'')); }
 function maqCadNova(){ const nome=((document.getElementById('mc-nova')||{}).value||'').trim(); if(!nome){ toast('Informe o nome'); return; } const id=maqId(nome); if(maqDe(id)){ toast('Essa máquina já existe'); return; } maqCadSalvar(id,{nome, grupo:((document.getElementById('mc-novaGrupo')||{}).value||'').trim(), ativa:true, plano:[]}); MQ_UI.cadAberto=id; route({keepScroll:true}); toast(`${nome} cadastrada`); }
 function planoAdd(mid){ const m=maqDe(mid); if(!m) return; const g=k=>(document.getElementById(k)||{}).value||''; const nome=g('pl-nome').trim(), cada=numBR(g('pl-cada')), cadaD=Math.round(numBR(g('pl-cadaDias'))), ult=numBR(g('pl-ult')), ultData=g('pl-ultData')||_hojeISO();
@@ -9285,18 +9373,19 @@ async function fotoSubir(url, p){
   if(n>=3){ p.parada=m; syncLog(`✖ ${p.nome}: ${m} — foto parada (abra o registro em Ocorrências: Reenviar fotos / Compartilhar fotos)`); toast(`Uma foto não foi aceita pela planilha: ${m} — veja o registro em Ocorrências`); return 'parada'; }
   syncLog(`⚠ ${p.nome}: ${m} — tentativa ${n} de 3`); return 'rede';
 }
-async function ocorFotosEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url||!ocorServerOk()||fotoEnviando||!fotoPend.length||syncKeepalive) return;   // keepalive (saindo do app) não aceita corpo grande: a foto fica p/ a próxima
+async function ocorFotosEnviar(opts){ opts=opts||{}; const url=syncUrl(); if(!url||(!ocorServerOk()&&!checkServerOk())||fotoEnviando||!fotoPend.length||syncKeepalive) return;   // keepalive (saindo do app) não aceita corpo grande: a foto fica p/ a próxima
   fotoEnviando=true;
-  try{ for(const p of fotoPend.slice()){ const rec=OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
+  try{ for(const p of fotoPend.slice()){ if(p.ckId?!checkServerOk():!ocorServerOk()) continue;   // v340: a fila também leva fotos do checklist pré-uso (ckId)
+      const rec=p.ckId?((OV&&OV.checkMaq)||{})[p.ckId]:OCOR.reg[p.ocId]; if(!rec||rec.del){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
       if(p.parada){ if(!opts.forcar) continue; delete p.parada; delete _fotoTent[p.nome]; }   // parada: só com "Reenviar fotos"
       const r=await fotoSubir(url, p);
       if(r==='rede') break;                                                  // sem sinal: tenta de novo na próxima sincronização
       if(r==='parada'){ saveFotoPend(); continue; }
       if(r==='recusada'){ fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); continue; }
       rec.fotos=(rec.fotos||[]).concat([{url:r.url, id:r.id||''}]); rec._u=tsAgora();
-      fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); lsSet(OCOR_KEY, JSON.stringify(OCOR)) } }
+      fotoPend=fotoPend.filter(x=>x!==p); saveFotoPend(); if(p.ckId){ saveOverrides(); loteAgendar('__checklist'); } else lsSet(OCOR_KEY, JSON.stringify(OCOR)); } }
   finally{ fotoEnviando=false; }
-  if(document.body.dataset.view==='ocorrencia') route({keepScroll:true});
+  if(document.body.dataset.view==='ocorrencia'||document.body.dataset.view==='checklist') route({keepScroll:true});
 }
 function ocorApplyPulled(map){
   if(!map || typeof map!=='object' || !OCOR) return false;
@@ -12863,7 +12952,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={insumos:'Cadastrar insumos',frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={checklist:'Checklist pré-uso',insumos:'Cadastrar insumos',frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -12919,7 +13008,8 @@ function notifItens(){ const g={conferir:[], semana:[], atraso:[]}; if(!DATA||!O
   // v339: máquinas no sino — preventivas (por horas ou dias) e documentos vencidos/perto de vencer
   try{ if(podeTela('frota')){ let n=0; maqTodas().forEach(m=>{
       planoStatus(m).forEach(x=>{ if(x.st==='ok'||n++>40) return; (x.st==='vencida'?g.atraso:g.semana).push({tit:`🚜 ${m.nome} · ${x.p.nome}`, sub:`preventiva: ${planoTxt(x)}`, go:'#/manutencao/'+encodeURIComponent(m.id), dd:x.faltaD!=null?x.faltaD:(x.falta<0?-1:3), tal:''}); });
-      maqDocsStatus(m).forEach(x=>{ if(x.st==='ok'||n++>40) return; (x.st==='vencido'?g.atraso:g.semana).push({tit:`🚜 ${m.nome} · ${x.d.tipo}`, sub:`${docTxt(x)} · ${_dtBRc(x.d.venc)}`, go:'#/maqcad', dd:x.dias, tal:''}); }); }); } }catch(e){}
+      maqDocsStatus(m).forEach(x=>{ if(x.st==='ok'||n++>40) return; (x.st==='vencido'?g.atraso:g.semana).push({tit:`🚜 ${m.nome} · ${x.d.tipo}`, sub:`${docTxt(x)} · ${_dtBRc(x.d.venc)}`, go:'#/maqcad', dd:x.dias, tal:''}); });
+      const ck=checkUltimo(m); if(ck&&ck.bloqueia&&n++<=40) g.atraso.push({tit:`🚜 ${m.nome} · checklist reprovado`, sub:`${_dtBRc(ck.c.data)} · ${(ck.c.itens||[]).filter(i=>i.st==='prob').map(i=>i.nome).join(', ')} · OS aberta`, go:'#/manutencao/'+encodeURIComponent(m.id), dd:-1, tal:''}); }); } }catch(e){}   // v340
   g.atraso.sort((a,b)=>a.dd-b.dd); g.semana.sort((a,b)=>a.dd-b.dd); return g; }
 function notifTotal(g){ return g.conferir.length+g.semana.length+g.atraso.length; }
 let _notifSig='';
@@ -13257,6 +13347,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('select[data-pr]')){ const f=prFormAtual(); if(f){ const k=e.target.dataset.pr; f[k]=e.target.value; if(k==='amostragem'){ f.plantas=[]; route({keepScroll:true}); } else prAtualiza(f); } return; }
   if(e.target.id==='oc-tal'){ location.hash='#/ocorrencia/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
   if(e.target.matches&&e.target.matches('input[data-ocfoto]')){ const fs=e.target.files; if(fs&&fs.length) ocFotosAdd(fs); e.target.value=''; return; }
+  if(e.target.matches&&e.target.matches('input[data-ckfoto]')){ const fs=e.target.files; if(fs&&fs.length) ckFotosAdd(fs); e.target.value=''; return; }   // v340
   if(e.target.matches&&e.target.matches('input[data-mistfoto]')){ const fs=e.target.files; if(fs&&fs.length) mistFotosAdd(fs); e.target.value=''; return; }
   if(e.target.id==='mi-filtro'){ mistFiltro=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.matches&&e.target.matches('input[data-bulaarq]')){ const fs=e.target.files; if(fs&&fs.length) bulaArqAdd(fs[0], e.target.dataset.bulaarq); e.target.value=''; return; }
@@ -13308,6 +13399,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='fech-prod'||e.target.id==='fech-mes'){ FECH_UI[e.target.id==='fech-prod'?'cpf':'mes']=e.target.value; FECH_UI.para=null; FECH_UI.cc=null; route({keepScroll:true}); return; }   // v292
   if(e.target.id==='fech-para'){ FECH_UI.para=e.target.value; return; } if(e.target.id==='fech-cc'){ FECH_UI.cc=e.target.value; return; }
   if(e.target.id==='ab-maq'){ MQ_UI.maq=e.target.value; location.hash=e.target.value?'#/abastecimento/'+encodeURIComponent(e.target.value):'#/abastecimento'; return; }   // v295
+  if(e.target.id==='ck-maq'){ MQ_UI.maq=e.target.value; CK_F=null; location.hash=e.target.value?'#/checklist/'+encodeURIComponent(e.target.value):'#/checklist'; return; }   // v340
   if(e.target.id==='os-maq'){ MQ_UI.maq=e.target.value; MQ_UI.osAberta=''; location.hash=e.target.value?'#/manutencao/'+encodeURIComponent(e.target.value):'#/manutencao'; return; }
   if(e.target.id==='wa-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f){ const fr=new FileReader(); fr.onload=()=>waImportLer(String(fr.result||'')); fr.readAsText(f,'utf-8'); } return; }   // v299
   if(e.target.dataset && e.target.dataset.wa!=null && WA_IMP){ waCampo(e.target); return; }
@@ -13778,6 +13870,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='osExcluir'){ const o=(OV.osMaq||{})[a.id]; if(o&&ask('Excluir esta ordem de serviço?')){ o.del=1; o._u=tsAgora(); saveOverrides(); loteAgendar('__osMaq'); route({keepScroll:true}); } }
     else if(a.act==='osNovaPlano'){ MQ_UI.maq=a.maq; MQ_UI.osAberta=''; MQ_UI.osTipo='preventiva'; MQ_UI.osPlano=a.plano; route({keepScroll:true}); setTimeout(()=>{ const el=document.getElementById('os-form'); if(el) el.scrollIntoView({block:'start'}); },50); }
     else if(a.act==='maqDocAdd'){ maqDocAdd(a.maq); return; } else if(a.act==='maqDocDel'){ if(ask('Remover este documento?')) maqDocDel(a.maq, a.id); return; }
+    else if(a.act==='ckSet'){ ckSet(+a.i, a.st); return; } else if(a.act==='ckTodosOk'){ ckTodosOk(); return; } else if(a.act==='ckSalvar'){ ckSalvar(a.maq); return; }   // v340: checklist pré-uso
+    else if(a.act==='ckFotoDel'){ if(CK_F){ ckHarvest(); CK_F.fotos.splice(+a.i,1); route({keepScroll:true}); } return; } else if(a.act==='ckDel'){ if(ask('Excluir este checklist?')) ckDel(a.id); return; }
     else if(a.act==='planoAdd'){ planoAdd(a.maq); } else if(a.act==='planoExcluir'){ const m=maqDe(a.maq); if(m&&ask('Remover este item do plano?')){ maqCadSalvar(m.id,{plano:(m.plano||[]).filter(p=>p.id!==a.plano)}); route({keepScroll:true}); } }
     else if(a.act==='maqRegistrarTodas'){ const n=maqRegistrarTodas(); route({keepScroll:true}); toast(n?`${n} máquina(s) enviada(s) para a aba MÁQUINAS APP`:'Nada a enviar'); }
     else if(a.act==='maqCadAbrir'){ MQ_UI.cadAberto=MQ_UI.cadAberto===a.maq?'':a.maq; route({keepScroll:true}); } else if(a.act==='maqCadSalvar'){ maqCadSalvarForm(a.maq); } else if(a.act==='maqCadNova'){ maqCadNova(); } else if(a.act==='maqCadReativar'){ maqCadSalvar(a.maq,{ativa:true}); route({keepScroll:true}); }
@@ -14357,6 +14451,7 @@ const LOTE_TIPOS={
   __conjunto:    { lbl:'Conjuntos',     ok:()=>conjServerOk(),    dados:()=>(OV.conjApp||{}),    sig:()=>conjSig(),      last:()=>lastConjSig,      set:v=>{ lastConjSig=v; } },   // v302
   __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
   __osMaq:       { lbl:'Ordens de serviço', ok:()=>maqServerOk(), dados:()=>(OV.osMaq||{}),      sig:()=>osSig(),        last:()=>lastOsSig,        set:v=>{ lastOsSig=v; } },
+  __checklist:   { lbl:'Checklist pré-uso', ok:()=>checkServerOk(), dados:()=>(OV.checkMaq||{}), sig:()=>checkSig(),     last:()=>lastCheckSig,     set:v=>{ lastCheckSig=v; },  antes:()=>ocorFotosEnviar() },   // v340
   __afericao:    { lbl:'Aferições',     ok:()=>aferServerOk(),    dados:()=>(AFER.reg||{}),      sig:()=>aferSig(),      last:()=>lastAferSig,      set:v=>{ lastAferSig=v; } },
   __stand:       { lbl:'Stand',         ok:()=>standServerOk(),   dados:()=>standMapa(),         sig:()=>standSig(),     last:()=>lastStandSig,     set:v=>{ lastStandSig=v; } },
   __ocorrencia:  { lbl:'Ocorrências',   ok:()=>ocorServerOk(),    dados:()=>(OCOR.reg||{}),      sig:()=>ocorSig(),      last:()=>lastOcorSig,      set:v=>{ lastOcorSig=v; },  antes:()=>ocorFotosEnviar() },
@@ -14417,7 +14512,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -14624,6 +14719,7 @@ function applyPulledData(d, raw){
   try{ limitesApplyPulled(d.limites_app); }catch(e){}       // limites dos talhões (mapa)
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
+  try{ checkApplyPulled(d.checklist_app); }catch(e){}       // v340: checklist pré-uso
   try{ conjApplyPulled(d.conjuntos_app); }catch(e){}         // v302: conjuntos (montados, edições, conjunto por operação)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
   try{ standApplyPulled(d.stand_app); }catch(e){}           // contagens de stand
@@ -15334,7 +15430,7 @@ function boot(d){
     sigsCarregar();   // marcas do último envio guardadas no aparelho (o que não subiu segue pendente)
   }catch(e){}
   // filas de fotos/PDFs: IndexedDB (sem o limite do localStorage); o que ficou pendente sobe na próxima sincronização
-  filaCarregar(FOTO_PEND_KEY).then(a=>{ fotoPend=a; if(a.length) scheduleOcorPush(); });
+  filaCarregar(FOTO_PEND_KEY).then(a=>{ fotoPend=a; if(a.some(p=>!p.ckId)) scheduleOcorPush(); if(a.some(p=>p.ckId)) loteAgendar('__checklist'); });   // v340: fotos do checklist na mesma fila
   filaCarregar(MIST_FOTO_KEY).then(a=>{ mistFotoPend=a; if(a.length) scheduleMistPush(); });
   filaCarregar(BULA_ARQ_KEY).then(a=>{ bulaArqPend=a; if(a.length) scheduleBulaPush(); });
   checkNewVersion();   // versão publicada mais nova? atualiza sozinho (nada fica em cache no aparelho)
