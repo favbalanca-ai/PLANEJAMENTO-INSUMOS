@@ -343,7 +343,7 @@ body[data-view="inicio"] .content{max-width:none;padding:0}
 
 /* Cards / panels */
 .panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-bottom:20px;overflow:hidden}
-.panel-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--line)}
+.panel-head{display:flex;align-items:center;justify-content:space-between;gap:2px 10px;padding:14px 18px;border-bottom:1px solid var(--line)}   /* v342: respiro entre título e subtítulo ("Compras registradas0 nota(s)") */
 .panel-head h2{font-size:15px;font-weight:700;color:var(--ink)}
 .panel-head .sub{font-size:12px;color:var(--muted);font-weight:400}
 /* painel recolhível (details/summary) */
@@ -1206,7 +1206,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .nfe-ign{font-size:12px;color:var(--ink2);display:inline-flex;gap:6px;align-items:center;cursor:pointer}
 .nfe-foot{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line)}
 .nfe-foot label{display:inline-flex;gap:6px;align-items:center;font-size:12.5px;color:var(--ink2);font-weight:600}
-.nfe-foot .btn[disabled]{opacity:.45;cursor:not-allowed}
+.nfe-foot .btn[disabled]{opacity:.45;cursor:not-allowed}.nfe-foot .btn[data-falta]{opacity:.55}   /* v342: falta item → o botão continua clicável e explica (antes o 1º toque após digitar a máquina era engolido) */
 .nfe-hint{font-size:12px;padding:0 14px 12px;margin:0}
 @media (max-width:640px){
   .nfe-head{grid-template-columns:1fr 1fr}
@@ -2813,7 +2813,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-341';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-342';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4368,13 +4368,14 @@ async function pushComprasLote(){
 // A planilha apaga as linhas [#id] do razão e guarda uma "lápide" — os outros aparelhos apagam também.
 function comprasExcluidas(){ if(!COMPRAS.excluidas) COMPRAS.excluidas=[]; return COMPRAS.excluidas; }
 function excluirCompra(id){
-  const c=(COMPRAS.registros||[]).find(x=>x.id===id); if(!c) return;
+  const c=(COMPRAS.registros||[]).find(x=>x.id===id); if(!c) return false;   // v342: devolve se achou (o estorno avisa quando a compra não está no aparelho)
   COMPRAS.registros=COMPRAS.registros.filter(x=>x.id!==id);
   const ex=comprasExcluidas().filter(e=>e.id!==id);
   // srv = já estava na planilha: guarda os itens p/ tirar do saldo até o próximo puxar trazer o razão novo
   ex.push({id, _u:tsAgora(), srv:!!c.pushed, itens:c.pushed?(c.itens||[]).map(it=>({produto:it.produto, qtd:+it.qtd||0})):null});
   COMPRAS.excluidas=ex.slice(-300); saveCompras();
   pushComprasLote().then(n=>{ if(n) setTimeout(()=>syncPull({auto:true, force:true, silentToast:true}), 400); });
+  return true;
 }
 function pushExclusoesCompras(){
   const url=syncUrl(), pend=comprasExcluidas().filter(e=>!e.ok); if(!url||!pend.length) return Promise.resolve(0);
@@ -4507,7 +4508,7 @@ function comprasPorNotaHtml(regs){
           <span class="num mut">${its.length}</span><span class="num"><b>${brl0(compraTotal(c))}</b></span>${_crStatus(c)||'<span></span>'}</summary>
         <div class="cr-sub">${its.map(x=>`<div class="cr-sub-row cr-sub-it"><span class="cr-forn">${esc(x.produto)}</span><span class="num">${num(x.qtd)} ${esc(x.un||'')}</span><span class="num mut">${x.preco>0?brl(x.preco):'—'}</span><span class="num">${brl0((+x.qtd||0)*(+x.preco||0))}</span></div>`).join('')}
           ${c.obs?`<div class="cr-obs mut">${esc(c.obs)}</div>`:''}
-          <div class="cr-foot">${c.nfe&&nfeServerOk()?`<button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(c.id)}" title="Abre a nota de novo para corrigir produto ou fator; esta entrada é substituída (não duplica)">♻️ Reclassificar (corrigir fator)</button>${nfeEhAdmin()?`<button class="btn btn-outline btn-sm" data-act="nfeDesfazerReceb" data-chave="${esc(c.id)}" title="Nota recebida por engano (depósito, retorno de armazém, estorno…): desfaz entrada, compra, itens, títulos e apropriações na planilha e reclassifica a nota">↩ Desfazer recebimento</button>`:''}`:''}<span class="spacer"></span><button class="btn btn-ghost btn-sm del" data-act="cmpDel" data-id="${esc(c.id)}">🗑 Excluir esta compra</button></div></div></details>`; }).join('');
+          <div class="cr-foot">${c.nfe&&nfeServerOk()?`<button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(c.id)}" title="Abre a nota de novo para corrigir produto ou fator; esta entrada é substituída (não duplica)">♻️ Reclassificar (corrigir fator)</button>${nfeEhAdmin()?`<button class="btn btn-outline btn-sm" data-act="nfeDesfazerReceb" data-chave="${esc(c.id)}" title="Nota recebida por engano (depósito, retorno de armazém, estorno…): desfaz entrada, compra, itens, títulos e apropriações na planilha e reclassifica a nota">↩ Desfazer recebimento</button>`:''}`:''}<span class="spacer"></span>${(c.nfe&&nfeServerOk())?'':`<button class="btn btn-ghost btn-sm del" data-act="cmpDel" data-id="${esc(c.id)}">🗑 Excluir esta compra</button>`}</div></div></details>`; }).join('');   // v342: compra de NF-e ligada à planilha se desfaz por "Desfazer recebimento" (o 🗑 só apagava o razão e deixava a nota RECEBIDA)
 }
 function filterComprasReg(){ const q=_crNorm(cmpBusca); document.querySelectorAll('#cr-list .cr-item').forEach(d=>{ d.hidden=!!q && !(d.getAttribute('data-busca')||'').includes(q); }); }
 document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
@@ -4674,7 +4675,7 @@ function nfeIgnorarPorCfop(it){ const I=NFE_TIPO_INFO[nfeTipoCfop(it.cfop)]; ret
 // ===== v277: VENDA DO PRODUTOR (receita) — nota emitida pelo produtor OU contranota de entrada do comprador =====
 // v286: produtor (destinatário) da nota, para mostrar na lista e na conferência
 function nfeProdutorTxt(doc, nomeXml){ doc=String(doc||'').replace(/\D/g,''); if(!doc) return {nome:nomeXml||'—', doc:'', fora:false}; const prods=FIN().produtores, p=prods.find(x=>x.cpf===doc);
-  return {nome:p?p.nome:(nomeXml||nfeCnpjFmt(doc)), doc:nfeCnpjFmt(doc), fora:!!(prods.length&&!p)}; }
+  return {nome:p?p.nome:(nomeXml||nfeDocFmt(doc)), doc:nfeDocFmt(doc), fora:!!(prods.length&&!p)}; }   // v342: CPF também formatado (antes só CNPJ)
 function nfeProdutoresDocs(){ return FIN().produtores.map(p=>String(p.cpf||'').replace(/\D/g,'')).filter(Boolean); }
 // v288: produtos que a fazenda PRODUZ — nota com só esses itens é venda (contranota de entrada do comprador ou nota
 // emitida pelo produtor), mesmo que o CPF do produtor ainda não esteja em Cadastros → Produtores
@@ -4829,6 +4830,7 @@ function nfeItemInicial(nota,it){
       return Object.assign({},it,{fonte:diverge?'sug':'ia',produto:ia.produto,fator:fi,ignorar:false,ok:!diverge,iaConf:+ia.confianca}); } }
   else if(ia && ia.produto && PROD[ia.produto]) return Object.assign({},it,{fonte:'sug',produto:ia.produto,fator:+ia.fator>0?+ia.fator:nfeFatorDe(it.xprod,it.ucom,(PROD[ia.produto]||{}).un),ignorar:false,ok:false,iaConf:+ia.confianca});
   if(nfeIgnorarPorCfop(it)) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v307: energia, frete, vasilhame, demonstração: não é compra de insumo
+  if(!sugP && (_RX_ITEM_IGN.test(it.xprod)||(+it.qcom>0&&+it.vprod<=0.01))) return Object.assign({},it,{fonte:'auto',produto:'',ignorar:true,fator:1,ok:true});   // v342: palete, embalagem, brinde, item de R$ 0,00 → Ignorar (antes "pallet de madeira" caía em Benfeitoria)
   const sug=sugP;
   if(sug && !pecaSug) return Object.assign({},it,{fonte:'sug',produto:sug.p,fator:nfeFatorDe(it.xprod,it.ucom,(PROD[sug.p]||{}).un),ignorar:false,ok:false});
   if(pecaSug) return Object.assign({},it,{fonte:'sug',produto:'',fator:1,ignorar:false,ok:false,dest:pecaSug,maq:nfeMaqPadrao(pecaSug,nota.cnpj),tipoMaq:(pecaSug==='maquina'&&nfeTipoCfop(it.cfop)==='COMBUSTIVEL')?'Óleo/lubrificante':nfeTipoGuess(pecaSug,it.xprod)});   // v276: parece peça/serviço · v285: oficina/benfeitoria · v307: CFOP de lubrificante
@@ -4843,6 +4845,7 @@ const OFIC_TIPOS=['Ferramenta','Consumível','EPI','Outro'], BENF_TIPOS=['Constr
 function nfeDestManut(d){ return d==='maquina'||d==='oficina'||d==='benfeitoria'||d==='tanque'; }
 const TANQ_TIPOS=['Combustível','Arla 32','Outro'];
 const _RX_ITEM_OFIC=/\b(ferramenta|chave (?:de )?(?:fenda|boca|combinada|philips|allen|inglesa|estrela|grifo)|jogo de chaves|alicate|martelo|marreta|eletrodo|disco de (?:corte|desbaste)|lixa|serra|broca|soldador|m[aá]quina de solda|esmeril|furadeira|parafusadeira|compressor|macaco|talha|luva|[oó]culos de prote|protetor auricular|bota|capacete|\bepi\b|estopa|desengraxante|silicone|fita isolante|abra[cç]adeira|rebite|graxeira|bancada|morsa|paqu[ií]metro|tri?ncha|pincel|rolo de pintura)\b/i;
+const _RX_ITEM_IGN=/\b(palete?s?|pallets?|embalagem|brinde|bonifica[cç][aã]o|caixa de papel[aã]o|tambor vazio|bombona vazia|vasilhame|amostra gr[aá]tis)\b/i;   // v342: não é insumo nem peça — sugere Ignorar
 const _RX_ITEM_BENF=/\b(cimento|tijolo|telha|areia|brita|arame|cerca|mour[aã]o|palanque|estaca|tinta|madeira|t[aá]bua|caibro|ripa|viga|vergalh|ferro (?:ca|cm|\d)|eletroduto|fio (?:el[eé]trico|flex|r[ií]gido|\d)|cabo (?:el[eé]trico|flex|\d)|disjuntor|tomada|interruptor|cano|tubo pvc|conex[aã]o|caixa d.?[aá]gua|torneira|registro (?:de )?(?:gaveta|press|esfera)|piso|argamassa|reboco|bloco|laje|calha|port[aã]o|dobradi[cç]a|cadeado|fechadura|grade|tela (?:soldada|galv|arame)|alambrado|concreto|massa corrida|verniz|gesso|prego|cal hidrat|manilha|bebedouro|cocho)\b/i;
 function nfeTipoGuess(dest, xprod){ const x=String(xprod||''); if(dest==='tanque') return /arla/i.test(x)?'Arla 32':'Combustível';   // v307
   if(dest==='oficina'){ if(/luva|[oó]culos|bota|capacete|\bepi\b|protetor|m[aá]scara/i.test(x)) return 'EPI'; if(/ferramenta|chave|alicate|martelo|marreta|serra|furadeira|parafusadeira|esmeril|compressor|macaco|talha|morsa|bancada|paqu[ií]metro|soldador|m[aá]quina/i.test(x)) return 'Ferramenta'; return 'Consumível'; }
@@ -4867,6 +4870,7 @@ function nfeDetectaPecas(n){ const cnpj=n.cnpj||'', mem=Object.values(Object.ass
   const forn=_RX_FORN_PECAS.test(n.fornecedor||'')||fornMem;
   const itens=(n.itens||[]).map(it=>{ const x=it.xprod||'', pc=nfeDestPorCfop(it), tc=nfeTipoCfop(it.cfop);   // v307: diesel/Arla → tanque; CFOP de combustível, ativo ou conserto manda antes da descrição ("grade aradora" não é cerca)
     if(_RX_GRAOS.test(x)&&!_RX_NAO_GRAO.test(x)) return '';   // v317: soja/milho em grãos nunca é peça (5949 de estorno/depósito)
+    if(_RX_ITEM_IGN.test(x)) return '';   // v342: palete/embalagem não é benfeitoria ("madeira") nem peça
     if(_RX_TANQ.test(x)) return 'tanque'; if(pc && tc!=='CONSUMO') return pc;
     return _RX_ITEM_OFIC.test(x)?'oficina':_RX_ITEM_BENF.test(x)?'benfeitoria':(_RX_ITEM_PECAS.test(x)||_RX_CFOP_SERV.test(String(it.cfop||'')))?'maquina':pc; });   // v285: destino sugerido por item
   const nItem=itens.filter(Boolean).length, nota=forn||(n.itens&&n.itens.length&&nItem>=Math.ceil(n.itens.length/2));
@@ -4982,7 +4986,7 @@ function nfeErrosHtml(c){ const L=c.erros||[]; if(!L.length) return ''; const is
       ${acesso?`<div class="mut" style="margin-top:6px">🔑 <b>"Access denied"</b> = o arquivo (ou a pasta) pertence a <b>outra conta do Google</b>, e a planilha só pode apagar o que é dela. No Drive, abra a NFe/Entrada, veja o dono do arquivo e apague-o à mão (ou peça à pessoa para copiar os XML em vez de mover). As notas já lidas não entram duas vezes.</div>`:''}</div>`; }
   return h; }
 // o que aconteceu com cada arquivo lido (últimos 30): nova, repetida, ignorada (com botão p/ reabrir) ou rejeitada — com o motivo
-const NFE_HIST_ST={nova:['ok','Nova'],casada:['ok','Casou c/ recebimento'],duplicada:['rep','Repetida'],ignorada:['ign','Ignorada'],rejeitada:['rej','Rejeitada'],cancelada:['canc','Cancelamento']};
+const NFE_HIST_ST={nova:['ok','Nova'],casada:['ok','Casou com recebimento'],duplicada:['rep','Repetida'],ignorada:['ign','Ignorada'],rejeitada:['rej','Rejeitada'],cancelada:['canc','Cancelamento']};
 let nfeHistAberto=false;   // histórico de leitura começa RECOLHIDO (lembra se você abriu)
 function nfeHistoricoHtml(L){
   const h=L.historico||[]; if(!h.length) return '';
@@ -5015,11 +5019,11 @@ function nfeIgnoradasHtml(L){ const n=(L.contagem||{})['IGNORADA']||0; if(!n&&!N
   const rows=(NFE_IGN.notas||[]).map(nt=>`<div class="nfe-row"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-${esc(String(nt.tipo||'').replace(/\s+/g,'_'))}">${esc(NFE_TIPO[nt.tipo]||nt.tipo)}</span><div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b>${nt.obs?` · ${esc(nt.obs)}`:''}</div></div>
       <div class="nfe-row-act"><button class="btn btn-primary btn-sm" data-act="nfeReabrirConferir" data-chave="${esc(nt.chave)}" title="Volta a nota para 'a classificar' e abre a conferência">Reabrir e conferir</button></div></div>`).join('');
   return `<div class="nfe-ign-box"><b>📂 Ignoradas</b> <span class="mut">(${(NFE_IGN.notas||[]).length})</span> <a class="link" data-act="nfeIgnVer" style="margin-left:8px">atualizar</a>${NFE_IGN.erro?`<div class="nfe-aviso err">${esc(NFE_IGN.erro)}</div>`:''}${rows||'<div class="mut">Nenhuma.</div>'}</div>`; }
-async function nfeReabrirConferir(chave){ await nfeReabrir(chave); NFE_IGN=null; nfeConferirServidor(chave); }
+async function nfeReabrirConferir(chave){ if(!(await nfeReabrir(chave))) return; NFE_IGN=null; nfeConferirServidor(chave); }   // v342: só abre a conferência se a planilha reabriu
 async function nfeReabrir(chave){
   try{ const r=await nfePost({__nfeReabrir:{chave}}); if(r&&r.fail) throw new Error((r.msgs||[]).join(' ')||'falha');
-    toast('Nota voltou para "a classificar"'); await nfeListaCarregar(true); }
-  catch(e){ toast('Não deu para reabrir: '+(e.message||e)); }
+    toast('Nota voltou para "a classificar"'); await nfeListaCarregar(true); return true; }
+  catch(e){ toast('Não deu para reabrir: '+(e.message||e)); return false; }
 }
 async function nfeConferirServidor(chave){
   toast('Buscando o XML da nota…');
@@ -5029,7 +5033,11 @@ async function nfeConferirServidor(chave){
   }catch(e){ toast('NF-e: '+e.message); }
 }
 // v290: APROVAR em um toque — abre a nota com a classificação automática aplicada e, se tudo estiver resolvido, confirma sozinho
+let _nfeAprovBusy=false;   // v342: trava contra toque duplo (dois toques gravavam duas classificações)
 async function nfeAprovar(chave){ if(!nfeServerOk()){ toast('Aprovar precisa da NF-e ligada (token + Code.gs)'); return; }
+  if(_nfeAprovBusy){ toast('Aguarde, aprovando…'); return; } _nfeAprovBusy=true;
+  try{ await _nfeAprovar(chave); } finally{ _nfeAprovBusy=false; } }
+async function _nfeAprovar(chave){
   toast('Aprovando…');
   try{ const d=await nfeGet({acao:'nfe', chave}); if(!d||!d.ok) throw new Error((d&&d.erro)||'falha');
     const nt=(NFE_LISTA&&NFE_LISTA.notas||[]).find(x=>x.chave===chave)||{};
@@ -5039,11 +5047,15 @@ async function nfeAprovar(chave){ if(!nfeServerOk()){ toast('Aprovar precisa da 
     const pend=imp.itens.filter(i=>!nfeResolvido(i)).length; if(pend){ toast(`${pend} item(ns) precisam da sua decisão (em amarelo)`); return; }
     const n=imp.nota, itensP=nfeItensPayload(imp), soManut=itensP.every(i=>i.ignorar||nfeDestManut(i.dest));
     if(n.tipo==='REMESSA'){ if(imp.refP) await imp.refP; if(!imp.ref){ toast('Remessa sem contrato ligado — escolha o contrato e confirme'); return; } }   // v309: antes confirmava com ref vazio e apagava a referência do XML
+    if(n.tipo==='FATURAMENTO' && itensP.some(i=>!i.ignorar&&!nfeDestManut(i.dest)&&pedidoDe(i.produto)>0)){ toast('Este contrato tem produto com "EM PEDIDO" informado à mão — revise e confirme na tela'); return; }   // v342: a pergunta de abater o EM PEDIDO não cabe no "Aprovar" (travava o lote numa caixa de diálogo)
     nfeConfirmar(n.tipo==='FATURAMENTO'?'contrato':soManut?'entrada':'transito');   // compra: em trânsito (entra no estoque quando o caminhão chegar); peças/obra: direto
   }catch(e){ toast('NF-e: '+e.message); } }
 // aprova em sequência todas as notas prontas (uma por vez, esperando cada gravação)
-async function nfeAprovarTodas(){ const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }); if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
-  for(const nt of L){ await nfeAprovar(nt.chave); await new Promise(r=>setTimeout(r,800)); if(nfeImport) break; }   // parou numa que precisa de decisão
+let _nfeAprovTodasBusy=false;
+async function nfeAprovarTodas(){ if(_nfeAprovTodasBusy){ toast('Já estou aprovando…'); return; } const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto; }); if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
+  _nfeAprovTodasBusy=true;
+  try{ for(const nt of L){ await nfeAprovar(nt.chave); await new Promise(r=>setTimeout(r,800)); if(nfeImport) break; } }   // parou numa que precisa de decisão
+  finally{ _nfeAprovTodasBusy=false; }
   await nfeListaCarregar(true); route(); }
 // pedir a classificação à IA para uma nota (ou refazer)
 async function nfeIaPedir(chave, forcar){ if(!nfeServerOk()) return; toast('🤖 Classificando com a IA…');
@@ -5072,7 +5084,7 @@ async function nfeReclassificar(chave){
   }catch(e){ toast('NF-e: '+e.message); }
 }
 // v319: nota RECEBIDA por engano — a planilha desfaz tudo (entrada, compra, itens, títulos, apropriações, tanque) e reclassifica pelo XML
-async function nfeDesfazerRecebimento(chave){ if(!nfeServerOk()) return;
+async function nfeDesfazerRecebimento(chave){ if(!nfeServerOk()){ toast('Desfazer precisa da NF-e ligada (token + Code.gs)'); return; }   // v342: antes saía em silêncio
   const c=(COMPRAS.registros||[]).find(x=>x.id===chave)||{};
   if(!ask(`Desfazer o recebimento da NF-e ${c.nf?c.nf.split('/')[0]:''} de ${c.fornecedor||''}?\n\nNa planilha: a entrada sai do estoque, a compra é apagada, os títulos em aberto são cancelados e a nota é reclassificada pelo XML (depósito, retorno de armazém ou estorno ficam ignorados; o resto volta para "a classificar").`)) return;
   try{ const r=await nfePost({__nfeReabrir:{chave, forcar:true, recebida:true}}); if(!r||r.fail){ toast('Não desfez: '+nfeMsgs(r)); return; }
@@ -5147,7 +5159,7 @@ function nfeListaHtml(){
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>{ const ob=String(a.obs||''); if(/CANCELADA/i.test(ob)) return `<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque. <button class="btn btn-outline btn-sm" data-act="nfeEstornar" data-chave="${esc(a.chave)}">↩ Estornar entrada</button></div>`;
-    return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclassificar" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309
+    return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309 · v342: a ação chamava "nfeReclassificar", que não existe no roteador — o botão não respondia
   const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
     const cls=R?(R.pronto?' ia-pronto':' ia-pend'):'', tipoTxt=R?R.tipoTxt+(R.tipo==='venda'&&R.cultura?' · '+cultNome(R.cultura):''):(venda?'Venda do produtor':(NFE_TIPO[nt.tipo]||nt.tipo));
     const ia=R?`<div class="nfe-ia">${R.pronto?`<span class="nfe-ia-ok">🤖 ${R.n} de ${R.n} item(ns) reconhecido(s)</span>`:`<span class="nfe-ia-pend">🤖 ${R.pend} de ${R.n} item(ns) para você decidir</span>`}${R.motivo?` <span class="mut">· ${esc(R.motivo)}</span>`:''}</div>`
@@ -5173,7 +5185,7 @@ function nfeListaHtml(){
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeCapturaHtml(c)}
     ${nN?`<div class="nfe-busca"><input id="nfe-q" class="txt" type="search" placeholder="🔎 Buscar fornecedor, nº da nota, CNPJ, produtor, valor, produto…" value="${esc(NFE_UI.q||'')}"><span class="mut" id="nfe-q-n"></span></div>`:''}
-    ${rows||vazio}
+    ${rows||(L.erro?'':vazio)}
     ${nfeIgnoradasHtml(L)}
     ${nfeRecebidasHtml()}
     ${nfeHistoricoHtml(L)}</div>`;
@@ -5186,6 +5198,7 @@ function nfeAplicaBusca(){ const q=_agNorm(NFE_UI.q||'').trim().split(/\s+/).fil
   document.querySelectorAll('.nfe-lista .nfe-row[data-busca]').forEach(r=>{ tot++; const ok=q.every(t=>(r.dataset.busca||'').indexOf(t)>=0); r.hidden=!ok; if(ok) n++; });
   const el=document.getElementById('nfe-q-n'); if(el) el.textContent=q.length?`${n} de ${tot}`:''; }
 document.addEventListener('input',e=>{ if(e.target.id!=='nfe-q') return; NFE_UI.q=e.target.value; nfeAplicaBusca(); });
+document.addEventListener('input',e=>{ if(!nfeImport) return; if(e.target.id==='nfe-maq-all') nfeImport.maqAll=e.target.value; else if(e.target.id==='nfe-benf-all') nfeImport.benfAll=e.target.value; });   // v342: o que foi digitado nos campos "tudo → máquina/benfeitoria" sobrevive ao redesenho
 document.addEventListener('input',e=>{ if(!(e.target.dataset&&e.target.dataset.insf!=null)) return; const f=e.target.dataset.insf; INS_FORM[f]=e.target.value; if(f==='nome'&&INS_FORM.p){ INS_FORM.p=null; INS_FORM.cultivar=''; }   // v320: formulário Cadastrar insumo
   if(f==='nome'||f==='classe'||f==='pct'||f==='vista'){ clearTimeout(window._insT); window._insT=setTimeout(()=>{ if(/#\/insumos/.test(location.hash)) route({keepScroll:true}); }, 350); } });
 // itens da nota no formato da planilha (NFE ITENS)
@@ -5324,8 +5337,8 @@ function nfeConferirHtml(){
   const semSrv=(syncUrl()&&!deparaServerOk())?`<div class="nfe-aviso warn">O de-para fica só <b>neste aparelho</b> até atualizar o <b>Code.gs</b> da planilha (aba “DE-PARA NFE”).</div>`:'';
   const det=nfeDetectaPecas(n), nMaq=imp.itens.filter(i=>nfeDestManut(i.dest)&&!i.ignorar).length, maqAll=nfeMaqUltima(n.cnpj), benfAll=nfeBenfUltima(n.cnpj);   // v276/v285
   const pecas=(det.nota||nMaq)?`<div class="nfe-aviso ${det.nota?'warn':'info'} nfe-pecas">🔧 <b>${det.nota?'Parece nota de peças, oficina ou benfeitoria':'Itens apropriados fora do estoque'}</b>${det.nota?` (${det.forn?'pelo fornecedor':''}${det.forn&&det.nItem?' e ':''}${det.nItem?`${det.nItem} item(ns) com cara de peça, material de oficina ou obra`:''}).`:'.'} ${nMaq?`<b>${nMaq}</b> item(ns) vão para a aba Máquinas/Benfeitorias, sem entrar no estoque.`:''}
-      <div class="nfe-pecas-all"><input list="maqlist" class="txt" id="nfe-maq-all" value="${esc(maqAll)}" placeholder="máquina ou bem"><button class="btn btn-primary btn-sm" data-act="nfeMaqTodos">🔧 Tudo → máquina</button><button class="btn btn-outline btn-sm" data-act="nfeOficTodos">🧰 Tudo → oficina</button></div>
-      <div class="nfe-pecas-all"><input list="benflist" class="txt" id="nfe-benf-all" value="${esc(benfAll)}" placeholder="benfeitoria (galpão, cerca, curral…)"><button class="btn btn-outline btn-sm" data-act="nfeBenfTodos">🏗️ Tudo → benfeitoria</button>${nMaq?`<button class="btn btn-outline btn-sm" data-act="nfeMaqNenhum">Voltar tudo para insumo</button>`:''}</div>
+      <div class="nfe-pecas-all"><input list="maqlist" class="txt" id="nfe-maq-all" value="${esc(imp.maqAll!=null?imp.maqAll:maqAll)}" placeholder="máquina ou bem"><button class="btn btn-primary btn-sm" data-act="nfeMaqTodos">🔧 Tudo → máquina</button><button class="btn btn-outline btn-sm" data-act="nfeOficTodos">🧰 Tudo → oficina</button></div>
+      <div class="nfe-pecas-all"><input list="benflist" class="txt" id="nfe-benf-all" value="${esc(imp.benfAll!=null?imp.benfAll:benfAll)}" placeholder="benfeitoria (galpão, cerca, curral…)"><button class="btn btn-outline btn-sm" data-act="nfeBenfTodos">🏗️ Tudo → benfeitoria</button>${nMaq?`<button class="btn btn-outline btn-sm" data-act="nfeMaqNenhum">Voltar tudo para insumo</button>`:''}</div>
       ${!nfeServerOk()?'<div class="mut" style="margin-top:4px">Apropriações precisam da NF-e ligada à planilha (token + Code.gs).</div>':''}</div>`:'';
   const maqList=`<datalist id="maqlist">${maqListaManut().map(m=>`<option value="${esc(m)}">`).join('')}</datalist><datalist id="benflist">${benfListaManut().map(m=>`<option value="${esc(m)}">`).join('')}</datalist>`;
   const iaBox=(imp.origem==='planilha'&&nfeServerOk())?`<div class="nfe-aviso ${n.ia?'info':'warn'} nfe-iabox">🤖 ${n.ia?`<b>Classificação automática</b>${n.ia.motivo?': '+esc(n.ia.motivo):''} <span class="mut">(confiança ${Math.round((+n.ia.confianca||0)*100)}% · ${esc(n.ia.em||'')})</span> — itens marcados 🤖 vieram dela; os amarelos precisam de você.`:'Esta nota ainda não passou pela IA.'} <button class="btn btn-outline btn-sm" data-act="nfeIaPedir" data-chave="${esc(n.chave)}" data-forcar="${n.ia?'1':'0'}">${n.ia?'Refazer com a IA':'Classificar com a IA'}</button></div>`:'';
@@ -5373,12 +5386,12 @@ function nfeConferirHtml(){
       ${nSug?`<button class="btn btn-outline btn-sm" data-act="nfeAceitarTodas">✓ Aceitar todas as sugestões (${nSug})</button>`:''}
       <button class="btn btn-outline btn-sm" data-act="nfeCancelar">Cancelar</button>
       ${((n.tipo==='RETORNO'||NFE_TIPO_NOTA_IGN[n.tipo])&&imp.origem==='planilha'&&srv&&!imp.reclass)?`<button class="btn ${NFE_TIPO_NOTA_IGN[n.tipo]?'btn-primary':'btn-outline'} btn-sm" data-act="nfeIgnorarNota" data-chave="${esc(n.chave)}" title="${NFE_TIPO_NOTA_IGN[n.tipo]?'Não é compra: a nota sai da lista sem mexer no estoque':'O produto nunca entrou no estoque: a nota sai da lista sem mexer no estoque'}">🚫 Ignorar esta nota</button>`:''}
-      ${n.tipo==='RETORNO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="devolucao"${(pend||!srv)?' disabled':''} title="Lança a SAÍDA dos itens no estoque (razão da planilha, etiqueta da nota)${imp.reclass?' e tira a entrada errada desta nota':''}">↩ Confirmar devolução (saída do estoque)</button>`
-        : imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''}>♻️ Regravar entrada (substitui a anterior)</button>`
-        : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${(pend||fat)?' disabled':''}>✅ Confirmar entrada no estoque</button>`
-        : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' disabled':''}>📑 Registrar contrato (a entregar)</button>`
-        : `<button class="btn btn-outline btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' disabled':''} title="A mercadoria já está na fazenda: dá entrada no estoque agora">📦 Já chegou — dar entrada</button>
-           <button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="transito"${pend?' disabled':''} title="Fica EM TRÂNSITO até o operador receber na fazenda (Receber nota)">🚚 Confirmar e pôr em trânsito</button>`}
+      ${n.tipo==='RETORNO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="devolucao"${!srv?' disabled':''}${pend?' data-falta="1"':''} title="Lança a SAÍDA dos itens no estoque (razão da planilha, etiqueta da nota)${imp.reclass?' e tira a entrada errada desta nota':''}">↩ Confirmar devolução (saída do estoque)</button>`
+        : imp.reclass?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' data-falta="1"':''}>♻️ Regravar entrada (substitui a anterior)</button>`
+        : !srv?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="entrada"${fat?' disabled':''}${pend?' data-falta="1"':''}>✅ Confirmar entrada no estoque</button>`
+        : n.tipo==='FATURAMENTO'?`<button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="contrato"${pend?' data-falta="1"':''}>📑 Registrar contrato (a entregar)</button>`
+        : `<button class="btn btn-outline btn-sm" data-act="nfeConfirmar" data-modo="entrada"${pend?' data-falta="1"':''} title="A mercadoria já está na fazenda: dá entrada no estoque agora">📦 Já chegou — dar entrada</button>
+           <button class="btn btn-primary btn-sm" data-act="nfeConfirmar" data-modo="transito"${pend?' data-falta="1"':''} title="Fica EM TRÂNSITO até o operador receber na fazenda (Receber nota)">🚚 Confirmar e pôr em trânsito</button>`}
     </div>
     <p class="mut nfe-hint">${n.tipo==='RETORNO'?(!srv?'Devolução precisa da NF-e ligada à planilha (token + Code.gs).':pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. <b>Confirmar devolução</b>: cada item sai do estoque pelo custo médio do dia; a nota fica como DEVOLVIDA na planilha.'):fat?'Nota de faturamento: nada a confirmar.':(srv&&!pend)?(n.tipo==='FATURAMENTO'?'Tudo resolvido. O contrato passa a contar como "a entregar" na Demanda.':'Tudo resolvido. <b>Pôr em trânsito</b>: entra no estoque quando o operador receber na fazenda. <b>Já chegou</b>: entra agora.'):pend?`Falta resolver <b>${pend}</b> item(ns): escolha o produto do app (e o fator) ou marque Ignorar.`:'Tudo resolvido. Ao confirmar, a quantidade convertida entra no estoque com o custo real.'}</p>
   </div>`;
@@ -13920,7 +13933,7 @@ document.addEventListener('click',e=>{
         if(nfeServerOk()&&imp.origem==='planilha') nfePost({__nfeVenda:{chave:imp.nota.chave, desfazer:true, tipo:imp.nota.tipo}}).then(r=>{ if(r&&!r.fail){ imp.itens=imp.nota.itens.map(it=>nfeItemInicial(imp.nota,it)); if(nfeImport===imp) route({keepScroll:true}); } }).catch(()=>{}); } }   // v309: a planilha volta fornecedor/CNPJ do XML
     else if(a.act==='nfeReabrirStatus'){ nfeReabrirStatus(a.chave); }
     else if(a.act==='nfeDesfazerReceb'){ nfeDesfazerRecebimento(a.chave); }   // v319
-    else if(a.act==='nfeEstornar'){ if(ask('Estornar a entrada desta nota no estoque? A compra sai do razão (fica a lápide) e a nota continua cancelada.')){ excluirCompra(a.chave); toast('Entrada estornada'); } }
+    else if(a.act==='nfeEstornar'){ if(!nfeEhAdmin()){ toast('Só o administrador estorna uma entrada'); return; } if(ask('Estornar a entrada desta nota no estoque? A compra sai do razão (fica a lápide) e a nota continua cancelada.')){ const ok=excluirCompra(a.chave); route({keepScroll:true}); toast(ok?'Entrada estornada':'A compra desta nota não está neste aparelho: sincronize (puxar) e tente de novo'); } }   // v342: antes dizia "estornada" mesmo sem achar a compra
     else if(a.act==='nfeMaqTodos'){ if(nfeImport){ const m=((document.getElementById('nfe-maq-all')||{}).value||'').trim(); if(!m){ toast('Digite ou escolha a máquina'); return; } nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='maquina'; it.maq=m; it.tipoMaq=nfeTipoGuess('maquina',it.xprod); }); route({keepScroll:true}); toast(`Nota inteira apropriada a ${m}`); } }
     else if(a.act==='nfeMaqNenhum'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(nfeDestManut(it.dest)){ it.dest='estoque'; it.ok=!!PROD[it.produto]; } }); route({keepScroll:true}); } }
     else if(a.act==='nfeOficTodos'){ if(nfeImport){ nfeImport.itens.forEach(it=>{ if(it.ignorar) return; it.dest='oficina'; it.maq='Oficina'; it.tipoMaq=nfeTipoGuess('oficina',it.xprod); }); route({keepScroll:true}); toast('Nota inteira apropriada à oficina'); } }

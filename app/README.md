@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Revisão da tela Notas, fase 1 — correções (v342)** — (1) o botão "♻️ Reclassificar" do alerta amarelo chamava
+  uma ação inexistente (`nfeReclassificar`) e não respondia; (2) "↩ Estornar entrada" só para admin e avisa quando a
+  compra não está no aparelho (`excluirCompra` devolve `false`) em vez de dizer "estornada"; (3) "Aprovar" e "Aprovar
+  todas" com trava de toque duplo (`_nfeAprovBusy`); faturamento com produto em EM PEDIDO manual não é aprovado em um
+  toque (a pergunta de abater fica para a tela); (4) "Reabrir e conferir" só abre a conferência se a planilha reabriu;
+  (5) compra vinda de NF-e com a planilha ligada perde o 🗑 (o certo é "Desfazer recebimento"); (6) os campos "tudo →
+  máquina / benfeitoria" guardam o que foi digitado (`imp.maqAll/benfAll`) e sobrevivem ao redesenho; (7) botões de
+  confirmar não ficam mais `disabled` com item pendente: ficam esmaecidos (`data-falta`) e o toque explica o que falta
+  (o 1º toque depois de digitar a máquina era engolido); (8) palete, embalagem, brinde, bonificação e item de R$ 0,00
+  caem em Ignorar (`_RX_ITEM_IGN`) — "pallet de madeira" caía em Benfeitoria; (9) CPF do produtor formatado na
+  conferência; (10) lista com erro de conexão não mostra o texto de "nenhuma nota"; "Desfazer recebimento" avisa quando
+  a NF-e não está ligada; respiro entre título e subtítulo dos painéis.
 - **Importar inventário do AgroGestão (v341)** — Cadastro de máquinas → "📥 Importar inventário (PDF)". Lê o
   relatório "Inventário de Máquinas" no próprio aparelho (`invLerPdf`: pdf.js 3.11.174 do cdnjs, carregado só na
   hora; texto por célula + faixas vermelhas = bens baixados) e monta a conferência (`invParsePaginas` acha as colunas
