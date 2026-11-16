@@ -2111,6 +2111,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v339: documentos da máquina */
+.mq-docs{padding:0 14px 4px}.mq-docs .tf-ev{align-items:center}.mq-docs .pill{background:var(--line);white-space:nowrap}.mq-docs .pill.perto{background:#fff3cd;color:#8d6e00}.mq-docs .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}.mq-docs .icon-btn{margin-left:auto}
 /* v338: custo fixo no cadastro */
 .mq-fixo{margin:4px 0 0;border-top:1px dashed var(--line);padding-top:6px}.mq-fixo h4{margin:0 14px 2px;font-size:12.5px;color:var(--ink2)}
 /* v337: ficha da máquina */
