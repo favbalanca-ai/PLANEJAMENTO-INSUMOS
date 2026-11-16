@@ -235,6 +235,23 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Armazém geral à prova de entrada em dobro (v347)
+
+- `nfeArmazemTextoGs_(fornecedor, natOp, tpNF, nfVenda)` — mesma regra do app: emitente com "ARMAZÉNS GERAIS /
+  ARMAZÉM GERAL / DEPÓSITO FECHADO", ou natureza de depósito/retorno + NF de venda citada no `infCpl`. Nota de
+  entrada (tpNF 0) → DEPOSITO; de saída → RETORNO_DEP. `nfeTipoNotaCompleto_` ganhou os parâmetros `fornecedor` e
+  `nfVenda` e aplica a regra quando o CFOP é genérico (OUTRA / VASILHAME / INDUSTRIALIZACAO) e não há CFOP de compra.
+  Assim a captura já marca IGNORADA (`nfeAutoIgnora_`) e liga à venda (`nfeArmazemLiga_`) mesmo com CFOP x949.
+- `nfeClassifica_` **recusa** RECEBIDA / EM TRÂNSITO / A ENTREGAR para nota cujo TIPO está em `NFE_TIPO_NOTA_IGN_`
+  (depósito, retorno de depósito, estorno) quando algum item vai para o estoque (`produto` sem `ignorar`), citando a
+  NF de venda que está na OBS. `forcar` passa (reclassificação consciente); IGNORADA e despesa (itens todos Ignorar)
+  passam. Protege contra app antigo em outro aparelho.
+- `nfeMarcaArmazemRecebidas_()` — varredura do passado, chamada no conserto da captura: nota RECEBIDA cujo TIPO é
+  de armazém/estorno **ou** cujo FORNECEDOR tem "ARMAZÉNS GERAIS", e que tem item no estoque (NFE ITENS com PRODUTO
+  APP e QTD APP), ganha OBS `⚠ recebida como compra, mas é nota de armazém geral … desfaça o recebimento`. Não lê
+  XML. O app mostra o alerta com o botão "↩ Desfazer recebimento" (`__nfeReabrir` com `recebida:true`, v319).
+  Nota de serviço do armazém registrada como despesa (itens Ignorar) não é marcada.
+
 ## Desfazer recebimento (v319)
 
 - `nfeReabrir_` aceita `recebida:true` (com `forcar`) para notas RECEBIDA / RECEBIDA SEM XML: além do que a v309 já

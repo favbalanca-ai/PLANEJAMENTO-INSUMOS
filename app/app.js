@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-346';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-347';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1777,6 +1777,16 @@ function nfeEntregaHtml(n){ if(!nfeEntregaTerceiro(n)) return ''; return `<div c
 // v317: nota de venda citada nas observações (armazém geral: "NF venda: 179873", "venda179873")
 function nfeNfVendaCitada(n){ const m=String((n&&n.infCpl)||'').match(/NF\.?\s*(?:de\s*)?venda:?\s*(\d{3,9})|venda\s*(\d{4,9})\b/i); return m?(m[1]||m[2]):''; }
 const nfeRefNum=ref=>/^\d{44}$/.test(ref||'')?String(+ref.slice(25,34)):'';   // nº da nota referenciada (posições 26–34 da chave)
+// v347: nota de ARMAZÉM GERAL reconhecida pelo TEXTO, não só pelo CFOP — emitente "ARMAZÉNS GERAIS", natureza da operação
+// "DEPÓSITO / ARMAZÉM / RETORNO DE DEPÓSITO" ou observação citando a NF de venda. Vale quando o CFOP não decide (x949 etc.).
+// Nota de ENTRADA (tpNF 0) do armazém = entrada simbólica no depósito; nota de SAÍDA = a mercadoria saindo para a fazenda.
+// A MESMA regra está no Code.gs (nfeArmazemTextoGs_).
+const _RX_ARMAZEM=/ARMAZ[EÉ]NS?\s+GERA(?:L|IS)\b|ARMAZ[EÉ]M\s+GERAL|DEP[OÓ]SITO\s+FECHADO|\bARMAZENAGEM\b/i, _RX_NATOP_ARM=/DEP[OÓ]SITO\s+FECHADO|ARMAZ[EÉ]M\s+GERAL|ARMAZ[EÉ]NS\s+GERAIS|ARM\.?\s*GERAL|\bARMAZENAGEM\b|RETORNO\s+(?:DE\s+)?MERC\w*\s+DEPOS/i;
+function nfeArmazemTexto(n){ if(!n) return ''; const forn=String(n.fornecedor||''), nat=String(n.natOp||'');
+  const emitArm=_RX_ARMAZEM.test(forn), natArm=_RX_NATOP_ARM.test(nat);
+  if(!emitArm && !(natArm && nfeNfVendaCitada(n))) return '';   // só a natureza OU só a observação não bastam: precisa do emitente armazém, ou natureza + NF de venda citada
+  if(n.tpNF==='0' || (/ENTRADA|REMESSA/i.test(nat) && !/RETORNO/i.test(nat))) return 'DEPOSITO';
+  return 'RETORNO_DEP'; }
 const NFE_TPAG={'01':'Dinheiro','02':'Cheque','03':'Cartão de crédito','04':'Cartão de débito','05':'Crédito loja','14':'Duplicata mercantil','15':'Boleto','16':'Depósito','17':'PIX','18':'Transferência','19':'Carteira digital','90':'Sem pagamento','99':'Outros'};
 function nfePagTxt(n){ const f=[...new Set((n.pag||[]).map(x=>NFE_TPAG[x.t]||(x.t?'código '+x.t:'')).filter(x=>x&&x!=='Sem pagamento'))].join(' + ');
   const d=n.dups||[]; if(!d.length) return {parc:'sem parcelas no XML', forma:f||'—'};
@@ -1816,6 +1826,7 @@ function nfeCfopCompra(n){ const its=(n&&n.itens)||[]; return !!its.length && it
 function nfeTipoDaNota(n){ const t=nfeTipoNota((n&&n.itens)||[]);
   if(n && (n.finNFe==='3' || /\bestorno\b/i.test(String(n.natOp||'')))) return 'ESTORNO';   // v317: NF-e de ajuste
   if(t==='DEPOSITO'||t==='RETORNO_DEP') return t;   // v317: armazém geral (1934 é nota de entrada, mas não é retorno ao fornecedor)
+  if(n && (t==='OUTRA'||t==='VASILHAME'||t==='INDUSTRIALIZACAO') && !nfeCfopCompra(n) && !nfeItensProducao(n)){ const a=nfeArmazemTexto(n); if(a) return a; }   // v347: CFOP genérico (x949…) mas o texto diz "armazém geral"
   if(n && n.tpNF==='0' && !nfeCfopCompra(n) && !nfeItensProducao(n)) return 'RETORNO';
   if(t==='OUTRA' && /troca|reposi|substitui|garantia/i.test(String((n&&n.natOp)||''))) return 'TROCA';
   return t; }
@@ -2084,6 +2095,7 @@ function nfeAbrirXml(txt, nome, origem, opts){ opts=opts||{};
     if(nota.cstat!=='100') throw new Error(`nota não autorizada pela SEFAZ (cStat ${nota.cstat||'—'})`);
     if(!nfeChaveOk(nota.chave)) throw new Error('chave de acesso inválida (dígito verificador não confere)');
     const ja=nfeJaEntrou(nota.chave);
+    if(ja && !opts.reclass && NFE_TIPO_NOTA_IGN[nfeTipoDaNota(nota)]) throw new Error(`esta nota é de ${NFE_TIPO[nfeTipoDaNota(nota)].toLowerCase()} e deu entrada por engano em ${fmtDataBR(ja)} — use "↩ Desfazer recebimento" em Compras registradas: a compra de verdade é a NF de venda do fornecedor`);   // v347
     if(ja && !opts.reclass && nfeTipoDaNota(nota)!=='RETORNO') throw new Error(`esta nota já deu entrada no estoque (${fmtDataBR(ja)}) — para corrigir, use "Reclassificar" na lista de compras`);   // v316: nota de devolução recebida por engano abre para confirmar a devolução
     if(!nota.itens.length) throw new Error('a nota não tem itens');
     nota.tipo=nfeTipoDaNota(nota); nota.ia=(opts.ia&&typeof opts.ia==='object')?opts.ia:null;   // v290: classificação automática vinda da planilha · v314: tpNF + natureza
@@ -2239,6 +2251,7 @@ async function _nfeAprovar(chave){
     const n=imp.nota, itensP=nfeItensPayload(imp), soManut=itensP.every(i=>i.ignorar||nfeDestManut(i.dest));
     if(n.tipo==='REMESSA'){ if(imp.refP) await imp.refP; if(!imp.ref){ toast('Remessa sem contrato ligado — escolha o contrato e confirme'); return; } }   // v309: antes confirmava com ref vazio e apagava a referência do XML
     if(n.tipo==='FATURAMENTO' && itensP.some(i=>!i.ignorar&&!nfeDestManut(i.dest)&&pedidoDe(i.produto)>0)){ toast('Este contrato tem produto com "EM PEDIDO" informado à mão — revise e confirme na tela'); return; }   // v342: a pergunta de abater o EM PEDIDO não cabe no "Aprovar" (travava o lote numa caixa de diálogo)
+    if(!soManut && nfeEntradaDobrada(imp).length){ toast('Parece entrada em dobro (mesmo produto e quantidade já entraram por outro fornecedor) — confira na tela'); return; }   // v347: a conferência fica aberta com o aviso
     nfeConfirmar(n.tipo==='FATURAMENTO'?'contrato':soManut?'entrada':'transito');   // compra: em trânsito (entra no estoque quando o caminhão chegar); peças/obra: direto
   }catch(e){ toast('NF-e: '+e.message); } }
 // aprova em sequência todas as notas prontas (uma por vez, esperando cada gravação)
@@ -2350,6 +2363,7 @@ function nfeListaHtml(){
   if(!(DATA&&DATA.nfe_resumo)) return `<div class="nfe-aviso warn" style="margin:0 0 14px">A captura automática de NF-e precisa do <b>Code.gs novo</b> na planilha (e rodar <b>setupNfe</b> uma vez).</div>`;
   const L=NFE_LISTA; if(!L) return `<div class="panel"><div class="panel-head"><h2>📥 Notas a classificar</h2><span class="sub">carregando…</span></div></div>`;
   const al=(L.alertas||[]).map(a=>{ const ob=String(a.obs||''); if(/CANCELADA/i.test(ob)) return `<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque. <button class="btn btn-outline btn-sm" data-act="nfeEstornar" data-chave="${esc(a.chave)}">↩ Estornar entrada</button></div>`;
+    if(/nota de armaz[ée]m/i.test(ob) && /recebida como compra/i.test(ob)) return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeDesfazerReceb" data-chave="${esc(a.chave)}" title="Tira a entrada do estoque, apaga a compra e os títulos; a nota fica ignorada (a compra é a NF de venda do fornecedor)">↩ Desfazer recebimento</button></div>`;   // v347: nota do armazém aprovada como compra antes da v317
     return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309 · v342: a ação chamava "nfeReclassificar", que não existe no roteador — o botão não respondia
   const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
     const dm=deparaDe(String(nt.cnpj||''),'*despesa'), desp=dm&&dm.destino==='despesa'&&!nfeOrigemPdf(nt)?dm:null;   // v345: fornecedor lembrado como despesa · v346: nota de PDF sempre passa pela conferência
@@ -2459,7 +2473,13 @@ function nfeConfirmar(modo){
   if(n.tipo==='RETORNO'){ toast('Mercadoria voltando ao fornecedor: use "Confirmar devolução" (saída) ou "Ignorar esta nota"'); return; }
   if(imp.reclass && modo!=='entrada'){ toast('Reclassificar só regrava a entrada'); return; }
   const ja=imp.reclass?'':nfeJaEntrou(n.chave); if(ja){ toast(`Esta nota já deu entrada (${fmtDataBR(ja)})`); nfeImport=null; route(); return; }
+  // v347: depósito / retorno de armazém / estorno NUNCA dá entrada — a compra é a NF de venda do fornecedor (antes era só uma pergunta "continuar?")
+  if(NFE_TIPO_NOTA_IGN[n.tipo] && itensEstoque(imp)){ const v=nfeNfVendaCitada(n)||nfeRefNum(n.ref); toast(`${NFE_TIPO[n.tipo]||n.tipo}: esta nota é só o caminho da mercadoria (armazém/transporte) e não entra no estoque. A compra é a NF de venda do fornecedor${v?` (nº ${v})`:''} — receba essa; nesta, use "Ignorar esta nota".`); return; }
   { const I=NFE_TIPO_INFO[n.tipo]; if(I && !I.entra && n.tipo!=='FATURAMENTO' && itensEstoque(imp) && !confirm(`Esta nota é "${NFE_TIPO[n.tipo]||n.tipo}" (CFOP ${[...new Set(n.itens.map(i=>i.cfop))].join(', ')}): normalmente não entra no estoque de insumos.\n\nTem ${itensEstoque(imp)} item(ns) marcado(s) para o estoque. Continuar mesmo assim?`)) return; }   // v307
+  // v347: a nota de venda manda entregar no armazém — "já chegou" só com confirmação (o normal é pôr em trânsito e receber pelo DANFE do armazém)
+  if(modo==='entrada' && srv && !imp.reclass && nfeEntregaTerceiro(n) && itensEstoque(imp) && !confirm(`Esta nota manda entregar em ${n.entregaNome||nfeCnpjFmt(n.entregaDoc)} (depósito por conta e ordem): normalmente a mercadoria ainda NÃO está na fazenda.\n\nDar entrada agora mesmo assim?\n(Cancelar → use "Confirmar e pôr em trânsito"; a entrada acontece quando o armazém entregar.)`)) return;
+  // v347: entrada em dobro — o mesmo produto, na mesma quantidade, já entrou há pouco por OUTRO fornecedor (nota do armazém/transportador aprovada como compra)
+  if((modo==='entrada'||modo==='transito') && !imp.reclass){ const dob=nfeEntradaDobrada(imp); if(dob.length && !confirm(`⚠ Entrada em dobro?\n${dob.map(d=>'• '+d.txt).join('\n')}\n\nSe esta nota é só o transporte ou o depósito da compra (armazém geral, frete), toque em Cancelar e use "Ignorar esta nota". Dar entrada mesmo assim?`)) return; }
   const itensP=nfeItensPayload(imp), usados=itensP.filter(i=>!i.ignorar&&!nfeDestManut(i.dest)&&i.produto), manut=itensP.filter(i=>!i.ignorar&&nfeDestManut(i.dest));   // v276/v285
   if(!usados.length&&!manut.length){ toast('Todos os itens estão marcados como Ignorar — nada a registrar'); return; }
   if(manut.length&&!srv){ toast('Apropriações (máquina, oficina, benfeitoria) precisam da NF-e ligada à planilha (token + Code.gs novo)'); return; }
@@ -2504,6 +2524,19 @@ function nfeConfirmar(modo){
   if(rec && !srv) pushEntrada(rec).then(ok=>{ if(ok && location.hash.indexOf('entradas')>=0) route({keepScroll:true}); });   // v309: com a NF-e ligada a entrada já foi junto da classificação
   pushDeParaNfe();
 }
+// v347: ENTRADA EM DOBRO — para cada item que vai para o estoque, procura nas compras registradas (todos os aparelhos, via planilha)
+// outra nota de OUTRO emitente com o mesmo produto e a mesma quantidade (±1%) até 60 dias antes/depois. Caso real: a NF de venda
+// da Syngenta e as duas notas da Bravo (armazém) do mesmo CRUISER 120 L entraram três vezes. Devolve [{txt, nf, forn}] (vazio = ok).
+function nfeEntradaDobrada(imp){ const n=imp.nota, out=[], d0=new Date((imp.data||_hojeISO())+'T12:00:00'), cnpj=String(n.cnpj||'');
+  const regs=(COMPRAS&&COMPRAS.registros||[]).filter(c=>c.id!==n.chave && (c.itens||[]).length);
+  imp.itens.forEach(it=>{ if(it.ignorar||nfeDestManut(it.dest)||!it.produto) return; const q=nfeQtdItem(imp,it); if(!(q>0)) return;
+    for(const c of regs){ const outroCnpj=c.nfe&&c.nfe.cnpj?String(c.nfe.cnpj)!==cnpj:_agNorm(c.fornecedor||'')!==_agNorm(n.fornecedor||''); if(!outroCnpj) continue;
+      const dd=Math.abs((new Date((c.data||'1970-01-01')+'T12:00:00')-d0)/86400000); if(!(dd<=60)) continue;
+      const hit=(c.itens||[]).find(x=>x.produto===it.produto && Math.abs((+x.qtd||0)-q)<=q*0.01+1e-6); if(!hit) continue;
+      out.push({txt:`${it.produto} ${num(q)} ${(PROD[it.produto]||{}).un||''}: já entrou pela NF ${String(c.nf||'').split('/')[0]||'?'} de ${c.fornecedor||'?'} em ${c.data?fmtDataBR(c.data):'?'}`, nf:c.nf||'', forn:c.fornecedor||'', chave:c.id}); break; } });
+  return out; }
+function nfeDobradaHtml(imp){ if(!imp||imp.reclass||imp.despesa||imp.venda) return ''; const dob=nfeEntradaDobrada(imp); if(!dob.length) return '';
+  return `<div class="nfe-aviso err nfe-dobro">⚠️ <b>Entrada em dobro?</b> ${dob.map(d=>esc(d.txt)).join('; ')}. Se esta nota é só o <b>transporte ou o depósito</b> dessa compra (armazém geral, frete), não dê entrada: use <b>Ignorar esta nota</b>. Se são duas compras de verdade, pode confirmar.</div>`; }
 // v316: NF-e de troca/devolução do fornecedor → SAÍDA dos itens no razão (etiqueta [#chave], idempotente) e status DEVOLVIDA.
 // Se esta nota tinha sido recebida como compra por engano (razão com ENTRADA [#chave]), a planilha apaga a entrada e a
 // compra do COMPRAS APP no mesmo pedido; aqui a compra local sai da lista.
@@ -2608,7 +2641,7 @@ function nfeConferirHtml(){
       ${(()=>{ const pg=nfePagTxt(n); return `<div title="parcelas do bloco de cobrança do XML — viram títulos a pagar no Financeiro ao confirmar a nota"><small>Pagamento</small><b>${esc(pg.parc)}</b><span>${esc(pg.forma)}</span></div>`; })()}
     </div>
     <div class="nfe-chave"><small>Chave de acesso</small> ${esc(nfeChaveFmt(n.chave))}</div>
-    ${pdfAviso}${reclass}${aviso}${semSrv}${iaBox}${(n.tipo!=='RETORNO'&&!imp.reclass)?nfeDespesaHtml(imp):''}${imp.despesa?'':pecas}${maqList}
+    ${pdfAviso}${reclass}${aviso}${nfeDobradaHtml(imp)}${semSrv}${iaBox}${(n.tipo!=='RETORNO'&&!imp.reclass)?nfeDespesaHtml(imp):''}${imp.despesa?'':pecas}${maqList}
     ${imp.despesa?`<div class="nfe-desp-itens mut">${imp.itens.map(it=>`<span>${esc(it.xprod)} <small>${num(it.qcom)} ${esc(it.ucom)} · ${brl(nfeItemValor(it))}</small></span>`).join('')}</div>`:`<div class="nfe-itens">${cards}</div>`}
     <div class="nfe-foot">
       <label>Data da entrada<input type="date" data-nff="data" value="${esc(imp.data)}"></label>
