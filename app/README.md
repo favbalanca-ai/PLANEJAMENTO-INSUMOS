@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Ficha da máquina (v337)** — tocar no nome da máquina no Painel da frota ou no Cadastro abre `maqFichaOpen(id)`:
+  resumo (grupo, horímetro, horas na safra, combustível, consumo × planejado, peças e serviços, custo-hora real ×
+  planejado, próxima preventiva, alertas), botões Abastecer / Nova OS / PDF / Cadastro, **gráficos por mês** em SVG
+  puro (`maqGraficoSvg`: combustível e peças em R$, litros, L/h médio, horas no Campo), horas por talhão, plano de
+  preventivas e **histórico unificado** (`maqHistorico`: abastecimentos, leituras de horímetro, OS, peças das notas e
+  horas do Campo, em ordem de data). `maqPorMes` agrega os últimos 12 meses.
 - **"Enviar agora" manda o conjunto inteiro (v335)** — o envio automático manda só o que mudou desde o último envio OK
   (`loteDelta`); se um envio antigo falhou no meio, um registro podia ficar para trás (contagem de stand que não
   chegou ao outro aparelho). O botão manual **Enviar agora** (`syncPush` não-auto → `loteEnviarTudo(true)`) agora

@@ -2111,6 +2111,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* módulo Máquinas (v295) */
 .mq-list{display:grid;gap:10px}.mq-card{background:var(--paper,#fff);border:1px solid var(--line);border-radius:12px;padding:12px 14px;border-left:4px solid var(--line)}.mq-card.aviso{border-left-color:var(--amber)}.mq-card.erro{border-left-color:var(--red)}
 .mq-head{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.mq-head b{font-size:15px}.mq-kpis{margin:8px 0 0}.mq-ruim{color:var(--red)}
+/* v337: ficha da máquina */
+.mq-nome{cursor:pointer;color:var(--teal)}.mq-nome:hover{text-decoration:underline}
+.mq-ficha .tf-h h3{margin:0}
+.mq-grafs{display:grid;gap:10px;margin:8px 0}.mq-grafs h4{margin:0 0 2px;font-size:12.5px;color:var(--ink2)}.mq-graf{width:100%;height:auto;display:block;background:#fbfcfd;border:1px solid var(--line);border-radius:8px}
+.mq-leg{display:flex;gap:12px;font-size:11px;color:var(--ink2);margin-top:3px}.mq-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:middle}
+.mq-hist{display:grid;gap:2px}.mq-ev{display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-top:1px dashed var(--line);font-size:13px}.mq-ev.aberta{background:#fff8e1}
+.mq-ev-d{flex:0 0 46px;font-weight:700;color:var(--teal);font-size:12px;display:flex;flex-direction:column}.mq-ev-d small{font-weight:400;color:var(--muted)}
+.mq-ev-i{flex:0 0 20px;text-align:center}.mq-ev-t{flex:1;min-width:0;display:flex;flex-direction:column}.mq-ev-t small{font-size:11.5px}.mq-ev-v{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap}
+@media (min-width:700px){ .mq-grafs{grid-template-columns:1fr 1fr} }
 .mq-alertas{list-style:none;margin:8px 0 0;padding:0;font-size:12.5px}.mq-alertas li{padding:3px 0}.mq-alertas li.erro{color:var(--red);font-weight:700}.mq-alertas li.aviso{color:var(--amber)}
 .mq-escolha{display:flex;gap:10px;align-items:flex-end;padding:0 14px 12px;flex-wrap:wrap}.mq-form{display:flex;gap:10px;flex-wrap:wrap;padding:0 14px 8px}.mq-form label{display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:140px;flex:1}.mq-form .cell,.mq-form .txt,.mq-form .sel{width:100%}
 .mq-plano{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}.mq-plano .pill{background:var(--line)}.mq-plano .pill.perto{background:#fff3cd;color:#8d6e00}.mq-plano .pill.vencida{background:var(--red-soft);color:var(--red);font-weight:700}
@@ -2619,6 +2628,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mq-talhoes{font-size:9.5px}
   .qr-msg{font-size:11.5px}
   .mq-head b{font-size:12px}
+  .mq-grafs h4{font-size:10px}
+  .mq-ev{font-size:10.5px}
+  .mq-ev-d{font-size:9.5px}
+  .mq-ev-t small{font-size:9.5px}
   .mq-alertas{font-size:10px}
   .mq-form label{font-size:9.5px}
   .fech-list li{font-size:10.5px}
