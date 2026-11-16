@@ -800,9 +800,17 @@ function nfeTipoNotaGs_(tipos){ for (var i = 0; i < NFE_TIPO_ORD_.length; i++) i
 // v314: tipo da NOTA além do CFOP dos itens (mesma regra do app, nfeTipoDaNota). NF-e de ENTRADA de terceiro sem CFOP de compra
 // (ex.: 2949 "remessa de troca/entrada") = fornecedor recebendo mercadoria de volta → RETORNO; saída x949 com natureza
 // "troca/reposição/garantia" → TROCA (reposição sem cobrança).
-function nfeTipoNotaCompleto_(tipoCfop, tpNF, cfopCompra, producao, natOp, finNFe){
+// v347: nota de ARMAZÉM GERAL pelo TEXTO (mesma regra do app, nfeArmazemTexto): emitente "ARMAZÉNS GERAIS", ou natureza da
+// operação de depósito/retorno + NF de venda citada nas observações. Nota de entrada (tpNF 0) = depósito; de saída = retorno.
+var RX_ARMAZEM_ = /ARMAZ[EÉ]NS?\s+GERA(?:L|IS)\b|ARMAZ[EÉ]M\s+GERAL|DEP[OÓ]SITO\s+FECHADO|\bARMAZENAGEM\b/i, RX_NATOP_ARM_ = /DEP[OÓ]SITO\s+FECHADO|ARMAZ[EÉ]M\s+GERAL|ARMAZ[EÉ]NS\s+GERAIS|ARM\.?\s*GERAL|\bARMAZENAGEM\b|RETORNO\s+(?:DE\s+)?MERC\w*\s+DEPOS/i;
+function nfeArmazemTextoGs_(fornecedor, natOp, tpNF, nfVenda){ var nat = S(natOp), emitArm = RX_ARMAZEM_.test(S(fornecedor)), natArm = RX_NATOP_ARM_.test(nat);
+  if (!emitArm && !(natArm && S(nfVenda))) return '';
+  if (S(tpNF) === '0' || (/ENTRADA|REMESSA/i.test(nat) && !/RETORNO/i.test(nat))) return 'DEPOSITO';
+  return 'RETORNO_DEP'; }
+function nfeTipoNotaCompleto_(tipoCfop, tpNF, cfopCompra, producao, natOp, finNFe, fornecedor, nfVenda){
   if (S(finNFe) === '3' || /\bestorno\b/i.test(S(natOp))) return 'ESTORNO';   // v317: NF-e de ajuste
   if (tipoCfop === 'DEPOSITO' || tipoCfop === 'RETORNO_DEP') return tipoCfop;   // v317: armazém geral
+  if ((tipoCfop === 'OUTRA' || tipoCfop === 'VASILHAME' || tipoCfop === 'INDUSTRIALIZACAO') && !cfopCompra && !producao){ var arm = nfeArmazemTextoGs_(fornecedor, natOp, tpNF, nfVenda); if (arm) return arm; }   // v347: CFOP genérico, texto de armazém
   if (tpNF === '0' && !cfopCompra && !producao) return 'RETORNO';
   if (tipoCfop === 'OUTRA' && /troca|reposi|substitui|garantia/i.test(S(natOp))) return 'TROCA';
   return tipoCfop; }
@@ -841,7 +849,7 @@ function nfeLerGs_(txt){
   var natOp = _xt(ide,'natOp'), tpNF = _xt(ide,'tpNF'), cfopCompra = tipos.some(function(t){ return t === 'VENDA' || t === 'FATURAMENTO' || t === 'REMESSA'; });   // v314
   var producao = xprods.length > 0 && xprods.every(function(x){ return nfeEhGrao_(x); });
   var finNFe = _xt(ide,'finNFe'), infCpl = S(_xt(_xfirst(inf,'infAdic'),'infCpl')).slice(0, 600), mv = infCpl.match(/NF\.?\s*(?:de\s*)?venda:?\s*(\d{3,9})|venda\s*(\d{4,9})\b/i);   // v317
-  tipo = nfeTipoNotaCompleto_(tipo, tpNF, cfopCompra, producao, natOp, finNFe);   // v314: RETORNO / TROCA · v317: ESTORNO / DEPOSITO
+  tipo = nfeTipoNotaCompleto_(tipo, tpNF, cfopCompra, producao, natOp, finNFe, _xt(emit,'xNome'), mv ? (mv[1] || mv[2]) : '');   // v314: RETORNO / TROCA · v317: ESTORNO / DEPOSITO · v347: armazém pelo texto
   var idAttr = inf.getAttribute('Id');
   return { chave:(prot && _xt(prot,'chNFe')) || (idAttr ? S(idAttr.getValue()).replace(/^NFe/,'') : ''), temProt:!!prot, cstat:prot ? _xt(prot,'cStat') : '',
     nNF:_xt(ide,'nNF'), serie:_xt(ide,'serie'), emissao:(_xt(ide,'dhEmi') || _xt(ide,'dEmi')).slice(0,10),
@@ -963,6 +971,23 @@ function nfeReavaliarVendas_(){
         : novo === 'TROCA' ? 'era "outra operação" — é reposição do fornecedor (troca), sem cobrança'
         : 'era "venda do produtor" pela regra antiga — é compra (nota de saída do fornecedor)';
       _setCells_(t, i + 2, { 'TIPO':novo, 'PRODUTOR':nx.dest, 'CNPJ EMITENTE':nx.cnpj, 'FORNECEDOR':nx.fornecedor, 'OBS':obs }); n++; } catch (e) {} });
+  return n;
+}
+// v347: varredura do passado — nota RECEBIDA (aprovada como compra) que é de ARMAZÉM GERAL: TIPO depósito/retorno/estorno, ou
+// emitente com "ARMAZÉNS GERAIS" (notas aprovadas antes da v317, quando o CFOP 1934/5906 caía em "outra operação").
+// Ganha o alerta ⚠ (aparece na caixa de entrada do app com o botão "Desfazer recebimento"). Não lê XML: só a linha do índice.
+var OBS_ARMAZEM_RECEBIDA_ = '⚠ recebida como compra, mas é nota de armazém geral (depósito/retorno): a compra é a NF de venda do fornecedor — desfaça o recebimento';
+function nfeMarcaArmazemRecebidas_(){
+  var s = sh(NFE_IDX_SHEET); if (!s || s.getLastRow() < 2) return 0;
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), n = 0, comEstoque = null;   // só notas com item que foi para o estoque (PRODUTO APP) — nota de serviço do armazém registrada como despesa fica em paz
+  var temEstoque = function(ch){ if (!comEstoque){ comEstoque = {}; try { _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).forEach(function(i){ if (S(i['PRODUTO APP']) && N(i['QTD APP']) > 0) comEstoque[S(i['CHAVE'])] = 1; }); } catch (e) {} } return !!comEstoque[ch]; };
+  s.getRange(2, 1, s.getLastRow() - 1, t.ncol).getValues().forEach(function(r, i){
+    var st = S(r[t.col('STATUS')]).toUpperCase(); if (st !== 'RECEBIDA' && st !== 'RECEBIDA SEM XML') return;
+    var obs = S(r[t.col('OBS')]); if (obs.indexOf('⚠') === 0) return;
+    var tipo = S(r[t.col('TIPO')]).toUpperCase(), forn = S(r[t.col('FORNECEDOR')]);
+    if (!NFE_TIPO_NOTA_IGN_[tipo] && !RX_ARMAZEM_.test(forn)) return;
+    if (!temEstoque(S(r[t.col('CHAVE')]))) return;
+    _setCells_(t, i + 2, { 'OBS':OBS_ARMAZEM_RECEBIDA_ + (obs ? ' · ' + obs : '') }); n++; });
   return n;
 }
 function nfeReavaliarIgnoradas_(){
@@ -1166,7 +1191,7 @@ function capturarNfe(maxMs){
   _NFE_MEMO_ = {};
   try {
     var cfg = nfeConfig_(); if (!cfg.pasta){ _nfeCapturaSalva_(res, ['NF-e não configurada (rode setupNfe)']); return 'NF-e não configurada (rode setupNfe)'; }
-    var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0) + (nfeReavaliarVendas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }
+    var mexeu = 0; try { passo(function(){ mexeu = (nfeRepararChaves_() || 0) + (nfeReavaliarIgnoradas_() || 0) + (nfeReavaliarVendas_() || 0) + (nfeMarcaArmazemRecebidas_() || 0); }); } catch (e){ erros.push('conserto das chaves: ' + e); }   // v347: notas de armazém recebidas como compra ganham ⚠
     // pasta primeiro (é o que a pessoa acabou de pôr lá); depois o Gmail
     var p = nfePastas_(cfg), it = p.entrada.getFiles(), permFalta = false, feitos = _nfeFeitos_(), feitosMudou = false;
     while (it.hasNext() && !fimTempo()){ var f = it.next(), fid = '', fnome = '';
@@ -1338,6 +1363,11 @@ function nfeClassifica_(c){
   if (atual === 'CANCELADA') return { rows:0, erro:'nota cancelada' };
   // fase 3: EM TRÂNSITO (venda/remessa) · A ENTREGAR (faturamento = contrato) · RECEBIDA (entrada direta) · IGNORADA
   var st = S(c.status || 'RECEBIDA').toUpperCase(), agora = new Date(), vals = { 'STATUS':st, 'CLASSIFICADA EM':agora };
+  // v347: depósito / retorno de armazém / estorno nunca vira compra (nem por app antigo): a compra é a NF de venda do fornecedor
+  var tipoRow = S(t.s.getRange(row, t.col('TIPO') + 1).getValue()).toUpperCase();
+  if (NFE_TIPO_NOTA_IGN_[tipoRow] && !c.forcar && ['RECEBIDA','EM TRÂNSITO','A ENTREGAR'].indexOf(st) >= 0 && (c.itens || []).some(function(it){ return !it.ignorar && S(it.produto); })){
+    var obsRow = S(t.s.getRange(row, t.col('OBS') + 1).getValue()), mvv = obsRow.match(/NF n[º°o]\s*(\d{3,9})/i);
+    return { rows:0, erro:'nota de ' + ({ DEPOSITO:'depósito em armazém geral', RETORNO_DEP:'retorno de depósito (entrega pelo armazém)', ESTORNO:'estorno' })[tipoRow] + ' não entra no estoque — a compra é a NF de venda do fornecedor' + (mvv ? ' (nº ' + mvv[1] + ')' : '') + '; receba essa e ignore esta' }; }
   // v309: nota já recebida na fazenda não volta para "em trânsito"/"a entregar" por um envio atrasado de outro aparelho
   if ((atual === 'RECEBIDA' || atual === 'RECEBIDA SEM XML') && (st === 'EM TRÂNSITO' || st === 'A ENTREGAR') && !c.forcar) return { rows:0, erro:'nota já recebida na fazenda — não volta para ' + st.toLowerCase() };
   var jaRecebida = atual === 'RECEBIDA' && !!c.reclass;   // v309: reclassificar mantém quem/quando recebeu

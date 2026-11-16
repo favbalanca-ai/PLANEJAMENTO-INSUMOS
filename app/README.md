@@ -71,6 +71,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Armazém geral: o caminho da mercadoria não entra em dobro (v347)** — caso real: a NF de venda do fornecedor
+  (entrega no armazém) e as duas notas do armazém (depósito 1934 e retorno 5906) do mesmo produto entraram três
+  vezes, porque foram aprovadas antes da v317. Agora: (1) `nfeArmazemTexto` reconhece nota de armazém pelo **texto**
+  (emitente "ARMAZÉNS GERAIS", natureza "depósito fechado / retorno de depósito" + NF de venda citada), mesmo com
+  CFOP genérico x949 — `nfeTipoDaNota` devolve DEPOSITO/RETORNO_DEP; (2) `nfeConfirmar` **trava** a entrada de
+  depósito/retorno/estorno (antes era só "continuar?") citando a NF de venda; (3) venda com entrega no armazém:
+  "Já chegou — dar entrada" pergunta antes (o normal é pôr em trânsito); (4) **entrada em dobro** —
+  `nfeEntradaDobrada` acha o mesmo produto e quantidade (±1%) já entrados por outro fornecedor até 60 dias
+  (`COMPRAS.registros`): aviso vermelho na conferência (`nfeDobradaHtml`), pergunta ao confirmar, e `nfeAprovar`
+  para com a tela aberta; (5) abrir o XML de uma nota de armazém que já deu entrada explica e manda "Desfazer
+  recebimento"; (6) alerta ⚠ "recebida como compra, mas é nota de armazém" (varredura do Code.gs) vem com o botão
+  **↩ Desfazer recebimento**. Code.gs v347 (ver `sync/README.md`).
 - **DANFE em PDF na pasta (v346)** — a planilha lê PDF da `NFe/Entrada` e da pasta extra com a IA e monta um XML
   mínimo (ORIGEM "pdf", `infCpl` "DANFE em PDF lido por IA — confira os valores"). No app: cartão com a marca "📄
   lida do DANFE em PDF" e **sem Aprovar em um toque** (`nfeOrigemPdf`); "Aprovar todas" e a contagem de prontas a
