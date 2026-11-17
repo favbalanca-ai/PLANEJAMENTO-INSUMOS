@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Mensagem do WhatsApp das máquinas mais clara (v355)** — o QR da etiqueta abre agora:
+  "⛽ *ABASTECIMENTO* / 🚜 *máquina* (negrito) / Digite depois dos dois-pontos e envie: / ⏱ Horímetro atual (horas): /
+  ⛽ Litros abastecidos: / 🛢 Origem (tanque ou posto): tanque / 💲 Valor pago (só se posto): / 👤 Operador: / 📝 Obs: /
+  _[m:id]_" (`maqWaTexto`). `waInterpreta` aceita explicação entre o rótulo e os dois-pontos, ignora negrito/itálico e
+  emojis, acha a máquina na 2ª linha quando não há etiqueta, e lê **Operador** (vale como quem abasteceu, no lugar
+  do nome do remetente) e **Obs** (vai para a observação do registro). As mensagens no formato antigo continuam
+  sendo lidas.
 - **Correção: dose da bula em mL/ha comparada com L/ha (v354)** — "600 a 1.000 mL/ha" marcava 0,6 L/ha como
   "(abaixo)". `_doseConv` converte a faixa da bula para a unidade do insumo (mL↔L, g↔kg↔t) antes de comparar e mostra
   "0,6 a 1 L/ha" (a faixa original fica no tooltip). Dose que não é por hectare (mL/100 kg de sementes) ou unidade
