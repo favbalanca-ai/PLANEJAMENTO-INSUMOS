@@ -71,6 +71,20 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Compatibilidade da calda: análise de mistura (v357)** — na Recomendação, com 2+ produtos, aparece a barra
+  "🧪 Analisar mistura" com o chip de risco (🟢 baixo · 🟡 médio · 🔴 alto). Abrindo: **ordem de adição sugerida**
+  pela formulação (condicionador → WG/WP → SC → EC → OD → SL → fertilizante → adjuvante/óleo; botão "Aplicar esta
+  ordem" no rascunho), **avisos pelas regras** (`mistRegrasPar`: sólido WG/WP com EC, suspensão com EC, fungicida com
+  óleo/OD, faixas de pH que não se cruzam, frases de incompatibilidade da bula cruzadas com o outro produto — alcalino,
+  óleo, cálcio, cobre —, cálcio com fosfato/sulfato/boro/enxofre, glifosato com cátions/foliar, enxofre com óleo,
+  zinco/manganês com fosfato, inseticidas sensíveis a pH alto com produto alcalino, biológico/inoculante com químico,
+  cúprico em calda ácida, 4+ produtos), **histórico** do módulo Misturas (a combinação inteira e cada par: quantas
+  vezes, eficácia) e o **parecer da IA** (`__misturaIa` pela planilha: risco por par, motivo, o que fazer, ordem,
+  pH; guardado na recomendação com data e assinatura dos produtos; se os produtos mudarem, pede novo parecer). Os
+  dados vêm da ficha da bula (`mistInfo`: formulação, pH, ativo, obs), depois do catálogo MAPA e da coluna
+  ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
+  o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
+  teste da jarra".
 - **Horímetro anterior na mensagem do WhatsApp (v356)** — logo abaixo da máquina a mensagem traz
   "🕐 Horímetro anterior (horas): 1.250 h — último lançamento até dd/mm/aaaa" (`maqHorimetro`: último abastecimento,
   leitura, OS ou horímetro inicial). Como o QR é impresso, o valor é o do dia da etiqueta e a linha diz a data;

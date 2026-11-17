@@ -2259,6 +2259,18 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* v350: saldo na Operação de Campo */
 .ci-est{display:block;font-size:11px;font-weight:700;margin-top:2px;white-space:nowrap}.ci-est.ok{color:var(--green)}.ci-est.warn{color:var(--amber)}.ci-est.err{color:var(--red)}
 .ci-bula{display:block;font-size:11px;color:var(--muted);margin-top:1px;white-space:normal}.ci-bula-fora{color:var(--amber)}   /* v353: dose da bula por cultura */
+/* v357: compatibilidade da calda (análise de mistura) */
+.rc-mist-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 12px 8px}
+.rc-mist{margin:0 12px 10px;padding:8px 10px;border:1px solid var(--line);border-left:4px solid #7e57c2;border-radius:10px;background:var(--bg-soft,#f7f5fb);font-size:12.5px;line-height:1.45}
+.rc-mist-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.rc-mist-sec{padding:5px 0;border-top:1px dashed var(--line)}.rc-mist-sec:first-of-type{border-top:0}
+.rc-mist-ord{margin:3px 0;font-weight:600}
+.rc-mist-al{margin:4px 0 0;padding-left:18px}.rc-mist-al li{margin:3px 0}
+.mist-alto{color:var(--red)}.mist-medio{color:var(--amber)}.mist-baixo{color:#8a6d00}.mist-info{color:var(--ink2)}
+.mi-chip.mist-alto{background:#fdecea;color:#8e1a14}.mi-chip.mist-medio{background:#fff8e1;color:#6b5400}.mi-chip.mist-baixo{background:#e8f5e9;color:#1b5e20}
+.rc-mist-iah{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rc-mist-ia p{margin:4px 0}
+.rc-mist-foot{margin-top:6px;font-size:11.5px;color:var(--muted)}
+.rx-mist ul{margin:4px 0 0;padding-left:16px}
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
@@ -2713,4 +2725,6 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-est-td{font-size:9.5px}
   .rc-sim-link{font-size:9.5px}
   .rc-sim{font-size:9.5px}
+  .rc-mist{font-size:10px}
+  .rc-mist-foot{font-size:9.5px}
 }

@@ -235,6 +235,19 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Parecer da IA sobre a mistura de tanque (v357)
+
+- `__misturaIa` `{id, cultura, alvo, calda, adjuvante, produtos:[{produto, ativo, classe, formulacao, tipo, ph, conc,
+  grupo, obs, dose, un}], regras:[…], historico}` (sem trava; módulos campo/planejamento/precos; não invalida cache)
+  → `misturaIa_`: exige 2+ produtos e a `ANTHROPIC_KEY`; manda à IA (`IA_MODELO`, `max_tokens` 3000, sem
+  `temperature`) as fichas das bulas, a calda, a cultura, os avisos das regras do app e o histórico, com formato fixo
+  de resposta `{risco, resumo, pares:[{a,b,risco,motivo,fazer}], ordem, ph, avisos}`.
+- `_misturaIaSaneia_`: risco só baixo/medio/alto ("moderado" vira medio; vazio = pior par); pares e ordem só com os
+  nomes enviados (casa sem diferenciar maiúsculas e por nome parcial único; par repetido ou com produto estranho sai);
+  ordem incompleta não vale; textos cortados; até 4 avisos. Resposta: `ok:1, parecer:{…, modelo}` ou `fail:1` com o
+  motivo. **Nada é gravado na planilha**: o app guarda o parecer na recomendação e, ao aprovar, o risco vai na
+  mistura (aba MISTURAS APP, campo `compat`).
+
 ## Correção: IA recusava com "temperature is deprecated" (v352)
 
 - Os modelos Claude 5 (o app usa `claude-haiku-5-5`) respondem HTTP 400 a qualquer valor de `temperature` diferente do
