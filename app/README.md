@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Horímetro anterior na mensagem do WhatsApp (v356)** — logo abaixo da máquina a mensagem traz
+  "🕐 Horímetro anterior (horas): 1.250 h — último lançamento até dd/mm/aaaa" (`maqHorimetro`: último abastecimento,
+  leitura, OS ou horímetro inicial). Como o QR é impresso, o valor é o do dia da etiqueta e a linha diz a data;
+  reimprimir as etiquetas atualiza. `waInterpreta` ignora essa linha ao ler o horímetro (só vale "Horímetro atual").
 - **Mensagem do WhatsApp das máquinas mais clara (v355)** — o QR da etiqueta abre agora:
   "⛽ *ABASTECIMENTO* / 🚜 *máquina* (negrito) / Digite depois dos dois-pontos e envie: / ⏱ Horímetro atual (horas): /
   ⛽ Litros abastecidos: / 🛢 Origem (tanque ou posto): tanque / 💲 Valor pago (só se posto): / 👤 Operador: / 📝 Obs: /
