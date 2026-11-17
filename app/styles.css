@@ -2254,6 +2254,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rc-sim{margin-top:6px;padding:6px 8px;background:var(--bg-soft,#f5f7f8);border:1px solid var(--line,#e5e8ec);border-radius:8px;font-size:12px;min-width:200px}
 .rc-sim-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line,#e5e8ec)}.rc-sim-row:last-child{border-bottom:0}
 .rc-est-res{color:var(--amber)}
+/* v350: saldo na Operação de Campo */
+.ci-est{display:block;font-size:11px;font-weight:700;margin-top:2px;white-space:nowrap}.ci-est.ok{color:var(--green)}.ci-est.warn{color:var(--amber)}.ci-est.err{color:var(--red)}
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){

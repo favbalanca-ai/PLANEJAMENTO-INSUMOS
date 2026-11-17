@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Saldo na Operação de Campo (v350)** — na tabela "Detalhes · registrar execução", cada insumo mostra embaixo do
+  nome a etiqueta de estoque (`campoEstoqueTag`): ✅ saldo, ⚠ "saldo X · falta Y" ou ⛔ "sem estoque", comparando o
+  saldo atual com dose (realizada, se digitada; senão planejada) × área da operação (`opAreaDe`). Insumo extra
+  também. Operação concluída não mostra (a baixa já saiu do estoque). Só informação: nada bloqueia.
 - **Estoque na recomendação (v349)** — a tabela de insumos da Recomendação ganhou a coluna **Estoque**
   (`recomEstoqueDe`/`recomEstoqueHtml`): ✅ saldo quando cobre dose × área, ⚠ "falta N" com o saldo quando cobre em
   parte, ⛔ "sem estoque", e "N em outras recomendações" quando recomendações enviadas e não aprovadas já usam o
