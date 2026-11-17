@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Estoque na recomendação (v349)** — a tabela de insumos da Recomendação ganhou a coluna **Estoque**
+  (`recomEstoqueDe`/`recomEstoqueHtml`): ✅ saldo quando cobre dose × área, ⚠ "falta N" com o saldo quando cobre em
+  parte, ⛔ "sem estoque", e "N em outras recomendações" quando recomendações enviadas e não aprovadas já usam o
+  produto (`recomComprometido`; se o que sobra não cobre, ⚠ "pode faltar"). Link **similares ▸** (`prodSimilares`):
+  produtos da mesma classe com ingrediente ativo em comum (`ativoToks` compara os nomes sem acento e sem termos de
+  sal/éster/ligação) e saldo, do mais parecido e maior saldo para o menor; no rascunho, **Trocar** (`recomTrocarIns`)
+  põe o similar no lugar mantendo a dose. Rodapé "📦 Estoque: …" só quando há problema (`recomEstoqueResumo`). A
+  busca de insumo (🔍) mostra o saldo de cada produto do portfólio. Nada bloqueia o envio, o retorno nem a aprovação.
 - **Fluxo automático por produtor (v348)** — (1) **Aprovação automática** (planilha, CONFIG NFE → AUTO APROVAR):
   nota de rotina (fornecedor conhecido pelo de-para, IA confiante, valor dentro do limite, sem armazém nem entrada em
   dobro) vai para EM TRÂNSITO sozinha; a caixa de entrada mostra "🤖 Aprovadas sozinhas" (`nfeAutoHtml`, lista
