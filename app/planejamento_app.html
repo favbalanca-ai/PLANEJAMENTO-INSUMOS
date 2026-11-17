@@ -2841,7 +2841,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-353';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-354';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11031,10 +11031,17 @@ function bulaDoseCultura(produto, cultKey){ const p=String(produto||'').trim(); 
     if(d&&(d.min>0||d.max>0)) return {mn:d.min>0?d.min:null, mx:d.max>0?d.max:null, un:String(d.un||'').trim(), cult:d.cu, car:+d.car||0, fonte:'ia'}; }
   if(b){ const mn=bulaNum(b.doseMin), mx=bulaNum(b.doseMax); if(mn>0||mx>0) return {mn:mn>0?mn:null, mx:mx>0?mx:null, un:String(b.doseUn||'').trim(), cult:'', car:bulaNum(b.carencia)||0, fonte:'ficha'}; }
   return null; }
-function bulaDoseTag(produto, cultKey, dose){ const D=bulaDoseCultura(produto, cultKey); if(!D) return '';
-  const faixa=(D.mn!=null&&D.mx!=null)?(Math.abs(D.mn-D.mx)<1e-9?fmtDose(D.mx):`${fmtDose(D.mn)} a ${fmtDose(D.mx)}`):(D.mx!=null?`até ${fmtDose(D.mx)}`:`a partir de ${fmtDose(D.mn)}`);
-  const d=+dose||0; let st=''; if(d>0){ if(D.mx!=null&&d>D.mx+1e-9) st='acima'; else if(D.mn!=null&&d<D.mn-1e-9) st='abaixo'; }
-  return `<span class="ci-bula${st?' ci-bula-fora':''}" title="faixa de dose da bula${D.cult?' para '+esc(D.cult)+' (bula lida pela IA)':' (ficha da bula, sem cultura)'}${D.car?' · carência '+D.car+' d':''} — só informação, não bloqueia">📖 bula: ${faixa}${D.un?' '+esc(D.un):''}${D.cult?' · '+esc(D.cult):''}${st?` <b>(${st})</b>`:''}</span>`; }
+// v354: a bula fala em mL/ha ou g/ha e o app em L ou kg → converte a faixa para a unidade do insumo antes de comparar
+// (600 a 1.000 mL/ha = 0,6 a 1 L/ha). Dose fora de "/ha" (ex.: mL/100 kg de sementes) ou unidade incompatível: mostra como está, sem comparar.
+function _doseConv(bulaUn, itUn){ const m=String(bulaUn||'').trim().match(/^([A-Za-z]+)\s*\/\s*ha$/i); if(!m) return null;
+  const a=_unBase(m[1]), b=_unBase(String(itUn||'').replace(/\/ha$/i,'')); if(!a||!b||a[0]!==b[0]) return null; return a[1]/b[1]; }
+function bulaDoseTag(produto, cultKey, dose, itUn){ const D=bulaDoseCultura(produto, cultKey); if(!D) return '';
+  const un=String(itUn||(PROD[produto]||{}).un||'').trim(), f=_doseConv(D.un, un), mn=D.mn!=null&&f?D.mn*f:D.mn, mx=D.mx!=null&&f?D.mx*f:D.mx, unTxt=f?(un+'/ha'):D.un;
+  const faixa=(mn!=null&&mx!=null)?(Math.abs(mn-mx)<1e-9?fmtDose(mx):`${fmtDose(mn)} a ${fmtDose(mx)}`):(mx!=null?`até ${fmtDose(mx)}`:`a partir de ${fmtDose(mn)}`);
+  const d=+dose||0, compara=!!f||(!D.un&&!!un)||_agNorm(D.un).replace(/\s+/g,'')===_agNorm(un+'/ha').replace(/\s+/g,''); let st='';
+  if(d>0&&compara){ if(mx!=null&&d>mx*(1+1e-6)) st='acima'; else if(mn!=null&&d<mn*(1-1e-6)) st='abaixo'; }
+  return `<span class="ci-bula${st?' ci-bula-fora':''}" title="faixa de dose da bula${D.cult?' para '+esc(D.cult)+' (bula lida pela IA)':' (ficha da bula, sem cultura)'}${f&&f!==1?' · na bula: '+faixaTxt(D)+' '+esc(D.un):''}${D.car?' · carência '+D.car+' d':''}${(!compara&&d>0)?' · unidade diferente da bula, sem comparar':''} — só informação, não bloqueia">📖 bula: ${faixa}${unTxt?' '+esc(unTxt):''}${D.cult?' · '+esc(D.cult):''}${st?` <b>(${st})</b>`:''}</span>`;
+  function faixaTxt(D){ return (D.mn!=null&&D.mx!=null)?`${fmtDose(D.mn)} a ${fmtDose(D.mx)}`:(D.mx!=null?`até ${fmtDose(D.mx)}`:`a partir de ${fmtDose(D.mn)}`); } }
 // v350: etiqueta de saldo para a Operação de Campo (tabela "registrar execução"): precisa = dose (realizada ou planejada) × área da operação
 function campoEstoqueTag(produto, precisa){ const p=String(produto||'').trim(); if(!p||!PROD[p]) return ''; const saldo=+saldoEstoqueDe(p).toFixed(4), un=esc((PROD[p]||{}).un||''), pr=+(+precisa||0).toFixed(4);
   const tit=`saldo no estoque (inicial + notas − saídas aprovadas)${pr>0?` · esta operação precisa de ${fmtDose(pr)} ${un} (dose × área)`:''}`;
@@ -13060,14 +13067,14 @@ V.campo = function(arg){
       const rv=(r.doses&&(iid in r.doses))?r.doses[iid]:'';
       const diff=rv!=='' && +rv!==+it.dose, fora=itemFora(r,it), trava=r.status==='concluido';
       return `<tr${fora?' class="ci-off"':''}>
-        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}${(mostraEst&&!fora)?campoEstoqueTag(it.produto, (rv!==''?+rv:+it.dose)*areaOp):''}${fora?'':bulaDoseTag(it.produto, ckOp, rv!==''?+rv:+it.dose)}</td>
+        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}${(mostraEst&&!fora)?campoEstoqueTag(it.produto, (rv!==''?+rv:+it.dose)*areaOp):''}${fora?'':bulaDoseTag(it.produto, ckOp, rv!==''?+rv:+it.dose, it.un)}</td>
         <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
         <td class="num ci-real">${fora?'<span class="mut">—</span>':`<input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}">`}
           ${trava?'':`<button class="icon-btn ci-x${fora?' on':''}" data-act="realExcl" data-key="${esc(o.key)}" data-iid="${iid}" title="${fora?'Voltar a usar este produto nesta aplicação':'Tirar este produto desta aplicação (o planejamento não muda)'}">${fora?'↩':'✕'}</button>`}</td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
-        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano">${mostraEst?campoEstoqueTag(ex.produto, (+ex.dose||0)*areaOp):''}${bulaDoseTag(ex.produto, ckOp, +ex.dose||0)}</td>
+        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano">${mostraEst?campoEstoqueTag(ex.produto, (+ex.dose||0)*areaOp):''}${bulaDoseTag(ex.produto, ckOp, +ex.dose||0, (PROD[ex.produto]||{}).un)}</td>
         <td class="num ci-plan mut">—</td>
         <td class="num ci-real"><input class="cell" inputmode="decimal" data-edit="realExtraDose" data-key="${esc(o.key)}" data-ei="${ei}" value="${ex.dose!=null?ex.dose:''}" placeholder="dose">
           <button class="icon-btn del" title="Remover extra" data-act="realDelExtra" data-key="${esc(o.key)}" data-ei="${ei}">🗑</button></td>

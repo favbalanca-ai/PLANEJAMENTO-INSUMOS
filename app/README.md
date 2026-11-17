@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Correção: dose da bula em mL/ha comparada com L/ha (v354)** — "600 a 1.000 mL/ha" marcava 0,6 L/ha como
+  "(abaixo)". `_doseConv` converte a faixa da bula para a unidade do insumo (mL↔L, g↔kg↔t) antes de comparar e mostra
+  "0,6 a 1 L/ha" (a faixa original fica no tooltip). Dose que não é por hectare (mL/100 kg de sementes) ou unidade
+  incompatível: mostra como está na bula e não compara.
 - **Dose da bula por cultura na Operação de Campo (v353)** — embaixo de cada insumo da tabela "registrar execução",
   "📖 bula: 0,15 a 0,25 L/ha · Soja" (`bulaDoseTag`/`bulaDoseCultura`): usa a cultura do talhão (safrinha quando a
   operação é da safrinha) e procura primeiro a dose daquela cultura no CATÁLOGO EXTRA (bula lida pela IA, v351; achado
