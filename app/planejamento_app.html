@@ -1952,6 +1952,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ag-alvos div{padding:4px 0;border-bottom:1px dashed #eef2f4}
 .ag-alvos i{display:block;color:var(--muted);font-size:12px}
 .bula-mapa{display:flex;flex-direction:column;gap:4px;width:100%}
+.bula-ia-tb{width:100%;border-collapse:collapse;font-size:11.5px;margin:4px 0}.bula-ia-tb th,.bula-ia-tb td{text-align:left;padding:3px 6px;border-bottom:1px solid var(--line,#e5e8ec);vertical-align:top}.bula-ia-tb th{color:var(--muted);font-weight:600}   /* v351 */
+.ag-cl.ag-extra{background:#e8f1f5;color:#2f6f7e}
 .ag-cand{text-align:left;border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px;cursor:pointer;font-size:13px;line-height:1.3}
 .ag-cand:hover{background:#eef7f9}
 .ag-cand small{color:var(--muted)}
@@ -2623,6 +2625,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ag-sec h4{font-size:11.5px}
   .ag-alvos{font-size:10.5px}
   .ag-alvos i{font-size:9.5px}
+  .bula-ia-tb{font-size:9.5px}
   .ag-cand{font-size:10.5px}
   .ag-lin span{font-size:9.5px}
   .ag-aba{font-size:10.5px}
@@ -2837,7 +2840,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-350';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-351';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9617,7 +9620,7 @@ const AGROFIT_IDB='agrofit_produtos';
 const _agNorm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 function agrofitIndexa(d){ if(!d||!Array.isArray(d.produtos)) return d; const cu=d.culturas||[];
   d.produtos.forEach(p=>{ p._s=_agNorm([(p.m||[]).join(' '), p.ia, p.r, p.t, p.c].join(' | ')); p._cu=(p.cu||[]).map(i=>cu[i]||''); p._todas=p._cu.some(c=>/^todas as culturas$/i.test(c)); });
-  d._porReg={}; d.produtos.forEach(p=>{ d._porReg[p.r]=p; }); return d; }
+  d._porReg={}; d.produtos.forEach(p=>{ d._porReg[p.r]=p; }); try{ agrofitExtraMescla(d); }catch(e){} return d; }   // v351: + produtos lidos da bula pela IA
 async function agrofitCarregar(force){
   if(AGROFIT.dados&&!force) return AGROFIT.dados; if(AGROFIT.carregando) return AGROFIT.carregando;
   AGROFIT.carregando=(async()=>{ let d=null; AGROFIT.erro='';
@@ -9943,14 +9946,16 @@ function agrofitFichaHtml(reg){ const d=AGROFIT.dados, p=d._porReg[reg]; if(!p) 
   const pref=AGROFIT.cultFicha||AGROFIT.cultura, cultSel=pref&&p._cu.some(c=>c===pref)?pref:(p._cu.find(c=>agrofitPragasArq(c))||'');   // cultura escolhida na ficha não mexe no filtro da lista
   const a=cultSel?agrofitPragasArq(cultSel):null, pr=a&&AGROFIT.pragas[a.chave];
   if(a&&!pr){ agrofitPragas(cultSel).then(()=>{ if(document.body.dataset.view==='catalogo') route({keepScroll:true}); }); }
-  const alvos=pr?((pr.por[p.r]||[]).map(i=>pr.pragas[i]).filter(Boolean)):(p._todas&&pr?[]:null);
-  const chips=p._cu.map(c=>`<button class="chip-f${c===cultSel?' on':''}${agrofitPragasArq(c)?'':' ag-semalvo'}" data-act="agCult" data-cult="${esc(c)}" data-reg="${esc(p.r)}">${esc(c)}</button>`).join('');
-  return `<div class="panel ag-ficha"><div class="panel-head"><a class="link" data-go="#/catalogo">‹ Catálogo</a><h2>${esc((p.m||[]).join(' · '))}</h2><span class="ag-cl">${esc(p.c||'—')}</span></div>
-    <div class="ag-lins">${lin('Tipo','Defensivo agrícola (AGROFIT)')}${lin('Nome comercial',esc((p.m||[]).join('; ')))}${lin('Princípio ativo',esc(p.ia))}${lin('Fabricante / titular',esc(p.t))}${lin('Registro MAPA',esc(p.r))}
-      ${lin('Formulação',esc(p.f))}${lin('Classe toxicológica',esc(p.tox))}${lin('Classe ambiental',esc(p.amb))}${lin('Modo de ação',esc(p.ma))}${lin('Categoria',esc(p.c))}${lin('Uso em orgânicos',p.org==='SIM'?'Sim':(p.org==='OUTROS'?'Outros':'Não'))}</div>
-    <div class="ag-sec"><h4>Culturas registradas <span class="mut">(${p._cu.length})</span></h4><div class="ag-chips">${chips||'<span class="mut">—</span>'}</div></div>
+  const alvos=p._extra?((p._alvos||{})[cultSel]||[]):(pr?((pr.por[p.r]||[]).map(i=>pr.pragas[i]).filter(Boolean)):(p._todas&&pr?[]:null));   // v351: produto lido da bula traz os alvos da própria bula
+  const chips=p._cu.map(c=>`<button class="chip-f${c===cultSel?' on':''}${(p._extra||agrofitPragasArq(c))?'':' ag-semalvo'}" data-act="agCult" data-cult="${esc(c)}" data-reg="${esc(p.r)}">${esc(c)}</button>`).join('');
+  const dose=p._extra?(p._doses||[]).find(x=>x.cu===cultSel):null, doseHtml=dose?`<div class="ag-lins"><div class="ag-lin"><span>Dose na bula${cultSel?' ('+esc(cultSel)+')':''}</span><b>${dose.min||dose.max?`${dose.min&&dose.max&&dose.min!==dose.max?fmtDose(dose.min)+' a ':''}${fmtDose(dose.max||dose.min)} ${esc(dose.un||'')}`:'—'}${dose.calda?` · calda ${esc(dose.calda)}`:''}${dose.car?` · carência ${dose.car} d`:''}${dose.nApl?` · ${esc(dose.nApl)} aplic.`:''}</b></div></div>`:'';
+  const alvosHtml=(alvos&&alvos.length)?`<div class="ag-alvos">${alvos.map(x=>`<div><b>${esc(x[0]||'—')}</b>${x[1]?`<i>${esc(x[1])}</i>`:''}</div>`).join('')}</div>`:'<p class="mut">Nenhum alvo listado para esta cultura.</p>';
+  return `<div class="panel ag-ficha"><div class="panel-head"><a class="link" data-go="#/catalogo">‹ Catálogo</a><h2>${esc((p.m||[]).join(' · '))}</h2><span class="ag-cl">${esc(p.c||'—')}</span>${p._extra?'<span class="ag-cl ag-extra" title="Produto que não está nos dados abertos do MAPA: dados lidos da bula em PDF pela IA (aba CATÁLOGO EXTRA)">🤖 bula lida pela IA</span>':''}</div>
+    <div class="ag-lins">${lin('Tipo',p._extra?'Defensivo agrícola (complemento: bula lida pela IA)':'Defensivo agrícola (AGROFIT)')}${lin('Nome comercial',esc((p.m||[]).join('; ')))}${lin('Princípio ativo',esc(p.ia))}${lin('Fabricante / titular',esc(p.t))}${lin('Registro MAPA',esc(p.r))}
+      ${lin('Formulação',esc(p.f))}${lin('Classe toxicológica',esc(p.tox))}${lin('Classe ambiental',esc(p.amb))}${lin('Modo de ação',esc(p.ma))}${lin('Categoria',esc(p.c))}${p._extra?'':lin('Uso em orgânicos',p.org==='SIM'?'Sim':(p.org==='OUTROS'?'Outros':'Não'))}</div>
+    <div class="ag-sec"><h4>Culturas registradas <span class="mut">(${p._cu.length})</span></h4><div class="ag-chips">${chips||'<span class="mut">—</span>'}</div></div>${doseHtml}
     <div class="ag-sec"><h4>Alvos registrados${cultSel?' em '+esc(cultSel):''}</h4>
-      ${!cultSel?'<p class="mut">Toque numa cultura acima.</p>':!a?'<p class="mut">Alvos desta cultura não estão no app (lista em scripts/agrofit_culturas.txt).</p>':!pr?'<p class="mut">⏳ carregando alvos…</p>':(alvos&&alvos.length?`<div class="ag-alvos">${alvos.map(x=>`<div><b>${esc(x[0]||'—')}</b>${x[1]?`<i>${esc(x[1])}</i>`:''}</div>`).join('')}</div>`:'<p class="mut">Nenhum alvo listado para esta cultura.</p>')}</div>
+      ${!cultSel?'<p class="mut">Toque numa cultura acima.</p>':p._extra?alvosHtml:!a?'<p class="mut">Alvos desta cultura não estão no app (lista em scripts/agrofit_culturas.txt).</p>':!pr?'<p class="mut">⏳ carregando alvos…</p>':alvosHtml}</div>
     <div class="cp-btns"><button class="btn btn-outline btn-sm" data-act="agWeb" data-q="${esc((p.m||[])[0]||'')}">🔎 Bula na web</button><a class="btn btn-outline btn-sm" data-go="#/catalogo">‹ Voltar</a></div></div>`; }
 // busca no catálogo pelo nome do produto do app (marca): casa por nome normalizado, depois por palavras
 function agrofitBuscarNome(nome){ const d=AGROFIT.dados; if(!d) return []; const n=_agNorm(nome).replace(/[^a-z0-9]+/g,' ').trim(); if(!n) return [];
@@ -9971,6 +9976,34 @@ function bulaMapaUsar(r){ const d=AGROFIT.dados, p=d&&d._porReg[r], ov=document.
   const vals={ia:sp.ia||p.ia, conc:sp.conc, tox, grupo:[p.c,p.ma].filter(Boolean).join(' · '), form:p.f, reg:p.r};
   let n=0; for(const f in vals){ const i=ov.querySelector(`input[data-bula="${f}"]`); if(i&&vals[f]&&i.value.trim()!==vals[f]){ i.value=vals[f]; i.classList.add('edited'); n++; } }
   const box=document.getElementById('bula-mapa'); if(box) box.innerHTML=`<span class="lim-ok">✔ ${(p.m||[])[0]} (reg. ${esc(p.r)}): ${n} campo(s) preenchido(s) — confira e Salvar.</span>`; }
+// ===== v351: LER A BULA EM PDF COM A IA (planilha, __bulaIa) → preenche a ficha e põe o produto no catálogo (complemento) =====
+let bulaIaLendo=false;
+async function bulaIaLer(file){ const p=bulaEditProd, ov=document.getElementById('bula-ov'); if(!p||!ov||bulaIaLendo) return; const box=document.getElementById('bula-mapa');
+  if(!syncUrl()){ toast('Configure a Sincronização: é a planilha que lê o PDF com a IA'); return; }
+  if(!bulasServerOk()){ toast('A planilha ainda não tem a versão nova do Code.gs (aba BULAS APP)'); return; }
+  const inp=ov.querySelector('input[data-bula="bulaUrl"]'), url=((inp&&inp.value)||'').trim()||String((bulaDe(p)||{}).bulaUrl||''), pl={produto:p};
+  if(file){ if(!/pdf/i.test(file.type||'')&&!/\.pdf$/i.test(file.name||'')){ toast('Envie um arquivo PDF'); return; } if(file.size>8*1024*1024){ toast('PDF muito grande para subir pelo celular (máximo 8 MB) — anexe pelo link e leia depois'); return; }
+    pl.b64=await new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(String(fr.result).split(',')[1]||''); fr.onerror=rej; fr.readAsDataURL(file); }); pl.nome=file.name; }
+  else if(/drive\.google\.com/i.test(url)) pl.url=url;
+  else { const fi=ov.querySelector('input[data-bulaia]'); if(fi) fi.click(); else toast('Anexe o PDF da bula primeiro'); return; }   // sem PDF no Drive: escolhe o arquivo no aparelho
+  bulaIaLendo=true; if(box) box.innerHTML='<span class="mut">🤖 Lendo a bula com a IA… pode levar até um minuto.</span>';
+  let r=null; try{ r=await syncPost(syncUrl(), JSON.stringify({__bulaIa:pl})); }catch(e){ r=null; }
+  bulaIaLendo=false;
+  if(!(r&&r.bula)){ const m=permAviso((r&&r.msgs&&r.msgs[0])||'sem resposta da planilha'); if(box) box.innerHTML=`<span class="bula-warn">${esc(m)}</span>`; toast('Não li a bula: '+m); return; }
+  const ov2=document.getElementById('bula-ov'); if(!ov2||bulaEditProd!==p) return;
+  let n=0; for(const f in r.bula){ const i=ov2.querySelector(`input[data-bula="${f}"]`), v=r.bula[f]; if(!i||v===''||v==null) continue; const s=String(v); if(i.value.trim()!==s){ i.value=s; i.classList.add('edited'); n++; } }
+  if(r.extra&&r.extra.key){ if(!DATA) DATA={}; DATA.catalogo_extra=DATA.catalogo_extra||{}; DATA.catalogo_extra[r.extra.key]=r.extra; try{ if(AGROFIT.dados) agrofitExtraMescla(AGROFIT.dados); }catch(e){} }
+  const ds=(r.extra&&r.extra.doses)||[], tb=ds.length?`<table class="bula-ia-tb"><thead><tr><th>Cultura</th><th>Dose</th><th>Carência</th><th>Alvos</th></tr></thead><tbody>${ds.slice(0,12).map(d=>`<tr><td>${esc(d.cu)}</td><td>${d.min||d.max?`${d.min&&d.max&&d.min!==d.max?fmtDose(d.min)+' a ':''}${fmtDose(d.max||d.min)} ${esc(d.un||'')}`:'—'}</td><td>${d.car?d.car+' d':'—'}</td><td>${(((r.extra.alvos||{})[d.cu])||[]).slice(0,4).map(a=>esc(a[0])).join(', ')||'—'}</td></tr>`).join('')}${ds.length>12?`<tr><td colspan="4" class="mut">+${ds.length-12} cultura(s)</td></tr>`:''}</tbody></table>`:'';
+  if(box) box.innerHTML=`<span class="lim-ok">✔ Bula lida: ${esc(r.resumo||'')} — ${n} campo(s) preenchido(s). Confira e toque em Salvar.</span>${tb}<span class="mut" style="font-size:11px">O produto entrou no 🏛️ Catálogo MAPA do app como complemento (aba CATÁLOGO EXTRA), para todos os aparelhos.</span>`;
+  toast(`Bula lida pela IA: ${n} campo(s) preenchido(s)`); }
+// produtos lidos da bula (DATA.catalogo_extra) entram no catálogo do app quando o registro não está nos dados abertos do MAPA
+function agrofitExtraMescla(d){ const ex=(DATA&&DATA.catalogo_extra)||{}; if(!d||!Array.isArray(d.produtos)) return 0; const cu=d.culturas=d.culturas||[]; d._porReg=d._porReg||{}; let n=0;
+  Object.keys(ex).forEach(k=>{ const e=ex[k]; if(!e||e.del||!e.r) return; const old=d._porReg[e.r]; if(old&&!old._extra) return;   // já está no catálogo oficial: o oficial vence
+    const idx=(e.cu||[]).map(c=>{ let i=cu.findIndex(x=>_agNorm(x)===_agNorm(c)); if(i<0){ cu.push(c); i=cu.length-1; } return i; });
+    const p=Object.assign({}, e, {cu:idx, _extra:true, _alvos:e.alvos||{}, _doses:e.doses||[]}); delete p.key; delete p.alvos; delete p.doses;
+    p._s=_agNorm([(p.m||[]).join(' '), p.ia, p.r, p.t, p.c].join(' | ')); p._cu=idx.map(i=>cu[i]||''); p._todas=false;
+    if(old){ const j=d.produtos.indexOf(old); if(j>=0) d.produtos[j]=p; else d.produtos.push(p); } else d.produtos.push(p); d._porReg[e.r]=p; n++; });
+  return n; }
 // ===== BULAS dos produtos (módulo Preços → aba "BULAS APP") =====
 // Uma ficha por produto: ingrediente ativo, concentração, pH ideal da calda, dose mín/máx da bula, carência,
 // reentrada, classe toxicológica, grupo/modo de ação, links (bula e FISPQ) e PDFs no Drive (pasta "Bulas").
@@ -10047,7 +10080,7 @@ function bulaRender(){
       <label class="btn btn-outline btn-sm">Anexar PDF<input type="file" accept="application/pdf,.pdf" data-bulaarq="${t}" hidden></label></div>`; };
   ov.innerHTML=`<div class="modal-box bula-box"><div class="modal-head"><h3>📘 Bula — ${esc(p)}</h3><button class="icon-btn" data-act="bulaFechar" title="Fechar">✕</button></div>
     <div class="mut" style="font-size:12px">${[P.classe, P.empresa, P.un?'un. '+P.un:'', P.ativos?'planilha: '+P.ativos:''].filter(Boolean).map(esc).join(' · ')||'produto fora do portfólio da planilha'}</div>
-    <div class="bula-web" style="margin-top:6px"><button type="button" class="btn btn-outline btn-sm" data-act="bulaMapa" title="Procura o produto no catálogo do Ministério e preenche ingrediente ativo, concentração, classe tox., formulação e registro">🏛️ Buscar no catálogo MAPA</button><div id="bula-mapa" class="bula-mapa"></div></div>
+    <div class="bula-web" style="margin-top:6px"><button type="button" class="btn btn-outline btn-sm" data-act="bulaMapa" title="Procura o produto no catálogo do Ministério e preenche ingrediente ativo, concentração, classe tox., formulação e registro">🏛️ Buscar no catálogo MAPA</button><button type="button" class="btn btn-primary btn-sm" data-act="bulaIa" title="A planilha lê o PDF da bula com a IA e preenche a ficha: ativo, concentração, registro, classe, formulação, doses por cultura, carência, reentrada, pH. O produto entra no catálogo MAPA do app como complemento.">🤖 Ler a bula com a IA</button><input type="file" accept="application/pdf,.pdf" data-bulaia="1" hidden><div id="bula-mapa" class="bula-mapa"></div></div>
     <div class="bula-body"><div class="app-grid bula-grid">${BULA_CAMPOS.map(([f,l,t,ph])=>`<label${f==='obs'||t==='url'?' class="w2"':''}>${l}<input ${t==='num'?'class="cell" inputmode="decimal"':'class="txt"'} data-bula="${f}" value="${esc(val(f))}" placeholder="${esc(ph)}">${t==='url'?`<span class="bula-web"><button type="button" class="btn btn-outline btn-sm" data-act="bulaBuscar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="Abre a busca na web já montada com o nome do produto">🔎 Buscar na web</button><button type="button" class="btn btn-outline btn-sm" data-act="bulaBaixar" data-tipo="${f==='fispqUrl'?'fispq':'bula'}" title="A planilha baixa o PDF deste link e guarda na pasta Bulas do Drive">⬇ Baixar e anexar pelo link</button></span>`:''}</label>`).join('')}</div>
       ${arq('bula','Bula')}${arq('fispq','FISPQ')}
       <p class="mut" style="font-size:11px;margin:6px 0 0">Vai para a aba <b>BULAS APP</b> da planilha e os PDFs para a pasta <b>Bulas</b> no Drive. A recomendação usa o ingrediente ativo, a carência, a reentrada e a faixa de dose.</p></div>
@@ -13607,6 +13640,7 @@ document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('input[data-mistfoto]')){ const fs=e.target.files; if(fs&&fs.length) mistFotosAdd(fs); e.target.value=''; return; }
   if(e.target.id==='mi-filtro'){ mistFiltro=e.target.value; setTimeout(()=>route({keepScroll:true}),0); return; }
   if(e.target.matches&&e.target.matches('input[data-bulaarq]')){ const fs=e.target.files; if(fs&&fs.length) bulaArqAdd(fs[0], e.target.dataset.bulaarq); e.target.value=''; return; }
+  if(e.target.matches&&e.target.matches('input[data-bulaia]')){ const fs=e.target.files; if(fs&&fs.length) bulaIaLer(fs[0]); e.target.value=''; return; }   // v351
   if(e.target.matches&&e.target.matches('input[type="checkbox"][data-oc]')){ const f=ocFormAtual(); if(f) f[e.target.dataset.oc]=e.target.checked; return; }
   if(e.target.matches&&e.target.matches('select[data-oc]')){ const f=ocFormAtual(); if(f){ f[e.target.dataset.oc]=e.target.value; const fl=document.getElementById('oc-falta'); if(fl){ const x=ocFalta(f); fl.textContent=x.length?'Falta: '+x.join(', '):''; } } return; }
   if(e.target.id==='af-tal'){ location.hash='#/afericao/'+(e.target.dataset.tipo||'')+'~'+encodeURIComponent(e.target.value); return; }
@@ -14019,6 +14053,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='bulaAbrir'){ bulaAbrir(a.prod||''); }
     else if(a.act==='bulaBuscar'){ bulaBuscar(a.tipo); }
     else if(a.act==='bulaMapa'){ bulaMapaBuscar(); }
+    else if(a.act==='bulaIa'){ bulaIaLer(); }   // v351: ler a bula em PDF com a IA
     else if(a.act==='agpPick'){ agPickEscolher(a.i); return; }
     else if(a.act==='agpNovo'){ agPickNovo(); return; }
     else if(a.act==='recomInsumo'){ recomInsumoOpen(a.id, a.i); return; }
@@ -14768,7 +14803,7 @@ const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoq
   __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
-  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
+  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
 function syncLogTipo(body){
   try{ const o=JSON.parse(body); if(Array.isArray(o)) return 'Edições de campo ('+o.length+')';
@@ -14979,6 +15014,7 @@ function applyPulledData(d, raw){
   try{ ocorApplyPulled(d.ocorrencias_app); }catch(e){}     // anotações e ocorrências
   try{ monitApplyPulled(d.monit_app); }catch(e){}          // v328: monitoramento (pragas/doenças/daninhas)
   try{ bulaApplyPulled(d.bulas_app); }catch(e){}           // bulas dos produtos
+  try{ if(d.catalogo_extra&&AGROFIT.dados) agrofitExtraMescla(AGROFIT.dados); }catch(e){}   // v351: produtos lidos da bula em outro aparelho
   try{ mistApplyPulled(d.misturas_app); }catch(e){}         // misturas e eficácia
   try{ prApplyPulled(d.produtividade_app); }catch(e){}      // estimativas de produtividade
   try{ acessoAplicar(d.acesso); }catch(e){}                 // login: exigido? + permissões atualizadas pela planilha

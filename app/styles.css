@@ -1935,6 +1935,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ag-alvos div{padding:4px 0;border-bottom:1px dashed #eef2f4}
 .ag-alvos i{display:block;color:var(--muted);font-size:12px}
 .bula-mapa{display:flex;flex-direction:column;gap:4px;width:100%}
+.bula-ia-tb{width:100%;border-collapse:collapse;font-size:11.5px;margin:4px 0}.bula-ia-tb th,.bula-ia-tb td{text-align:left;padding:3px 6px;border-bottom:1px solid var(--line,#e5e8ec);vertical-align:top}.bula-ia-tb th{color:var(--muted);font-weight:600}   /* v351 */
+.ag-cl.ag-extra{background:#e8f1f5;color:#2f6f7e}
 .ag-cand{text-align:left;border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px;cursor:pointer;font-size:13px;line-height:1.3}
 .ag-cand:hover{background:#eef7f9}
 .ag-cand small{color:var(--muted)}
@@ -2606,6 +2608,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ag-sec h4{font-size:11.5px}
   .ag-alvos{font-size:10.5px}
   .ag-alvos i{font-size:9.5px}
+  .bula-ia-tb{font-size:9.5px}
   .ag-cand{font-size:10.5px}
   .ag-lin span{font-size:9.5px}
   .ag-aba{font-size:10.5px}
