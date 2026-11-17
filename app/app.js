@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-348';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-349';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6883,7 +6883,7 @@ function agPickRender(){ const el=document.getElementById('agp-lista'); if(!el||
   let secPf=false, secCat=false;
   el.innerHTML=itens.map((x,i)=>{ let tit='', sub='', tag='', cab='';
     if(ins&&x.k==='pf'&&!secPf){ secPf=true; cab='<div class="agp-sec">📦 No app (portfólio)</div>'; } if(ins&&x.k==='p'&&!secCat){ secCat=true; cab='<div class="agp-sec">🏛️ Catálogo MAPA — escolher cadastra no portfólio + bula</div>'; }
-    if(x.k==='pf'){ const pr=x.p; tit=x.nome; sub=[pr.empresa, pr.un?`unidade ${pr.un}`:'', (+pr.preco>0)?`R$ ${num(+pr.preco)}/${pr.un||'un'}`:'', (bulaDe(x.nome)||{}).ia||pr.ativos||''].filter(Boolean).join(' · ')||'—'; tag=pr.classe||''; }
+    if(x.k==='pf'){ const pr=x.p, sd=ins?saldoEstoqueDe(x.nome):0; tit=x.nome; sub=[ins?(sd>0?`📦 saldo ${fmtDose(sd)} ${pr.un||''}`:'📦 sem estoque'):'', pr.empresa, pr.un?`unidade ${pr.un}`:'', (+pr.preco>0)?`R$ ${num(+pr.preco)}/${pr.un||'un'}`:'', (bulaDe(x.nome)||{}).ia||pr.ativos||''].filter(Boolean).join(' · ')||'—'; tag=pr.classe||''; }   // v349: saldo na busca de insumo
     else if(x.k==='p'){ tit=x.marca; sub=`${x.p.ia||'—'} · ${agEmpresaCurta(x.p.t)} · reg. ${x.p.r}`; tag=x.p.c; }
     else if(x.k==='c'){ const e=x.c._e||{}; tit=x.c.c; sub=x.c.rnc?`RNC ${x.c.rnc.n} · ${x.c.rnc.m}`:(e.c||''); tag=e.n||''; }
     else { tit=x.a.n||x.a.c; sub=(x.a.n&&x.a.c?x.a.c+' · ':'')+x.a.np+' produto(s)'; tag=x.a.t; }
@@ -7861,7 +7861,7 @@ const RECOM_TIPOS=['Terrestre','Drone','Avião','Pivô Central','Gotejo','Fertir
 // situação da recomendação para os contadores da visão geral: pendente (aguarda retorno/aprovação), atrasada (data passou e não aprovada), agendada (data de hoje em diante)
 function recomSit(r){ const hj=_hojeISO(), d=String(r.data||'').slice(0,10), s=r.status||'rascunho';
   return { aprovada:s==='aprovada', pendente:(s==='enviada'||s==='retorno'), atrasada:(s!=='aprovada' && !!d && d<hj), agendada:(s!=='aprovada' && (!d || d>=hj)) }; }
-let RECOM_UI={f:'total', q:'', aberto:{}};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória
+let RECOM_UI={f:'total', q:'', aberto:{}, sim:''};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória · v349: sim = "id|i" do item com a lista de similares aberta
 // cartão aberto? rascunho (em edição) e retorno recebido (pede aprovação) sempre; os outros só depois de tocar no cabeçalho
 function recomAberto(r){ return r.status==='rascunho' || r.status==='retorno' || !!RECOM_UI.aberto[r.id]; }
 function recomFiltra(regs){ const f=RECOM_UI.f; if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
@@ -8121,6 +8121,40 @@ function applyRetornos(retornos){
   return changed;
 }
 // cartão de uma recomendação, com aparência/ações conforme o estado
+// ===== v349: ESTOQUE NA RECOMENDAÇÃO — tem saldo para o que está sendo recomendado? similares com estoque; nunca bloqueia =====
+// ingrediente ativo em "palavras-chave": sem acento, maiúsculo, só palavras de 4+ letras, fora os termos de ligação e de sal/éster
+// ("ÉSTER METÍLICO DE ÓLEO DE SOJA" → SOJA · "GLIFOSATO SAL DE ISOPROPILAMINA" → GLIFOSATO · "AZOXISTROBINA + TEBUCONAZOL" → os dois)
+const _RX_ATIVO_STOP=/^(OLEO|ESTER|ESTERES|METILICO|METIL|ETIL|SAIS|ACIDO|SODIO|SODICO|POTASSIO|POTASSICO|AMONIO|AMONIACO|ISOPROPILAMINA|DIMETILAMINA|DIMETILAMONIO|TECNICO|EQUIVALENTE|CONCENTRADO|SUSPENSAO|EMULSIONAVEL|GRANULADO|DISPERSIVEL|MISTURA|BASE|CEPA|ESTIRPE|UFC)$/;
+function ativoToks(s){ return [...new Set(String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().split(/[^A-Z]+/).filter(t=>t.length>=4&&!_RX_ATIVO_STOP.test(t)))]; }
+function prodAtivoDe(nome){ const b=bulaDe(nome); return (b&&b.ia)||((PROD[nome]||{}).ativos)||''; }
+// produtos da MESMA classe com ativo em comum e saldo em estoque, do mais parecido (todos os ativos iguais) e maior saldo para o menor
+function prodSimilares(nome){ const p=PROD[nome]; if(!p) return []; const cl=String(p.classe||'').trim().toUpperCase(); if(!cl||/SEMENTE|M[ÁA]QUINA/.test(cl)) return [];
+  const at=ativoToks(prodAtivoDe(nome)); if(!at.length) return [];
+  const out=[]; for(const n in PROD){ if(n===nome) continue; const q=PROD[n]; if(!q||String(q.classe||'').trim().toUpperCase()!==cl) continue;
+    const bt=ativoToks(prodAtivoDe(n)), com=bt.filter(t=>at.includes(t)); if(!com.length) continue;
+    const saldo=saldoEstoqueDe(n); if(!(saldo>0)) continue;
+    out.push({produto:n, un:q.un||'', saldo, preco:precoDe(n), total:(com.length===at.length&&com.length===bt.length), comum:com}); }
+  return out.sort((a,b)=>(b.total-a.total)||(b.saldo-a.saldo)).slice(0,6); }
+// quanto desse produto já está prometido em OUTRAS recomendações pendentes (enviadas / com retorno, ainda não aprovadas)
+function recomComprometido(produto, excetoId){ let s=0; (RECOM.registros||[]).forEach(r0=>{ if(r0.id===excetoId||!(r0.status==='enviada'||r0.status==='retorno')) return; const r=recomNorm(r0), area=+r.area||0;
+    (r.itens||[]).forEach(it=>{ if(it.produto!==produto) return; const a=(+it.ha>0)?+it.ha:area; s+=(+it.dose||0)*a; }); }); return +s.toFixed(4); }
+// situação do estoque para um item: precisa (dose × área) × saldo atual × comprometido
+function recomEstoqueDe(r,it){ const p=String(it.produto||'').trim(); if(!p||!PROD[p]) return {st:'na'};
+  const area=(+it.ha>0)?+it.ha:(+r.area||0), precisa=+((+it.dose||0)*area).toFixed(4), saldo=+saldoEstoqueDe(p).toFixed(4), comp=recomComprometido(p, r.id), un=(PROD[p]||{}).un||it.un||'';
+  const st=saldo<=0?'sem':(!(precisa>0)?'info':(saldo+1e-6>=precisa?'ok':'parcial'));
+  return {st, saldo, precisa, comp, un, falta:Math.max(0,+(precisa-saldo).toFixed(4)), aperta:st==='ok'&&comp>0&&saldo-comp+1e-6<precisa}; }
+function recomEstoqueHtml(r,it,i,editable){ const E=recomEstoqueDe(r,it); if(E.st==='na') return '<span class="mut">—</span>';
+  const u=esc(E.un||''), link=(E.st==='sem'||E.st==='parcial'||E.aperta)?` <a class="link rc-sim-link" data-act="recomSimil" data-id="${esc(r.id)}" data-i="${i}" title="Produtos da mesma classe com o mesmo ingrediente ativo e saldo em estoque">similares ▸</a>`:'';
+  const comp=E.comp>0?`<div class="rc-est-comp mut" title="dose × área das outras recomendações enviadas e ainda não aprovadas">${fmtDose(E.comp)} ${u} em outras recomendações</div>`:'';
+  let main; if(E.st==='sem') main=`<span class="rc-est err">⛔ sem estoque</span>`; else if(E.st==='parcial') main=`<span class="rc-est warn">⚠ falta ${fmtDose(E.falta)} ${u}</span><div class="rc-est-sub mut">saldo ${fmtDose(E.saldo)} ${u}</div>`;
+  else if(E.aperta) main=`<span class="rc-est warn">⚠ pode faltar</span><div class="rc-est-sub mut">saldo ${fmtDose(E.saldo)} ${u}</div>`; else main=`<span class="rc-est ok">✅ ${fmtDose(E.saldo)} ${u}</span>`;
+  const aberto=RECOM_UI.sim===`${r.id}|${i}`; let sim='';
+  if(aberto){ const L=prodSimilares(it.produto); sim=`<div class="rc-sim">${L.length?L.map(s=>`<div class="rc-sim-row"><span><b>${esc(s.produto)}</b> <small class="mut">${s.total?'mesmo ativo':'ativo em comum: '+esc(s.comum.join(', ').toLowerCase())}</small><br><small>saldo <b>${fmtDose(s.saldo)} ${esc(s.un)}</b>${s.preco>0?` · ${brl(s.preco)}/${esc(s.un||'un')}`:''}</small></span>${editable?`<button class="btn btn-outline btn-sm" data-act="recomTrocarIns" data-id="${esc(r.id)}" data-i="${i}" data-novo="${esc(s.produto)}" title="Põe este produto no lugar; a dose fica para você conferir">Trocar</button>`:''}</div>`).join(''):`<div class="mut">Nenhum produto da mesma classe com o mesmo ativo em estoque.</div>`}</div>`; }
+  return main+link+comp+sim; }
+function recomEstoqueResumo(r,its){ const E=its.filter(it=>it.produto).map(it=>recomEstoqueDe(r,it)); const sem=E.filter(e=>e.st==='sem').length, parc=E.filter(e=>e.st==='parcial').length, ap=E.filter(e=>e.aperta).length;
+  if(!sem&&!parc&&!ap) return ''; return `<div class="rc-obs rc-est-res">📦 Estoque: ${[sem?`<b>${sem}</b> insumo(s) sem saldo`:'', parc?`<b>${parc}</b> com saldo parcial`:'', ap?`<b>${ap}</b> comprometido(s) em outras recomendações`:''].filter(Boolean).join(' · ')}. Não bloqueia: confira "similares" ou providencie a compra.</div>`; }
+function recomTrocarIns(rid, i, novo){ const r=recomById(rid); if(!r||!r.itens||!r.itens[+i]||!PROD[novo]) return; const it=r.itens[+i], antigo=it.produto; it.produto=novo; it.un=PROD[novo].un||it.un||''; it.ativo=prodAtivoDe(novo)||it.ativo||''; RECOM_UI.sim='';
+  saveRecom(); route({keepScroll:true}); toast(`${antigo} → ${novo} (saldo ${fmtDose(saldoEstoqueDe(novo))} ${PROD[novo].un||''}) — confira a dose`); }
 function recomCard(r,t){
   const st=RECOM_ST[r.status]||RECOM_ST.rascunho;
   const area=+r.area||0, its=r.itens||[], cd=recomCalda(r);
@@ -8153,6 +8187,7 @@ function recomCard(r,t){
       <td class="c-full">${prodCell}</td>
       <td class="num">${doseCell}</td>
       <td class="num">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="rc-est-td">${recomEstoqueHtml(r,it,i,editable)}</td>
       <td class="num">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
       <td class="num">${carCell}</td>
       <td class="num">${realCell}${difTag}</td>
@@ -8252,8 +8287,8 @@ function recomCard(r,t){
     ${head}
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
-      <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
-      <tbody>${rows||'<tr><td colspan="8" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${(()=>{ const ac=its.filter(it=>bulaDoseRef(it).st==='acima'); return ac.length?`<div class="rc-obs rc-acima">⛔ ${ac.length} dose(s) acima da bula: ${ac.map(it=>`<b>${esc(it.produto)}</b> ${fmtDose(it.dose)} ${esc(it.un||'')}/ha (bula ${esc(bulaDoseRef(it).txt)})`).join(' · ')}. Reveja antes de aprovar.</div>`:''; })()}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
+      <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th title="saldo atual no estoque (inicial + notas − saídas aprovadas) × o total desta recomendação">Estoque</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="9" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${recomEstoqueResumo(r,its)}${(()=>{ const ac=its.filter(it=>bulaDoseRef(it).st==='acima'); return ac.length?`<div class="rc-obs rc-acima">⛔ ${ac.length} dose(s) acima da bula: ${ac.map(it=>`<b>${esc(it.produto)}</b> ${fmtDose(it.dose)} ${esc(it.un||'')}/ha (bula ${esc(bulaDoseRef(it).txt)})`).join(' · ')}. Reveja antes de aprovar.</div>`:''; })()}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
     ${tail}
     ${(!editable&&r.exp&&expById(r.exp))?`<div class="rc-obs">🧪 Área de referência: <b>${esc(expById(r.exp).nome||'')}</b> · ${nf2.format(expHa(expById(r.exp)))} ha</div>`:''}
@@ -11100,6 +11135,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomDosePlano'){ const r=recomById(a.id); const it=r&&r.itens&&r.itens[+a.i]; if(it&&it.plan>0){ it.dose=it.plan; saveRecom(); route({keepScroll:true}); toast(`${it.produto}: dose do planejamento (${fmtDose(it.plan)} ${it.un||''}/ha)`); } }   // v293
     else if(a.act==='recomAddItem'){ const r=recomById(a.id); if(r){ (r.itens=r.itens||[]).push({produto:'',un:'',dose:0,real:null}); saveRecom(); route(); } }
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
+    else if(a.act==='recomSimil'){ const k=`${a.id}|${a.i}`; RECOM_UI.sim=(RECOM_UI.sim===k)?'':k; route({keepScroll:true}); }   // v349: similares com estoque
+    else if(a.act==='recomTrocarIns'){ recomTrocarIns(a.id, a.i, a.novo); }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
       if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom(); route({keepScroll:true}); } } }
     else if(a.act==='recomPrint'){ exportRecomPDF(a.id); }

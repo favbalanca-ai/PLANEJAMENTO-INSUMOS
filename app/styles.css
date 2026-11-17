@@ -2248,6 +2248,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .pl-sems{margin:6px 0 2px}.pl-sem{display:flex;align-items:center;gap:8px;margin:4px 0}.pl-sem .sel{flex:1;min-width:0}
 .pl-sem-ha{display:inline-flex;align-items:center;gap:4px}.pl-sem-ha .cell{width:74px}
 .rc-ha{margin-top:3px;font-size:11.5px}.rc-ha .cell{width:64px}
+/* v349: estoque na recomendação */
+.rc-est-td{min-width:120px;white-space:normal;font-size:12px}.rc-est{font-weight:700;white-space:nowrap}.rc-est.ok{color:var(--green)}.rc-est.warn{color:var(--amber)}.rc-est.err{color:var(--red)}
+.rc-est-sub,.rc-est-comp{font-size:11px;line-height:1.3}.rc-sim-link{font-size:11.5px;font-weight:700;white-space:nowrap}
+.rc-sim{margin-top:6px;padding:6px 8px;background:var(--bg-soft,#f5f7f8);border:1px solid var(--line,#e5e8ec);border-radius:8px;font-size:12px;min-width:200px}
+.rc-sim-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px dashed var(--line,#e5e8ec)}.rc-sim-row:last-child{border-bottom:0}
+.rc-est-res{color:var(--amber)}
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
@@ -2698,4 +2704,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ld-item .na-tx span{font-size:9.5px}
   .mapa-menu .btn{font-size:11.5px}
   .rc-ha{font-size:9.5px}
+  .rc-est-td{font-size:9.5px}
+  .rc-sim-link{font-size:9.5px}
+  .rc-sim{font-size:9.5px}
 }
