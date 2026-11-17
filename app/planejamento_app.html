@@ -2276,6 +2276,18 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* v350: saldo na Operação de Campo */
 .ci-est{display:block;font-size:11px;font-weight:700;margin-top:2px;white-space:nowrap}.ci-est.ok{color:var(--green)}.ci-est.warn{color:var(--amber)}.ci-est.err{color:var(--red)}
 .ci-bula{display:block;font-size:11px;color:var(--muted);margin-top:1px;white-space:normal}.ci-bula-fora{color:var(--amber)}   /* v353: dose da bula por cultura */
+/* v357: compatibilidade da calda (análise de mistura) */
+.rc-mist-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:2px 12px 8px}
+.rc-mist{margin:0 12px 10px;padding:8px 10px;border:1px solid var(--line);border-left:4px solid #7e57c2;border-radius:10px;background:var(--bg-soft,#f7f5fb);font-size:12.5px;line-height:1.45}
+.rc-mist-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.rc-mist-sec{padding:5px 0;border-top:1px dashed var(--line)}.rc-mist-sec:first-of-type{border-top:0}
+.rc-mist-ord{margin:3px 0;font-weight:600}
+.rc-mist-al{margin:4px 0 0;padding-left:18px}.rc-mist-al li{margin:3px 0}
+.mist-alto{color:var(--red)}.mist-medio{color:var(--amber)}.mist-baixo{color:#8a6d00}.mist-info{color:var(--ink2)}
+.mi-chip.mist-alto{background:#fdecea;color:#8e1a14}.mi-chip.mist-medio{background:#fff8e1;color:#6b5400}.mi-chip.mist-baixo{background:#e8f5e9;color:#1b5e20}
+.rc-mist-iah{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rc-mist-ia p{margin:4px 0}
+.rc-mist-foot{margin-top:6px;font-size:11.5px;color:var(--muted)}
+.rx-mist ul{margin:4px 0 0;padding-left:16px}
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
@@ -2730,6 +2742,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rc-est-td{font-size:9.5px}
   .rc-sim-link{font-size:9.5px}
   .rc-sim{font-size:9.5px}
+  .rc-mist{font-size:10px}
+  .rc-mist-foot{font-size:9.5px}
 }
 
 </style>
@@ -2841,7 +2855,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-356';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-357';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -10153,7 +10167,8 @@ function misturaDeRecom(r){
   const m=Object.assign(old||{id:'mi'+now.toString(36)+Math.random().toString(36).slice(2,6), ts:now, aval:null}, {
     recomId:r.id, opKey:r.opKey||'', talhao:r.talhao, talhaoNome:t?tNome(t):r.talhao, data:String(r.data||'').slice(0,10)||_hojeISO(), cultura:r.cultura||'', estadio:r.estadio||'',
     alvo:r.alvo||'', nivel:r.nivel||'', opNome:r.opNome||'', calda:_mmC(r.calda)||0, cond:recomCondTxt(r), adjuvante:r.adjuvante||'', maquina:r.maquina||'',
-    operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:tsAgora() });
+    operador:(r.retorno&&r.retorno.quem)||'', itens:its, assin:mistAssin(its), area:+r.area||0, _u:tsAgora(),
+    compat:(()=>{ try{ const A=misturaAnalise(r); return {regras:A.risco, ia:r.mist?r.mist.risco:'', resumo:r.mist?String(r.mist.resumo||'').slice(0,200):''}; }catch(e){ return null; } })() });   // v357: risco da calda (regras e IA) vai junto para a aba MISTURAS APP
   delete m.del; MIST.reg[m.id]=m; saveMist(); return m;
 }
 function mistRemoverDeRecom(id){ const m=mistDeRecom(id); if(m && !(m.aval&&m.aval.nota)){ m.del=true; m._u=tsAgora(); saveMist(); } }   // reprovar/reabrir: some se ainda não foi avaliada
@@ -10736,7 +10751,7 @@ const RECOM_TIPOS=['Terrestre','Drone','Avião','Pivô Central','Gotejo','Fertir
 // situação da recomendação para os contadores da visão geral: pendente (aguarda retorno/aprovação), atrasada (data passou e não aprovada), agendada (data de hoje em diante)
 function recomSit(r){ const hj=_hojeISO(), d=String(r.data||'').slice(0,10), s=r.status||'rascunho';
   return { aprovada:s==='aprovada', pendente:(s==='enviada'||s==='retorno'), atrasada:(s!=='aprovada' && !!d && d<hj), agendada:(s!=='aprovada' && (!d || d>=hj)) }; }
-let RECOM_UI={f:'total', q:'', aberto:{}, sim:''};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória · v349: sim = "id|i" do item com a lista de similares aberta
+let RECOM_UI={f:'total', q:'', aberto:{}, sim:'', mist:{}};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória · v349: sim = "id|i" do item com a lista de similares aberta · v357: mist = análise de mistura aberta por recomendação
 // cartão aberto? rascunho (em edição) e retorno recebido (pede aprovação) sempre; os outros só depois de tocar no cabeçalho
 function recomAberto(r){ return r.status==='rascunho' || r.status==='retorno' || !!RECOM_UI.aberto[r.id]; }
 function recomFiltra(regs){ const f=RECOM_UI.f; if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
@@ -10956,6 +10971,7 @@ function recomWhats(id){
     const tk=(cd.haTk&&it.dose)?` · ${fmtDose(it.dose*cd.haTk)} ${it.un||''}/tanque`:'';
     return `${i+1}. ${it.produto}${it.ativo?` (${it.ativo})`:''} — ${fmtDose(it.dose)} ${it.un||''}/ha${tot}${tk}${it.car?` · carência ${it.car} d`:''}`;
   }).join('\n')+'\n'; }
+  const MX=misturaResumoTxt(r); if(MX){ x+=`\n*Compatibilidade da calda:* ${MX.linha}\n`; if(MX.A.ordemDif) x+=`Ordem de adição sugerida: ${MX.A.ordem.map((p,k)=>`${k+1}. ${p.produto}`).join(' → ')}\n`; MX.top.forEach(t=>{ x+=`• ${t.txt}\n`; }); x+=`🫙 Teste da jarra antes de misturar no tanque.\n`; }   // v357
   if(cd.calda) x+=`\n*Calda:* ${num(cd.calda)} L/ha${cd.tk?` · tanque ${num(cd.tk)} L (${num(cd.haTk)} ha/tanque)`:''}${cd.nTk?` · ${cd.nTk} tanque(s)${cd.ultimo&&cd.ultimo<cd.haTk-0.01?`, último com ${num(cd.ultimo)} ha`:''}`:''}${cd.total?` · total ${num(cd.total)} L`:''}\n`;
   if(r.adjuvante) x+=`Adjuvante: ${r.adjuvante}\n`;
   const apl=[r.tipoApl, r.maquina, conjRendTxt(r.maquina,+r.area||0), r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
@@ -11056,6 +11072,103 @@ function campoEstoqueTag(produto, precisa){ const p=String(produto||'').trim(); 
   return `<span class="ci-est ok" title="${esc(tit)}">✅ saldo ${fmtDose(saldo)} ${un}</span>`; }
 function recomTrocarIns(rid, i, novo){ const r=recomById(rid); if(!r||!r.itens||!r.itens[+i]||!PROD[novo]) return; const it=r.itens[+i], antigo=it.produto; it.produto=novo; it.un=PROD[novo].un||it.un||''; it.ativo=prodAtivoDe(novo)||it.ativo||''; RECOM_UI.sim='';
   saveRecom(); route({keepScroll:true}); toast(`${antigo} → ${novo} (saldo ${fmtDose(saldoEstoqueDe(novo))} ${PROD[novo].un||''}) — confira a dose`); }
+// ===== v357: COMPATIBILIDADE DA CALDA (análise de mistura) — regras locais com os dados da bula + parecer da IA (planilha, __misturaIa) =====
+// Só informação: nada bloqueia o envio nem a aprovação. A prova final continua sendo o teste da jarra.
+// Fontes por produto: ficha da bula (formulação, pH, ativo, obs de compatibilidade) → catálogo MAPA (formulação, ativo, classe) → coluna ATIVOS/CLASSE da planilha.
+const MIST_FORM_RANK={COND:0, WG:1,WP:1,SG:1,SP:1,DF:1,GR:1, SC:2,CS:2,SE:2,ZC:2,FS:2, EC:3,EW:3,ME:3, OD:4, SL:5, FERT:6, ADJ:7};
+const MIST_FORM_NOMES={COND:'condicionador de água',WG:'grânulos dispersíveis',WP:'pó molhável',SG:'grânulos solúveis',SP:'pó solúvel',DF:'grânulos dispersíveis',GR:'granulado',SC:'suspensão concentrada',CS:'suspensão de encapsulado',SE:'suspo-emulsão',ZC:'mistura CS + SC',FS:'suspensão p/ sementes',EC:'concentrado emulsionável',EW:'emulsão óleo em água',ME:'microemulsão',OD:'dispersão oleosa',SL:'concentrado solúvel',FERT:'fertilizante',ADJ:'adjuvante / óleo'};
+const MIST_RISCO={baixo:{lbl:'risco baixo',ico:'🟢',cls:'mist-baixo'}, medio:{lbl:'risco médio',ico:'🟡',cls:'mist-medio'}, alto:{lbl:'risco alto',ico:'🔴',cls:'mist-alto'}};
+function mistFormSigla(txt){ const s=String(txt||''); const m=s.match(/\b(WG|WDG|WP|SG|SP|DF|GR|SC|CS|SE|ZC|FS|EC|EW|ME|OD|SL)\b/i); if(m) return m[1].toUpperCase()==='WDG'?'WG':m[1].toUpperCase(); const n=_agNorm(s);
+  if(/granulos? dispers/.test(n)) return 'WG'; if(/po molhavel/.test(n)) return 'WP'; if(/granulos? soluv/.test(n)) return 'SG'; if(/po soluvel/.test(n)) return 'SP'; if(/suspo.?emuls/.test(n)) return 'SE'; if(/encapsulad/.test(n)) return 'CS'; if(/suspensao concentrada/.test(n)) return 'SC';
+  if(/concentrado emulsion/.test(n)) return 'EC'; if(/emulsao oleo/.test(n)) return 'EW'; if(/microemuls/.test(n)) return 'ME'; if(/dispersao oleosa/.test(n)) return 'OD'; if(/concentrado soluvel|solucao aquosa/.test(n)) return 'SL'; return ''; }
+// faixa de pH da ficha: "5 a 6", "5,5-6,5", "ácido", "neutro" → [mín, máx] ou null
+function mistPh(txt){ const s=String(txt||'').trim(); if(!s) return null; const ns=(s.match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>+x.replace(',','.')).filter(x=>x>0&&x<=14); if(ns.length>=2) return [Math.min(...ns), Math.max(...ns)]; if(ns.length===1) return [ns[0]-0.5, ns[0]+0.5]; const n=_agNorm(s); if(/alcalin|basic/.test(n)) return [7.5,9]; if(/neutr/.test(n)) return [6.5,7.5]; if(/acid/.test(n)) return [4,6.5]; return null; }
+// o que se sabe de um produto para a análise
+function mistInfo(produto){ const p=String(produto||'').trim(), b=bulaDe(p)||{}, pr=PROD[p]||{}; let ag=null;
+  try{ const d=AGROFIT.dados; if(d){ const reg=String(b.reg||'').replace(/\D/g,''); ag=(reg&&d._porReg[reg])||null; if(!ag){ const l=agrofitBuscarNome(p); if(l.length&&(l[0].m||[]).some(m=>_agNorm(m)===_agNorm(p))) ag=l[0]; } } }catch(e){}
+  const classe=String(pr.classe||(ag?agClasseApp(ag.c):'')||'').toUpperCase(), ativo=String(b.ia||pr.ativos||(ag?agrofitIaSplit(ag.ia).ia:'')||''), formTxt=String(b.form||(ag?ag.f:'')||''), grupo=String(b.grupo||(ag?ag.ma:'')||'');
+  const tok=_agNorm([p, ativo, grupo, classe, formTxt].join(' ')), fonteForm=b.form?'bula':ag?'MAPA':'';
+  let tipo=mistFormSigla(formTxt);
+  const oleo=/\boleo\b|ester (metilico|de soja)|metil ?ester|\bod\b.*dispersao oleosa|lecitina/.test(tok)&&!/sem oleo/.test(tok);
+  if(/sulfato de amonio|condicionador|sequestrante|redutor de ph|corretor de ph|regulador de ph|antiespumante/.test(tok)) tipo='COND';
+  else if(/adjuvante|espalhante|surfactante|antideriva|redutor de deriva/.test(tok)||(oleo&&!/fungicida|inseticida|herbicida|acaricida/.test(tok))) tipo='ADJ';
+  else if(/fertiliz|foliar|nutri|micronutr|macronutr/.test(tok)&&!/herbicida|fungicida|inseticida/.test(tok)) tipo='FERT';
+  const bio=/biolog|inoculant|bacillus|trichoderma|bradyrhizobium|azospirillum|beauveria|metarhizium|baculovirus|pseudomonas|rhizobium|microbiol/.test(tok);
+  return {produto:p, classe, ativo, grupo, formTxt, tipo, fonteForm, ph:mistPh(b.ph), phTxt:String(b.ph||''), obs:String(b.obs||''), conc:String(b.conc||''), tok, oleo, bio, semFicha:!bulaTem(b)}; }
+// regras de um par de produtos (A, B): add(nivel, texto)
+function mistRegrasPar(A,B,add){ const t=(x)=>x.tipo?` (${x.tipo})`:'', par=[A.produto,B.produto];
+  const sol=x=>MIST_FORM_RANK[x.tipo]===1, emu=x=>/^(EC|EW|ME)$/.test(x.tipo), susp=x=>MIST_FORM_RANK[x.tipo]===2;
+  if((sol(A)&&emu(B))||(sol(B)&&emu(A))) add('medio',`${A.produto}${t(A)} com ${B.produto}${t(B)}: dissolva bem o sólido antes de entrar com o emulsionável — em calda concentrada a mistura tende a flocular e entupir os bicos.`,par);
+  if((susp(A)&&emu(B))||(susp(B)&&emu(A))) add('baixo',`${A.produto}${t(A)} com ${B.produto}${t(B)}: suspensão com emulsionável pode separar e formar creme — agitação constante, não deixar a calda parada.`,par);
+  if(emu(A)&&emu(B)) add('baixo',`${A.produto} e ${B.produto} são concentrados emulsionáveis: muita carga de solvente na calda — atenção à fitotoxicidade em dias quentes.`,par);
+  const fung=x=>/FUNGICIDA/.test(x.classe)||/conazol|triazol|estrobilurina|carboxamida/.test(x.tok), oleoso=x=>x.oleo||x.tipo==='OD';
+  if((fung(A)&&oleoso(B)&&!fung(B))||(fung(B)&&oleoso(A)&&!fung(A))) add('medio',`${fung(A)?A.produto:B.produto} (fungicida) com ${oleoso(A)&&!fung(A)?A.produto:B.produto} (óleo / dispersão oleosa): em dia quente aumenta o risco de fitotoxicidade (queima) — aplique nas horas frescas e respeite a dose do óleo.`,par);
+  if(A.ph&&B.ph&&(A.ph[1]<B.ph[0]||B.ph[1]<A.ph[0])) add('alto',`pH de calda incompatível: ${A.produto} pede pH ${A.phTxt}; ${B.produto} pede pH ${B.phTxt}. Corrija a calda para o produto mais sensível ou aplique separado.`,par);
+  const alcalino=x=>(x.ph&&x.ph[0]>=7.5)||/alcalin|calcario|hidroxido de calcio|\bcal\b|oxido de calcio/.test(x.tok);
+  [[A,B],[B,A]].forEach(([X,Y])=>{ const o=_agNorm(X.obs); if(!o) return;
+    if(/alcalin/.test(o)&&alcalino(Y)) add('alto',`A bula de ${X.produto} alerta contra produtos alcalinos — ${Y.produto} é alcalino / pede pH alto.`,par);
+    if(/oleo/.test(o)&&oleoso(Y)) add('alto',`A bula de ${X.produto} restringe a mistura com óleo — ${Y.produto} é óleo / formulação oleosa. Confira a frase da bula.`,par);
+    if(/calcio/.test(o)&&/calcio/.test(Y.tok)) add('alto',`A bula de ${X.produto} restringe a mistura com cálcio — ${Y.produto} contém cálcio.`,par);
+    if(/cobre|cupric/.test(o)&&/cobre|cupric|oxicloreto/.test(Y.tok)) add('alto',`A bula de ${X.produto} restringe a mistura com cobre — ${Y.produto} é cúprico.`,par); });
+  const tem=(x,rx)=>rx.test(x.tok), ambos=(rxA,rxB)=>(tem(A,rxA)&&tem(B,rxB))||(tem(B,rxA)&&tem(A,rxB));
+  if(ambos(/calcio/,/fosfat|fosfor|sulfat|\bboro\b|borax|enxofre|sulfur/)) add('alto',`${A.produto} + ${B.produto}: cálcio com fosfato, sulfato, boro ou enxofre forma sal insolúvel (precipita) e entope filtros e bicos.`,par);
+  if(ambos(/glifosato|glyphosate/,/calcio|magnesio|zinco|manganes|cobre|ferro|micronutr|foliar/)||(tem(A,/glifosato/)&&B.tipo==='FERT')||(tem(B,/glifosato/)&&A.tipo==='FERT')) add('medio',`${A.produto} + ${B.produto}: cátions (Ca, Mg, Zn, Mn, Cu, Fe) prendem o glifosato e reduzem o efeito — sulfato de amônio antes do glifosato ou aplicar separado.`,par);
+  if(ambos(/enxofre|sulfur/,/oleo/)||(tem(A,/enxofre/)&&oleoso(B))||(tem(B,/enxofre/)&&oleoso(A))) add('alto',`${A.produto} + ${B.produto}: enxofre com óleo causa queima severa — intervalo de 2 a 3 semanas entre os dois.`,par);
+  if(ambos(/zinco|manganes/,/fosfat|fosfito/)) add('medio',`${A.produto} + ${B.produto}: zinco/manganês com fosfato ou fosfito tende a precipitar — confira no teste da jarra.`,par);
+  const sensPh=x=>/organofosf|carbamat|piretr|clorpirif|malation|acefato|metomil|carbaril|cipermetrina|deltametrina|cialotrina|bifentrina|permetrina|esfenvalerato|dimetoato|profenof|triclorf|tiodicarbe|indoxacarbe|clorfenapir|captana|folpete/.test(x.tok);
+  if((sensPh(A)&&alcalino(B))||(sensPh(B)&&alcalino(A))) add('alto',`${sensPh(A)?A.produto:B.produto} degrada em calda alcalina (hidrólise em poucas horas) — ${alcalino(A)&&!sensPh(A)?A.produto:B.produto} deixa o pH alto. Corrija o pH para 5–6 ou aplique separado.`,par);
+  const quim=x=>!x.bio&&(/FUNGICIDA|INSETICIDA|BACTERICIDA/.test(x.classe)||/fungicida|inseticida|bactericida|cobre|cupric|cobalto|molibd/.test(x.tok));
+  if((A.bio&&quim(B))||(B.bio&&quim(A))) add('alto',`${A.bio?A.produto:B.produto} é biológico / inoculante: fungicidas, inseticidas, cobre, cobalto e molibdênio na mesma calda matam os microrganismos — aplicar separado ou conferir a compatibilidade na bula.`,par);
+  if(ambos(/cobre|cupric|oxicloreto/,/./)&&((tem(A,/cobre|cupric/)&&B.ph&&B.ph[1]<6)||(tem(B,/cobre|cupric/)&&A.ph&&A.ph[1]<6))) add('medio',`${A.produto} + ${B.produto}: cúprico em calda ácida libera cobre em excesso — risco de fitotoxicidade.`,par);
+}
+// histórico do módulo Misturas: a combinação toda e cada par (aplicações registradas e eficácia avaliada)
+function mistHistorico(its){ const ks=its.map(it=>bulaKey(it.produto)), L=mistLista(), assin=ks.slice().sort().join(' + '), cont=l=>{ const c={n:l.length, eficaz:0, parcial:0, ineficaz:0}; l.forEach(m=>{ const n=m.aval&&m.aval.nota; if(c[n]!=null) c[n]++; }); return c; };
+  const iguais=L.filter(m=>m.assin===assin), pares=[], nunca=[];
+  for(let a=0;a<ks.length;a++) for(let b=a+1;b<ks.length;b++){ const l=L.filter(m=>{ const s=new Set((m.itens||[]).map(x=>bulaKey(x.produto))); return s.has(ks[a])&&s.has(ks[b]); }); if(l.length) pares.push(Object.assign({a:its[a].produto, b:its[b].produto}, cont(l))); else nunca.push(`${its[a].produto} + ${its[b].produto}`); }
+  return Object.assign({pares, nunca, ultima:iguais[0]||null}, cont(iguais)); }
+function misturaAnalise(r){ const its=(r.itens||[]).filter(it=>it.produto), I=its.map((it,i)=>Object.assign({i, dose:it.dose, un:it.un}, mistInfo(it.produto)));
+  const al=[], add=(nivel,txt,prods)=>{ if(!al.some(x=>x.txt===txt)) al.push({nivel,txt,prods:prods||[]}); };
+  const rank=x=>MIST_FORM_RANK[x.tipo]!=null?MIST_FORM_RANK[x.tipo]:2.5;
+  const ordem=I.slice().sort((a,b)=>rank(a)-rank(b)||a.i-b.i), ordemDif=ordem.some((x,k)=>x.i!==k);
+  const semForm=I.filter(x=>!x.tipo); if(semForm.length&&I.length>=2) add('info',`Formulação desconhecida: ${semForm.map(x=>x.produto).join(', ')}. Preencha a ficha da bula (ou leia a bula com a IA) para a ordem de adição e as regras ficarem completas.`, semForm.map(x=>x.produto));
+  I.forEach(x=>{ const o=_agNorm(x.obs); if(o&&/incompat|nao (deve ser |e )?(mistur|compat)|compatib|mistura/.test(o)) add('info',`A bula de ${x.produto} diz: “${x.obs.slice(0,200)}”`,[x.produto]); });
+  for(let a=0;a<I.length;a++) for(let b=a+1;b<I.length;b++) mistRegrasPar(I[a],I[b],add);
+  if(I.length>=4) add('info',`${I.length} produtos na mesma calda: quanto mais produtos, maior a chance de reação e de perda de efeito. Teste da jarra obrigatório.`);
+  const hist=mistHistorico(its), risco=al.some(x=>x.nivel==='alto')?'alto':al.some(x=>x.nivel==='medio')?'medio':'baixo';
+  return {itens:I, ordem, ordemDif, alertas:al, hist, risco}; }
+function mistOrdemTxt(A){ return A.ordem.map((x,k)=>`${k+1}. ${x.produto}${x.tipo?` (${x.tipo})`:''}`).join(' → '); }
+function mistHistTxt(h){ if(!h) return ''; const ef=c=>[c.eficaz?`${c.eficaz} eficaz`:'', c.parcial?`${c.parcial} parcial`:'', c.ineficaz?`${c.ineficaz} não eficaz`:''].filter(Boolean).join(', ');
+  if(h.n) return `Esta combinação já foi aplicada ${h.n} vez(es)${ef(h)?` — ${ef(h)}`:' (eficácia ainda não avaliada)'}${h.ultima&&h.ultima.data?` · última em ${fmtDataBR(h.ultima.data)}${h.ultima.talhaoNome?' ('+h.ultima.talhaoNome+')':''}`:''}.`;
+  const p=h.pares.map(x=>`${x.a} + ${x.b}: ${x.n}×${ef(x)?' ('+ef(x)+')':''}`); return (p.length?`Pares já usados juntos: ${p.join(' · ')}. `:'')+(h.nunca.length?`Nunca aplicados juntos aqui: ${h.nunca.join(' · ')}.`:''); }
+const MIST_JARRA='🫙 Faça o teste da jarra antes de misturar no tanque: na proporção da calda, na ordem sugerida, agitar e observar 15 a 30 min (grumos, separação, espuma, aquecimento). Esta análise orienta e não substitui a bula nem o responsável técnico — nada aqui bloqueia a aplicação.';
+let mistIaLendo='';
+function misturaHtml(r, editable){ const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2) return '';
+  const aberto=!!RECOM_UI.mist[r.id], ia=r.mist||null, A=misturaAnalise(r), R=MIST_RISCO[A.risco], RI=ia&&(MIST_RISCO[ia.risco]||MIST_RISCO.baixo);
+  const bar=`<div class="rc-mist-bar"><button class="btn btn-outline btn-sm" data-act="recomMist" data-id="${esc(r.id)}" title="Compatibilidade da calda: ordem de adição, pH, formulações, avisos da bula, histórico e parecer da IA">🧪 ${aberto?'Fechar análise':'Analisar mistura'}</button>${!aberto?`<span class="mi-chip ${R.cls}" title="pelas regras locais (formulação, pH, bula, ativos)">${R.ico} ${R.lbl}</span>${RI?`<span class="mi-chip ${RI.cls}" title="parecer da IA">🤖 ${RI.lbl}</span>`:''}`:''}</div>`;
+  if(!aberto) return bar;
+  const ico={alto:'⛔',medio:'⚠️',baixo:'🟡',info:'ℹ️'}, lis=A.alertas.map(x=>`<li class="mist-${x.nivel}">${ico[x.nivel]||''} ${esc(x.txt)}</li>`).join('');
+  const iaBox=mistIaLendo===r.id?`<div class="mut">🤖 Pedindo o parecer da IA… pode levar até um minuto.</div>`
+    : ia?`<div class="rc-mist-iah"><b>🤖 Parecer da IA</b> <span class="mi-chip ${RI.cls}">${RI.ico} ${RI.lbl}</span><span class="mut" style="font-size:11px">${ia.ts?esc(fmtDataBR(_dISO(ia.ts))):''}${ia.modelo?' · '+esc(ia.modelo):''}</span></div>${(ia.assin&&ia.assin!==mistAssin(its))?`<div class="mist-medio" style="font-size:12px">⚠️ Os produtos mudaram depois deste parecer — peça um novo.</div>`:''}${ia.resumo?`<p>${esc(ia.resumo)}</p>`:''}${(ia.pares||[]).length?`<table class="bula-ia-tb"><thead><tr><th>Par</th><th>Risco</th><th>Motivo</th><th>O que fazer</th></tr></thead><tbody>${ia.pares.map(p=>`<tr><td>${esc(p.a)} + ${esc(p.b)}</td><td class="mist-${esc(p.risco)}">${(MIST_RISCO[p.risco]||{}).ico||''} ${esc((MIST_RISCO[p.risco]||{}).lbl||p.risco)}</td><td>${esc(p.motivo||'')}</td><td>${esc(p.fazer||'')}</td></tr>`).join('')}</tbody></table>`:''}${(ia.ordem||[]).length?`<div><b>Ordem (IA):</b> ${esc(ia.ordem.map((p,k)=>`${k+1}. ${p}`).join(' → '))}</div>`:''}${ia.ph?`<div><b>pH:</b> ${esc(ia.ph)}</div>`:''}${(ia.avisos||[]).map(a=>`<div>• ${esc(a)}</div>`).join('')}`
+    : `<div class="mut">Sem parecer da IA ainda. A IA recebe as fichas das bulas (formulação, ativos, pH, incompatibilidades) e devolve risco por par de produtos, motivo e o que fazer.</div>`;
+  const iaBtn=`<button class="btn btn-primary btn-sm" data-act="recomMistIa" data-id="${esc(r.id)}"${(!syncUrl()||mistIaLendo)?' disabled':''} title="${syncUrl()?'A planilha manda as fichas das bulas à IA':'Configure a Sincronização: é a planilha que fala com a IA'}">🤖 ${ia?'Atualizar parecer':'Pedir parecer da IA'}</button>`;
+  return bar+`<div class="rc-mist">
+    <div class="rc-mist-h"><b>🧪 Compatibilidade da calda</b> <span class="mi-chip ${R.cls}" title="pelas regras locais">${R.ico} ${R.lbl} (regras)</span></div>
+    <div class="rc-mist-sec"><b>Ordem de adição sugerida</b> <small class="mut">(pela formulação: condicionador → WG/WP → SC → EC → OD → SL → fertilizante → adjuvante/óleo)</small><div class="rc-mist-ord">${esc(mistOrdemTxt(A))}${A.ordemDif?` <span class="mist-medio">— difere da ordem atual</span>${editable?` <button class="btn btn-outline btn-sm" data-act="recomMistOrdem" data-id="${esc(r.id)}">Aplicar esta ordem</button>`:''}`:' <span class="lim-ok" style="margin:0">✓ igual à ordem atual</span>'}</div>
+      <div class="mut" style="font-size:11px">Formulação por produto: ${A.itens.map(x=>`${esc(x.produto)} = ${x.tipo?`<b>${esc(x.tipo)}</b> ${esc(MIST_FORM_NOMES[x.tipo]||'')}${x.fonteForm?` <small>(${esc(x.fonteForm)})</small>`:''}`:'<span class="mist-medio">?</span>'}`).join(' · ')}</div></div>
+    <div class="rc-mist-sec"><b>Avisos pelas regras</b>${lis?`<ul class="rc-mist-al">${lis}</ul>`:'<div class="lim-ok" style="margin:4px 0 0">✓ Nenhuma incompatibilidade conhecida entre estes produtos pelas regras do app.</div>'}</div>
+    <div class="rc-mist-sec"><b>📚 Histórico (módulo Misturas)</b><div>${esc(mistHistTxt(A.hist))||'<span class="mut">sem registros</span>'}</div></div>
+    <div class="rc-mist-sec rc-mist-ia">${iaBox}<div style="margin-top:6px">${iaBtn}</div></div>
+    <div class="rc-mist-foot">${MIST_JARRA}</div></div>`; }
+function mistRiscoLbl(k){ return (MIST_RISCO[k]||{}).lbl||''; }
+// texto curto para o WhatsApp e o PDF
+function misturaResumoTxt(r){ const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2) return null; const A=misturaAnalise(r), ia=r.mist||null, top=A.alertas.filter(x=>x.nivel!=='info').slice(0,3);
+  return {A, ia, top, linha:ia?`IA: ${mistRiscoLbl(ia.risco)}${ia.resumo?' — '+ia.resumo:''}`:`${mistRiscoLbl(A.risco)} pelas regras do app (formulação, pH, bula, ativos)`}; }
+async function misturaIaPedir(id){ const r=recomById(id); if(!r||mistIaLendo) return; const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2){ toast('Precisa de pelo menos 2 produtos'); return; }
+  if(!syncUrl()){ toast('Configure a Sincronização: é a planilha que fala com a IA'); return; }
+  const A=misturaAnalise(r), pl={id:r.id, cultura:r.cultura||'', alvo:r.alvo||'', calda:+_mmC(r.calda)||0, adjuvante:r.adjuvante||'', produtos:A.itens.map(x=>({produto:x.produto, ativo:x.ativo, classe:x.classe, formulacao:x.formTxt||x.tipo, tipo:x.tipo, ph:x.phTxt, conc:x.conc, grupo:x.grupo, obs:x.obs, dose:+x.dose||0, un:x.un||''})), regras:A.alertas.map(x=>`[${x.nivel}] ${x.txt}`), historico:mistHistTxt(A.hist)};
+  mistIaLendo=r.id; RECOM_UI.mist[r.id]=true; route({keepScroll:true}); let j=null; try{ j=await syncPost(syncUrl(), JSON.stringify({__misturaIa:pl})); }catch(e){ j=null; } mistIaLendo='';
+  if(!(j&&j.parecer)){ const m=permAviso((j&&j.msgs&&j.msgs[0])||'sem resposta da planilha'); toast('Sem parecer da IA: '+m); route({keepScroll:true}); return; }
+  r.mist=Object.assign({}, j.parecer, {ts:Date.now(), assin:mistAssin(its)}); saveRecom(); route({keepScroll:true}); toast(`Parecer da IA: ${mistRiscoLbl(r.mist.risco)}`); }
 function recomCard(r,t){
   const st=RECOM_ST[r.status]||RECOM_ST.rascunho;
   const area=+r.area||0, its=r.itens||[], cd=recomCalda(r);
@@ -11191,6 +11304,7 @@ function recomCard(r,t){
       <thead><tr><th>#</th><th>Insumo · ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (área)</th><th title="saldo atual no estoque (inicial + notas − saídas aprovadas) × o total desta recomendação">Estoque</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th><th></th></tr></thead>
       <tbody>${rows||'<tr><td colspan="9" class="mut" style="padding:8px 10px">Sem insumos.</td></tr>'}</tbody></table>${semAviso}${recomEstoqueResumo(r,its)}${(()=>{ const ac=its.filter(it=>bulaDoseRef(it).st==='acima'); return ac.length?`<div class="rc-obs rc-acima">⛔ ${ac.length} dose(s) acima da bula: ${ac.map(it=>`<b>${esc(it.produto)}</b> ${fmtDose(it.dose)} ${esc(it.un||'')}/ha (bula ${esc(bulaDoseRef(it).txt)})`).join(' · ')}. Reveja antes de aprovar.</div>`:''; })()}${(()=>{ const dif=its.filter(it=>it.plan>0&&Math.abs((+it.dose||0)/it.plan-1)>=0.5); return dif.length?`<div class="rc-obs" style="color:var(--amber)">⚠️ ${dif.length} dose(s) vieram do Campo muito diferentes do planejamento (${dif.map(it=>`${esc(it.produto)}: ${fmtDose(it.dose)} × plano ${fmtDose(it.plan)}`).join(' · ')}). Confira antes de aprovar${editable?' — toque em "usar o plano" para voltar':''}.</div>`:''; })()}</div>
     ${editable?`<div style="padding:4px 12px 8px;display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}">🔍 Buscar insumo</button><button class="btn btn-outline btn-sm" data-act="recomAddItem" data-id="${esc(r.id)}" title="Linha em branco para digitar">+ linha</button></div>`:''}
+    ${misturaHtml(r,editable)}
     ${tail}
     ${(!editable&&r.exp&&expById(r.exp))?`<div class="rc-obs">🧪 Área de referência: <b>${esc(expById(r.exp).nome||'')}</b> · ${nf2.format(expHa(expById(r.exp)))} ha</div>`:''}
     ${editable?`<div style="padding:0 12px 10px"><input class="txt" data-id="${esc(r.id)}" data-recf="obs" value="${esc(r.obs||'')}" placeholder="Observações" style="width:100%"></div>`:(r.obs?`<div class="rc-obs mut">${esc(r.obs)}</div>`:'')}
@@ -11364,7 +11478,9 @@ function exportRecomPDF_(r){
     <thead><tr><th>#</th><th>Produto</th><th>Ingrediente ativo</th><th class="num">Dose/ha</th><th class="num">Total (${num(area)} ha)</th><th class="num">Por tanque</th><th class="num">Carência</th><th class="num">Utilizado</th></tr></thead><tbody>`;
   its.forEach((it,i)=>{ h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?`<br><span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}</td><td>${esc(it.ativo||'')}</td><td class="num"><span class="${bulaDoseCls(bulaDoseRef(it).st).trim()}">${fmtDose(it.dose)} ${esc(it.un||'')}</span>${(()=>{ const bR=bulaDoseRef(it); return (bR.st==='sem'||bR.st==='semBula')?'':`<br><span class="mut2${bR.st==='acima'?' dose-acima':''}">bula: ${esc(bR.txt)}${bR.st==='acima'?' — ACIMA':''}</span>`; })()}</td><td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td><td class="num">${(cd.haTk&&it.dose)?`${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}${(()=>{ const e=embDe(it.produto); return e?`<br><span class="mut2">${esc(embTxt(it.dose*cd.haTk,e))}</span>`:''; })()}`:'—'}</td><td class="num">${it.car?`${esc(it.car)} d`:'—'}</td><td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td></tr>`; });
   if(!its.length) h+=`<tr><td colspan="8">— sem produtos —</td></tr>`;
-  h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}${bulaPhTxt(its)?`<div class="rx-note">pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}</div>
+  h+=`</tbody></table>${r.adjuvante?`<div class="rx-note">Adjuvante / pH: ${esc(r.adjuvante)}</div>`:''}${bulaPhTxt(its)?`<div class="rx-note">pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}`;
+  const MX=misturaResumoTxt(r); if(MX){ const al=MX.A.alertas.filter(x=>x.nivel!=='info'); h+=`<div class="rx-note rx-mist"><b>Compatibilidade da calda</b> — ${esc(MX.linha)}<br>Ordem de adição sugerida: ${esc(MX.A.ordem.map((p,k)=>`${k+1}. ${p.produto}${p.tipo?' ('+p.tipo+')':''}`).join(' → '))}${MX.A.ordemDif?' <i>(difere da tabela acima)</i>':''}${al.length?`<ul>${al.map(x=>`<li>${esc(x.txt)}</li>`).join('')}</ul>`:'<br>Nenhuma incompatibilidade conhecida pelas regras do app.'}${MX.ia&&(MX.ia.pares||[]).length?`<table class="rx pdf-ops" style="margin-top:4px"><thead><tr><th>Par (IA)</th><th>Risco</th><th>Motivo</th><th>O que fazer</th></tr></thead><tbody>${MX.ia.pares.map(p=>`<tr><td>${esc(p.a)} + ${esc(p.b)}</td><td>${esc(mistRiscoLbl(p.risco)||p.risco)}</td><td>${esc(p.motivo||'')}</td><td>${esc(p.fazer||'')}</td></tr>`).join('')}</tbody></table>`:''}<br>${esc(MIST_JARRA)}</div>`; }   // v357
+  h+=`</div>
   <div class="rx-sec"><h2>4. Calda</h2><div class="rx-kv">
     ${kv('Volume de calda',cd.calda?`${num(cd.calda)} L/ha`:'')}${kv('Tanque',cd.tk?`${num(cd.tk)} L`:'')}${kv('Área por tanque',cd.haTk?`${num(cd.haTk)} ha`:'')}${kv('Nº de tanques',cd.nTk?`${cd.nTk}${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último: ${num(cd.ultimo)} ha)`:''}`:'')}
     ${kv('Volume total de calda',cd.total?`${num(cd.total)} L`:'')}</div></div>
@@ -14039,6 +14155,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomDelItem'){ const r=recomById(a.id); if(r&&r.itens){ r.itens.splice(+a.i,1); saveRecom(); route(); } }
     else if(a.act==='recomSimil'){ const k=`${a.id}|${a.i}`; RECOM_UI.sim=(RECOM_UI.sim===k)?'':k; route({keepScroll:true}); }   // v349: similares com estoque
     else if(a.act==='recomTrocarIns'){ recomTrocarIns(a.id, a.i, a.novo); }
+    else if(a.act==='recomMist'){ RECOM_UI.mist[a.id]=!RECOM_UI.mist[a.id]; route({keepScroll:true}); }   // v357: compatibilidade da calda
+    else if(a.act==='recomMistIa'){ misturaIaPedir(a.id); }
+    else if(a.act==='recomMistOrdem'){ const r=recomById(a.id); if(r&&r.status==='rascunho'&&r.itens){ const A=misturaAnalise(r), com=r.itens.filter(it=>it.produto), sem=r.itens.filter(it=>!it.produto); r.itens=A.ordem.map(x=>com[x.i]).concat(sem); saveRecom(); route({keepScroll:true}); toast('Ordem de mistura ajustada pela formulação'); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
       if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom(); route({keepScroll:true}); } } }
     else if(a.act==='recomPrint'){ exportRecomPDF(a.id); }
@@ -14830,7 +14949,7 @@ const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoq
   __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
-  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
+  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
 function syncLogTipo(body){
   try{ const o=JSON.parse(body); if(Array.isArray(o)) return 'Edições de campo ('+o.length+')';

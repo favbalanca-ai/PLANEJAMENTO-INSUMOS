@@ -487,6 +487,42 @@ function _bulaIaSaneia_(d, produto){ d = d && typeof d === 'object' ? d : {};
   var resumo = ficha.ia + (reg ? ' · reg. ' + reg : '') + ' · ' + culturas.length + ' cultura(s), ' + culturas.reduce(function(s, c){ return s + c.alvos.length; }, 0) + ' alvo(s)';
   return { bula:ficha, extra:extra, resumo:resumo };
 }
+// ===== v357: PARECER DA IA SOBRE A MISTURA DE TANQUE (compatibilidade da calda) =====
+// payload __misturaIa: { id, cultura, alvo, calda, adjuvante, produtos:[{produto, ativo, classe, formulacao, tipo, ph, conc, grupo, obs, dose, un}], regras:[...], historico }.
+// Devolve { parecer:{ risco, resumo, pares:[{a,b,risco,motivo,fazer}], ordem:[produtos], ph, avisos:[], modelo } }. Nada é gravado na planilha:
+// o app guarda o parecer na recomendação (e o risco vai para a aba MISTURAS APP quando a aplicação é aprovada).
+function misturaIa_(p){
+  var key = iaChave_(); if (!key) return { erro:'IA desligada: falta ANTHROPIC_KEY nas Propriedades do Script' };
+  var prods = (p && Array.isArray(p.produtos) ? p.produtos : []).map(function(x){ x = x || {}; return { produto:S(x.produto).slice(0, 80), ativo:S(x.ativo).slice(0, 160), classe:S(x.classe).slice(0, 40), formulacao:S(x.formulacao).slice(0, 60), ph:S(x.ph).slice(0, 30), conc:S(x.conc).slice(0, 60), grupo:S(x.grupo).slice(0, 120), obs:S(x.obs).slice(0, 300), dose:N(x.dose), un:S(x.un).slice(0, 10) }; }).filter(function(x){ return x.produto; });
+  if (prods.length < 2) return { erro:'mande pelo menos 2 produtos' };
+  var nomes = prods.map(function(x){ return x.produto; });
+  var system = 'Você é engenheiro(a) agrônomo(a) especialista em tecnologia de aplicação e mistura de tanque de defensivos, fertilizantes foliares e adjuvantes no Brasil. Avalie a compatibilidade FÍSICA (floculação, precipitação, separação, espuma, entupimento) e QUÍMICA (hidrólise por pH, degradação, perda de efeito, fitotoxicidade) da calda descrita, usando as fichas das bulas enviadas (formulação, ingredientes ativos, pH ideal, observações de compatibilidade) e o conhecimento técnico. ' +
+    'Responda SOMENTE com JSON válido, sem markdown: {"risco":"baixo|medio|alto","resumo":"até 220 caracteres, linguagem simples","pares":[{"a":"produto","b":"produto","risco":"baixo|medio|alto","motivo":"até 160 caracteres","fazer":"o que fazer, até 160 caracteres"}],"ordem":["nome de cada produto na ordem de adição no tanque"],"ph":"faixa de pH recomendada para a calda e como corrigir, até 120 caracteres","avisos":["até 3 avisos curtos"]}. ' +
+    'Use exatamente os nomes de produto recebidos. Inclua em "pares" TODOS os pares; se um par não tem problema conhecido, risco "baixo" com motivo curto. Quando faltar informação (formulação ou ativo desconhecidos), diga isso no motivo e não invente. Não há garantia sem teste da jarra: lembre isso em "avisos".';
+  var dados = { cultura:S(p.cultura).slice(0, 60), alvo:S(p.alvo).slice(0, 80), volume_calda_L_ha:N(p.calda), adjuvante_ph_informado:S(p.adjuvante).slice(0, 120), produtos:prods, avisos_das_regras_do_app:(Array.isArray(p.regras) ? p.regras : []).slice(0, 12).map(function(s){ return S(s).slice(0, 240); }), historico_na_fazenda:S(p.historico).slice(0, 300) };
+  var payload = { model:IA_MODELO, max_tokens:3000, system:system, messages:[{ role:'user', content:JSON.stringify(dados) }] };
+  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+  catch (e) { return { erro:'IA sem resposta: ' + e }; }
+  var code = resp.getResponseCode(), body = resp.getContentText();
+  if (code !== 200) return { erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 160) };
+  var d; try { var j = JSON.parse(body), texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); d = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
+  catch (e) { return { erro:'IA respondeu fora do formato' }; }
+  var r = _misturaIaSaneia_(d, nomes); if (r.erro) return r;
+  r.parecer.modelo = IA_MODELO;
+  return r;
+}
+// só aceita o que faz sentido: risco em {baixo, medio, alto}; pares e ordem só com os produtos enviados; textos curtos
+function _misturaIaSaneia_(d, nomes){ d = d && typeof d === 'object' ? d : {};
+  var norm = function(s){ return S(s).toUpperCase().replace(/\s+/g, ' ').trim(); }, mapa = {}; nomes.forEach(function(n){ mapa[norm(n)] = n; });
+  var nome = function(s){ var k = norm(s); if (mapa[k]) return mapa[k]; var hit = nomes.filter(function(n){ return k && (norm(n).indexOf(k) >= 0 || k.indexOf(norm(n)) >= 0); }); return hit.length === 1 ? hit[0] : ''; };
+  var risco = function(s){ s = S(s).toLowerCase().replace(/é/g, 'e'); return /alto/.test(s) ? 'alto' : /medio|moderad/.test(s) ? 'medio' : /baixo/.test(s) ? 'baixo' : ''; };
+  var pares = (Array.isArray(d.pares) ? d.pares : []).map(function(x){ x = x || {}; return { a:nome(x.a), b:nome(x.b), risco:risco(x.risco) || 'baixo', motivo:S(x.motivo).slice(0, 200), fazer:S(x.fazer).slice(0, 200) }; }).filter(function(x){ return x.a && x.b && x.a !== x.b; }).slice(0, 28);
+  var ordem = [], visto = {}; (Array.isArray(d.ordem) ? d.ordem : []).forEach(function(s){ var n = nome(s); if (n && !visto[n]){ visto[n] = 1; ordem.push(n); } });
+  if (ordem.length !== nomes.length) ordem = [];   // ordem incompleta ou com nome estranho: não vale
+  var rg = risco(d.risco); if (!rg) rg = pares.some(function(x){ return x.risco === 'alto'; }) ? 'alto' : pares.some(function(x){ return x.risco === 'medio'; }) ? 'medio' : 'baixo';
+  var resumo = S(d.resumo).slice(0, 260); if (!resumo && !pares.length) return { erro:'a IA não deu parecer' };
+  return { parecer:{ risco:rg, resumo:resumo, pares:pares, ordem:ordem, ph:S(d.ph).slice(0, 160), avisos:(Array.isArray(d.avisos) ? d.avisos : []).map(function(s){ return S(s).slice(0, 160); }).filter(Boolean).slice(0, 4) } };
+}
 // baixa um PDF (bula / FISPQ) de um LINK da web e guarda na pasta "Bulas" — o navegador do app não consegue
 // baixar de outros sites (CORS); a planilha consegue. Só aceita PDF de verdade (começa com "%PDF") até 15 MB.
 function bulaBaixar_(b){
@@ -2717,7 +2753,7 @@ var MOD_DADOS = {
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -2874,8 +2910,8 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao','vendas'];   // financeiro: classificar/cancelar nota mexe nos títulos
-var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1, __bulaIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação · v351: leitura da bula (rede)
-var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[], __bulaIa:['catalogo_extra'],
+var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1, __bulaIa:1, __misturaIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação · v351: leitura da bula (rede) · v357: parecer da mistura
+var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[], __bulaIa:['catalogo_extra'], __misturaIa:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
@@ -3183,6 +3219,9 @@ function gravaUm_(payload, acc, cfg, out){
       var bi = bulaIa_(payload.__bulaIa);   // grava CATÁLOGO EXTRA → invalida só catalogo_extra (APP_INVALIDA_)
       if (bi && !bi.erro){ out.ok = 1; out.bula = bi.bula; out.extra = bi.extra; out.resumo = bi.resumo; if (bi.aviso) out.msgs.push(bi.aviso); }
       else { out.fail = 1; out.msgs.push('bula: ' + ((bi && bi.erro) || 'não li')); }
+    } else if (payload && payload.__misturaIa){       // v357: parecer da IA sobre a compatibilidade da calda (nada gravado na planilha)
+      var mx = misturaIa_(payload.__misturaIa);
+      if (mx && !mx.erro){ out.ok = 1; out.parecer = mx.parecer; } else { out.fail = 1; out.msgs.push('mistura: ' + ((mx && mx.erro) || 'sem parecer')); }
     } else if (payload && payload.__bulaArquivo){     // bula / FISPQ em PDF → Drive (pasta "Bulas")
       out.arquivo = bulaArquivo_(payload.__bulaArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0; semCache = true;
       if (!out.ok){ out.fail = 1; out.msgs.push('bula: ' + ((out.arquivo && out.arquivo.erro) || 'não gravou no Drive')); }   // v326: motivo no log do app
