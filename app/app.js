@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-354';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-355';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4772,24 +4772,28 @@ function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Co
 // ---- v299: WhatsApp sem app — QR com mensagem pronta e importação da conversa exportada ----
 // O número fica na planilha (CONFIG APP → WHATSAPP MAQUINAS) ou neste aparelho; nunca no código (repositório público).
 function maqWhats(){ const c=DATA&&DATA.config_app&&DATA.config_app.maquinas; return String((c&&c.whats)||(OV&&OV.maqWa)||'').replace(/\D/g,''); }
-function maqWaTexto(m){ return `ABASTECIMENTO · ${m.nome} [${m.id}]\nHorímetro: \nLitros: \nOrigem: tanque`; }
+// v355: mensagem do QR — máquina em negrito (*…* no WhatsApp), cada campo com o que digitar e a unidade; a etiqueta [m:id] vai no fim, em itálico
+function maqWaTexto(m){ return `⛽ *ABASTECIMENTO*\n🚜 *${m.nome}*\n\nDigite depois dos dois-pontos e envie:\n⏱ Horímetro atual (horas): \n⛽ Litros abastecidos: \n🛢 Origem (tanque ou posto): tanque\n💲 Valor pago (só se posto): \n👤 Operador: \n📝 Obs: \n\n_[${m.id}]_`; }
 function maqWaLink(m){ const n=maqWhats(); if(!n) return ''; return `https://wa.me/${n.startsWith('55')?n:'55'+n}?text=${encodeURIComponent(maqWaTexto(m))}`; }
 // conversa exportada (Android: "dd/mm/aaaa hh:mm - Nome: msg" · iPhone: "[dd/mm/aaaa, hh:mm:ss] Nome: msg"); mensagens de várias linhas continuam até o próximo cabeçalho
 function waParse(txt){ const out=[]; let cur=null; const rx=/^‎?\[?(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\]?\s*(?:-\s*)?([^:]{1,60}?):\s(.*)$/;
   String(txt||'').replace(/\r/g,'').split('\n').forEach(l=>{ const m=l.match(rx); if(m){ const a=m[3].length===2?'20'+m[3]:m[3]; cur={data:`${a}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`, hora:`${m[4].padStart(2,'0')}:${m[5]}`, quem:m[6].trim(), texto:m[7]}; out.push(cur); } else if(cur&&l.trim()) cur.texto+='\n'+l; });
   return out; }
 // entende uma mensagem: ABASTECIMENTO / HORÍMETRO / MANUTENÇÃO (ou texto livre com os campos)
-function waInterpreta(msg){ const T=msg.texto||'', N=_bkNorm(T); const campo=rx=>{ const m=T.match(rx); return m?m[1].trim():''; };
+function waInterpreta(msg){ const T=msg.texto||'', N=_bkNorm(T).replace(/[*_~]/g,'').replace(/^[^A-Z]+/,''); const campo=rx=>{ const m=T.match(rx); return m?m[1].trim():''; };   // v355: ignora negrito/itálico e o emoji do começo
   const tipo=/^\s*ABASTEC/.test(N)?'abast':/^\s*HORIMETRO/.test(N)?'leitura':/^\s*MANUTEN|^\s*OS\b|^\s*DEFEITO|^\s*QUEBR/.test(N)?'os':(/HORIMETRO|LITROS/.test(N)?'abast':null);
   if(!tipo) return null;
   let m=null; const tag=T.match(/\[(m:[A-Z0-9-]+)\]/i); if(tag) m=maqDe(tag[1]);
-  if(!m){ const prim=_bkNorm(T.split('\n')[0]).replace(/^(ABASTECIMENTO|HORIMETRO|MANUTENCAO|OS|DEFEITO|QUEBROU)\s*[·:\-–]?\s*/,'').replace(/\[.*$/,'').trim(); const ms=maqTodas(); m=ms.find(x=>_bkNorm(x.nome)===prim)||ms.find(x=>prim&&prim.includes(_bkNorm(x.nome)))||ms.find(x=>prim&&prim.length>=4&&_bkNorm(x.nome).includes(prim))||null; }
-  const hor=numBR(campo(/hor[ií]metro\s*[:=]?\s*([\d.,]+)/i)), litros=numBR(campo(/litros?\s*[:=]?\s*([\d.,]+)/i)), valor=numBR(campo(/valor\s*[:=]?\s*R?\$?\s*([\d.,]+)/i)), origem=/posto/i.test(campo(/origem\s*[:=]?\s*(\w+)/i)||'')?'posto':'tanque';
+  if(!m){ const linhas=T.split('\n').map(l=>_bkNorm(l).replace(/[*_~]/g,'').replace(/^[^A-Z0-9]+/,'').trim()); let prim=(linhas[0]||'').replace(/^(ABASTECIMENTO|HORIMETRO|MANUTENCAO|OS|DEFEITO|QUEBROU)\s*[·:\-–]?\s*/,'').replace(/\[.*$/,'').trim(); if(!prim&&linhas[1]) prim=linhas[1].replace(/\[.*$/,'').trim();   // v355: a máquina pode vir na 2ª linha (mensagem nova do QR)
+    const ms=maqTodas(); m=ms.find(x=>_bkNorm(x.nome)===prim)||ms.find(x=>prim&&prim.includes(_bkNorm(x.nome)))||ms.find(x=>prim&&prim.length>=4&&_bkNorm(x.nome).includes(prim))||null; }
+  // v355: rótulos podem ter explicação entre o nome e os dois-pontos ("Horímetro atual (horas): 1234", "Litros abastecidos: 50")
+  const hor=numBR(campo(/hor[ií]metro(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)), litros=numBR(campo(/litros?(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)), valor=numBR(campo(/valor(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*R?\$?\s*([\d.,]+)/i)), origem=/posto/i.test(campo(/origem(?:[ \t]+[a-z(][^·:=\n]*)?[:=]?\s*(\w+)/i)||'')?'posto':'tanque';   // a explicação entre o rótulo e os dois-pontos começa com letra ou "(" — "HORÍMETRO · máquina" (título) não conta
+  const oper=campo(/operador\s*[:=]\s*([^\n]+)/i), obs=campo(/obs\.?[^:=\n]*[:=]\s*([^\n]+)/i);
   const desc=tipo==='os'?(T.split('\n').slice(1).join(' ').trim()||T.replace(/^\s*\S+\s*[·:\-–]?\s*/,'').trim()):'';
   const id='wa:'+sigHash(`${msg.data} ${msg.hora} ${msg.quem} ${T}`);
   const ok=!!m && (tipo==='abast'?(litros>0&&hor>0):tipo==='leitura'?hor>0:!!desc);
   const ja=tipo==='os'?!!((OV.osMaq||{})[id]):!!((OV.abast||{})[id]);
-  return {id, tipo, maq:m?m.id:'', hor, litros, valor, origem, desc, ok, ja, msg}; }
+  return {id, tipo, maq:m?m.id:'', hor, litros, valor, origem, desc, oper, obs, ok, ja, msg}; }
 let WA_IMP=null;
 function waImportLer(txt){ const msgs=waParse(txt); const itens=msgs.map(waInterpreta).filter(Boolean); WA_IMP={n:msgs.length, itens}; route({keepScroll:true}); toast(itens.length?`${itens.length} registro(s) encontrado(s) em ${msgs.length} mensagem(ns)`:'Nenhuma mensagem de abastecimento, horímetro ou manutenção'); }
 function waImportHtml(){ const W=WA_IMP, num=maqWhats();
@@ -4808,8 +4812,9 @@ function waImportHtml(){ const W=WA_IMP, num=maqWhats();
 function waCampo(el){ const W=WA_IMP; if(!W) return; const x=W.itens[+el.dataset.i]; if(!x) return; const f=el.dataset.wa; if(f==='maq') x.maq=el.value; else x[f]=numBR(el.value);
   x.ok=!!x.maq && (x.tipo==='abast'?(x.litros>0&&x.hor>0):x.tipo==='leitura'?x.hor>0:!!x.desc); route({keepScroll:true}); }
 function waGravar(){ const W=WA_IMP; if(!W) return; const L=W.itens.filter(x=>x.ok&&!x.ja); if(!L.length){ toast('Nada pronto para gravar'); return; } let nA=0, nO=0;
-  L.forEach(x=>{ if(x.tipo==='os'){ osGravar({id:x.id, maq:x.maq, tipo:'corretiva', dataAb:x.msg.data, hor:x.hor||0, desc:x.desc, pecas:[], moH:0, moValor:0, resp:x.msg.quem, status:'aberta', obs:'via WhatsApp'}); nO++; }
-    else { const a={id:x.id, maq:x.maq, data:x.msg.data, hora:x.msg.hora, hor:x.hor, litros:x.tipo==='leitura'?0:x.litros, comb:'Diesel S10', origem:x.origem, valor:x.origem==='posto'?x.valor:0, precoL:(x.origem==='posto'&&x.litros)?+(x.valor/x.litros).toFixed(3):0, operador:x.msg.quem, obs:'via WhatsApp'}; if(x.tipo==='leitura') a.tipo='leitura'; abastGravar(a); nA++; } x.ja=true; });
+  L.forEach(x=>{ const quem=x.oper||x.msg.quem, obs='via WhatsApp'+(x.obs?' · '+x.obs:'');   // v355: "Operador:" e "Obs:" da mensagem
+    if(x.tipo==='os'){ osGravar({id:x.id, maq:x.maq, tipo:'corretiva', dataAb:x.msg.data, hor:x.hor||0, desc:x.desc, pecas:[], moH:0, moValor:0, resp:quem, status:'aberta', obs}); nO++; }
+    else { const a={id:x.id, maq:x.maq, data:x.msg.data, hora:x.msg.hora, hor:x.hor, litros:x.tipo==='leitura'?0:x.litros, comb:'Diesel S10', origem:x.origem, valor:x.origem==='posto'?x.valor:0, precoL:(x.origem==='posto'&&x.litros)?+(x.valor/x.litros).toFixed(3):0, operador:quem, obs}; if(x.tipo==='leitura') a.tipo='leitura'; abastGravar(a); nA++; } x.ja=true; });
   route({keepScroll:true}); toast(`Gravado: ${nA} abastecimento(s)/leitura(s) e ${nO} OS — sobem para a planilha`); }
 // ---- leitura do QR pela câmera ao vivo (v296): BarcodeDetector do aparelho ou zxing-wasm nos quadros do vídeo; sem câmera cai na foto ----
 let QR_SCAN=null;
@@ -5137,7 +5142,7 @@ V.maqcad=function(){ const ms=maqTodas(), inativas=Object.values((OV&&OV.maqApp)
       <div class="bk-bar"><button class="btn btn-primary btn-sm" data-act="maqCadSalvar" data-maq="${esc(m.id)}">💾 Salvar</button><span class="mut">QR Code desta máquina: <code>MAQ:${esc(m.id)}</code>${maqWhats()?` · <a class="link" data-act="maqEtiquetas" data-modo="whats">etiquetas WhatsApp</a>`:''} · <a class="link" data-act="maqEtiquetas" data-modo="app">etiquetas app</a></span></div>`:''}</div>`; }).join('');
   return invHtml()+`<div class="panel"><div class="panel-head"><h2>🗂️ Cadastro de máquinas</h2><span class="sub">máquinas e implementos da CUSTO OPERAÇÃO, das notas e as cadastradas aqui</span><div class="spacer"></div>${maqWhats()?`<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="whats">🏷️ Etiquetas WhatsApp</button>`:''}<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="app">🏷️ Etiquetas App</button></div>
     <div class="mq-form"><label style="flex:1">WhatsApp que recebe os abastecimentos (DDD + número)<input class="txt" inputmode="tel" id="mc-whats" value="${esc(maqWhats())}" placeholder="ex.: 62999990000"></label><label><span>&nbsp;</span><button class="btn btn-outline btn-sm" data-act="maqWhatsSalvar">💾 Salvar número</button></label></div>
-    <p class="mut" style="font-size:12px;margin:0 14px 8px">Com o número salvo, as etiquetas ganham um QR do WhatsApp: a câmera comum do celular abre a mensagem pronta ("ABASTECIMENTO · máquina · Horímetro · Litros") e o operador só preenche e envia. Depois importe a conversa em Abastecimento → Importar do WhatsApp.</p>
+    <p class="mut" style="font-size:12px;margin:0 14px 8px">Com o número salvo, as etiquetas ganham um QR do WhatsApp: a câmera comum do celular abre a mensagem pronta (⛽ ABASTECIMENTO · 🚜 <b>máquina</b> · horímetro · litros · origem · operador) e o operador só digita depois dos dois-pontos e envia. Depois importe a conversa em Abastecimento → Importar do WhatsApp.</p>
     <div class="mq-form"><label style="flex:1">Nova máquina<input class="txt" id="mc-nova" placeholder="ex.: Caminhão VW 24.280"></label><label>Grupo<input class="txt" id="mc-novaGrupo" placeholder="Trator, Caminhão…"></label></div><div class="bk-bar"><button class="btn btn-outline btn-sm" data-act="maqCadNova">➕ Cadastrar</button><button class="btn btn-outline btn-sm" data-act="invAbrir" title="Lê o PDF 'Inventário de Máquinas' do AgroGestão e completa o cadastro (valor de compra, chassi, ano, grupo)">📥 Importar inventário (PDF)</button><input type="file" id="inv-pdf-file" accept="application/pdf,.pdf" hidden>${(()=>{ const falt=ms.filter(m=>!(OV.maqApp&&OV.maqApp[m.id])).length; return falt?`<button class="btn btn-outline btn-sm" data-act="maqRegistrarTodas" title="Grava na aba MÁQUINAS APP as máquinas que hoje só existem na CUSTO OPERAÇÃO ou nas notas">📋 Enviar as ${falt} que faltam para a planilha</button>`:'<span class="mut">todas as máquinas estão na aba MÁQUINAS APP</span>'; })()}</div></div>
     <div class="mq-list">${rows||'<p class="mut" style="padding:14px">Nenhuma máquina.</p>'}</div>
     ${inativas.length?`<p class="mut" style="font-size:12px;padding:0 14px">Inativas: ${inativas.map(c=>`${esc(c.nome)} <a class="link" data-act="maqCadReativar" data-maq="${esc(c.id)}">reativar</a>`).join(' · ')}</p>`:''}`; };
