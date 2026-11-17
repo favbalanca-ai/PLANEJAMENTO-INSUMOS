@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-349';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-350';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8153,6 +8153,12 @@ function recomEstoqueHtml(r,it,i,editable){ const E=recomEstoqueDe(r,it); if(E.s
   return main+link+comp+sim; }
 function recomEstoqueResumo(r,its){ const E=its.filter(it=>it.produto).map(it=>recomEstoqueDe(r,it)); const sem=E.filter(e=>e.st==='sem').length, parc=E.filter(e=>e.st==='parcial').length, ap=E.filter(e=>e.aperta).length;
   if(!sem&&!parc&&!ap) return ''; return `<div class="rc-obs rc-est-res">📦 Estoque: ${[sem?`<b>${sem}</b> insumo(s) sem saldo`:'', parc?`<b>${parc}</b> com saldo parcial`:'', ap?`<b>${ap}</b> comprometido(s) em outras recomendações`:''].filter(Boolean).join(' · ')}. Não bloqueia: confira "similares" ou providencie a compra.</div>`; }
+// v350: etiqueta de saldo para a Operação de Campo (tabela "registrar execução"): precisa = dose (realizada ou planejada) × área da operação
+function campoEstoqueTag(produto, precisa){ const p=String(produto||'').trim(); if(!p||!PROD[p]) return ''; const saldo=+saldoEstoqueDe(p).toFixed(4), un=esc((PROD[p]||{}).un||''), pr=+(+precisa||0).toFixed(4);
+  const tit=`saldo no estoque (inicial + notas − saídas aprovadas)${pr>0?` · esta operação precisa de ${fmtDose(pr)} ${un} (dose × área)`:''}`;
+  if(saldo<=0) return `<span class="ci-est err" title="${esc(tit)}">⛔ sem estoque</span>`;
+  if(pr>0 && saldo+1e-6<pr) return `<span class="ci-est warn" title="${esc(tit)}">⚠ saldo ${fmtDose(saldo)} ${un} · falta ${fmtDose(+(pr-saldo).toFixed(4))} ${un}</span>`;
+  return `<span class="ci-est ok" title="${esc(tit)}">✅ saldo ${fmtDose(saldo)} ${un}</span>`; }
 function recomTrocarIns(rid, i, novo){ const r=recomById(rid); if(!r||!r.itens||!r.itens[+i]||!PROD[novo]) return; const it=r.itens[+i], antigo=it.produto; it.produto=novo; it.un=PROD[novo].un||it.un||''; it.ativo=prodAtivoDe(novo)||it.ativo||''; RECOM_UI.sim='';
   saveRecom(); route({keepScroll:true}); toast(`${antigo} → ${novo} (saldo ${fmtDose(saldoEstoqueDe(novo))} ${PROD[novo].un||''}) — confira a dose`); }
 function recomCard(r,t){
@@ -10166,20 +10172,20 @@ V.campo = function(arg){
   let lastSeq='';
   const opsHtml=visiveis.map(o=>{
     const r=realOf(o.key)||{status:'pendente',data:'',obs:'',doses:{},extras:[]};
-    const items=effItems(t.id,o.tagoi,o.op.itens);
+    const items=effItems(t.id,o.tagoi,o.op.itens), areaOp=opAreaDe(t, r), mostraEst=r.status!=='concluido';   // v350: saldo do estoque por insumo (concluída já baixou)
     const insRows=items.map(it=>{
       const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
       const rv=(r.doses&&(iid in r.doses))?r.doses[iid]:'';
       const diff=rv!=='' && +rv!==+it.dose, fora=itemFora(r,it), trava=r.status==='concluido';
       return `<tr${fora?' class="ci-off"':''}>
-        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}</td>
+        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}${(mostraEst&&!fora)?campoEstoqueTag(it.produto, (rv!==''?+rv:+it.dose)*areaOp):''}</td>
         <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
         <td class="num ci-real">${fora?'<span class="mut">—</span>':`<input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}">`}
           ${trava?'':`<button class="icon-btn ci-x${fora?' on':''}" data-act="realExcl" data-key="${esc(o.key)}" data-iid="${iid}" title="${fora?'Voltar a usar este produto nesta aplicação':'Tirar este produto desta aplicação (o planejamento não muda)'}">${fora?'↩':'✕'}</button>`}</td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
-        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano"></td>
+        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano">${mostraEst?campoEstoqueTag(ex.produto, (+ex.dose||0)*areaOp):''}</td>
         <td class="num ci-plan mut">—</td>
         <td class="num ci-real"><input class="cell" inputmode="decimal" data-edit="realExtraDose" data-key="${esc(o.key)}" data-ei="${ei}" value="${ex.dose!=null?ex.dose:''}" placeholder="dose">
           <button class="icon-btn del" title="Remover extra" data-act="realDelExtra" data-key="${esc(o.key)}" data-ei="${ei}">🗑</button></td>
