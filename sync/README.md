@@ -235,6 +235,12 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Correção: IA recusava com "temperature is deprecated" (v352)
+
+- Os modelos Claude 5 (o app usa `claude-haiku-5-5`) respondem HTTP 400 a qualquer valor de `temperature` diferente do
+  padrão. As quatro chamadas à IA (`bulaIa_`, `_danfeIa_`, `bancoIa_`, `nfeIaClassificar_`) mandavam `temperature:0`;
+  o parâmetro saiu. Sem isso a leitura da bula, do DANFE em PDF, do extrato e a classificação das notas falhavam.
+
 ## Bula em PDF lida pela IA + CATÁLOGO EXTRA (v351)
 
 - `__bulaIa` `{produto, b64|url, nome}` (sem trava; módulos precos/planejamento/campo) → `bulaIa_`: pega o PDF do
