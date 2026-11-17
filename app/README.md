@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Dose da bula por cultura na Operação de Campo (v353)** — embaixo de cada insumo da tabela "registrar execução",
+  "📖 bula: 0,15 a 0,25 L/ha · Soja" (`bulaDoseTag`/`bulaDoseCultura`): usa a cultura do talhão (safrinha quando a
+  operação é da safrinha) e procura primeiro a dose daquela cultura no CATÁLOGO EXTRA (bula lida pela IA, v351; achado
+  pelo registro da ficha, pelo nome ou pela marca), senão a faixa geral da ficha da bula (dose mín/máx). Dose
+  planejada ou realizada fora da faixa ganha "(acima)"/"(abaixo)" em âmbar. Só informação: nada bloqueia; sem bula,
+  não aparece nada. Insumo extra também.
 - **Ler a bula em PDF com a IA (v351)** — na ficha da bula (Preços → Bulas, ou "cadastrar" na recomendação), o botão
   **🤖 Ler a bula com a IA** (`bulaIaLer`): manda à planilha o PDF já anexado no Drive (link da ficha) ou um PDF
   escolhido no aparelho (até 8 MB), payload `__bulaIa`. A planilha lê com a IA e devolve os campos da ficha
