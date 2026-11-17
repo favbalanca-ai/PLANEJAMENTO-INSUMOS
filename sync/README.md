@@ -235,6 +235,22 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Bula em PDF lida pela IA + CATÁLOGO EXTRA (v351)
+
+- `__bulaIa` `{produto, b64|url, nome}` (sem trava; módulos precos/planejamento/campo) → `bulaIa_`: pega o PDF do
+  base64 ou do arquivo do Drive (id no link), confere "%PDF" e até 20 MB, manda à IA (`IA_MODELO`, `document` em
+  base64, `max_tokens` 12000) com o formato fixo de resposta (marca, registro, titular, ingredientes, classe,
+  formulação, tox, ambiental, modo de ação, grupo de resistência, pH, reentrada, embalagens, culturas com alvos,
+  dose, calda, carência, nº de aplicações e intervalo, obs). `_bulaIaSaneia_` monta `bula` (campos de
+  `BULA_CAMPOS` do app: dose mín = menor, dose máx = maior, carência = maior entre as culturas; tox "4 — texto"; grupo =
+  classe · resistência · modo de ação) e `extra` (registro no formato do `produtos.json`: `r`, `m`, `f`, `ia`, `t`,
+  `c`, `tox`, `amb`, `ma`, `cu` por nome, mais `alvos` por cultura, `doses` por cultura, `fonte`, `produto`, `_u`).
+- O `extra` é gravado na aba **CATÁLOGO EXTRA** (KEY|JSON, `writeMapApp`; KEY `r:<registro>` ou `p:<produto>` quando
+  a bula não traz registro). `catalogo_extra` entrou em `APP_TODAS_`/`APP_LER_` e em `MOD_DADOS` (precos,
+  planejamento, campo, admin); `__bulaIa` invalida só essa chave.
+- Resposta: `ok:1, bula, extra, resumo` (ou `fail:1` com o motivo: sem ANTHROPIC_KEY, arquivo não é PDF, link fora do
+  Drive, IA sem ingrediente ativo…).
+
 ## Aprovação automática e caixa por produtor (v348)
 
 - CONFIG NFE ganha (criadas pelo `setupNfe`, todas opcionais): **AUTO APROVAR** (NÃO), **AUTO VALOR MÁX** (50000),

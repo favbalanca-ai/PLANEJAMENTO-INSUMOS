@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Ler a bula em PDF com a IA (v351)** — na ficha da bula (Preços → Bulas, ou "cadastrar" na recomendação), o botão
+  **🤖 Ler a bula com a IA** (`bulaIaLer`): manda à planilha o PDF já anexado no Drive (link da ficha) ou um PDF
+  escolhido no aparelho (até 8 MB), payload `__bulaIa`. A planilha lê com a IA e devolve os campos da ficha
+  (ingrediente ativo, concentração, pH, dose mín/máx, carência, reentrada, classe tox., grupo/IRAC-FRAC-HRAC,
+  formulação, registro, embalagem, obs.), que entram marcados para conferir e Salvar, com uma tabela de dose, carência
+  e alvos por cultura. O registro vai para a aba **CATÁLOGO EXTRA** da planilha e o app o mescla ao 🏛️ Catálogo MAPA
+  (`agrofitExtraMescla`, chave `catalogo_extra` do puxar): produto que não está nos dados abertos do MAPA (caso real:
+  Verdavis) passa a aparecer na busca, no seletor de insumo e na ficha do catálogo, com a marca "🤖 bula lida pela IA",
+  alvos e dose por cultura vindos da bula. Registro que já existe no catálogo oficial não é substituído. Code.gs v351.
 - **Saldo na Operação de Campo (v350)** — na tabela "Detalhes · registrar execução", cada insumo mostra embaixo do
   nome a etiqueta de estoque (`campoEstoqueTag`): ✅ saldo, ⚠ "saldo X · falta Y" ou ⛔ "sem estoque", comparando o
   saldo atual com dose (realizada, se digitada; senão planejada) × área da operação (`opAreaDe`). Insumo extra

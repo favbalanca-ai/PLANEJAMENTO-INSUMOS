@@ -110,7 +110,7 @@ function readBase_(){
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app',
-  'ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas','pesagem','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app'];   // v295: módulo Máquinas · v340: checklist pré-uso
+  'ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas','pesagem','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app','catalogo_extra'];   // v295: módulo Máquinas · v340: checklist pré-uso · v351: catálogo extra (bulas lidas pela IA)
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600, pesagem:600 };   // pesagem: planilha da balança (Pesagem v2), 10 min   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
@@ -120,6 +120,7 @@ var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:fun
   afericoes_app:function(){ return readMapApp(AFER_SHEET); }, stand_app:function(){ return readMapApp(STAND_SHEET); },
   ocorrencias_app:function(){ return readMapApp(OCOR_SHEET); }, monit_app:function(){ return readMapApp(MONIT_SHEET); }, produtividade_app:function(){ return readMapApp(PROD_SHEET); }, bulas_app:function(){ return readMapApp(BULAS_SHEET); },   // v328: monitoramento (pragas/doenças/daninhas com GPS)
   checklist_app:function(){ return readMapApp(CHECK_SHEET); },   // v340: checklist pré-uso do operador
+  catalogo_extra:function(){ return readMapApp(CATEXTRA_SHEET); },   // v351: produtos lidos da bula pela IA (faltam nos dados abertos do MAPA)
   misturas_app:function(){ return readMapApp(MIST_SHEET); }, compras_app:function(){ return readMapApp('COMPRAS APP'); }, depara_nfe:function(){ return readDeParaNfe(); },
   nfe_resumo:function(){ return nfeResumo_(); }, nfe_estados:function(){ return nfeEstados_(); },
   precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); }, config_app:function(){ return readConfigApp(); },
@@ -433,6 +434,59 @@ function writeBulasApp(map){
       r.carencia!==''&&r.carencia!=null?+r.carencia:'', r.reentrada!==''&&r.reentrada!=null?+r.reentrada:'', T_(r.tox), T_(r.grupo), T_(r.form), (S(r.reg) ? "'" + S(r.reg) : ''), T_(emb), T_(r.bulaUrl), T_(r.fispqUrl), T_(r.obs), r.del ? 'EXCLUÍDA' : '']; });
 }
 function bulaArquivo_(f){ return driveArquivo_(f, 'Bulas', 'application/pdf', 'bula-' + Date.now() + '.pdf'); }
+// ===== v351: LER A BULA EM PDF COM A IA → ficha da bula + aba "CATÁLOGO EXTRA" (produtos que faltam nos dados abertos do MAPA) =====
+// payload __bulaIa: { produto, b64 (PDF escolhido no aparelho) | url (link do Drive já anexado na ficha), nome }.
+// Devolve { bula:{campos da ficha}, extra:{registro no formato do catálogo}, resumo }. O registro vai para CATÁLOGO EXTRA
+// (KEY = "r:<registro MAPA>" ou "p:<produto>"), que o app mescla ao catálogo em todo aparelho (chave catalogo_extra do doGet).
+var CATEXTRA_SHEET = 'CATÁLOGO EXTRA';
+function bulaIa_(p){
+  var key = iaChave_(); if (!key) return { erro:'IA desligada: falta ANTHROPIC_KEY nas Propriedades do Script' };
+  var produto = S(p && p.produto); if (!produto) return { erro:'produto não informado' };
+  var blob = null;
+  if (p.b64){ try { blob = Utilities.newBlob(Utilities.base64Decode(S(p.b64)), 'application/pdf', S(p.nome) || 'bula.pdf'); } catch (e) { return { erro:'PDF ilegível' }; } }
+  else if (p.url){ var m = String(p.url).match(/[-\w]{25,}/); if (!m) return { erro:'o link da bula precisa ser do Drive (anexe o PDF primeiro)' };
+    try { blob = DriveApp.getFileById(m[0]).getBlob(); } catch (e) { return { erro:'não consegui abrir o PDF no Drive: ' + e }; } }
+  else return { erro:'mande o PDF da bula (arquivo) ou o link dela no Drive' };
+  var bytes = blob.getBytes(); if (bytes.length > 20 * 1024 * 1024) return { erro:'PDF grande demais (máximo 20 MB)' };
+  if (!(bytes.length > 4 && bytes[0] === 37 && bytes[1] === 80)) return { erro:'o arquivo não é um PDF' };
+  var b64 = Utilities.base64Encode(bytes);
+  var system = 'Você lê a BULA (rótulo) de um agrotóxico ou produto agrícola registrado no Brasil, em PDF, para o sistema de uma fazenda de grãos. Responda SOMENTE com JSON válido, sem comentários nem markdown. Números com ponto decimal. Se um campo não existir na bula, deixe vazio, 0 ou lista vazia. ' +
+    'Formato: {"marca":"nome comercial","registro":"nº do registro no MAPA, só dígitos","titular":"empresa titular do registro","ingredientes":[{"nome":"nome comum do ingrediente ativo","grupo_quimico":"","conc":"ex.: 100 g/L"}],' +
+    '"classe":"Herbicida|Fungicida|Inseticida|Acaricida|Acaricida/Inseticida|Nematicida|Regulador de Crescimento|Adjuvante|Fertilizante|Inoculante|Outro","formulacao":"sigla e nome, ex.: SC - Suspensão Concentrada","tox_categoria":"1 a 5 ou vazio","tox_texto":"ex.: Produto Pouco Tóxico","ambiental":"classe de periculosidade ambiental","modo_acao":"","grupo_resistencia":"código IRAC/FRAC/HRAC, ex.: IRAC 3A + 30","ph_calda":"","reentrada_horas":0,"embalagens":["ex.: 5 L"],' +
+    '"culturas":[{"cultura":"nome da cultura como na bula","alvos":[{"alvo":"nome comum","nome_cientifico":""}],"dose_min":0,"dose_max":0,"dose_un":"ex.: L/ha, mL/ha, g/ha, kg/ha, mL/100 kg de sementes","volume_calda":"ex.: 100 a 200 L/ha","carencia_dias":0,"num_aplicacoes":"","intervalo_dias":""}],' +
+    '"obs":"compatibilidade, mistura, restrições — até 300 caracteres"}. Liste TODAS as culturas e TODOS os alvos da tabela de indicações. Dose na unidade da bula (produto comercial, não ingrediente ativo). Carência em dias por cultura ("sem restrição" = 0).';
+  var payload = { model:IA_MODELO, max_tokens:12000, temperature:0, system:system, messages:[{ role:'user', content:[{ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } }, { type:'text', text:'Extraia os dados desta bula. O produto no sistema chama-se "' + produto.replace(/"/g, '') + '".' }] }] };
+  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+  catch (e) { return { erro:'IA sem resposta: ' + e }; }
+  var code = resp.getResponseCode(), body = resp.getContentText();
+  if (code !== 200) return { erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 160) };
+  var d; try { var j = JSON.parse(body), texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); d = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
+  catch (e) { return { erro:'IA respondeu fora do formato' }; }
+  var r = _bulaIaSaneia_(d, produto); if (r.erro) return r;
+  try { var ex = {}; ex[r.extra.key] = r.extra; writeMapApp(CATEXTRA_SHEET, ex); } catch (e) { r.aviso = 'catálogo extra não gravado: ' + e; }
+  return r;
+}
+// só aceita o que faz sentido; monta a ficha (campos de BULA_CAMPOS do app) e o registro do catálogo (formato do produtos.json)
+function _bulaIaSaneia_(d, produto){ d = d && typeof d === 'object' ? d : {};
+  var num = function(v){ if (typeof v === 'number') return isFinite(v) ? v : 0; var s = S(v).replace(/\./g, '').replace(',', '.').replace(/[^\d.\-]/g, ''); var n = parseFloat(s); return isFinite(n) ? n : 0; };
+  var ings = (Array.isArray(d.ingredientes) ? d.ingredientes : []).map(function(x){ x = x || {}; return { nome:S(x.nome).slice(0, 80), grupo:S(x.grupo_quimico).slice(0, 60), conc:S(x.conc).slice(0, 30) }; }).filter(function(x){ return x.nome; });
+  if (!ings.length) return { erro:'a IA não encontrou o ingrediente ativo na bula' };
+  var culturas = (Array.isArray(d.culturas) ? d.culturas : []).map(function(c){ c = c || {}; return { cultura:S(c.cultura).slice(0, 60), alvos:(Array.isArray(c.alvos) ? c.alvos : []).map(function(a){ a = a || {}; return [S(a.alvo).slice(0, 80), S(a.nome_cientifico).slice(0, 80)]; }).filter(function(a){ return a[0]; }),
+      doseMin:num(c.dose_min), doseMax:num(c.dose_max), doseUn:S(c.dose_un).slice(0, 30), calda:S(c.volume_calda).slice(0, 60), carencia:num(c.carencia_dias), nApl:S(c.num_aplicacoes).slice(0, 30), intervalo:S(c.intervalo_dias).slice(0, 30) }; }).filter(function(c){ return c.cultura; });
+  var dmin = 0, dmax = 0, dun = '', car = null; culturas.forEach(function(c){ if (c.doseMin > 0 && (!dmin || c.doseMin < dmin)) dmin = c.doseMin; if (c.doseMax > dmax) dmax = c.doseMax; if (!dun && c.doseUn) dun = c.doseUn; if (c.carencia > 0 && (car == null || c.carencia > car)) car = c.carencia; });
+  var toxCat = S(d.tox_categoria).replace(/\D/g, '').slice(0, 1), toxTxt = S(d.tox_texto).slice(0, 80), tox = toxCat ? (toxCat + (toxTxt ? ' — ' + toxTxt : '')) : toxTxt;
+  var reg = S(d.registro).replace(/\D/g, '').slice(0, 8), marca = S(d.marca).slice(0, 80) || produto, emb = S((d.embalagens || [])[0]), me = emb.match(/^(\d+(?:[.,]\d+)?)\s*([A-Za-z]+)/);
+  var ficha = { ia:ings.map(function(x){ return x.nome; }).join(' + '), conc:ings.map(function(x){ return x.conc; }).filter(Boolean).join(' + '), ph:S(d.ph_calda).slice(0, 30), doseMin:dmin || '', doseMax:dmax || '', doseUn:dun,
+    carencia:car == null ? '' : car, reentrada:num(d.reentrada_horas) || '', tox:tox, grupo:[S(d.classe), S(d.grupo_resistencia), S(d.modo_acao)].filter(Boolean).join(' · ').slice(0, 120), form:S(d.formulacao).slice(0, 60), reg:reg,
+    emb:me ? num(me[1]) : '', embUn:me ? me[2] : '', obs:S(d.obs).slice(0, 300) };
+  var extra = { key:reg ? 'r:' + reg : 'p:' + produto.toUpperCase(), r:reg || ('BULA-' + produto.toUpperCase().replace(/[^A-Z0-9]+/g, '-').slice(0, 30)), m:[marca].concat(marca.toUpperCase() !== produto.toUpperCase() ? [produto] : []), f:ficha.form,
+    ia:ings.map(function(x){ return x.nome + (x.grupo ? ' (' + x.grupo + ')' : '') + (x.conc ? ' (' + x.conc + ')' : ''); }).join(' + '), t:S(d.titular).slice(0, 100), c:S(d.classe).slice(0, 40) || 'Outro',
+    tox:toxCat ? 'Categoria ' + toxCat + (toxTxt ? ' – ' + toxTxt : '') : toxTxt, amb:S(d.ambiental).slice(0, 80), org:'', ma:S(d.modo_acao).slice(0, 60), cu:culturas.map(function(c){ return c.cultura; }),
+    alvos:{}, doses:culturas.map(function(c){ return { cu:c.cultura, min:c.doseMin, max:c.doseMax, un:c.doseUn, calda:c.calda, car:c.carencia, nApl:c.nApl, int:c.intervalo }; }), fonte:'bula lida pela IA', produto:produto, _u:Date.now() };
+  culturas.forEach(function(c){ if (c.alvos.length) extra.alvos[c.cultura] = c.alvos; });
+  var resumo = ficha.ia + (reg ? ' · reg. ' + reg : '') + ' · ' + culturas.length + ' cultura(s), ' + culturas.reduce(function(s, c){ return s + c.alvos.length; }, 0) + ' alvo(s)';
+  return { bula:ficha, extra:extra, resumo:resumo };
+}
 // baixa um PDF (bula / FISPQ) de um LINK da web e guarda na pasta "Bulas" — o navegador do app não consegue
 // baixar de outros sites (CORS); a planilha consegue. Só aceita PDF de verdade (começa com "%PDF") até 15 MB.
 function bulaBaixar_(b){
@@ -2654,16 +2708,16 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas','maquinas']
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app'],
-  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem','conjuntos_app','checklist_app'],
-  precos:['precos_app','bulas_app'],
-  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app','catalogo_extra'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem','conjuntos_app','checklist_app','catalogo_extra'],
+  precos:['precos_app','bulas_app','catalogo_extra'],
+  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem','catalogo_extra'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app','conjuntos_app'],
   maquinas:['config_app','equipe_sst','realizado_app','manutencao','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app'] };   // v295 · v340: checklist_app
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -2820,8 +2874,8 @@ function cacheGen_(k){ try { return CacheService.getScriptCache().get(k) || ''; 
 function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.random(); keys.forEach(function(k){ o[k] = g; }); CacheService.getScriptCache().putAll(o, 21600); } catch (e) {} }
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao','vendas'];   // financeiro: classificar/cancelar nota mexe nos títulos
-var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação
-var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[],
+var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1, __bulaIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação · v351: leitura da bula (rede)
+var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[], __bulaIa:['catalogo_extra'],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
@@ -3125,6 +3179,10 @@ function gravaUm_(payload, acc, cfg, out){
     } else if (payload && payload.__bulaBaixar){      // bula / FISPQ: baixa o PDF de um link da web → Drive (pasta "Bulas")
       out.arquivo = bulaBaixar_(payload.__bulaBaixar); semCache = true;
       if (out.arquivo && out.arquivo.url) out.ok = 1; else { out.fail = 1; out.msgs.push((out.arquivo && out.arquivo.erro) || 'não baixou'); }
+    } else if (payload && payload.__bulaIa){          // v351: lê a bula em PDF com a IA → campos da ficha + CATÁLOGO EXTRA
+      var bi = bulaIa_(payload.__bulaIa);   // grava CATÁLOGO EXTRA → invalida só catalogo_extra (APP_INVALIDA_)
+      if (bi && !bi.erro){ out.ok = 1; out.bula = bi.bula; out.extra = bi.extra; out.resumo = bi.resumo; if (bi.aviso) out.msgs.push(bi.aviso); }
+      else { out.fail = 1; out.msgs.push('bula: ' + ((bi && bi.erro) || 'não li')); }
     } else if (payload && payload.__bulaArquivo){     // bula / FISPQ em PDF → Drive (pasta "Bulas")
       out.arquivo = bulaArquivo_(payload.__bulaArquivo); out.ok = out.arquivo && out.arquivo.url ? 1 : 0; semCache = true;
       if (!out.ok){ out.fail = 1; out.msgs.push('bula: ' + ((out.arquivo && out.arquivo.erro) || 'não gravou no Drive')); }   // v326: motivo no log do app
