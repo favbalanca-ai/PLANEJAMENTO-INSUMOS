@@ -71,6 +71,17 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Fluxo automático por produtor (v348)** — (1) **Aprovação automática** (planilha, CONFIG NFE → AUTO APROVAR):
+  nota de rotina (fornecedor conhecido pelo de-para, IA confiante, valor dentro do limite, sem armazém nem entrada em
+  dobro) vai para EM TRÂNSITO sozinha; a caixa de entrada mostra "🤖 Aprovadas sozinhas" (`nfeAutoHtml`, lista
+  `NFE_LISTA.auto`) com **↩ Desfazer** (`nfeReabrirStatus`), e o cartão das que sobraram traz na OBS o motivo
+  ("não aprovou sozinha: fornecedor novo…"). (2) **Usuário ligado ao produtor** (Usuários → "Produtor deste
+  usuário", `u.produtor`, payload `__usuarios.salvar.produtor`): operador com CPF ligado vê em Notas só as NF-e dele
+  ("Suas notas", `nfeSoMeu`/`nfeNotasVisiveis`); o administrador ganha chips por produtor (`nfeProdChipsHtml`,
+  `NFE_UI.prod`); "Aprovar todas" respeita o chip. (3) **Sino** (`notifItens`): "N nota(s) sua(s) para classificar"
+  (ou o total, para o admin), nota **em trânsito parada** há mais de TRÂNSITO DIAS e "saiu do armazém — leia o
+  DANFE ao chegar", todos vindos do `nfe_resumo` (porProdutor, transitoParado, armazemSaiu). Sem e-mail nem
+  Telegram: o aviso é o sino do app e a notificação do aparelho que já existia. Code.gs v348.
 - **Armazém geral: o caminho da mercadoria não entra em dobro (v347)** — caso real: a NF de venda do fornecedor
   (entrega no armazém) e as duas notas do armazém (depósito 1934 e retorno 5906) do mesmo produto entraram três
   vezes, porque foram aprovadas antes da v317. Agora: (1) `nfeArmazemTexto` reconhece nota de armazém pelo **texto**

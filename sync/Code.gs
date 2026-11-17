@@ -734,7 +734,7 @@ function nfeConfig_(){
   var cfg = nfeConfigLer_(); if (_NFE_MEMO_) _NFE_MEMO_.cfg = cfg; return cfg;
 }
 function nfeConfigLer_(){
-  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30, email:false, extra:[], extraDias:60 }; if (!s) return cfg;   // v344: extra = pastas só de leitura
+  var s = sh(NFE_CONFIG_SHEET), cfg = { token:'', pasta:'', produtores:[], diasParado:30, email:false, extra:[], extraDias:60, auto:false, autoMax:50000, autoConf:90, transitoDias:7 }; if (!s) return cfg;   // v344: extra = pastas só de leitura · v348: aprovação automática e trânsito parado
   var last = s.getLastRow(); if (last < 2) return cfg;
   var v = s.getRange(2,1,last-1,2).getValues();
   var ant = '';
@@ -746,7 +746,11 @@ function nfeConfigLer_(){
     else if (k === 'DIASCONTRATOPARADO' && val !== '') cfg.diasParado = N(val);
     else if (k === 'LEREMAIL') cfg.email = /^(SIM|S|1|TRUE|X)$/i.test(val);
     else if (k === 'PASTAEXTRA' && val) val.split(/[,;\s]+/).forEach(function(x){ var m = String(x).match(/[-\w]{25,}/); if (m && cfg.extra.indexOf(m[0]) < 0) cfg.extra.push(m[0]); })   // aceita ID ou link, várias linhas
-    else if (k === 'PASTAEXTRADIAS' && val !== '') cfg.extraDias = N(val); });
+    else if (k === 'PASTAEXTRADIAS' && val !== '') cfg.extraDias = N(val)
+    else if (k === 'AUTOAPROVAR') cfg.auto = /^(SIM|S|1|TRUE|X)$/i.test(val)   // v348
+    else if (k === 'AUTOVALORMAX' && val !== '') cfg.autoMax = N(val)
+    else if (k === 'AUTOCONFIANCA' && val !== '') cfg.autoConf = N(val)
+    else if (k === 'TRANSITODIAS' && val !== '') cfg.transitoDias = N(val); });
   try { finProdutoresAtivos_().forEach(function(d){ if (cfg.produtores.indexOf(d) < 0) cfg.produtores.push(d); }); } catch (e) {}   // v273: aba PRODUTORES também conta
   return cfg;
 }
@@ -778,6 +782,10 @@ function setupNfe(){
   var ks = s.getLastRow() >= 2 ? s.getRange(2,1,s.getLastRow()-1,1).getValues().map(function(r){ return _hkey(r[0]); }) : [];   // v344
   if (ks.indexOf('PASTAEXTRA') < 0) add('PASTA EXTRA', '', 'Opcional: ID ou link de OUTRA pasta do Drive onde chegam XML (ex.: a pasta do ano onde o e-mail salva os anexos). Só lê, nunca move. Compartilhe a pasta com a conta desta planilha (leitor basta). Pode repetir a linha.');
   if (ks.indexOf('PASTAEXTRADIAS') < 0) add('PASTA EXTRA DIAS', 60, 'Na pasta extra, só olha subpastas e arquivos dos últimos N dias.');
+  if (ks.indexOf('AUTOAPROVAR') < 0) add('AUTO APROVAR', 'NÃO', 'SIM = nota de rotina (fornecedor conhecido pelo de-para, IA confiante, valor dentro do limite, não é armazém nem entrada em dobro) vai para EM TRÂNSITO sozinha. O app mostra "aprovadas sozinhas" com desfazer.');   // v348
+  if (ks.indexOf('AUTOVALORMAX') < 0) add('AUTO VALOR MÁX', 50000, 'Nota acima deste valor (R$) sempre passa por uma pessoa.');
+  if (ks.indexOf('AUTOCONFIANCA') < 0) add('AUTO CONFIANÇA', 90, 'Confiança mínima da IA (%) na nota e em cada item para aprovar sozinha.');
+  if (ks.indexOf('TRANSITODIAS') < 0) add('TRÂNSITO DIAS', 7, 'Nota em trânsito há mais dias que isso sem recebimento aparece no sino do app (cobrar o operador).');
   return 'NF-e configurada: pastas, abas, token e gatilho de 15 min (lê a pasta NFe/Entrada).';
 }
 
@@ -1230,7 +1238,8 @@ function capturarNfe(maxMs){
         } catch (e){ erros.push('e-mail "' + S(th.getFirstMessageSubject()).slice(0,60) + '": ' + e); } }
     } catch (e){ erros.push('Gmail: ' + e); }
     // v290: classificação automática com IA das notas que acabaram de entrar (fora da trava: é chamada de rede)
-    if (iaChave_()) res.forEach(function(r){ if (r.status !== 'nova' || !r.chave || fimTempo()) return; try { nfeIaClassificar_(r.chave); } catch (e){ erros.push('IA ' + r.chave.slice(-6) + ': ' + e); } });
+    if (iaChave_()) res.forEach(function(r){ if (r.status !== 'nova' || !r.chave || fimTempo()) return; try { nfeIaClassificar_(r.chave); } catch (e){ erros.push('IA ' + r.chave.slice(-6) + ': ' + e); }
+      if (cfg.auto) try { var aa = passo(function(){ return nfeAutoAprova_(r.chave); }); r.auto = aa.ok ? 'sim' : S(aa.motivo); } catch (e2){ erros.push('auto ' + r.chave.slice(-6) + ': ' + e2); } });   // v348: nota de rotina aprova sozinha
   } finally {
     _NFE_MEMO_ = null;
     _nfeCapturaSalva_(res, erros, parcial, ex && ex.out);
@@ -1333,10 +1342,12 @@ function _nfeConsertoLeve_(){
 }
 function nfeLista_(status){
   _nfeConsertoLeve_();
-  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {}, ign = [];
-  var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S);
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(), out = [], alertas = [], cont = {}, ign = [], auto = [], cfgA = nfeConfig_();
+  var quer = S(status || 'A CLASSIFICAR').toUpperCase().split(',').map(S), lim7 = Date.now() - 7 * 864e5;
   if (last >= 2) s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var o = _rowObj(t, r), st = S(o[_hkey('STATUS')]).toUpperCase();
     if (!S(o[_hkey('CHAVE')])) return; cont[st] = (cont[st] || 0) + 1;
+    if (st === 'EM TRÂNSITO' && S(o[_hkey('OBS')]).indexOf('🤖 aprovada automaticamente') === 0){ var cl = o[_hkey('CLASSIFICADA EM')]; if (cl instanceof Date && cl.getTime() >= lim7 && auto.length < 40)   // v348: aprovadas sozinhas nos últimos 7 dias (o app mostra com "desfazer")
+      auto.push({ chave:S(o[_hkey('CHAVE')]), nNF:S(o[_hkey('Nº')]), fornecedor:S(o[_hkey('FORNECEDOR')]), valor:N(o[_hkey('VALOR')]), produtor:_doc_(o[_hkey('PRODUTOR')]), em:_fmtDT(cl), obs:S(o[_hkey('OBS')]).replace(/^🤖 aprovada automaticamente:\s*/, '').slice(0, 160), xprods:S(o[_hkey('ITENS')]).split(' | ').filter(Boolean) }); }
     var nota = { chave:S(o[_hkey('CHAVE')]), fornecedor:S(o[_hkey('FORNECEDOR')]), cnpj:S(o[_hkey('CNPJ EMITENTE')]), produtor:_doc_(o[_hkey('PRODUTOR')]), nNF:S(o[_hkey('Nº')]), serie:S(o[_hkey('SÉRIE')]),   // v286: produtor (destinatário) na lista
       emissao:_fmtD(o[_hkey('EMISSÃO')]), valor:N(o[_hkey('VALOR')]), tipo:S(o[_hkey('TIPO')]), status:st, origem:S(o[_hkey('ORIGEM')]), obs:S(o[_hkey('OBS')]),
       capturada:_fmtDT(o[_hkey('CAPTURADA EM')]), recebida:_fmtD(o[_hkey('RECEBIDA EM')]), ia:iaParse_(o[_hkey('IA')]), xprods:S(o[_hkey('ITENS')]).split(' | ').filter(Boolean) };   // v290 · v313: itens
@@ -1344,7 +1355,7 @@ function nfeLista_(status){
     if (st === 'IGNORADA') ign.push(nota.chave);
     if (S(nota.obs).indexOf('⚠') === 0) alertas.push(nota); });
   var pasta = null; try { var cfgL = nfeConfig_(); if (cfgL.pasta){ var pp = nfePastas_(cfgL); pasta = { raiz:cfgL.pasta, entrada:pp.entrada.getId(), nome:S(pp.raiz.getName()), extra:cfgL.extra.length }; } } catch (e) { pasta = null; }   // v343: o app mostra o link da NFe/Entrada · v344: nº de pastas extras
-  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign, pasta:pasta };
+  return { ok:true, notas:out, alertas:alertas, contagem:cont, captura:nfeCapturaInfo_(), historico:nfeCapturaHist_(), ignoradas:ign, pasta:pasta, auto:auto, autoOn:!!cfgA.auto };   // v348
 }
 // v309: entradas no tanque feitas por uma NF-e (id abnf:<chave>:<item>) marcadas como apagadas
 function abastDaNotaApaga_(chave){ if (!sh(ABAST_SHEET)) return 0; var m = readMapApp(ABAST_SHEET), out = {}, n = 0, u = Date.now();
@@ -1869,8 +1880,9 @@ function iaCandidatos_(prods, xprod){ var xt = iaTok_(xprod), out = [];
   prods.forEach(function(p){ var pt = iaTok_(p.produto); if (!pt.length) return; var hit = pt.filter(function(t){ return xt.indexOf(t) >= 0; }).length; if (hit) out.push({ s:hit / pt.length + hit / Math.max(1, xt.length), p:p }); });
   out.sort(function(a, b){ return b.s - a.s; }); return out.slice(0, 12).map(function(o){ return o.p; }); }
 function nfeItensGs_(txt){ var root = XmlService.parse(txt).getRootElement(), inf = _xfirst(root, 'infNFe'); if (!inf) return [];
-  return _xall(inf, 'det').map(function(d, i){ var pr = _xfirst(d, 'prod'), na = d.getAttribute('nItem');
-    return { n:na ? +na.getValue() : i + 1, cprod:_xt(pr, 'cProd'), xprod:_xt(pr, 'xProd'), cfop:_xt(pr, 'CFOP'), ucom:_xt(pr, 'uCom'), qcom:parseFloat(_xt(pr, 'qCom')) || 0, vun:parseFloat(_xt(pr, 'vUnCom')) || 0, vprod:parseFloat(_xt(pr, 'vProd')) || 0 }; }); }
+  return _xall(inf, 'det').map(function(d, i){ var pr = _xfirst(d, 'prod'), na = d.getAttribute('nItem'), im = _xfirst(d, 'imposto'), ic = im ? _xfirst(im, 'ICMS') : null, nf = function(el, k){ return parseFloat(_xt(el, k)) || 0; };
+    return { n:na ? +na.getValue() : i + 1, cprod:_xt(pr, 'cProd'), xprod:_xt(pr, 'xProd'), cfop:_xt(pr, 'CFOP'), ucom:_xt(pr, 'uCom'), qcom:nf(pr, 'qCom'), vun:nf(pr, 'vUnCom'), vprod:nf(pr, 'vProd'),
+      vdesc:nf(pr, 'vDesc'), vfrete:nf(pr, 'vFrete'), voutro:nf(pr, 'vOutro'), vipi:im ? nf(_xfirst(im, 'IPI'), 'vIPI') : 0, vst:ic ? nf(ic, 'vICMSST') : 0, vdeson:(ic && _xt(ic, 'indDeduzDeson') === '1') ? nf(ic, 'vICMSDeson') : 0 }; }); }   // v348: mesmos descontos/acréscimos que o app usa no custo real (nfeCustoReal)
 var IA_DESTINOS = ['estoque', 'maquina', 'oficina', 'benfeitoria', 'tanque', 'ignorar'], IA_TIPOS = ['compra_insumo', 'venda', 'pecas', 'oficina', 'benfeitoria', 'servico', 'outra'];
 var IA_CULTURAS = ['soja', 'milho', 'feijao', 'laranja', 'sorgo', 'trigo', 'algodao', 'arroz', 'girassol', 'braquiaria', 'aveia', 'milheto'];
 function nfeIaClassificar_(chave, forcar){
@@ -1919,6 +1931,73 @@ function iaSaneia_(ia, itens, prods){ ia = ia && typeof ia === 'object' ? ia : {
     out.itens.push({ n:it.n, destino:dest, produto:prod, fator:Math.round(f * 10000) / 10000, maquina:S(x.maquina).slice(0, 80), tipoGasto:S(x.tipoGasto).slice(0, 40), confianca:Math.round(conf * 100) / 100 }); });
   if (out.tipo === 'venda' && !out.cultura) out.confianca = Math.min(out.confianca, 0.5);
   return out; }
+// ===== v348: APROVAÇÃO AUTOMÁTICA — nota de rotina vai para EM TRÂNSITO sem ninguém tocar =====
+// Decisão pura (testável): passa quando TUDO vale — CONFIG NFE → AUTO APROVAR = SIM · veio de XML (não PDF) · tipo VENDA ·
+// destinatário é produtor da fazenda · não é venda do produtor · valor ≤ AUTO VALOR MÁX · IA disse compra_insumo com
+// confiança ≥ AUTO CONFIANÇA (nota e cada item) · TODO item tem de-para lembrado deste fornecedor (Ignorar ou produto do
+// portfólio) = "fornecedor conhecido" · nenhum item é entrada em dobro (mesmo produto e quantidade por outro emitente em 60 dias).
+// Devolve { ok, motivo, itens } — itens no formato do nfeClassifica_ (custo real como o app: nfeCustoReal).
+function nfeAutoDecide_(n, itens, ia, dep, cfg, prods, dobro, origem){
+  var nao = function(m){ return { ok:false, motivo:m }; };
+  if (!cfg.auto) return nao('aprovação automática desligada (CONFIG NFE → AUTO APROVAR)');
+  if (/^pdf\b/i.test(S(origem)) && !/\(xml\)/.test(S(origem))) return nao('nota lida de PDF pela IA');
+  if (n.tipo !== 'VENDA') return nao('tipo ' + (n.tipo || 'OUTRA') + ' (só venda normal aprova sozinha)');
+  if (cfg.produtores.length && cfg.produtores.indexOf(n.dest) < 0) return nao('destinatário fora da lista de produtores');
+  if (nfeEhVendaProd_(n, cfg, origem)) return nao('venda do produtor');
+  if (n.vNF > cfg.autoMax) return nao('valor acima de R$ ' + cfg.autoMax);
+  if (!ia || !Array.isArray(ia.itens)) return nao('sem classificação da IA');
+  if (ia.tipo !== 'compra_insumo') return nao('IA viu "' + (ia.tipo || 'outra') + '", não compra de insumo');
+  var min = (N(cfg.autoConf) || 90) / 100; if (+ia.confianca < min) return nao('IA com ' + Math.round((+ia.confianca || 0) * 100) + '% (mínimo ' + Math.round(min * 100) + '%)');
+  var un = {}; (prods || []).forEach(function(p){ if (p.produto) un[p.produto] = S(p.un); });
+  var out = [], novos = [], temDep = Object.keys(dep || {}).length > 0;
+  for (var i = 0; i < itens.length; i++){ var it = itens[i], d = (dep || {})[it.cprod], x = (ia.itens || []).filter(function(y){ return +y.n === +it.n; })[0] || {};
+    if (!d){ novos.push(it.xprod); continue; }
+    if (d.ignorar){ out.push({ n:it.n, cprod:it.cprod, xprod:it.xprod, cfop:it.cfop, ucom:it.ucom, qcom:it.qcom, produto:'', fator:1, qtd:0, un:'', custo:0, ignorar:true, dest:'', maq:'' }); continue; }
+    if (+x.confianca < min) return nao('item "' + it.xprod + '" com IA ' + Math.round((+x.confianca || 0) * 100) + '%');
+    if (d.destino && d.destino !== 'estoque') return nao('item "' + it.xprod + '" vai para ' + d.destino + ' (apropriação precisa de pessoa)');
+    if (!d.produto || !(d.produto in un)){ novos.push(it.xprod); continue; }
+    var f = N(d.fator) || 1, q = Math.round(it.qcom * f * 10000) / 10000; if (!(q > 0)) return nao('item "' + it.xprod + '" sem quantidade');
+    var custo = (it.vprod - (it.vdesc || 0) - (it.vdeson || 0) + (it.vfrete || 0) + (it.voutro || 0) + (it.vipi || 0) + (it.vst || 0)) / q;
+    out.push({ n:it.n, cprod:it.cprod, xprod:it.xprod, cfop:it.cfop, ucom:it.ucom, qcom:it.qcom, produto:d.produto, fator:f, qtd:q, un:un[d.produto], custo:Math.round(custo * 10000) / 10000, ignorar:false, dest:'estoque', maq:'' }); }
+  if (novos.length) return nao(temDep ? 'item novo para este fornecedor: ' + novos.join(', ').slice(0, 120) : 'fornecedor novo (sem de-para lembrado)');
+  var usados = out.filter(function(o){ return !o.ignorar; }); if (!usados.length) return nao('todos os itens marcados Ignorar');
+  var dob = dobro ? dobro(usados) : ''; if (dob) return nao('entrada em dobro: ' + dob);
+  return { ok:true, motivo:'fornecedor conhecido · ' + usados.length + ' item(ns) pelo de-para · IA ' + Math.round((+ia.confianca || 0) * 100) + '%', itens:out };
+}
+// entrada em dobro vista pela planilha: outra nota (RECEBIDA / EM TRÂNSITO) de OUTRO emitente, emitida até 60 dias antes ou depois,
+// com o mesmo PRODUTO APP e a mesma QTD APP (±1%) nos NFE ITENS. Devolve texto do primeiro caso ou ''.
+function nfeDobroGs_(n, usados){
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), s = t.s, last = s.getLastRow(); if (last < 2) return '';
+  var d0 = new Date(S(n.emissao).slice(0, 10) + 'T12:00:00'), cand = {};
+  s.getRange(2, 1, last - 1, t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase(); if (st !== 'RECEBIDA' && st !== 'EM TRÂNSITO') return;
+    if (S(r[t.col('CNPJ EMITENTE')]) === S(n.cnpj) || S(r[t.col('CHAVE')]) === S(n.chave)) return;
+    var em = r[t.col('EMISSÃO')], dd = em instanceof Date ? Math.abs((em - d0) / 864e5) : 999; if (dd > 60) return;
+    cand[S(r[t.col('CHAVE')])] = { nNF:S(r[t.col('Nº')]), forn:S(r[t.col('FORNECEDOR')]) }; });
+  if (!Object.keys(cand).length) return '';
+  var hit = '';
+  _ler_(NFE_ITENS_SHEET, NFE_ITENS_COLS).some(function(i){ var c = cand[S(i['CHAVE'])]; if (!c) return false; var p = S(i['PRODUTO APP']), q = N(i['QTD APP']); if (!p || !(q > 0)) return false;
+    var u = usados.filter(function(x){ return x.produto === p && Math.abs(x.qtd - q) <= q * 0.01 + 1e-6; })[0]; if (!u) return false;
+    hit = p + ' ' + q + ' já entrou pela NF ' + c.nNF + ' de ' + c.forn; return true; });
+  return hit;
+}
+// roda na captura para cada nota NOVA depois da IA: lê a linha, o XML, a IA, o de-para e decide. Aprovada → nfeClassifica_
+// (EM TRÂNSITO + itens + títulos) com OBS "🤖 aprovada automaticamente: …". Recusada com AUTO APROVAR ligado → OBS
+// "não aprovou sozinha: motivo" (só se a OBS estiver vazia), para o cartão do app explicar.
+function nfeAutoAprova_(chave){
+  chave = S(chave); var cfg = nfeConfig_(); if (!cfg.auto) return { ok:false, motivo:'desligada' };
+  var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), row = _nfeLinha_(t, chave); if (!row) return { ok:false, motivo:'nota não encontrada' };
+  var o = _rowObj(t, t.s.getRange(row, 1, 1, t.ncol).getValues()[0]), g = function(h){ return o[_hkey(h)]; };
+  if (S(g('STATUS')).toUpperCase() !== 'A CLASSIFICAR') return { ok:false, motivo:'status ' + S(g('STATUS')) };
+  var fid = S(g('FILE ID')); if (!fid) return { ok:false, motivo:'sem XML' };
+  var txt, n, itens; try { txt = _blobTxt(DriveApp.getFileById(fid).getBlob()); n = nfeLerGs_(txt); itens = nfeItensGs_(txt); } catch (e) { return { ok:false, motivo:'XML ilegível: ' + e }; }
+  var dep = {}; try { var all = readDeParaNfe(); Object.keys(all).forEach(function(k){ var d = all[k]; if (d.cnpj === n.cnpj) dep[d.cprod] = d; }); } catch (e) {}
+  var prods = []; try { prods = (readBase_().produtos || []).filter(function(p){ return p.produto && !/^M[AÁ]QUINA/i.test(p.classe || ''); }); } catch (e) {}
+  var r = nfeAutoDecide_(n, itens, iaParse_(g('IA')), dep, cfg, prods, function(us){ return nfeDobroGs_(n, us); }, S(g('ORIGEM')));
+  if (r.ok){ var c = nfeClassifica_({ chave:chave, status:'EM TRÂNSITO', por:'auto', itens:r.itens, dups:[], pag:[], obs:'🤖 aprovada automaticamente: ' + r.motivo });
+    if (c && c.erro) return { ok:false, motivo:'planilha recusou: ' + c.erro }; return r; }
+  if (!S(g('OBS'))) _setCells_(t, row, { 'OBS':'não aprovou sozinha: ' + r.motivo });
+  return r;
+}
 // ---- FASE 5: divergências na conferência (aba PENDÊNCIAS RECEBIMENTO) ----
 var NFE_PEND_SHEET = 'PENDÊNCIAS RECEBIMENTO';
 var NFE_PEND_COLS = ['ID','CHAVE','Nº','FORNECEDOR','PRODUTO','TIPO','QTD','UN','FICOU NA FAZENDA','FOTO','CONFERIDO POR','DATA','STATUS','SOLUÇÃO','OBS'];
@@ -1968,10 +2047,17 @@ function nfeFoto_(f){
   var file = pasta.createFile(blob); return { url:file.getUrl(), id:file.getId() };
 }
 // resumo SEM dados da nota (só contagens) — vai no puxar normal, para o contador do app
-function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0, pendAbertas:0 }; if (!s) return out;
+function nfeResumo_(){ var s = sh(NFE_IDX_SHEET), out = { aClassificar:0, alertas:0, pendAbertas:0, porProdutor:{}, transitoParado:[], armazemSaiu:[], autoHoje:0, autoOn:false }; if (!s) return out;   // v348: por CPF, trânsito parado, armazém, auto
   var t = sheetCols_(NFE_IDX_SHEET, NFE_IDX_COLS), last = s.getLastRow(); if (last < 2) return out;
-  s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase();
-    if (st === 'A CLASSIFICAR') out.aClassificar++; if (st === 'EM TRÂNSITO') out.emTransito = (out.emTransito || 0) + 1; if (S(r[t.col('OBS')]).indexOf('⚠') === 0) out.alertas++; });   // v292: emTransito p/ o checklist do fechamento
+  var cfg = nfeConfig_(), dias = N(cfg.transitoDias) || 7, hoje = new Date(), hojeS = Utilities.formatDate(hoje, tz_(), 'yyyy-MM-dd'); out.autoOn = !!cfg.auto;
+  s.getRange(2,1,last-1,t.ncol).getValues().forEach(function(r){ var st = S(r[t.col('STATUS')]).toUpperCase(), prod = _doc_(r[t.col('PRODUTOR')]), obs = S(r[t.col('OBS')]);
+    if (st === 'A CLASSIFICAR'){ out.aClassificar++; if (prod) out.porProdutor[prod] = (out.porProdutor[prod] || 0) + 1; }
+    if (st === 'EM TRÂNSITO'){ out.emTransito = (out.emTransito || 0) + 1; var cl = r[t.col('CLASSIFICADA EM')], dd = cl instanceof Date ? Math.floor((hoje - cl) / 864e5) : -1;
+      var base = { chave:S(r[t.col('CHAVE')]), nNF:S(r[t.col('Nº')]), fornecedor:S(r[t.col('FORNECEDOR')]), produtor:prod };
+      if (obs.indexOf('🤖 aprovada automaticamente') === 0 && cl instanceof Date && Utilities.formatDate(cl, tz_(), 'yyyy-MM-dd') === hojeS) out.autoHoje++;
+      if (dd >= dias && out.transitoParado.length < 20){ base.dias = dd; out.transitoParado.push(base); }
+      else if (obs.indexOf('🚛') === 0 && out.armazemSaiu.length < 20){ base.obs = obs.slice(0, 160); out.armazemSaiu.push(base); } }
+    if (obs.indexOf('⚠') === 0) out.alertas++; });   // v292: emTransito p/ o checklist do fechamento
   out.contratosParados = nfeContratos_().filter(function(c){ return c.parado; }).length;
   if (sh(NFE_PEND_SHEET)) out.pendAbertas = _ler_(NFE_PEND_SHEET, NFE_PEND_COLS).filter(function(p){ return S(p['STATUS']).toUpperCase() === 'ABERTA'; }).length;
   return out; }
@@ -2563,7 +2649,7 @@ function custoIniColOf(P){
      Administrativo); o doPost só GRAVA o que os módulos da pessoa permitem. ADMIN = tudo.
    - EXIGIR LOGIN = NÃO (padrão): funciona como antes para quem não entrou; quem entrou já é filtrado. */
 var USU_SHEET = 'USUÁRIOS APP', CFGAPP_SHEET = 'CONFIG APP';
-var USU_COLS = ['NOME','LOGIN','PERFIL','MÓDULOS','TELAS','PIN NOVO','PIN','ATIVO','VERSÃO','ÚLTIMO ACESSO'];
+var USU_COLS = ['NOME','LOGIN','PERFIL','MÓDULOS','TELAS','PIN NOVO','PIN','ATIVO','VERSÃO','ÚLTIMO ACESSO','PRODUTOR'];   // v348: PRODUTOR = CPF/CNPJ do produtor desta pessoa (vê "Suas notas" e recebe os avisos dele)
 var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas','maquinas'];   // v308: 'maquinas' faltava — a marcação do admin sumia e o módulo não abria para operador
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
@@ -2599,7 +2685,7 @@ function _usuObj_(t, r, row){ var g = function(h){ return r[t.col(h)]; };
   var perfil = S(g('PERFIL')).toUpperCase().indexOf('ADM') === 0 ? 'ADMIN' : 'OPERADOR', at = S(g('ATIVO')).toUpperCase();
   return { row:row, nome:S(g('NOME')), login:_normLogin_(g('LOGIN')), perfil:perfil, modulos:_lista_(g('MÓDULOS')).filter(function(m){ return MODULOS_APP.indexOf(m) >= 0; }),
     telas:_lista_(g('TELAS')), pinNovo:S(g('PIN NOVO')), pin:S(g('PIN')), ativo:!(at === 'NÃO' || at === 'NAO' || at === 'N' || at === 'FALSE' || at === '0'),
-    versao:N(g('VERSÃO')) || 0, ultimo:_fmtDT(g('ÚLTIMO ACESSO')) }; }
+    versao:N(g('VERSÃO')) || 0, ultimo:_fmtDT(g('ÚLTIMO ACESSO')), produtor:_doc_(g('PRODUTOR')) }; }   // v348
 function usuariosLer_(){
   var t = sheetCols_(USU_SHEET, USU_COLS), s = t.s, out = [];
   if (s.getLastRow() >= 2) s.getRange(2,1,s.getLastRow()-1,t.ncol).getValues().forEach(function(r, i){ var u = _usuObj_(t, r, i + 2); if (u.login) out.push(u); });
@@ -2612,7 +2698,7 @@ function usuarioPorLogin_(login){
   return _USU_MEMO_[_normLogin_(login)] || null;
 }
 function _usuLimpaCache_(){ _USU_MEMO_ = null; try { CacheService.getScriptCache().removeAll(['lg_usu','lg_cfg','lg_nusu']); } catch (e) {} }
-function usuarioInfo_(u){ return { nome:u.nome || u.login, login:u.login, perfil:u.perfil, modulos:u.perfil === 'ADMIN' ? MODULOS_APP.slice() : u.modulos, telas:u.perfil === 'ADMIN' ? [] : u.telas }; }
+function usuarioInfo_(u){ return { nome:u.nome || u.login, login:u.login, perfil:u.perfil, modulos:u.perfil === 'ADMIN' ? MODULOS_APP.slice() : u.modulos, telas:u.perfil === 'ADMIN' ? [] : u.telas, produtor:u.produtor || '' }; }   // v348: produtor
 function tokenGera_(login, ver){ var p = login + '|' + ver + '|' + (Date.now() + 30 * 864e5);
   return _b64_(p) + '.' + _b64_(Utilities.computeHmacSha256Signature(p, _prop_('LOGIN_SEGREDO'))); }
 // sessão → {u, admin, mods} · sem sessão → null · sessão ruim → {erro}
@@ -2693,6 +2779,7 @@ function usuariosSalva_(acc, r){
   if (pin || (u && (u.ativo && !ativo)) || (u && login !== antigo)) ver++;   // PIN novo / desativado / login trocado → sai dos aparelhos
   var vals = { 'NOME':S(d.nome), 'LOGIN':login, 'PERFIL':perfil, 'MÓDULOS':(d.modulos || []).filter(function(m){ return MODULOS_APP.indexOf(m) >= 0; }).join(', '),
     'TELAS':(d.telas || []).join(', '), 'ATIVO':ativo ? 'SIM' : 'NÃO', 'VERSÃO':ver };
+  if (d.produtor !== undefined) vals['PRODUTOR'] = _doc_(d.produtor);   // v348: vazio = vê todas
   if (pin){ vals['PIN'] = _hashPin_(login, pin); vals['PIN NOVO'] = ''; }
   _setCells_(t, row, vals); _usuLimpaCache_();
   var eu = acc && acc.u && u && acc.u.login === u.login && ativo;   // editou a si mesmo: chave nova (não cai do app)

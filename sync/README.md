@@ -235,6 +235,28 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Aprovação automática e caixa por produtor (v348)
+
+- CONFIG NFE ganha (criadas pelo `setupNfe`, todas opcionais): **AUTO APROVAR** (NÃO), **AUTO VALOR MÁX** (50000),
+  **AUTO CONFIANÇA** (90), **TRÂNSITO DIAS** (7) → `cfg.auto`, `cfg.autoMax`, `cfg.autoConf`, `cfg.transitoDias`.
+- `nfeAutoDecide_(n, itens, ia, dep, cfg, prods, dobro, origem)` — decisão pura: aprova só quando AUTO APROVAR = SIM,
+  veio de XML (não PDF), tipo VENDA, destinatário é produtor da fazenda, não é venda do produtor, valor ≤ máximo, IA
+  disse `compra_insumo` com confiança ≥ mínimo (nota e itens), TODO item tem de-para lembrado deste fornecedor
+  (Ignorar ou produto do portfólio; destino máquina/oficina/benfeitoria recusa) e nenhum item é entrada em dobro.
+  Monta os itens no formato do `nfeClassifica_` com o custo real igual ao do app (`nfeItensGs_` agora lê vDesc,
+  vFrete, vOutro, vIPI, vICMSST e vICMSDeson quando `indDeduzDeson` = 1).
+- `nfeDobroGs_(n, usados)` — entrada em dobro vista pela planilha: outra nota RECEBIDA/EM TRÂNSITO de outro
+  emitente, emitida até 60 dias antes ou depois, com o mesmo PRODUTO APP e QTD APP (±1%) nos NFE ITENS.
+- `nfeAutoAprova_(chave)` — roda na captura (`capturarNfe`, logo depois da IA, dentro da trava) para cada nota nova:
+  aprovada → `nfeClassifica_({status:'EM TRÂNSITO', por:'auto', itens, obs:'🤖 aprovada automaticamente: …'})`
+  (itens + títulos a pagar); recusada com AUTO APROVAR ligado → OBS `não aprovou sozinha: motivo` (só se a OBS
+  estava vazia). O resultado de cada nota vai no histórico da captura (`r.auto`).
+- `nfeLista_` devolve `auto` (EM TRÂNSITO com a marca 🤖, últimos 7 dias, até 40) e `autoOn`.
+- `nfeResumo_` devolve `porProdutor` {CPF: a classificar}, `transitoParado` (EM TRÂNSITO há ≥ TRÂNSITO DIAS desde
+  CLASSIFICADA EM, até 20), `armazemSaiu` (EM TRÂNSITO com OBS 🚛, até 20), `autoHoje` e `autoOn`.
+- USUÁRIOS APP ganha a coluna **PRODUTOR** (CPF/CNPJ): `_usuObj_`/`usuarioInfo_` devolvem `produtor` (vai no login e
+  na lista), `usuariosSalva_` grava `salvar.produtor` (vazio = vê todas).
+
 ## Armazém geral à prova de entrada em dobro (v347)
 
 - `nfeArmazemTextoGs_(fornecedor, natOp, tpNF, nfVenda)` — mesma regra do app: emitente com "ARMAZÉNS GERAIS /

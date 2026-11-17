@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-347';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-348';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -460,6 +460,8 @@ function sessUsuario(){ const x=sessao(); return (x&&x.usuario)||null; }
 function loginExigido(){ try{ return localStorage.getItem(LOGIN_EXIG_KEY)==='1'; }catch(e){ return false; } }
 function setLoginExigido(b){ lsSet(LOGIN_EXIG_KEY, b?'1':'0') }
 function ehAdmin(){ const u=sessUsuario(); return !!(u&&u.perfil==='ADMIN'); }
+function usuProdutor(){ const u=sessUsuario(); return String((u&&u.produtor)||'').replace(/\D/g,''); }   // v348: CPF/CNPJ do produtor ligado ao usuário (Usuários → Produtor deste usuário)
+function nfeSoMeu(){ const p=usuProdutor(); return (p && sessUsuario() && !ehAdmin())?p:''; }   // v348: operador ligado a um produtor vê só as notas desse CPF
 function podeModulo(m){ const u=sessUsuario(); return !u || u.perfil==='ADMIN' || (u.modulos||[]).includes(m); }
 // telas de um módulo = itens do menu daquele módulo (sem Sincronizar/Usuários)
 function navTelas(m){ return Array.from(document.querySelectorAll('#nav a[data-view]')).filter(a=>(a.dataset.mod||'').split(' ').includes(m) && !['sync','usuarios'].includes(a.dataset.view))
@@ -2132,7 +2134,7 @@ function nfeListaCarregar(force){
   if(!nfeServerOk()) return Promise.resolve(null);
   if(!force && NFE_LISTA && Date.now()-NFE_LISTA.ts<30000) return Promise.resolve(NFE_LISTA);
   return nfeGet({acao:'nfe_lista', status:'A CLASSIFICAR'}).then(d=>{
-    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null, iaOn:!!(d&&d.iaOn), pasta:(d&&d.pasta)||null};   // v290: a planilha diz se a IA está ligada · v343: pasta NFe/Entrada
+    NFE_LISTA={ts:Date.now(), notas:(d&&d.ok&&d.notas)||[], alertas:(d&&d.alertas)||[], erro:(d&&!d.ok)?(d.erro||'erro'):'', captura:(d&&d.captura)||null, historico:(d&&d.historico)||[], ignoradas:(d&&d.ignoradas)||[], contagem:(d&&d.contagem)||null, iaOn:!!(d&&d.iaOn), pasta:(d&&d.pasta)||null, auto:(d&&d.auto)||[], autoOn:!!(d&&d.autoOn)};   // v290: a planilha diz se a IA está ligada · v343: pasta NFe/Entrada · v348: aprovadas sozinhas
     if(DATA&&DATA.nfe_resumo&&d&&d.ok){ DATA.nfe_resumo.aClassificar=NFE_LISTA.notas.length; DATA.nfe_resumo.alertas=NFE_LISTA.alertas.length; }
     nfeNavBadge(); try{ updateSyncBar(); }catch(e){} if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA;
   }).catch(()=>{ NFE_LISTA={ts:Date.now(), notas:[], alertas:[], erro:'sem conexão com a planilha — toque em Atualizar'}; if(/#\/entradas/.test(location.hash) && !nfeImport) route({keepScroll:true}); return NFE_LISTA; });
@@ -2256,7 +2258,7 @@ async function _nfeAprovar(chave){
   }catch(e){ toast('NF-e: '+e.message); } }
 // aprova em sequência todas as notas prontas (uma por vez, esperando cada gravação)
 let _nfeAprovTodasBusy=false;
-async function nfeAprovarTodas(){ if(_nfeAprovTodasBusy){ toast('Já estou aprovando…'); return; } const L=((NFE_LISTA&&NFE_LISTA.notas)||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); });   // v346: nota de PDF fica de fora if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
+async function nfeAprovarTodas(){ if(_nfeAprovTodasBusy){ toast('Já estou aprovando…'); return; } const L=nfeNotasVisiveis(NFE_LISTA).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); });   // v348: só as notas visíveis (chip do produtor)   // v346: nota de PDF fica de fora if(!L.length) return; if(!ask(`Aprovar ${L.length} nota(s) com a classificação automática?`)) return;
   _nfeAprovTodasBusy=true;
   try{ for(const nt of L){ await nfeAprovar(nt.chave); await new Promise(r=>setTimeout(r,800)); if(nfeImport) break; } }   // parou numa que precisa de decisão
   finally{ _nfeAprovTodasBusy=false; }
@@ -2365,7 +2367,8 @@ function nfeListaHtml(){
   const al=(L.alertas||[]).map(a=>{ const ob=String(a.obs||''); if(/CANCELADA/i.test(ob)) return `<div class="nfe-aviso err">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b> foi <b>cancelada depois da entrada no estoque</b>${a.recebida?` (recebida em ${esc(fmtDataBR(a.recebida))})`:''}. Confira com o fornecedor e ajuste o estoque. <button class="btn btn-outline btn-sm" data-act="nfeEstornar" data-chave="${esc(a.chave)}">↩ Estornar entrada</button></div>`;
     if(/nota de armaz[ée]m/i.test(ob) && /recebida como compra/i.test(ob)) return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeDesfazerReceb" data-chave="${esc(a.chave)}" title="Tira a entrada do estoque, apaga a compra e os títulos; a nota fica ignorada (a compra é a NF de venda do fornecedor)">↩ Desfazer recebimento</button></div>`;   // v347: nota do armazém aprovada como compra antes da v317
     return `<div class="nfe-aviso warn">⚠️ <b>NF-e ${esc(a.nNF)} · ${esc(a.fornecedor)}</b>: ${esc(ob.replace(/^⚠\s*/,''))} <button class="btn btn-outline btn-sm" data-act="nfeReclass" data-chave="${esc(a.chave)}">♻️ Reclassificar</button></div>`; }).join('');   // v309 · v342: a ação chamava "nfeReclassificar", que não existe no roteador — o botão não respondia
-  const rows=(L.notas||[]).map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
+  const vis=nfeNotasVisiveis(L);   // v348: por produtor (chips) · operador ligado a um CPF vê só as dele
+  const rows=vis.map(nt=>{ const R=nfeIaResumo(nt), venda=nt.tipo==='VENDA PRODUTOR'||(R&&R.tipo==='venda');   // v290: cartão com a classificação automática
     const dm=deparaDe(String(nt.cnpj||''),'*despesa'), desp=dm&&dm.destino==='despesa'&&!nfeOrigemPdf(nt)?dm:null;   // v345: fornecedor lembrado como despesa · v346: nota de PDF sempre passa pela conferência
     if(desp) return `<div class="nfe-row ia-pronto" data-busca="${esc(nfeBuscaTxt(nt, 'Despesa '+(desp.maquina||'')))}"><div class="nfe-row-main"><b>${esc(nt.fornecedor||'—')}</b><span class="nfe-tipo t-DESPESA">💳 Despesa · ${esc(desp.maquina||'Outros')}</span>
         <div class="mut">Nº ${esc(nt.nNF)}/${esc(nt.serie)} · emissão ${esc(fmtDataBR(nt.emissao))} · <b>${brl(nt.valor)}</b> · via ${esc(nt.origem||'—')}</div>${(nt.xprods&&nt.xprods.length)?`<div class="mut nfe-itens">📦 ${esc(nt.xprods.slice(0,3).join(' · '))}${nt.xprods.length>3?` +${nt.xprods.length-3}`:''}</div>`:''}<div class="nfe-ia"><span class="nfe-ia-ok">💳 lembrado: nota inteira é despesa, não entra no estoque</span></div></div>
@@ -2380,7 +2383,7 @@ function nfeListaHtml(){
       <div class="nfe-row-act">${R&&R.pronto&&!pdf?`<button class="btn btn-primary btn-sm" data-act="nfeAprovar" data-chave="${esc(nt.chave)}" title="${venda?'Registra a venda: aba VENDAS e títulos a receber':'Confirma a nota com a classificação automática (compra entra no estoque ao receber)'}">✅ Aprovar</button><button class="btn btn-outline btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">Revisar</button>`
         :`<button class="btn btn-primary btn-sm" data-act="nfeConferirSrv" data-chave="${esc(nt.chave)}">${venda?'🌾 Conferir venda':'Conferir'}</button>`}
         <button class="btn btn-outline btn-sm" data-act="nfeIgnorar" data-chave="${esc(nt.chave)}" title="Não é compra de insumo: sai da lista sem entrar no estoque">Ignorar</button></div></div>`; }).join('');
-  const nN=(L.notas||[]).length, c=L.captura;
+  const nN=vis.length, c=L.captura;
   let ult=''; if(c){ const d=new Date(String(c.em).replace(' ','T')); ult=isNaN(d)?esc(c.em):d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); }
   const ST_LBL={'A CLASSIFICAR':'A classificar','EM TRÂNSITO':'Em trânsito','A ENTREGAR':'A entregar','ENTREGUE':'Entregues','RECEBIDA':'Recebidas','RECEBIDA SEM XML':'Recebidas s/ XML','IGNORADA':'Ignoradas','CANCELADA':'Canceladas'};
   const ORD=Object.keys(ST_LBL), cont=L.contagem||{};
@@ -2388,24 +2391,41 @@ function nfeListaHtml(){
     .map(k=>`<span class="nfe-chip st-${esc(k.replace(/[^A-Z]/g,''))}"><b>${cont[k]}</b> ${esc(ST_LBL[k]||k.toLowerCase())}</span>`).join('');
   const pl=L.pasta&&L.pasta.entrada?`<a class="link" href="https://drive.google.com/drive/folders/${encodeURIComponent(L.pasta.entrada)}" target="_blank" rel="noopener">NFe/Entrada</a>`:'<b>NFe/Entrada</b>';   // v343: link direto da pasta
   const vazio=`<div class="nfe-vazio"><div class="nv-ico">📭</div><div><b>Nenhuma nota a classificar</b><div class="mut">Coloque os XML na pasta ${pl} do Drive e toque em <b>Atualizar</b> — ou espere a leitura automática (a cada 15 min).</div></div></div>`;
-  const prontas=(L.notas||[]).filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); }).length;   // v346
+  const prontas=vis.filter(nt=>{ const R=nfeIaResumo(nt); return R&&R.pronto&&!nfeOrigemPdf(nt); }).length;   // v346
   if(NFE_UI.q) setTimeout(nfeAplicaBusca,0);   // v306: reaplica a busca depois de redesenhar
   return `${al}<div class="panel nfe-lista"><div class="panel-head"><h2>📥 Notas</h2><span class="nfe-badge${nN?' tem':''}">${nN}</span><span class="sub">${L.iaOn?`🤖 IA ligada · ${prontas} pronta(s) para aprovar em um toque`:`🤖 IA desligada${nfeEhAdmin()?': coloque a ANTHROPIC_KEY nas Propriedades do Script da planilha':''}`} · <a class="link" data-go="#/contratos">📑 Contratos</a> · <a class="link" data-go="#/pendencias">⚠️ Pendências</a></span>
       <div class="spacer"></div>${prontas>1?`<button class="btn btn-primary btn-sm" data-act="nfeAprovarTodas" title="Aprova uma a uma as notas em que a IA reconheceu tudo">✅ Aprovar ${prontas} prontas</button>`:''}<button class="btn btn-outline btn-sm" data-act="nfeListaAtualizar" title="Ler a pasta NFe/Entrada do Drive agora">🔄 Atualizar</button></div>
     <div class="nfe-stats">${c?`<span class="nfe-chip st-ult" title="${c.lidas} arquivo(s) lidos nessa leitura">🕒 Última leitura <b>${ult}</b></span>`:''}${chips}</div>
     ${L.erro?`<div class="nfe-aviso err">${esc(L.erro)}</div>`:''}
     ${nfeDiagHtml(c)}
+    ${nfeProdChipsHtml(L)}${nfeAutoHtml(L)}
     ${nN?`<div class="nfe-busca"><input id="nfe-q" class="txt" type="search" placeholder="🔎 Buscar fornecedor, nº da nota, CNPJ, produtor, valor, produto…" value="${esc(NFE_UI.q||'')}"><span class="mut" id="nfe-q-n"></span></div>`:''}
     ${rows||(L.erro?'':vazio)}
     ${nfeIgnoradasHtml(L)}
     ${nfeRecebidasHtml()}
     ${nfeHistoricoHtml(L)}</div>`;
 }
+// ===== v348: caixa de entrada POR PRODUTOR + aprovadas sozinhas =====
+// Operador ligado a um CPF (Usuários → Produtor deste usuário) vê só as notas desse CPF; o administrador vê chips por produtor.
+function nfeNotasVisiveis(L){ const notas=(L&&L.notas)||[], forc=nfeSoMeu(), sel=forc||NFE_UI.prod||''; if(!sel) return notas;
+  const f=notas.filter(nt=>String(nt.produtor||'').replace(/\D/g,'')===sel); if(!f.length&&!forc){ NFE_UI.prod=''; return notas; } return f; }
+function nfeProdChipsHtml(L){ const notas=(L&&L.notas||[]); if(!notas.length) return ''; const forc=nfeSoMeu(), meu=usuProdutor();
+  if(forc) return `<div class="nfe-prods"><span class="btn btn-primary btn-sm nfe-prod-fixo">Suas notas · ${notas.filter(n=>String(n.produtor||'').replace(/\D/g,'')===forc).length}</span><span class="mut">só as notas de ${esc(nfeProdutorTxt(forc).nome)}</span></div>`;
+  const by={}; notas.forEach(n=>{ const p=String(n.produtor||'').replace(/\D/g,''); by[p]=(by[p]||0)+1; }); const ks=Object.keys(by); if(ks.length<2&&!(meu&&by[meu])) return '';
+  const sel=NFE_UI.prod||'', chip=(v,l,n)=>`<button class="btn btn-sm ${sel===v?'btn-primary':'btn-outline'}" data-act="nfeProd" data-prod="${esc(v)}">${esc(l)} · ${n}</button>`;
+  return `<div class="nfe-prods">${chip('','Todas',notas.length)}${ks.sort((a,b)=>(a===meu?-1:b===meu?1:0)||(by[b]-by[a])).map(p=>chip(p, p?(p===meu?'Suas notas':nfeProdutorTxt(p).nome):'sem produtor', by[p])).join('')}</div>`; }
+// notas que a planilha aprovou sozinha (EM TRÂNSITO, últimos 7 dias): lista com "desfazer" (volta para a classificar — nfeReabrirStatus)
+function nfeAutoHtml(L){ const A=(L&&L.auto)||[]; if(!A.length&&!(L&&L.autoOn)) return '';
+  if(!A.length) return `<div class="nfe-auto-off mut">🤖 Aprovação automática <b>ligada</b> — nenhuma nota aprovada sozinha nos últimos 7 dias.</div>`;
+  const hoje=_hojeISO(), nH=A.filter(a=>String(a.em||'').slice(0,10)===hoje).length;
+  const rows=A.map(a=>`<div class="nh-row"><span class="nh-st nh-ok">Em trânsito</span><span class="nh-nf">NF <b>${esc(a.nNF)}</b> <span class="nh-doc">${esc(a.fornecedor||'')}</span><div class="mut nfe-auto-obs">${esc(a.obs||'')}${a.xprods&&a.xprods.length?' · '+esc(a.xprods.slice(0,2).join(' · ')):''}${a.produtor?' · 👤 '+esc(nfeProdutorTxt(a.produtor).nome):''}</div></span><span class="nh-when">${esc(fmtDataBR(String(a.em||'').slice(0,10)).slice(0,5))}</span><span class="nh-det">${brl(a.valor)}</span><div class="nh-act"><button class="btn btn-outline btn-sm" data-act="nfeAutoDesfazer" data-chave="${esc(a.chave)}" title="Volta para 'a classificar': itens e títulos em aberto são desfeitos na planilha">↩ Desfazer</button></div></div>`).join('');
+  return `<details class="nfe-hist nfe-auto"${NFE_UI.autoAberto?' open':''}><summary data-act="nfeAutoToggle"><span>🤖 Aprovadas sozinhas${nH?` hoje: <b>${nH}</b>`:''}</span><span class="nh-count">${A.length} em 7 dias · ver / desfazer</span></summary>
+    <div class="nh-list"><p class="mut" style="font-size:12px;padding:6px 10px 2px">Nota de rotina (fornecedor conhecido pelo de-para, IA confiante, valor dentro do limite, sem entrada em dobro) já está <b>em trânsito</b>: entra no estoque quando o operador receber na fazenda. Errou? <b>Desfazer</b> devolve para "a classificar".</p>${rows}</div></details>`; }
 // v346: nota que veio de um DANFE em PDF lido pela IA (ORIGEM "pdf" na planilha, ou XML montado com a marca no infCpl)
 function nfeOrigemPdf(nt){ return /^pdf\b/i.test(String((nt&&nt.origem)||'')) && !/\(xml\)/.test(String(nt.origem||'')); }
 function nfeNotaDePdf(n){ return /DANFE em PDF lido por IA/.test(String((n&&n.infCpl)||'')); }
 // v306: busca na caixa de entrada — texto do cartão + itens (xProd) + chave; sem acento e sem maiúscula
-let NFE_UI={q:''};
+let NFE_UI={q:'', prod:'', autoAberto:false};   // v348: prod = chip do produtor escolhido (admin) · autoAberto = lista das aprovadas sozinhas
 function nfeBuscaTxt(nt, tipoTxt){ const its=(nt.itens||[]).concat(nt.xprods||[], (nt.ia&&nt.ia.itens)||[]).map(i=>typeof i==='string'?i:[i.xprod,i.produto,i.maquina].filter(Boolean).join(' ')).join(' '), prod=nt.produtor?nfeProdutorTxt(nt.produtor).nome:'';   // itens: do XML quando vierem + o que a IA reconheceu
   return _agNorm([nt.fornecedor, nt.cnpj, nt.nNF, nt.serie, tipoTxt, nt.tipo, nt.origem, nt.obs, prod, nt.produtor, nt.chave, fmtDataBR(nt.emissao), brl(nt.valor), String(+nt.valor||0).replace('.',','), its].filter(Boolean).join(' ')); }
 function nfeAplicaBusca(){ const q=_agNorm(NFE_UI.q||'').trim().split(/\s+/).filter(Boolean); let n=0, tot=0;
@@ -5674,14 +5694,16 @@ function usuForm(){ const e=USU_EDIT, novo=!e.loginAntigo;
       <label>Login<input id="usu-login" class="txt" value="${esc(e.login||'')}" autocapitalize="none" placeholder="ex.: joao"></label>
       <label>Perfil<select id="usu-perfil" class="txt" data-usuperfil="1"><option value="OPERADOR"${e.perfil!=='ADMIN'?' selected':''}>Operador</option><option value="ADMIN"${e.perfil==='ADMIN'?' selected':''}>Administrador (tudo)</option></select></label>
       <label>${novo?'PIN (4 a 6 números)':'Redefinir PIN (deixe vazio p/ manter)'}<input id="usu-pin" class="txt" type="password" inputmode="numeric" maxlength="6"></label>
-      <label class="usu-ativo"><input id="usu-ativo" type="checkbox"${e.ativo!==false?' checked':''}> Ativo</label></div>
+      <label class="usu-ativo"><input id="usu-ativo" type="checkbox"${e.ativo!==false?' checked':''}> Ativo</label>
+      <label>Produtor deste usuário<select id="usu-produtor" class="txt" title="A pessoa vê 'Suas notas' (só as NF-e desse CPF) e recebe no sino os avisos dele"><option value="">Nenhum — vê todas as notas</option>${((DATA&&DATA.financeiro)?FIN().produtores:[]).map(p=>`<option value="${esc(p.cpf)}"${String(e.produtor||'').replace(/\D/g,'')===String(p.cpf||'').replace(/\D/g,'')?' selected':''}>${esc(p.nome)} · ${esc(nfeDocFmt(p.cpf))}</option>`).join('')}</select></label></div>
+    <div style="padding:0 14px 6px" class="mut">Produtor ligado: a pessoa vê em Notas só as NF-e do CPF dela (“Suas notas”) e o sino avisa quando sobra nota para ela classificar. Administrador vê todas, com um chip por produtor.</div>   <!-- v348 -->
     <div style="padding:0 14px 6px" class="mut">${e.perfil==='ADMIN'?'Administrador vê todos os módulos e telas, e gerencia usuários.':'Marque os módulos e, se quiser, só algumas telas de cada um:'}</div>
     <div class="usu-mods">${mods}</div>
     <div style="display:flex;gap:8px;padding:12px 14px;flex-wrap:wrap"><button class="btn btn-primary" data-act="usuSalvar">💾 Salvar</button>
       ${novo?'':`<button class="btn btn-ghost del" data-act="usuExcluir">Excluir usuário</button>`}</div></div>`;
 }
 function usuLeForm(){ const e=USU_EDIT; if(!e) return; const g=id=>document.getElementById(id);
-  if(g('usu-nome')){ e.nome=g('usu-nome').value; e.login=g('usu-login').value; e.perfil=g('usu-perfil').value; e.pinNovo=g('usu-pin').value; e.ativo=g('usu-ativo').checked; }
+  if(g('usu-nome')){ e.nome=g('usu-nome').value; e.login=g('usu-login').value; e.perfil=g('usu-perfil').value; e.pinNovo=g('usu-pin').value; e.ativo=g('usu-ativo').checked; if(g('usu-produtor')) e.produtor=g('usu-produtor').value; }   // v348: produtor
   e.telas=Array.from(document.querySelectorAll('[data-usutela]')).filter(c=>c.checked).map(c=>c.dataset.usutela).concat((e.telas||[]).filter(v=>!document.querySelector(`[data-usutela="${v}"]`))); }
 V.usuarios=function(){
   if(!ehAdmin()) return `<div class="empty">Só o administrador vê esta tela.</div>`;
@@ -5691,7 +5713,7 @@ V.usuarios=function(){
   const rows=USU_LISTA.map(u=>{ const mods=u.perfil==='ADMIN'?['todos']:(u.modulos||[]);
     return `<div class="usu-row${u.ativo?'':' off'}"><div class="usu-quem"><b>${esc(u.nome||u.login)}</b><small>${esc(u.login)} · ${u.perfil==='ADMIN'?'<span class="uc-adm">ADMIN</span>':'operador'}${u.ativo?'':' · <span class="usu-off">desativado</span>'}</small></div>
       <div class="usu-chips">${mods.map(m=>m==='todos'?'<span class="usu-chip">tudo</span>':`<span class="usu-chip">${MOD_INFO[m].ico} ${esc(MOD_INFO[m].nome)}</span>`).join('')||'<span class="mut">nada liberado</span>'}
-        ${u.perfil!=='ADMIN'&&(u.telas||[]).length?`<span class="usu-chip t">${u.telas.length} tela(s)</span>`:''}</div>
+        ${u.perfil!=='ADMIN'&&(u.telas||[]).length?`<span class="usu-chip t">${u.telas.length} tela(s)</span>`:''}${u.produtor?`<span class="usu-chip p" title="vê só as notas deste produtor">👤 ${esc((DATA&&DATA.financeiro)?nfeProdutorTxt(u.produtor).nome:nfeDocFmt(u.produtor))}</span>`:''}</div>
       <div class="usu-ult mut">${u.ultimo?'último acesso '+esc(u.ultimo):'nunca entrou'}</div>
       <button class="btn btn-outline btn-sm" data-act="usuEditar" data-login="${esc(u.login)}">Editar</button></div>`; }).join('');
   return `${avisoLogin}${USU_EDIT?usuForm():''}
@@ -5704,10 +5726,11 @@ async function usuSalvar(){
   usuLeForm(); const e=USU_EDIT;
   if(!e.login.trim()){ toast('Informe o login'); return; } if(!e.loginAntigo && !/^\d{4,6}$/.test(e.pinNovo||'')){ toast('Usuário novo precisa de PIN com 4 a 6 números'); return; }
   if(e.pinNovo && !/^\d{4,6}$/.test(e.pinNovo)){ toast('O PIN precisa ter 4 a 6 números'); return; }
-  const salvar={nome:e.nome, login:e.login, loginAntigo:e.loginAntigo||'', perfil:e.perfil, modulos:e.perfil==='ADMIN'?[]:(e.modulos||[]), telas:e.perfil==='ADMIN'?[]:(e.telas||[]).filter(v=>(e.modulos||[]).some(m=>navTelas(m).some(t=>t.v===v))), ativo:e.ativo!==false};
+  const salvar={nome:e.nome, login:e.login, loginAntigo:e.loginAntigo||'', perfil:e.perfil, modulos:e.perfil==='ADMIN'?[]:(e.modulos||[]), telas:e.perfil==='ADMIN'?[]:(e.telas||[]).filter(v=>(e.modulos||[]).some(m=>navTelas(m).some(t=>t.v===v))), ativo:e.ativo!==false, produtor:String(e.produtor||'').replace(/\D/g,'')};   // v348: produtor
   if(e.pinNovo) salvar.pinNovo=e.pinNovo;
   try{ const r=await syncPost(syncUrl(), JSON.stringify({__usuarios:{salvar}})); if(!r||r.fail) throw new Error(((r&&r.msgs)||[]).join(' ')||'falha');
     if(r.token){ const x=sessao(); if(x){ x.token=r.token; x.usuario=Object.assign({}, x.usuario, {login:salvar.login.toLowerCase().replace(/\s+/g,''), nome:salvar.nome||x.usuario.nome}); sessSalva(x); acessoChip(); } }
+    { const x=sessao(); if(x&&x.usuario&&x.usuario.login===salvar.login.toLowerCase().replace(/\s+/g,'')){ x.usuario.produtor=salvar.produtor; sessSalva(x); } }   // v348: editou a si mesmo → o produtor vale já neste aparelho
     toast('Usuário salvo'); USU_EDIT=null; USU_LISTA=null; route(); }
   catch(err){ toast('Não salvou: '+err.message); }
 }
@@ -10361,6 +10384,12 @@ function notifItens(){ const g={conferir:[], semana:[], atraso:[]}; if(!DATA||!O
       planoStatus(m).forEach(x=>{ if(x.st==='ok'||n++>40) return; (x.st==='vencida'?g.atraso:g.semana).push({tit:`🚜 ${m.nome} · ${x.p.nome}`, sub:`preventiva: ${planoTxt(x)}`, go:'#/manutencao/'+encodeURIComponent(m.id), dd:x.faltaD!=null?x.faltaD:(x.falta<0?-1:3), tal:''}); });
       maqDocsStatus(m).forEach(x=>{ if(x.st==='ok'||n++>40) return; (x.st==='vencido'?g.atraso:g.semana).push({tit:`🚜 ${m.nome} · ${x.d.tipo}`, sub:`${docTxt(x)} · ${_dtBRc(x.d.venc)}`, go:'#/maqcad', dd:x.dias, tal:''}); });
       const ck=checkUltimo(m); if(ck&&ck.bloqueia&&n++<=40) g.atraso.push({tit:`🚜 ${m.nome} · checklist reprovado`, sub:`${_dtBRc(ck.c.data)} · ${(ck.c.itens||[]).filter(i=>i.st==='prob').map(i=>i.nome).join(', ')} · OS aberta`, go:'#/manutencao/'+encodeURIComponent(m.id), dd:-1, tal:''}); }); } }catch(e){}   // v340
+  // v348: NF-e no sino — notas do seu CPF (ou todas, para o administrador), trânsito parado e "saiu do armazém"
+  try{ const R=DATA&&DATA.nfe_resumo; if(R&&podeTela('entradas')&&syncUrl()){ const meu=usuProdutor(), adm=ehAdmin()||!sessUsuario(), so=nfeSoMeu(); const nMeu=meu?(+(R.porProdutor||{})[meu]||0):0, nTot=+R.aClassificar||0;
+      if(meu&&nMeu) g.conferir.push({tit:`📥 ${nMeu} nota(s) sua(s) para classificar`, sub:'NF-e do seu CPF esperando você em Notas', go:'#/entradas', tal:''});
+      else if(adm&&!meu&&nTot) g.conferir.push({tit:`📥 ${nTot} nota(s) a classificar`, sub:'notas que a planilha não aprovou sozinha', go:'#/entradas', tal:''});
+      (R.transitoParado||[]).forEach(x=>{ if(so&&x.produtor&&x.produtor!==so) return; g.atraso.push({tit:`🚚 NF ${x.nNF} · ${x.fornecedor}`, sub:`em trânsito há ${x.dias} dia(s) sem recebimento — chegou? leia o DANFE em Receber nota`, go:'#/receber', dd:-x.dias, tal:''}); });
+      (R.armazemSaiu||[]).forEach(x=>{ if(so&&x.produtor&&x.produtor!==so) return; g.semana.push({tit:`🏬 NF ${x.nNF} · ${x.fornecedor}`, sub:`${x.obs} — leia o DANFE do armazém ao chegar`, go:'#/receber', dd:0, tal:''}); }); } }catch(e){}
   g.atraso.sort((a,b)=>a.dd-b.dd); g.semana.sort((a,b)=>a.dd-b.dd); return g; }
 function notifTotal(g){ return g.conferir.length+g.semana.length+g.atraso.length; }
 let _notifSig='';
@@ -11170,6 +11199,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recSxDel'){ REC.itens.splice(+a.i,1); if(!REC.itens.length) REC.itens.push({produto:'',qtd:'',un:''}); route({keepScroll:true}); }
     else if(a.act==='ctrAtualizar'){ toast('Atualizando contratos…'); nfeContratosCarregar(true).then(()=>route({keepScroll:true})); }
     else if(a.act==='nfeListaAtualizar'){ nfeCapturarAgora(); }
+    else if(a.act==='nfeProd'){ NFE_UI.prod=a.prod||''; route({keepScroll:true}); }   // v348: chip do produtor
+    else if(a.act==='nfeAutoToggle'){ NFE_UI.autoAberto=!act.closest('details').open; }
+    else if(a.act==='nfeAutoDesfazer'){ nfeReabrirStatus(a.chave); }
     else if(a.act==='nfeAprovar'){ nfeAprovar(a.chave); } else if(a.act==='nfeIaPedir'){ nfeIaPedir(a.chave, a.forcar==='1'); }
     else if(a.act==='nfeAprovarTodas'){ nfeAprovarTodas(); }
     else if(a.act==='nfeReabrir'){ nfeReabrir(a.chave); }
