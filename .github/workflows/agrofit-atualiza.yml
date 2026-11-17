@@ -55,7 +55,13 @@ jobs:
           if git diff --cached --quiet; then echo "sem mudanças"; echo "mudou=0" >> "$GITHUB_OUTPUT"; exit 0; fi
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Catálogo MAPA (Agrofit): atualização $(date -u +%Y-%m-%d)"
-          git push
+          # a leitura leva ~1 h; se a main andou nesse meio-tempo (outro PR mesclado), rebase e tenta de novo (até 3 vezes)
+          ok=0
+          for i in 1 2 3; do
+            git pull --rebase origin main && git push && { ok=1; break; }
+            echo "push rejeitado (tentativa $i) — a main mudou; tentando de novo"; sleep 20
+          done
+          [ "$ok" = "1" ] || { echo "não consegui publicar o catálogo"; exit 1; }
           echo "mudou=1" >> "$GITHUB_OUTPUT"
       - name: Publicar o app (deploy-pages)
         if: steps.commit.outputs.mudou == '1' && github.ref == 'refs/heads/main'
