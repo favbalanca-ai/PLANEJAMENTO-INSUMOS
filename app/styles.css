@@ -2258,6 +2258,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rc-est-res{color:var(--amber)}
 /* v350: saldo na Operação de Campo */
 .ci-est{display:block;font-size:11px;font-weight:700;margin-top:2px;white-space:nowrap}.ci-est.ok{color:var(--green)}.ci-est.warn{color:var(--amber)}.ci-est.err{color:var(--red)}
+.ci-bula{display:block;font-size:11px;color:var(--muted);margin-top:1px;white-space:normal}.ci-bula-fora{color:var(--amber)}   /* v353: dose da bula por cultura */
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
