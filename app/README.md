@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Cadastro de máquinas: filtro, renomear e excluir (v359)** — barra de busca (nome, grupo, placa/chassi,
+  conjunto, ano, obs) e seletor de grupo com contagem acima da lista (`maqCadFiltra`: esconde os cartões sem
+  re-renderizar; contador "N de M"). No formulário de edição há o campo **Nome**: renomear mantém o id `m:…`, então o
+  QR das etiquetas, a mensagem do WhatsApp, abastecimentos, OS e checklists continuam valendo (nome repetido é
+  recusado). Botão **🗑 Excluir** (`maqCadExcluir`): máquina cadastrada no app sai do cadastro em todos os aparelhos
+  (`del:true` na aba MÁQUINAS APP; o histórico fica e mostra o nome); máquina que vem da planilha (CUSTO OPERAÇÃO /
+  manutenção) não pode ser excluída, o botão vira **Inativar** (ela voltaria na sincronização).
 - **Etiquetas QR por grupo (v358)** — os botões "🏷️ Etiquetas WhatsApp / App" do Cadastro de máquinas abrem a
   escolha dos grupos (Trator, Implemento, Caminhão… com a contagem; "marcar todos / nenhum"; inativas ficam de fora) e
   o botão "Gerar PDF (N etiquetas)". O PDF (`maqEtiquetas(modo, lista)`) sai ordenado por grupo e nome, com um
