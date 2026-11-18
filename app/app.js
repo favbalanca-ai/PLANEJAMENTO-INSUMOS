@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-362';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-363';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3373,9 +3373,17 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
   const sai=[]; talhoesAll().forEach(t=>usoProdutosDe(t).forEach(l=>{ if(l.produto===prod) sai.push(Object.assign({tal:tNome(t)}, l)); }));
   { const S=custoMedioCalc().saida; (mov.devol||[]).forEach(d=>{ if(d.produto!==prod||!(+d.qtd>0)) return; const cm=S['dev|'+d.chave+'|'+prod], c=cm!=null?cm:custoMedioDe(prod);
       sai.push({data:d.data||'', tal:'—', op:'Devolução ao fornecedor', origem:`NF-e ${d.nNF||''}${d.forn?' · '+d.forn:''}`.trim(), qtd:+d.qtd, custo:c, valorReal:+d.qtd*c}); }); }   // v316
+  const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, pu:+it.preco||0, nfe:!!c.nfe, local:_locCompra(c)}); }));
+  // v362: ajustes de inventário (contagens fechadas): falta = saída, sobra = entrada — ficam no razão como SAÍDA/ENTRADA comuns
+  contLista().forEach(c=>{ if(c.status!=='fechada') return; const loc=localNorm(c.local)||ESTOQUE_PADRAO, pend=contPendente(c), rot=`Contagem de ${fmtDataBR(c.data)} · ${estoqueNome(loc)}${c.quem?' · '+c.quem:''}${pend?' · <span class="cr-st pend">pendente</span>':''}`;
+    (c.ajustes||[]).forEach(a=>{ if(a.produto!==prod||!(+a.qtd)) return; const q=Math.abs(+a.qtd), cu=+a.custo||custoMedioDe(prod)||0;
+      if(a.qtd<0) sai.push({data:c.data||'', tal:'—', op:'Ajuste de inventário', origem:rot, qtd:q, custo:cu, valorReal:q*cu, ajuste:true});
+      else ent.push({data:c.data||'', forn:'Ajuste de inventário', nf:rot, qtd:q, pu:cu, ajuste:true, local:loc}); }); });
   sai.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
-  const ent=[]; ((COMPRAS&&COMPRAS.registros)||[]).forEach(c=>(c.itens||[]).forEach(it=>{ if(it.produto===prod && +it.qtd>0) ent.push({data:c.data||'', forn:c.fornecedor||'', nf:c.nf||'', qtd:+it.qtd, pu:+it.preco||0, nfe:!!c.nfe}); }));
   ent.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  // v361: transferências entre fazendas deste produto — não entram nas somas (o total unificado não muda), só mudam o saldo por fazenda
+  const trf=[]; transfLista().forEach(t=>(t.itens||[]).forEach(it=>{ if(it.produto!==prod||!(+it.qtd>0)) return; trf.push({data:t.data||'', de:t.de, para:t.para, qtd:+it.qtd, custo:+it.custo||0, quem:t.quem||'', obs:t.obs||'', pend:transfPendente(t)}); }));
+  trf.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   const ci=custoMedioInfo(prod), vS=sai.reduce((a,l)=>a+(+l.valorReal||0),0);   // v272: custo real
   const un=(PROD[prod]||{}).un||'', tS=sai.reduce((a,l)=>a+l.qtd,0), tE=ent.reduce((a,l)=>a+l.qtd,0), pS=+(mov.saidas&&mov.saidas[prod])||0, pE=+(mov.entradas&&mov.entradas[prod])||0;
   const difS=mov.saidas?+(pS-tS).toFixed(4):0, difE=mov.entradas?+(pE-tE).toFixed(4):0;
@@ -3387,15 +3395,18 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
       ${ci?`<div class="ext-cm"><span><small>Custo médio</small><b>${brl(ci.cm)}</b>${un?'/'+esc(un):''}${(ci.ref||!ci.nEnt)?' <span class="pill cm-ref">ref.</span>':''}</span><span><small>Estoque inicial</small><b>${num(ci.ini)}</b> × ${brl(ci.puIni)} <small class="mut">(${ci.fonte==='digitado'?'custo digitado':ci.fonte==='nota'?'última nota':'preço de referência'})</small></span><span><small>Saldo a custo real</small><b>${brl0(ci.saldoV)}</b></span></div>`:''}
       <div class="ext-sec">📤 Saídas <b>${num(tS+Math.max(0,difS))}</b>${un?' '+esc(un):''}${vS?` <small class="mut">· ${brl0(vS)} a custo médio</small>`:''}</div>
       <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Talhão</th><th>Operação</th><th>Origem</th><th class="num">Qtd</th><th class="num">Custo</th></tr></thead><tbody>
-        ${sai.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.tal), esc(l.op), esc(l.origem)+(l.quem?` <small class="mut">· ${esc(l.quem)}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`, `<span class="num" title="${brl(l.custo)}/${esc(un||'un')} no dia da aplicação">${brl0(l.valorReal)}</span>`])).join('')}
+        ${sai.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.tal), l.ajuste?`<b class="ext-aj">📋 ${esc(l.op)}</b>`:esc(l.op), (l.ajuste?l.origem:esc(l.origem))+(l.quem?` <small class="mut">· ${esc(l.quem)}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`, `<span class="num" title="${brl(l.custo)}/${esc(un||'un')} ${l.ajuste?'custo médio na contagem':'no dia da aplicação'}">${brl0(l.valorReal)}</span>`])).join('')}
         ${Math.abs(difS)>=0.0005?row([`<span class="mut">—</span>`,`<span class="mut">—</span>`,`<i>${difS>0?'lançado em outro aparelho ou direto na aba MOVIMENTAÇÃO ESTOQUE':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difS>0?'':'−'}${fmtDose(Math.abs(difS))}</b>`,'']):''}
         ${!sai.length&&Math.abs(difS)<0.0005?'<tr><td colspan="6" class="mut" style="padding:8px 10px">Nenhuma saída.</td></tr>':''}</tbody></table>
       <div class="ext-sec">📥 Entradas <b>${num(tE+Math.max(0,difE))}</b>${un?' '+esc(un):''}${ci&&ci.vEnt?` <small class="mut">· ${brl0(ci.vEnt)} pagos</small>`:''}</div>
       <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Fornecedor</th><th>Nota</th><th class="num">Qtd</th><th class="num">R$/${esc(un||'un')}</th></tr></thead><tbody>
-        ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', esc(l.forn), esc(l.nf)+(l.nfe?' <small class="mut">NF-e</small>':''), `<b class="num">${fmtDose(l.qtd)}</b>`, l.pu>0?`<span class="num">${brl(l.pu)}</span>`:`<span class="pill cm-ref" title="compra sem preço: vale o preço de referência">ref.</span>`])).join('')}
+        ${ent.map(l=>row([l.data?fmtDataBR(l.data):'—', l.ajuste?`<b class="ext-aj">📋 ${esc(l.forn)}</b>`:esc(l.forn), (l.ajuste?l.nf:esc(l.nf))+(l.nfe?' <small class="mut">NF-e</small>':'')+(l.local&&!l.ajuste?` <small class="mut">· ${esc(estoqueNome(l.local).replace('Fazenda ',''))}</small>`:''), `<b class="num">${fmtDose(l.qtd)}</b>`, l.pu>0?`<span class="num"${l.ajuste?' title="custo médio na contagem"':''}>${brl(l.pu)}</span>`:`<span class="pill cm-ref" title="compra sem preço: vale o preço de referência">ref.</span>`])).join('')}
         ${Math.abs(difE)>=0.0005?row([`<span class="mut">—</span>`,`<i>${difE>0?'lançado em outro aparelho ou direto na planilha':'ainda não enviado à planilha'}</i>`,'<span class="mut">planilha</span>',`<b class="num">${difE>0?'':'−'}${fmtDose(Math.abs(difE))}</b>`,'']):''}
         ${!ent.length&&Math.abs(difE)<0.0005?'<tr><td colspan="5" class="mut" style="padding:8px 10px">Nenhuma entrada.</td></tr>':''}</tbody></table>
-      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito, das recomendações aprovadas e das devoluções ao fornecedor (NF-e de troca/entrada); entradas, das compras registradas. Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação ou a nota; VALOR UNIT e VALOR TOTAL, o custo).</p>
+      ${trf.length?`<div class="ext-sec">🔁 Transferências entre fazendas <small class="mut">· não mudam o total, só o saldo de cada fazenda</small></div>
+      <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>De → para</th><th>Quem / obs</th><th class="num">Qtd</th><th class="num">Custo</th></tr></thead><tbody>
+        ${trf.map(t=>row([t.data?fmtDataBR(t.data):'—', `${esc(estoqueNome(t.de))} → ${esc(estoqueNome(t.para))}${t.pend?' <span class="cr-st pend">pendente</span>':''}`, esc([t.quem,t.obs].filter(Boolean).join(' · ')), `<b class="num">${fmtDose(t.qtd)}</b>`, t.custo>0?`<span class="num">${brl0(t.qtd*t.custo)}</span>`:'—'])).join('')}</tbody></table>`:''}
+      <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito, das recomendações aprovadas, das devoluções ao fornecedor (NF-e de troca/entrada) e dos <b>ajustes de inventário</b> (falta na contagem); entradas, das compras registradas e dos ajustes de inventário (sobra na contagem). Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação, a nota ou a contagem; VALOR UNIT e VALOR TOTAL, o custo; LOCAL, a fazenda).</p>
     </div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov); }
 function filterEstoque(){
