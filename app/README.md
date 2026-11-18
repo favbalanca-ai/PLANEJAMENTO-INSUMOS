@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Transferência de estoque entre fazendas (v361)** — na tela Estoque, botão "🔁 Transferir" e painel
+  "Transferências entre fazendas" (lista com pendente/✔ e ↩ desfazer). O modal (`transfAbrir/transfRender/transfGravar`)
+  pede origem, produto, quantidade, data e observação; o destino é a outra fazenda; mostra os saldos antes → depois e o
+  custo médio, e avisa (sem bloquear) quando a origem fica negativa. Cada transferência fica em `OV.transf` (aba
+  **TRANSFERÊNCIAS APP**, lote `__transferencia`, merge pelo `_u`) e vira 2 linhas no razão (TRANSF. SAÍDA na origem,
+  TRANSF. ENTRADA no destino, mesma etiqueta `[#id]`): o total unificado não muda, só os saldos por fazenda.
+  `transfAjuste` soma no saldo o que ainda está pendente (ou desfeito e ainda no razão), sem contar duas vezes depois
+  que a planilha confirma (`transfPendente`). Atalho "transferir" no aviso "💡 a outra fazenda tem X" da recomendação e
+  da Operação de Campo abre o modal já preenchido com a quantidade que falta.
 - **Dois estoques, um por fazenda (v360)** — Água Viva (FA) e Espora (FE) passam a ter saldo próprio; o razão
   MOVIMENTAÇÃO ESTOQUE continua um só, com a coluna **LOCAL**. Unificado = soma; individualizado = filtro.
   `saldoEstoqueDe(produto, local)`; `estoqueEntradas(local)`/`estoqueSaidas(local)` usam `movimentacao.porLocal` da

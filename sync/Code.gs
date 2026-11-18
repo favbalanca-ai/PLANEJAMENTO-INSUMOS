@@ -111,7 +111,7 @@ function readBase_(){
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
 var APP_TODAS_ = ['retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app',
-  'ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas','pesagem','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app','catalogo_extra'];   // v295: módulo Máquinas · v340: checklist pré-uso · v351: catálogo extra (bulas lidas pela IA)
+  'ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas','pesagem','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app','catalogo_extra','transferencias_app'];   // v361: transferências entre fazendas   // v295: módulo Máquinas · v340: checklist pré-uso · v351: catálogo extra (bulas lidas pela IA)
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600, pesagem:600 };   // pesagem: planilha da balança (Pesagem v2), 10 min   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
   realizado_app:function(){ return readRealizadoApp(); }, result_app:function(){ return readMapApp('RESULTADO APP'); }, opplan_app:function(){ return readMapApp('PLANO OPS APP'); },
@@ -127,8 +127,10 @@ var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:fun
   precos_app:function(){ return readPrecosSheet(); }, equipe_sst:function(){ return readEquipeSST(); }, config_app:function(){ return readConfigApp(); },
   chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); }, manutencao:function(){ return readManutencao(); }, vendas:function(){ return readVendas(); }, pesagem:function(){ return readPesagem(); },
   maquinas_app:function(){ return readMapApp(MAQ_APP_SHEET); }, abast_app:function(){ return readMapApp(ABAST_SHEET); }, os_app:function(){ return readMapApp(OS_SHEET); },   // v295
+  transferencias_app:function(){ return readMapApp(TRANSF_SHEET); },   // v361
   conjuntos_app:function(){ return readMapApp(CONJ_SHEET); } };   // v302: conjuntos montados, edições e conjunto por operação
 var MAQ_APP_SHEET = 'MÁQUINAS APP', ABAST_SHEET = 'ABASTECIMENTOS APP', OS_SHEET = 'OS MÁQUINAS APP';   // v295: módulo Máquinas (KEY|JSON como os experimentos)
+var TRANSF_SHEET = 'TRANSFERÊNCIAS APP';   // v361: transferências de estoque entre fazendas (KEY|JSON); cada uma vira 2 linhas no razão
 var CONJ_SHEET = 'CONJUNTOS APP';   // v302: conjuntos (máquina + implemento) montados no app, edições dos da CUSTO OPERAÇÃO e conjunto escolhido por operação
 function readAppKeys_(keys){
   _LER_MEMO_ = {}; var out = {};
@@ -693,6 +695,7 @@ function readMovimentacao(){
     var mk = org.match(/\[#(\d{44})\]/), dia = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = dia;
     if (!prod || !qtd) continue;
+    if (tipo.indexOf('TRANSF') === 0){ var tk = /ENTRADA/.test(tipo) ? 'entradas' : 'saidas'; porLocal[loc][tk][prod] = (porLocal[loc][tk][prod] || 0) + qtd; continue; }   // v361: transferência só mexe no saldo por fazenda (o total não muda)
     if (tipo.indexOf('ENTRADA') === 0){ ent[prod] = (ent[prod] || 0) + qtd; porLocal[loc].entradas[prod] = (porLocal[loc].entradas[prod] || 0) + qtd; }
     else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd; porLocal[loc].saidas[prod] = (porLocal[loc].saidas[prod] || 0) + qtd;   // SAÍDA / SAIDA
       if (mk && /^Devolu/i.test(org)){ var mn = org.match(/NF-e (\S+)/), mf = org.match(/NF-e \S+ · ([^\[]*)\[/);   // v316: devolução ao fornecedor (NF-e de troca/entrada)
@@ -740,6 +743,30 @@ function writeComprasApp(lista){
   return { rows:n, ids:ids };
 }
 function writeCompraApp(ent){ return writeComprasApp([ent || {}]); }
+// ===== v361: TRANSFERÊNCIA DE ESTOQUE ENTRE FAZENDAS =====
+// payload __transferencia: { id:{id, data, de, para, itens:[{produto, un, qtd, custo}], obs, quem, del, _u}, … } (mapa, merge pelo _u).
+// Cada transferência vira DUAS linhas no razão com a mesma etiqueta [#id]: TRANSF. SAÍDA (LOCAL = de) e TRANSF. ENTRADA (LOCAL = para),
+// pelo custo médio informado pelo app. TIPO "TRANSF. …" não entra em ENTRADA/SAÍDA (total unificado e CONSUMO do PORTIFÓLIO não mudam).
+// del:true apaga as linhas do razão e deixa a lápide na aba. Reenviar não duplica (movDeleteBySources_ antes de regravar).
+function writeTransferencias_(map){
+  map = map && typeof map === 'object' ? map : {}; var cur = readMapApp(TRANSF_SHEET), grava = {}, del = [], rows = [], n = 0;
+  Object.keys(map).forEach(function(id){ var t = map[id] || {}; id = S(t.id) || S(id); if (!id) return; var u = +t._u || Date.now();
+    if (cur[id] && (+cur[id]._u || 0) > u) return;                            // já existe versão mais nova
+    var de = _localNorm_(t.de), para = _localNorm_(t.para);
+    if (!t.del && (!de || !para || de === para)) return;                      // transferência sem fazendas válidas: ignora
+    del.push(id); n++;
+    var when = new Date(); if (t.data && /^\d{4}-\d{2}-\d{2}/.test(String(t.data))) when = new Date(String(t.data).slice(0,10) + 'T12:00:00');
+    var origem = 'Transferência ' + de + ' → ' + para + ' [#' + id + ']', obs = [S(t.quem), S(t.obs)].filter(Boolean).join(' · ');
+    if (!t.del) (t.itens || []).forEach(function(it){ var q = N(it.qtd); if (!S(it.produto) || !(q > 0)) return; var vt = _vt_(it.custo, q);
+      rows.push([when, 'TRANSF. SAÍDA', T_(it.produto), T_(it.un), q, T_(origem), T_(obs), vt[0], vt[1], de]);
+      rows.push([when, 'TRANSF. ENTRADA', T_(it.produto), T_(it.un), q, T_(origem), T_(obs), vt[0], vt[1], para]); });
+    grava[id] = t.del ? { id:id, del:true, _u:u } : { id:id, data:S(t.data).slice(0, 10), de:de, para:para, obs:S(t.obs).slice(0, 200), quem:S(t.quem).slice(0, 80),
+      itens:(t.itens || []).map(function(it){ return { produto:S(it.produto), un:S(it.un), qtd:N(it.qtd), custo:N(it.custo) }; }).filter(function(it){ return it.produto && it.qtd > 0; }), _u:u }; });
+  movDeleteBySources_(del);
+  var nr = movAppendRows_(rows);
+  if (Object.keys(grava).length) writeMapApp(TRANSF_SHEET, grava);
+  return { rows:nr, n:n };
+}
 // ---- NF-e (fase 1): memória de-para de produtos da nota -> produto do app ----
 // Aba "DE-PARA NFE" (criada se faltar). Uma linha por CNPJ do emitente + código do produto na nota (cProd).
 // Colunas localizadas PELO CABEÇALHO (pode reordenar/adicionar colunas na planilha sem quebrar).
@@ -2766,16 +2793,16 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas','maquinas']
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app','catalogo_extra'],
-  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem','conjuntos_app','checklist_app','catalogo_extra'],
+  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app','catalogo_extra','transferencias_app'],
+  campo:['config_app','equipe_sst','retornos','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem','conjuntos_app','checklist_app','catalogo_extra','transferencias_app'],
   precos:['precos_app','bulas_app','catalogo_extra'],
-  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem','catalogo_extra'],
+  admin:['compras_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem','catalogo_extra','transferencias_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app','conjuntos_app'],
   maquinas:['config_app','equipe_sst','realizado_app','manutencao','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app'] };   // v295 · v340: checklist_app
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __transferencia:['planejamento','campo','admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -2938,7 +2965,7 @@ var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __monit:['monit_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
-  __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __conjunto:['conjuntos_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[], __concilia:['financeiro'], __bancoIa:[], __fechamento:['financeiro'], __maqCad:['maquinas_app'], __abastecimento:['abast_app'], __osMaq:['os_app'], __checklist:['checklist_app'] };
+  __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __conjunto:['conjuntos_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[], __concilia:['financeiro'], __bancoIa:[], __fechamento:['financeiro'], __maqCad:['maquinas_app'], __abastecimento:['abast_app'], __osMaq:['os_app'], __checklist:['checklist_app'], __transferencia:['movimentacao','transferencias_app'] };   // v361
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
 function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
 function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
@@ -3241,6 +3268,8 @@ function gravaUm_(payload, acc, cfg, out){
       var bi = bulaIa_(payload.__bulaIa);   // grava CATÁLOGO EXTRA → invalida só catalogo_extra (APP_INVALIDA_)
       if (bi && !bi.erro){ out.ok = 1; out.bula = bi.bula; out.extra = bi.extra; out.resumo = bi.resumo; if (bi.aviso) out.msgs.push(bi.aviso); }
       else { out.fail = 1; out.msgs.push('bula: ' + ((bi && bi.erro) || 'não li')); }
+    } else if (payload && payload.__transferencia){   // v361: transferência de estoque entre fazendas → 2 linhas no razão + aba TRANSFERÊNCIAS APP
+      var tf = writeTransferencias_(payload.__transferencia); out.ok = tf.n;
     } else if (payload && payload.__misturaIa){       // v357: parecer da IA sobre a compatibilidade da calda (nada gravado na planilha)
       var mx = misturaIa_(payload.__misturaIa);
       if (mx && !mx.erro){ out.ok = 1; out.parecer = mx.parecer; } else { out.fail = 1; out.msgs.push('mistura: ' + ((mx && mx.erro) || 'sem parecer')); }
