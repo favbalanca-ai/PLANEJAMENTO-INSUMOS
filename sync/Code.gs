@@ -59,12 +59,13 @@ function readBase_(){
 
   var talhoes = [], A = sh('ÁREA PLANTIO');
   if (A){
-    var av = A.getRange(2, 1, Math.max(1, A.getLastRow() - 1), 9).getValues();
+    var ixEst = areaPlantioColEstoque_(A, false) - 1;   // v360: coluna ESTOQUE (FA/FE; vazio = automático pelo prefixo), achada pelo cabeçalho
+    var av = A.getRange(2, 1, Math.max(1, A.getLastRow() - 1), Math.max(9, ixEst + 1)).getValues();
     for (var j = 0; j < av.length; j++){
       var t = av[j], id = S(t[0]), up = id.toUpperCase();
       if (up.indexOf('TL') !== 0 && up.indexOf('NV') !== 0) continue;   // TL* da planilha + NV* criados no app
       talhoes.push({ id:id, nome:S(t[1]), empreendimento:S(t[2]), produtividade:N(t[3]),
-        area:N(t[4]), emp_safrinha:S(t[7]), prod_safrinha:N(t[8]) });
+        area:N(t[4]), emp_safrinha:S(t[7]), prod_safrinha:N(t[8]), estoque:ixEst >= 0 ? _localNorm_(t[ixEst]) : '' });
     }
   }
 
@@ -615,7 +616,20 @@ var MOV_SHEET = 'MOVIMENTAÇÃO ESTOQUE';   // razão de estoque: entradas (mód
 // registra 1 linha no razão de estoque (cria a aba se faltar). "when" opcional (data do movimento)
 // v272: o razão também guarda o VALOR (custo real da nota na entrada; custo médio na saída). Planilha antiga
 // (7 colunas) ganha as duas colunas no fim, achadas PELO CABEÇALHO — pode reordenar sem quebrar.
-var MOV_COLS = ['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS','VALOR UNIT','VALOR TOTAL'];
+var MOV_COLS = ['DATA/HORA','TIPO','PRODUTO','UN','QTD','ORIGEM','OBS','VALOR UNIT','VALOR TOTAL','LOCAL'];   // v360: LOCAL = estoque da fazenda (FA / FE)
+// ===== v360: DOIS ESTOQUES — um por fazenda (FA = Água Viva, FE = Espora), no mesmo razão, pela coluna LOCAL =====
+// Linha sem LOCAL (razão antigo) conta como o estoque padrão. O estoque inicial do PORTIFÓLIO é da Água Viva (app).
+var ESTOQUE_PADRAO_ = 'FA', ESTOQUES_ = { FA:1, FE:1 };
+function _localNorm_(v){ v = S(v).toUpperCase(); return ESTOQUES_[v] ? v : ''; }
+// coluna (1-based) ESTOQUE na ÁREA PLANTIO; cria no fim quando falta (criar=true); 0 quando não existe e não deve criar
+function areaPlantioColEstoque_(A, criar){
+  var lc = Math.max(1, A.getLastColumn()), hd = A.getRange(1, 1, 1, lc).getValues()[0];
+  for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === 'ESTOQUE') return c + 1;
+  if (!criar) return 0;
+  var col = Math.max(lc, 11) + 1;   // depois de CUSTO R$/ha (J) e CUSTO TOTAL (K)
+  if (A.getMaxColumns() < col) A.insertColumnsAfter(A.getMaxColumns(), col - A.getMaxColumns());
+  A.getRange(1, col).setValue('ESTOQUE'); return col;
+}
 function movSheet_(){
   var s = ss().getSheetByName(MOV_SHEET);
   if (!s){ s = ss().insertSheet(MOV_SHEET); s.appendRow(MOV_COLS); s.setFrozenRows(1); return s; }
@@ -630,12 +644,12 @@ function movSheet_(){
 // posição (0-based) das colunas de valor no razão
 function movLayout_(){ var s = movSheet_(), lc = Math.max(7, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ix = {};
   for (var c = 0; c < hd.length; c++){ var h = S(hd[c]).toUpperCase(); if (h && !(h in ix)) ix[h] = c; }
-  return { s:s, n:lc, unit:ix['VALOR UNIT'], total:ix['VALOR TOTAL'] }; }
+  return { s:s, n:lc, unit:ix['VALOR UNIT'], total:ix['VALOR TOTAL'], local:ix['LOCAL'] }; }
 function logMovimentacao(tipo, produto, un, qtd, origem, obs, when){
   movAppendRows_([[when || new Date(), S(tipo), T_(produto), T_(un), N(qtd), T_(origem), T_(obs)]]);
 }
 // grava VÁRIAS linhas no razão de uma vez (1 escrita em vez de 1 por linha — bem mais rápido).
-// Cada linha: 7 colunas fixas + opcional [7] = valor unitário e [8] = valor total (vão para as colunas de valor).
+// Cada linha: 7 colunas fixas + opcional [7] = valor unitário, [8] = valor total e [9] = LOCAL (FA/FE, v360) — vão para as colunas achadas pelo cabeçalho.
 function movAppendRows_(rows){
   if (!rows.length) return 0;
   var L = movLayout_(), s = L.s, n = L.n, last = s.getLastRow(), falta = last + rows.length - s.getMaxRows();
@@ -643,6 +657,7 @@ function movAppendRows_(rows){
   var out = rows.map(function(r){ var o = []; for (var i = 0; i < n; i++) o.push(i < 7 && r[i] !== undefined ? r[i] : '');
     if (L.unit != null && r[7] != null && r[7] !== '') o[L.unit] = r[7];
     if (L.total != null && r[8] != null && r[8] !== '') o[L.total] = r[8];
+    if (L.local != null && r[9] != null && r[9] !== '') o[L.local] = r[9];
     return o; });
   s.getRange(last + 1, 1, rows.length, n).setValues(out);
   return rows.length;
@@ -662,23 +677,28 @@ function movDeleteBySources_(ids){
 }
 // soma ENTRADA e SAÍDA por produto no razão (fonte COMPARTILHADA entre aparelhos: todo
 // aparelho puxa isto e vê o mesmo saldo, não importa quem registrou a compra/aprovou a recom).
+// v360: devolve também porLocal = { FA:{entradas, saidas}, FE:{…} } (linha sem LOCAL = estoque padrão). entradas/saidas continuam o total (unificado).
 function readMovimentacao(){
-  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {}, nfe = {}, devol = [];
-  if (!s) return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
-  var last = s.getLastRow(); if (last < 2) return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
-  var v = s.getRange(2, 1, last - 1, 6).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM
+  var s = ss().getSheetByName(MOV_SHEET), ent = {}, sai = {}, nfe = {}, devol = [], porLocal = {};
+  for (var k in ESTOQUES_) porLocal[k] = { entradas:{}, saidas:{} };
+  var vazio = { entradas:ent, saidas:sai, nfe:nfe, devol:devol, porLocal:porLocal, padrao:ESTOQUE_PADRAO_ };
+  if (!s) return vazio;
+  var last = s.getLastRow(); if (last < 2) return vazio;
+  var lc = Math.max(6, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ixLoc = -1;
+  for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === 'LOCAL') ixLoc = c;
+  var v = s.getRange(2, 1, last - 1, Math.max(6, ixLoc + 1)).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM (… LOCAL)
   for (var i = 0; i < v.length; i++){
-    var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]), org = S(v[i][5]);
+    var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]), org = S(v[i][5]), loc = (ixLoc >= 0 && _localNorm_(v[i][ixLoc])) || ESTOQUE_PADRAO_;
     // NF-e que já deu entrada: etiqueta [#chave de 44 dígitos] no ORIGEM (o app bloqueia importar de novo)
     var mk = org.match(/\[#(\d{44})\]/), dia = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = dia;
     if (!prod || !qtd) continue;
-    if (tipo.indexOf('ENTRADA') === 0) ent[prod] = (ent[prod] || 0) + qtd;
-    else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd;   // SAÍDA / SAIDA
+    if (tipo.indexOf('ENTRADA') === 0){ ent[prod] = (ent[prod] || 0) + qtd; porLocal[loc].entradas[prod] = (porLocal[loc].entradas[prod] || 0) + qtd; }
+    else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd; porLocal[loc].saidas[prod] = (porLocal[loc].saidas[prod] || 0) + qtd;   // SAÍDA / SAIDA
       if (mk && /^Devolu/i.test(org)){ var mn = org.match(/NF-e (\S+)/), mf = org.match(/NF-e \S+ · ([^\[]*)\[/);   // v316: devolução ao fornecedor (NF-e de troca/entrada)
-        devol.push({ chave:mk[1], data:dia, produto:prod, un:S(v[i][3]), qtd:qtd, nNF:mn ? mn[1] : '', forn:mf ? S(mf[1]) : '', origem:org.replace(/\s*\[#[^\]]+\]/, '') }); } }
+        devol.push({ chave:mk[1], data:dia, produto:prod, un:S(v[i][3]), qtd:qtd, nNF:mn ? mn[1] : '', forn:mf ? S(mf[1]) : '', origem:org.replace(/\s*\[#[^\]]+\]/, ''), local:loc }); } }
   }
-  return { entradas:ent, saidas:sai, nfe:nfe, devol:devol };
+  return { entradas:ent, saidas:sai, nfe:nfe, devol:devol, porLocal:porLocal, padrao:ESTOQUE_PADRAO_ };
 }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){ movDeleteBySources_([id]); }
@@ -693,11 +713,11 @@ function entradaRows_(ent){
   var itens = (ent && ent.itens) || [], rows = [];
   var when = new Date();
   if (ent && ent.data && /^\d{4}-\d{2}-\d{2}/.test(String(ent.data))) when = new Date(String(ent.data).slice(0,10) + 'T12:00:00');
-  var ehNfe = /^\d{44}$/.test(S(ent && ent.id));
+  var ehNfe = /^\d{44}$/.test(S(ent && ent.id)), loc = _localNorm_(ent && ent.local) || ESTOQUE_PADRAO_;   // v360: estoque de destino
   var origem = (ehNfe ? 'NF-e' : 'Compra') + (ent.nf ? (ehNfe ? ' ' : ' NF ') + S(ent.nf) : '') + (ent.fornecedor ? ' · ' + S(ent.fornecedor) : '') + (ent.id ? ' [#' + S(ent.id) + ']' : '');
   for (var i = 0; i < itens.length; i++){ var it = itens[i]; if (!S(it.produto)) continue;
     var vt = _vt_(it.preco, it.qtd);   // v272: custo real da nota (R$/un e total) no razão
-    rows.push([when, 'ENTRADA', T_(it.produto), T_(it.un), N(it.qtd), T_(origem), T_(ent.obs), vt[0], vt[1]]); }
+    rows.push([when, 'ENTRADA', T_(it.produto), T_(it.un), N(it.qtd), T_(origem), T_(ent.obs), vt[0], vt[1], loc]); }
   return rows;
 }
 // Lista "Compras registradas" do app, compartilhada entre aparelhos: aba COMPRAS APP (KEY|JSON|ATUALIZADO,
@@ -713,7 +733,7 @@ function writeComprasApp(lista){
     if (!ent.del) rows = rows.concat(entradaRows_(ent));
     m[id] = ent.del ? { id:id, del:true, _u:u }
       : { id:id, fornecedor:S(ent.fornecedor), data:S(ent.data), nf:S(ent.nf), obs:S(ent.obs), itens:ent.itens || [],
-          nfe:ent.nfe || null, ts:ent.ts || null, _u:u }; });
+          nfe:ent.nfe || null, ts:ent.ts || null, local:_localNorm_(ent.local), _u:u }; });   // v360: local
   movDeleteBySources_(del);
   var n = movAppendRows_(rows);
   if (Object.keys(m).length) writeMapApp('COMPRAS APP', m);
@@ -2160,11 +2180,11 @@ function writeSaida(sd){
   movDeleteBySource(sd.id);                            // limpa saídas anteriores dessa recom
   var when = new Date();
   if (sd.data && /^\d{4}-\d{2}-\d{2}/.test(String(sd.data))) when = new Date(String(sd.data).slice(0,10) + 'T12:00:00');
-  var origem = (S(sd.origem) || ('Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : ''))) + ' [#' + S(sd.id) + ']', rows = [];   // v316: devolução ao fornecedor usa origem própria
+  var origem = (S(sd.origem) || ('Recom' + (sd.talhao ? ' · ' + S(sd.talhao) : ''))) + ' [#' + S(sd.id) + ']', rows = [], loc = _localNorm_(sd.local) || ESTOQUE_PADRAO_;   // v316: devolução ao fornecedor usa origem própria · v360: estoque de baixa do talhão
   for (var i = 0; i < itens.length; i++){ var it = itens[i];
     if (!S(it.produto) || !(N(it.real) > 0)) continue;
     var vt = _vt_(it.custo, it.real);   // v272: custo médio na data da aplicação (calculado pelo app)
-    rows.push([when, 'SAÍDA', T_(it.produto), T_(it.un), N(it.real), T_(origem), T_(sd.operador), vt[0], vt[1]]); }
+    rows.push([when, 'SAÍDA', T_(it.produto), T_(it.un), N(it.real), T_(origem), T_(sd.operador), vt[0], vt[1], loc]); }
   return { rows:movAppendRows_(rows) };   // 1 escrita (antes: 1 por produto)
 }
 function retornosSheet(){
@@ -2451,7 +2471,7 @@ function applyEditsBatch(edits, out){
     if (t === 'addtalhao') novos.push(ed);
     else if (t === 'deltalhao') remove.push(ed);
     else if (t === 'estoque' || t === 'preco' || t === 'pedido' || t === 'custoIni' || t === 'addprod') port.push(ed);
-    else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha') area.push(ed);
+    else if (t === 'area' || t === 'produtividade' || t === 'empreendimento' || t === 'emp_safrinha' || t === 'prod_safrinha' || t === 'estoque') area.push(ed);   // v360: estoque de baixa
     else if (ed.talhao) { (byTalhao[ed.talhao] = byTalhao[ed.talhao] || []).push(ed); }
     else { out.fail++; if (out.msgs.length < 10) out.msgs.push('tipo/sem talhão: ' + t); }
   });
@@ -2490,6 +2510,7 @@ function applyAddTalhao(ed, out){
     A.getRange(1, 10).setValue('CUSTO R$/ha'); A.getRange(1, 11).setValue('CUSTO TOTAL R$');
     A.getRange(L, 10).setFormula(custoHaFormula(L)); A.getRange(L, 11).setFormula(custoTotalFormula(L));
     A.getRange(L, 10, 1, 2).setNumberFormat('R$ #,##0.00');
+    if (_localNorm_(ed.estoque)) A.getRange(L, areaPlantioColEstoque_(A, true)).setValue(_localNorm_(ed.estoque));   // v360
     var s = ss().getSheetByName(id) || ss().insertSheet(id);
     var t = { id:id, nome:S(ed.nome), area:N(ed.area), empreendimento:S(ed.empreendimento), produtividade:N(ed.produtividade),
       emp_safrinha:S(ed.emp_safrinha), prod_safrinha:N(ed.prod_safrinha), plantio:'', plantio_safrinha:'' };
@@ -2551,6 +2572,7 @@ function applyAreaPlantio(edits, out){
       else if (ed.type === 'empreendimento') A.getRange(L, 3).setValue(S(ed.value));
       else if (ed.type === 'emp_safrinha') A.getRange(L, 8).setValue(S(ed.value));
       else if (ed.type === 'prod_safrinha') A.getRange(L, 9).setValue(N(ed.value));
+      else if (ed.type === 'estoque') A.getRange(L, areaPlantioColEstoque_(A, true)).setValue(_localNorm_(ed.value));   // v360: estoque de baixa (FA/FE; vazio = automático)
       out.ok++;
     } catch(err){ out.fail++; if (out.msgs.length < 10) out.msgs.push(String(err)); }
   });

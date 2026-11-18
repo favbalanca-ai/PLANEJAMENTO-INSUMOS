@@ -235,6 +235,20 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Dois estoques: coluna LOCAL no razão e ESTOQUE na ÁREA PLANTIO (v360)
+
+- `MOV_COLS` ganhou **LOCAL** (FA = Água Viva, FE = Espora), criada pelo cabeçalho como VALOR UNIT/VALOR TOTAL
+  (`movSheet_`/`movLayout_`); `movAppendRows_` grava o índice 9 da linha nela. `entradaRows_` usa `ent.local` e
+  `writeSaida` usa `sd.local`; sem local (ou inválido) vale `ESTOQUE_PADRAO_` = FA. `writeComprasApp` guarda `local`
+  no registro da COMPRAS APP.
+- `readMovimentacao` devolve, além de `entradas`/`saidas` (total, como antes), `porLocal:{FA:{entradas,saidas},
+  FE:{…}}`, `padrao` e o `local` em cada devolução. Linha sem LOCAL ou com valor estranho conta como FA. Planilha sem a
+  coluna continua lendo normalmente (tudo em FA).
+- ÁREA PLANTIO: coluna **ESTOQUE** (FA/FE; vazio = automático pelo prefixo), achada pelo cabeçalho e criada depois de
+  CUSTO TOTAL quando falta (`areaPlantioColEstoque_`). `readData` devolve `estoque` em cada talhão; a edição
+  `estoque` (`applyAreaPlantio`) grava; `applyAddTalhao` grava quando o talhão novo já vem com a escolha.
+- As fórmulas do PORTIFÓLIO (CONSUMO/SALDO) não mudam: continuam somando as duas fazendas.
+
 ## Parecer da IA sobre a mistura de tanque (v357)
 
 - `__misturaIa` `{id, cultura, alvo, calda, adjuvante, produtos:[{produto, ativo, classe, formulacao, tipo, ph, conc,

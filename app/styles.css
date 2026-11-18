@@ -2259,6 +2259,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* v350: saldo na Operação de Campo */
 .ci-est{display:block;font-size:11px;font-weight:700;margin-top:2px;white-space:nowrap}.ci-est.ok{color:var(--green)}.ci-est.warn{color:var(--amber)}.ci-est.err{color:var(--red)}
 .ci-bula{display:block;font-size:11px;color:var(--muted);margin-top:1px;white-space:normal}.ci-bula-fora{color:var(--amber)}   /* v353: dose da bula por cultura */
+/* v360: dois estoques (um por fazenda) */
+.est-locf{align-items:center}.est-loc-td{white-space:nowrap}
+.rc-est-loc{font-size:11px;line-height:1.3}.rc-est-outro{font-size:11px;line-height:1.3;color:#1f4a55;font-weight:600}
+.ci-est-outro{display:inline-block;font-size:10.5px;color:#1f4a55;font-weight:600;margin-left:4px;white-space:normal}
 /* v358: etiquetas por grupo */
 .etq-grupos{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:6px 0}.etq-g{display:flex;align-items:center;gap:6px;font-size:13px}.etq-g input{width:18px;height:18px;flex:none}.etq-links{font-size:12px;margin:4px 0}
 /* v357: compatibilidade da calda (análise de mistura) */
