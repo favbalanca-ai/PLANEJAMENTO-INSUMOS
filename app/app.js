@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-361';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-362';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -437,7 +437,7 @@ function saveDataCache(d, raw){ lsSet(DATA_KEY, raw||JSON.stringify(d)); }
 function loadDataCache(){ try{ const s=localStorage.getItem(DATA_KEY); return s?JSON.parse(s):null; }catch(e){ return null; } }
 const MOD_KEY = 'planejamento_modulo';   // 'planejamento' | 'campo' | 'precos' | 'admin' (qual módulo está ativo)
 // a qual módulo cada tela pertence ('both' = aparece nos dois)
-const VIEW_MOD = { inicio:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',
+const VIEW_MOD = { inicio:'both', contagem:'both', dashboard:'planejamento', talhoes:'planejamento', talhao:'planejamento',   // v362: contagem física (filha do Estoque)
   empreendimentos:'planejamento', compras:'planejamento', estoque:'both', cotacao:'planejamento', precos:'precos', insumos:'precos',   // v320: cadastro de insumos
   entradas:'admin', fluxocaixa:'admin', financeiro:'admin', cadastros:'admin', contratos:'admin', receber:'admin', pendencias:'admin',
   tarefas:'tarefas', agenda:'tarefas', calendario:'tarefas', cronograma:'tarefas', equipe:'tarefas',
@@ -452,7 +452,7 @@ const SESS_KEY='planejamento_sessao', LOGIN_EXIG_KEY='planejamento_login_exigido
 const EMBED=(()=>{ try{ return new URLSearchParams(location.search).get('embed')||''; }catch(e){ return ''; } })();
 const EMBED_TELAS=['receber','pendencias','login','conta','sync'];
 const MODULOS=['planejamento','campo','precos','admin','tarefas','maquinas'];   // v295: 🚜 Máquinas
-const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], catalogo:['precos','campo'], maquinas:['planejamento','maquinas']};   // v297: Máquinas (conjuntos) também no módulo Máquinas   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
+const TELA_PAI={talhao:'talhoes', ocorrencia:'monitoramento', produtividade:'stand', experimento:'mapa', contratos:'entradas', pendencias:'entradas', contagem:'estoque'}, TELAS_LIVRES=['inicio','sync','login','conta'], TELA_MODS={estoque:['planejamento','admin'], contagem:['planejamento','admin'], catalogo:['precos','campo'], maquinas:['planejamento','maquinas']};   // v362: contagem = mesma permissão do Estoque   // v297: Máquinas (conjuntos) também no módulo Máquinas   // Receber nota saiu do Campo: é só do Administrativo · Estoque: Planejamento E Administrativo (mesma tela)
 function sessao(){ try{ return JSON.parse(localStorage.getItem(SESS_KEY)||'null'); }catch(e){ return null; } }
 function sessSalva(x){ try{ if(x) localStorage.setItem(SESS_KEY, JSON.stringify(x)); else localStorage.removeItem(SESS_KEY); }catch(e){} }
 function sessToken(){ const x=sessao(); return (x&&x.token)||''; }
@@ -525,6 +525,7 @@ function loadOverrides(){
   OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
   OV.maqApp        = OV.maqApp        || {}; OV.abast = OV.abast || {}; OV.osMaq = OV.osMaq || {};   // v295: módulo Máquinas (cadastro, abastecimentos, OS)
   OV.transf        = OV.transf        || {}; // v361: transferências de estoque entre fazendas: id -> {id,data,de,para,itens:[{produto,un,qtd,custo}],obs,quem,del,_u}
+  OV.contagem      = OV.contagem      || {}; // v362: contagens físicas: id -> {id,data,local,status:'aberta'|'fechada',quem,obs,itens:{produto:{qtd}},ajustes:[{produto,un,qtd,custo,sist,cont}],del,_u}
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
   OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
   OV.realizado     = OV.realizado     || {}; // "TL|tagOp" -> {status,data,obs,doses:{iid:dose},extras:[{produto,dose}]} (modo Campo — local)
@@ -1669,6 +1670,7 @@ function estoqueEntradas(local){
     (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ if(!ok(c)) return; (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
   }
   if(local){ const tj=transfAjuste(local,'para'); for(const k in tj) m[k]=(m[k]||0)+tj[k]; }   // v361: transferências pendentes que ENTRAM neste estoque
+  { const cj=contAjuste(local,'ent'); for(const k in cj) m[k]=(m[k]||0)+cj[k]; }   // v362: ajustes de inventário pendentes (positivos)
   return m;
 }
 /* ---- Compras registradas: resumo POR PRODUTO (padrão) ou POR NOTA, uma linha cada; toque abre o detalhe ---- */
@@ -2628,6 +2630,75 @@ function transfListaHtml(lim){ const L=transfLista(); if(!L.length&&!syncUrl()) 
     return `<div class="transf-row"><span class="mut">${esc(fmtDataBR(t.data))}</span><span>${its} <span class="mut">${esc(estoqueNome(t.de))} → ${esc(estoqueNome(t.para))}</span>${t.quem?` <small class="mut">· ${esc(t.quem)}</small>`:''}${t.obs?` <small class="mut">· ${esc(t.obs)}</small>`:''}</span><span class="transf-st">${pend?'<span class="cr-st pend" title="ainda não foi para a planilha">pendente</span>':'<span class="cr-st ok" title="já está no razão da planilha">✔</span>'}</span><button class="icon-btn del" data-act="transfDesfazer" data-id="${esc(t.id)}" title="Desfazer (apaga as duas linhas do razão)">↩</button></div>`; }).join('');
   return `<div class="panel"><div class="panel-head"><h2>🔁 Transferências entre fazendas</h2><span class="sub">${L.length?`${L.length} registrada(s)`:'nenhuma ainda'} · cada uma vira saída na origem e entrada no destino, pelo custo médio</span><div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="transfAbrir">🔁 Transferir</button></div>
     <div class="transf-list">${rows||'<p class="mut" style="padding:8px 14px">Use quando um produto comprado para uma fazenda for usado na outra: o saldo sai de uma e entra na outra.</p>'}${L.length>(lim||12)?`<p class="mut" style="padding:4px 14px;font-size:12px">+${L.length-(lim||12)} mais antiga(s)</p>`:''}</div></div>`; }
+// ===== v362: CONTAGEM FÍSICA (inventário) — digita o que foi contado, compara com o sistema e aplica os ajustes =====
+// Uma contagem: {id, data, local ('' = unificado, 'FA'/'FE'), status aberta|fechada, quem, obs, itens:{produto:{qtd}}, ajustes:[{produto, un, qtd(±), custo, sist, cont}]}.
+// Fechar = calcula contado − sistema para cada produto CONTADO (em branco = não contado, não mexe) e manda os ajustes à planilha
+// (__contagem): cada ajuste vira ENTRADA (+) ou SAÍDA (−) no razão com ORIGEM "Ajuste de inventário [#id]" e LOCAL. Reabrir apaga as linhas.
+// Contagem unificada ajusta o estoque padrão (Água Viva). Fica em OV.contagem (aba CONTAGENS APP, merge pelo _u).
+let CONT_UI={q:'', so:'', colar:false, msg:''};
+function contLista(){ return Object.values((OV&&OV.contagem)||{}).filter(c=>c&&!c.del).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||((+b._u||0)-(+a._u||0))); }
+function contDe(id){ const c=OV.contagem&&OV.contagem[id]; return (c&&!c.del)?c:null; }
+function contPendente(c){ const srv=contServerOk()?DATA.contagens_app:null; if(!srv) return true; const s=srv[c.id]; return !s||(+c._u||0)>(+s._u||0); }
+function contLocalLbl(c){ const l=localNorm(c&&c.local); return l?estoqueNome(l):'Unificado (as duas fazendas)'; }
+// ajustes PENDENTES por produto: dir 'ent' (ajustes positivos) ou 'sai' (negativos); local '' = qualquer estoque. O que a planilha já confirmou vem no razão.
+function contAjuste(local, dir){ const m={}, srv=contServerOk()?DATA.contagens_app:null; local=localNorm(local);
+  const add=(c,sinal)=>{ if(!c||c.del||c.status!=='fechada'||!Array.isArray(c.ajustes)) return; const loc=localNorm(c.local)||ESTOQUE_PADRAO; if(local&&loc!==local) return;
+    c.ajustes.forEach(a=>{ const q=+a.qtd||0; if(!a.produto||!q) return; if(dir==='ent'&&q>0) m[a.produto]=(m[a.produto]||0)+sinal*q; else if(dir==='sai'&&q<0) m[a.produto]=(m[a.produto]||0)+sinal*(-q); }); };
+  Object.values((OV&&OV.contagem)||{}).forEach(c=>{ if(!c||!contPendente(c)) return; const s=srv&&srv[c.id]; add(c,1); if(s) add(s,-1); });   // versão nova soma; a antiga (ainda no razão) desconta
+  return m; }
+function contNova(){ const g=id=>(document.getElementById(id)||{}).value||''; const data=g('ct-data')||_hojeISO(), local=localNorm(g('ct-local')), quem=g('ct-quem').trim()||(sessUsuario()||{}).nome||'', obs=g('ct-obs').trim();
+  const id='ct'+Date.now().toString(36)+Math.random().toString(36).slice(2,5); OV.contagem[id]={id, data, local, quem, obs, status:'aberta', itens:{}, ajustes:[], _u:tsAgora()}; saveOverrides(); loteAgendar('__contagem'); CONT_UI={q:'', so:'', colar:false, msg:''}; location.hash='#/contagem/'+encodeURIComponent(id); toast(`Contagem de ${fmtDataBR(data)} aberta · ${contLocalLbl(OV.contagem[id])}`); }
+// universo da contagem: produtos (sem máquinas) com saldo, movimento, pedido ou já contados; sistema = saldo no estoque escolhido
+function contLinhas(c){ const loc=localNorm(c.local), E=estoqueEntradas(loc), S=estoqueSaidas(loc), its=c.itens||{}, nomes=new Set();
+  (DATA.produtos||[]).forEach(p=>{ if(p.produto&&!/^M[ÁA]QUINA/i.test(p.classe||'')) nomes.add(String(p.produto).trim()); }); Object.keys(E).forEach(n=>nomes.add(n)); Object.keys(S).forEach(n=>nomes.add(n)); Object.keys(its).forEach(n=>nomes.add(n));
+  return [...nomes].map(n=>{ const p=PROD[n]||{produto:n,classe:'',un:''}, ini=(!loc||loc===ESTOQUE_PADRAO)?estoqueDe(n):0, sist=+(ini+(E[n]||0)-(S[n]||0)).toFixed(4), it=its[n], cont=(it&&it.qtd!=null&&it.qtd!=='')?+it.qtd:null;
+      return {produto:n, classe:(p.classe||'').trim(), un:p.un||'', sist, cont, dif:cont==null?null:+(cont-sist).toFixed(4), mov:!!(ini||E[n]||S[n]||pedidoDe(n)||cont!=null)}; })
+    .filter(r=>r.mov).sort((a,b)=>a.produto.localeCompare(b.produto,'pt')); }
+function contResumo(L){ const cs=L.filter(r=>r.cont!=null), dif=cs.filter(r=>Math.abs(r.dif)>=0.0005); return {n:L.length, cont:cs.length, dif:dif.length, sobra:dif.filter(r=>r.dif>0).length, falta:dif.filter(r=>r.dif<0).length, ok:cs.length-dif.length}; }
+function contPassa(r){ const q=_agNorm(CONT_UI.q).trim(); if(q&&!_agNorm(r.produto+' '+r.classe).includes(q)) return false; if(CONT_UI.so==='dif') return r.cont!=null&&Math.abs(r.dif)>=0.0005; if(CONT_UI.so==='nao') return r.cont==null; if(CONT_UI.so==='cont') return r.cont!=null; return true; }
+function contSetQtd(id, prod, v){ const c=contDe(id); if(!c||c.status!=='aberta') return; c.itens=c.itens||{}; const s=String(v==null?'':v).trim(); if(s==='') delete c.itens[prod]; else c.itens[prod]={qtd:+numBR(s).toFixed(4)}; c._u=tsAgora(); saveOverrides(); loteAgendar('__contagem'); }
+function contDifHtml(r){ if(r.cont==null) return '<span class="mut">—</span>'; const d=r.dif; if(Math.abs(d)<0.0005) return '<b class="ct-dif ok">✓ bate</b>'; return `<b class="ct-dif ${d>0?'sobra':'falta'}">${d>0?'+':'−'}${fmtDose(Math.abs(d))} ${esc(r.un)}</b><small class="mut"> ${d>0?'sobra':'falta'}</small>`; }
+// cola uma lista "produto ; quantidade" (ou tab, ou "produto 123") e casa pelo nome do portfólio
+function contColarAplicar(id){ const c=contDe(id), ta=document.getElementById('ct-colar'); if(!c||!ta) return; const linhas=ta.value.split('\n').map(l=>l.trim()).filter(Boolean); if(!linhas.length) return;
+  const nomes=Object.keys(PROD), nn=nomes.map(n=>_agNorm(n).replace(/[^a-z0-9]+/g,' ').trim()); let ok=0; const falhou=[];
+  linhas.forEach(l=>{ let m=l.match(/^(.*?)\s*[;\t|]\s*([\d.,]+)\s*([a-zA-Z]*)\s*$/)||l.match(/^(.*?)\s*[-–→:]\s*([\d.,]+)\s*([a-zA-Z]*)\s*$/)||l.match(/^(.*\D)\s+([\d.,]+)\s*([a-zA-Z]*)$/); if(!m){ falhou.push(l); return; }
+    const nome=_agNorm(m[1]).replace(/[^a-z0-9]+/g,' ').trim(), q=numBR(m[2]); let i=nn.indexOf(nome); if(i<0) i=nn.findIndex(x=>x.startsWith(nome+' ')); if(i<0){ const toks=nome.split(' ').filter(t=>t.length>2); const cand=nn.map((x,k)=>toks.length&&toks.every(t=>x.includes(t))?k:-1).filter(k=>k>=0); if(cand.length===1) i=cand[0]; }
+    if(i<0){ falhou.push(l); return; } contSetQtd(id, nomes[i], q); ok++; });
+  CONT_UI.msg=`${ok} linha(s) aplicada(s)${falhou.length?` · não casei: ${falhou.slice(0,8).join(' | ')}${falhou.length>8?' …':''}`:''}`; CONT_UI.colar=!!falhou.length; CONT_UI.colarTxt=falhou.join('\n'); route({keepScroll:true}); toast(`${ok} produto(s) preenchido(s)${falhou.length?` · ${falhou.length} não encontrado(s)`:''}`); }
+function contFechar(id){ const c=contDe(id); if(!c||c.status!=='aberta') return; const L=contLinhas(c), R=contResumo(L); if(!R.cont){ toast('Nenhum produto contado ainda'); return; }
+  const aj=L.filter(r=>r.cont!=null&&Math.abs(r.dif)>=0.0005).map(r=>({produto:r.produto, un:r.un, qtd:+r.dif.toFixed(4), custo:+(custoMedioDe(r.produto)||0).toFixed(4), sist:r.sist, cont:r.cont}));
+  const loc=localNorm(c.local)||ESTOQUE_PADRAO;
+  if(!ask(`Fechar a contagem de ${fmtDataBR(c.data)} (${contLocalLbl(c)})?\n\n${R.cont} produto(s) contado(s): ${R.ok} batem, ${R.sobra} sobra(m) e ${R.falta} falta(m).\n${aj.length} ajuste(s) vão para o razão da planilha no estoque ${estoqueNome(loc)} (entrada para sobra, saída para falta, pelo custo médio).\nProdutos em branco não são mexidos.\n\nDá para reabrir depois: os ajustes são apagados.`)) return;
+  c.status='fechada'; c.ajustes=aj; c.fechadaEm=tsAgora(); c.fechadaPor=(sessUsuario()||{}).nome||''; c._u=tsAgora(); saveOverrides(); loteAgendar('__contagem'); route({keepScroll:true}); toast(`Contagem fechada: ${aj.length} ajuste(s)${syncUrl()?' a caminho da planilha':' (configure a Sincronização para gravar na planilha)'}`); }
+function contReabrir(id){ const c=contDe(id); if(!c||c.status!=='fechada') return; if(!ask('Reabrir a contagem? Os ajustes saem do razão da planilha (em todos os aparelhos) até você fechar de novo.')) return; c.status='aberta'; c.ajustes=[]; delete c.fechadaEm; c._u=tsAgora(); saveOverrides(); loteAgendar('__contagem'); route({keepScroll:true}); toast('Contagem reaberta'); }
+function contExcluir(id){ const c=contDe(id); if(!c) return; if(!ask(`Excluir a contagem de ${fmtDataBR(c.data)}?${c.status==='fechada'?'\nOs ajustes dela saem do razão.':''}`)) return; c.del=true; c._u=tsAgora(); saveOverrides(); loteAgendar('__contagem'); location.hash='#/contagem'; toast('Contagem excluída'); }
+V.contagem=function(arg){ const c=arg?contDe(arg):null;
+  if(!c){ const L=contLista(), hoje=_hojeISO();
+    return `<div class="panel"><div class="panel-head"><h2>📋 Contagem física do estoque</h2><span class="sub">digite o que foi contado no galpão; o app compara com o sistema e, ao fechar, grava os ajustes no razão</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/estoque">‹ Estoque</a></div>
+      <div class="mq-form"><label>Data da contagem<input type="date" class="cell" id="ct-data" value="${hoje}"></label><label>Estoque<select class="sel" id="ct-local"><option value="">Unificado (as duas fazendas)</option>${Object.keys(FAZENDAS).map(k=>`<option value="${k}"${estoqueLocal===k?' selected':''}>${esc(FAZENDAS[k])}</option>`).join('')}</select></label><label>Quem contou<input class="txt" id="ct-quem" value="${esc((sessUsuario()||{}).nome||'')}" placeholder="nome"></label><label style="flex-basis:100%">Observação<input class="txt" id="ct-obs" placeholder="ex.: galpão de defensivos"></label></div>
+      <div class="bk-bar"><button class="btn btn-primary" data-act="contNova">➕ Nova contagem</button><span class="mut">Na contagem unificada os ajustes vão para o estoque ${esc(estoqueNome(ESTOQUE_PADRAO))}. Feche a contagem no mesmo dia da conferência: o sistema compara com o saldo de agora.</span></div></div>
+      <div class="panel"><div class="panel-head"><h2>Contagens</h2><span class="sub">${L.length?`${L.length} registrada(s)`:'nenhuma ainda'}</span></div>
+      <div class="transf-list">${L.map(c=>{ const n=Object.keys(c.itens||{}).length, aj=(c.ajustes||[]).length, pend=contPendente(c); return `<div class="transf-row"><span class="mut">${esc(fmtDataBR(c.data))}</span><span><a class="link" data-go="#/contagem/${encodeURIComponent(c.id)}"><b>${esc(contLocalLbl(c))}</b></a> · ${n} produto(s) contado(s)${c.status==='fechada'?` · <b>${aj} ajuste(s)</b>`:''}${c.quem?` <small class="mut">· ${esc(c.quem)}</small>`:''}${c.obs?` <small class="mut">· ${esc(c.obs)}</small>`:''}</span><span class="transf-st">${c.status==='fechada'?`<span class="cr-st ok">fechada${pend?' · pendente':' ✔'}</span>`:'<span class="cr-st pend">aberta</span>'}</span></div>`; }).join('')||'<p class="mut" style="padding:8px 14px">Nenhuma contagem. Abra uma, conte o galpão e feche: o que sobrar vira entrada, o que faltar vira saída, e o saldo do sistema passa a bater com o físico.</p>'}</div></div>`; }
+  const L=contLinhas(c), R=contResumo(L), aberta=c.status==='aberta', pend=contPendente(c), loc=localNorm(c.local)||ESTOQUE_PADRAO;
+  const rows=L.filter(contPassa).map(r=>`<tr data-prod="${esc(r.produto)}" class="${r.cont==null?'':(Math.abs(r.dif)<0.0005?'ct-ok':(r.dif>0?'ct-sobra':'ct-falta'))}"><td class="c-full" data-th="Produto"><b>${esc(r.produto)}</b>${r.classe?` <span class="classe-tag">${esc(r.classe)}</span>`:''}</td><td class="num" data-th="Sistema">${num(r.sist)} <small class="mut">${esc(r.un)}</small></td>
+    <td class="num" data-th="Contado">${aberta?`<input class="cell ct-in" inputmode="decimal" data-ct="qtd" data-id="${esc(c.id)}" data-prod="${esc(r.produto)}" value="${r.cont!=null?fmtDose(r.cont):''}" placeholder="—">`:(r.cont!=null?fmtDose(r.cont):'<span class="mut">—</span>')}</td><td class="num ct-dif-td" data-th="Diferença">${contDifHtml(r)}</td></tr>`).join('');
+  const ajRows=(c.ajustes||[]).map(a=>`<tr><td class="c-full"><b>${esc(a.produto)}</b></td><td class="num">${num(a.sist)}</td><td class="num">${num(a.cont)}</td><td class="num"><b class="ct-dif ${a.qtd>0?'sobra':'falta'}">${a.qtd>0?'+':'−'}${fmtDose(Math.abs(a.qtd))} ${esc(a.un)}</b></td><td class="num">${a.custo>0?brl0(Math.abs(a.qtd)*a.custo):'—'}</td></tr>`).join('');
+  return `${prodDatalist()}<div class="panel"><div class="panel-head"><h2>📋 Contagem de ${esc(fmtDataBR(c.data))} · ${esc(contLocalLbl(c))}</h2><span class="sub">${c.quem?esc(c.quem)+' · ':''}${aberta?'aberta':`fechada${c.fechadaEm?' em '+fmtDataBR(_dISO(c.fechadaEm)):''}${pend?' · <b>pendente de envio</b>':' · ✔ na planilha'}`}${c.obs?' · '+esc(c.obs):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/contagem">‹ Contagens</a></div>
+    <div class="kpi-grid ct-kpis"><div class="kpi"><div class="k-label">Contados</div><div class="k-value" id="ct-k-cont">${R.cont}</div><div class="k-sub">de ${R.n} produto(s) com movimento</div></div><div class="kpi"><div class="k-label">Batem</div><div class="k-value" id="ct-k-ok" style="color:var(--green)">${R.ok}</div><div class="k-sub">sem diferença</div></div><div class="kpi"><div class="k-label">Sobra no físico</div><div class="k-value" id="ct-k-sobra" style="color:var(--amber)">${R.sobra}</div><div class="k-sub">vira entrada ao fechar</div></div><div class="kpi"><div class="k-label">Falta no físico</div><div class="k-value" id="ct-k-falta" style="color:var(--red)">${R.falta}</div><div class="k-sub">vira saída ao fechar</div></div></div>
+    ${aberta?`<div class="toolbar" style="padding:0 14px;margin:0 0 8px"><div class="search"><input id="ct-q" value="${esc(CONT_UI.q)}" placeholder="Buscar produto…" autocomplete="off"></div>
+      <button class="chip-f${CONT_UI.so===''?' on':''}" data-act="contSo" data-v="">todos</button><button class="chip-f${CONT_UI.so==='nao'?' on':''}" data-act="contSo" data-v="nao">não contados</button><button class="chip-f${CONT_UI.so==='cont'?' on':''}" data-act="contSo" data-v="cont">contados</button><button class="chip-f${CONT_UI.so==='dif'?' on':''}" data-act="contSo" data-v="dif">com diferença</button>
+      <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="contColarToggle">📥 Colar lista</button></div>
+      ${CONT_UI.colar?`<div class="ct-colar"><textarea class="txt" id="ct-colar" rows="5" placeholder="Uma linha por produto: nome ; quantidade&#10;ex.: ROUNDUP WG ; 4785&#10;NATIVO 760">${esc(CONT_UI.colarTxt||'')}</textarea><div class="cp-btns"><button class="btn btn-primary btn-sm" data-act="contColarAplicar" data-id="${esc(c.id)}">Aplicar na contagem</button><button class="btn btn-outline btn-sm" data-act="contColarToggle">Fechar</button><span class="mut" style="font-size:12px">casa pelo nome do portfólio; o que não casar fica na caixa para você corrigir</span></div></div>`:''}
+      ${CONT_UI.msg?`<div class="nfe-aviso info" style="margin:0 14px 8px">${esc(CONT_UI.msg)}</div>`:''}
+      <div class="mq-form" style="padding-top:0"><label style="flex:1">Produto fora da lista<span class="agp-row"><input list="prodlist" class="txt" id="ct-addprod" placeholder="digite o nome do portfólio"><button class="btn btn-outline btn-sm" data-act="contAddProd" data-id="${esc(c.id)}">+ incluir</button></span></label></div>`:''}
+    <div class="table-wrap"><table class="camp-ins ct-tbl" id="ct-tbl"><thead><tr><th>Produto</th><th class="num" title="saldo do sistema neste estoque, agora">Sistema</th><th class="num">Contado</th><th class="num">Diferença</th></tr></thead><tbody>${rows||'<tr><td colspan="4" class="mut" style="padding:10px">Nada para mostrar com este filtro.</td></tr>'}</tbody></table></div>
+    <div class="rc-actions">${aberta?`<button class="btn btn-primary" data-act="contFechar" data-id="${esc(c.id)}"${R.cont?'':' disabled'}>✅ Fechar contagem e aplicar ${R.dif} ajuste(s)</button><span class="mut" style="font-size:12px">ajustes no estoque <b>${esc(estoqueNome(loc))}</b> · produtos em branco não são mexidos</span>`:`<button class="btn btn-outline" data-act="contReabrir" data-id="${esc(c.id)}">↩ Reabrir (apaga os ajustes)</button>`}<span class="spacer"></span><button class="icon-btn del" data-act="contExcluir" data-id="${esc(c.id)}" title="Excluir contagem">🗑</button></div></div>
+    ${!aberta?`<div class="panel"><div class="panel-head"><h2>Ajustes aplicados (${(c.ajustes||[]).length})</h2><span class="sub">entrada para sobra, saída para falta · ORIGEM "Ajuste de inventário" no razão · estoque ${esc(estoqueNome(loc))}</span></div><div class="table-wrap"><table class="camp-ins"><thead><tr><th>Produto</th><th class="num">Sistema na hora</th><th class="num">Contado</th><th class="num">Ajuste</th><th class="num">Valor (custo médio)</th></tr></thead><tbody>${ajRows||'<tr><td colspan="5" class="mut" style="padding:10px">Tudo batia: nenhum ajuste.</td></tr>'}</tbody></table></div></div>`:''}`; };
+// digitação: atualiza a diferença e os contadores sem re-renderizar (o campo não perde o foco)
+document.addEventListener('input',e=>{ const t=e.target; if(!t||!t.dataset) return;
+  if(t.dataset.ct==='qtd'){ contSetQtd(t.dataset.id, t.dataset.prod, t.value); const c=contDe(t.dataset.id); if(!c) return; const L=contLinhas(c), r=L.find(x=>x.produto===t.dataset.prod), tr=t.closest('tr'); if(r&&tr){ tr.querySelector('.ct-dif-td').innerHTML=contDifHtml(r); tr.className=r.cont==null?'':(Math.abs(r.dif)<0.0005?'ct-ok':(r.dif>0?'ct-sobra':'ct-falta')); }
+    const R=contResumo(L), g=id=>document.getElementById(id); if(g('ct-k-cont')) g('ct-k-cont').textContent=R.cont; if(g('ct-k-ok')) g('ct-k-ok').textContent=R.ok; if(g('ct-k-sobra')) g('ct-k-sobra').textContent=R.sobra; if(g('ct-k-falta')) g('ct-k-falta').textContent=R.falta; const b=document.querySelector('[data-act="contFechar"]'); if(b){ b.disabled=!R.cont; b.textContent=`✅ Fechar contagem e aplicar ${R.dif} ajuste(s)`; } return; }
+  if(t.id==='ct-q'){ CONT_UI.q=t.value; const q=_agNorm(t.value).trim(); document.querySelectorAll('#ct-tbl tbody tr[data-prod]').forEach(tr=>{ tr.style.display=(!q||_agNorm(tr.textContent).includes(q))?'':'none'; }); } });
 // ---- contratos (fase 3) ----
 let NFE_CONTRATOS=null;   // {ts, lista:[…], erro}
 function nfeContratosCarregar(force){
@@ -3173,6 +3244,7 @@ function estoqueSaidas(local){
     opBaixas(false);
   }
   if(local){ const tj=transfAjuste(local,'de'); for(const k in tj) add(k, tj[k]); }   // v361: transferências pendentes que SAEM deste estoque
+  { const cj=contAjuste(local,'sai'); for(const k in cj) add(k, cj[k]); }   // v362: ajustes de inventário pendentes (negativos)
   return m;
 }
 let estoqueQ='', estoqueClasse='', estoqueSoMov=false, estoqueSaldo='';   // saldo: '' todos · nz não zerado · pos · neg · zero
@@ -3232,7 +3304,7 @@ V.estoque=function(){
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
     <label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="transfAbrir" title="Transferir produto de um estoque (fazenda) para o outro">🔁 Transferir</button><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-go="#/contagem" title="Inventário: digitar o que foi contado no galpão, comparar com o sistema e aplicar os ajustes">📋 Contagem física</button><button class="btn btn-outline btn-sm" data-act="transfAbrir" title="Transferir produto de um estoque (fazenda) para o outro">🔁 Transferir</button><button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
   <div class="classe-filter est-locf" id="est-locf" style="margin:2px 0 6px" title="Um estoque por fazenda (coluna LOCAL do razão). Unificado = soma dos dois."><span class="mut" style="font-size:12px;align-self:center">Estoque:</span><button class="chip-f${LOC===''?' on':''}" data-estloc="">Unificado</button>${Object.keys(FAZENDAS).map(k=>`<button class="chip-f${LOC===k?' on':''}" data-estloc="${k}">${esc(FAZENDAS[k])}</button>`).join('')}</div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque${LOC?` · ${esc(estoqueNome(LOC))}`:' · unificado'}</h2><span class="sub">${LOC?(LOC===ESTOQUE_PADRAO?'inicial + entradas − saídas desta fazenda':'entradas − saídas desta fazenda (o inicial do PORTIFÓLIO é da Água Viva)'):'inicial + entradas − saídas = saldo · as duas fazendas somadas'}</span></div>
@@ -4740,6 +4812,11 @@ let lastTransfSig='';
 function transfSig(){ return sigHash(JSON.stringify((OV&&OV.transf)||{})); }
 function transfServerOk(){ return !!(DATA && DATA.transferencias_app && typeof DATA.transferencias_app==='object'); }
 function transfApplyPulled(m){ return _mapApplyPulled('transf', m, transfSig, ()=>lastTransfSig, v=>{ lastTransfSig=v; }, '__transferencia'); }
+// v362: contagens físicas (aba CONTAGENS APP)
+let lastContSig='';
+function contSig(){ return sigHash(JSON.stringify((OV&&OV.contagem)||{})); }
+function contServerOk(){ return !!(DATA && DATA.contagens_app && typeof DATA.contagens_app==='object'); }
+function contApplyPulled(m){ return _mapApplyPulled('contagem', m, contSig, ()=>lastContSig, v=>{ lastContSig=v; }, '__contagem'); }
 function abastApplyPulled(m){ return _mapApplyPulled('abast', m, abastSig, ()=>lastAbastSig, v=>{ lastAbastSig=v; }, '__abastecimento'); }
 function osApplyPulled(m){ return _mapApplyPulled('osMaq', m, osSig, ()=>lastOsSig, v=>{ lastOsSig=v; }, '__osMaq'); }
 const MAQ_COMB=['Diesel S10','Diesel S500','Arla 32','Gasolina','Etanol'], OS_TIPOS={preventiva:'Preventiva',corretiva:'Corretiva',reforma:'Reforma'};
@@ -10646,7 +10723,7 @@ V.sync = function(){
 };
 
 /* ================= ROUTER ================= */
-const TITLES={checklist:'Checklist pré-uso',insumos:'Cadastrar insumos',frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
+const TITLES={contagem:'Contagem física',checklist:'Checklist pré-uso',insumos:'Cadastrar insumos',frota:'Máquinas — painel',abastecimento:'Abastecimento',manutencao:'Manutenção de máquinas',maqcad:'Cadastro de máquinas',experimento:'Experimento',financeiro:'Financeiro',cadastros:'Cadastros',inicio:'Início',dashboard:'Painel',talhoes:'Talhões',talhao:'Talhão',campopainel:'Painel de Campo',timeline:'Timeline',relatorios:'Relatórios',misturas:'Misturas',catalogo:'Catálogo MAPA (Agrofit)',campo:'Operação de Campo',monitoramento:'Monitoramento',mapa:'Mapa',chuva:'Chuva (pluviômetro)',stand:'Contagem de Stand',afericao:'Aferição',ocorrencia:'Anotações e ocorrências',produtividade:'Estimativa de Produtividade',recomendacao:'Recomendação de Aplicação',compras:'Demanda de Insumos',estoque:'Controle de Estoque',entradas:'Notas — caixa de entrada',contratos:'Contratos a entregar (NF-e)',receber:'Receber nota (NF-e)',pendencias:'Pendências de recebimento',cotacao:'Cotação por Fornecedor',precos:'Preços — composição por safra',maquinas:'Máquinas',dre:'DRE Orçada',resultados:'Resultados (Real × Orçado)',empreendimentos:'Empreendimentos',fluxocaixa:'Fluxo de Caixa',tarefas:'Quadro de Tarefas',agenda:'Agenda',calendario:'Calendário',cronograma:'Cronograma (Gantt)',equipe:'Equipe',sync:'Sincronizar',login:'Entrar',conta:'Minha conta',usuarios:'Usuários'};
 // ---- redesenho PARCIAL: na MESMA tela (edição, sincronização) troca só o que mudou ----
 // Antes: cada número editado jogava fora a tela inteira (Estoque ~6.900 elementos ≈ 2 s num celular médio)
 // e o próximo campo perdia o foco. Telas com mapa/câmera continuam com o redesenho completo.
@@ -11436,6 +11513,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomTrocarIns'){ recomTrocarIns(a.id, a.i, a.novo); }
     else if(a.act==='transfAbrir'){ transfAbrir({produto:a.prod||'', de:a.de||'', para:a.para||'', qtd:+a.qtd||0}); }   // v361: transferência entre fazendas
     else if(a.act==='transfFechar'){ transfFechar(); } else if(a.act==='transfGravar'){ transfGravar(); } else if(a.act==='transfDesfazer'){ transfDesfazer(a.id); }
+    else if(a.act==='contNova'){ contNova(); } else if(a.act==='contFechar'){ contFechar(a.id); } else if(a.act==='contReabrir'){ contReabrir(a.id); } else if(a.act==='contExcluir'){ contExcluir(a.id); }   // v362: contagem física
+    else if(a.act==='contSo'){ CONT_UI.so=a.v||''; route({keepScroll:true}); } else if(a.act==='contColarToggle'){ CONT_UI.colar=!CONT_UI.colar; CONT_UI.msg=''; if(!CONT_UI.colar) CONT_UI.colarTxt=''; route({keepScroll:true}); } else if(a.act==='contColarAplicar'){ contColarAplicar(a.id); }
+    else if(a.act==='contAddProd'){ const i=document.getElementById('ct-addprod'), p=((i&&i.value)||'').trim(); if(!PROD[p]){ toast('Escolha um produto do portfólio'); return; } const c=contDe(a.id); if(c&&c.status==='aberta'){ c.itens=c.itens||{}; if(!c.itens[p]) c.itens[p]={qtd:0}; c._u=tsAgora(); saveOverrides(); CONT_UI.q=p; route({keepScroll:true}); toast(`${p} incluído — digite a quantidade`); } }
     else if(a.act==='recomMist'){ RECOM_UI.mist[a.id]=!RECOM_UI.mist[a.id]; route({keepScroll:true}); }   // v357: compatibilidade da calda
     else if(a.act==='recomMistIa'){ misturaIaPedir(a.id); }
     else if(a.act==='recomMistOrdem'){ const r=recomById(a.id); if(r&&r.status==='rascunho'&&r.itens){ const A=misturaAnalise(r), com=r.itens.filter(it=>it.produto), sem=r.itens.filter(it=>!it.produto); r.itens=A.ordem.map(x=>com[x.i]).concat(sem); saveRecom(); route({keepScroll:true}); toast('Ordem de mistura ajustada pela formulação'); } }
@@ -12168,6 +12248,7 @@ const LOTE_TIPOS={
   __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
   __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
   __transferencia:{ lbl:'Transferências de estoque', ok:()=>transfServerOk(), dados:()=>(OV.transf||{}), sig:()=>transfSig(), last:()=>lastTransfSig, set:v=>{ lastTransfSig=v; } },   // v361
+  __contagem:    { lbl:'Contagens físicas', ok:()=>contServerOk(), dados:()=>(OV.contagem||{}), sig:()=>contSig(), last:()=>lastContSig, set:v=>{ lastContSig=v; } },   // v362
   __conjunto:    { lbl:'Conjuntos',     ok:()=>conjServerOk(),    dados:()=>(OV.conjApp||{}),    sig:()=>conjSig(),      last:()=>lastConjSig,      set:v=>{ lastConjSig=v; } },   // v302
   __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
   __osMaq:       { lbl:'Ordens de serviço', ok:()=>maqServerOk(), dados:()=>(OV.osMaq||{}),      sig:()=>osSig(),        last:()=>lastOsSig,        set:v=>{ lastOsSig=v; } },
@@ -12232,7 +12313,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -12441,6 +12522,7 @@ function applyPulledData(d, raw){
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
   try{ transfApplyPulled(d.transferencias_app); }catch(e){}   // v361: transferências entre fazendas
+  try{ contApplyPulled(d.contagens_app); }catch(e){}   // v362: contagens físicas
   try{ checkApplyPulled(d.checklist_app); }catch(e){}       // v340: checklist pré-uso
   try{ conjApplyPulled(d.conjuntos_app); }catch(e){}         // v302: conjuntos (montados, edições, conjunto por operação)
   try{ aferApplyPulled(d.afericoes_app); }catch(e){}        // aferições do Campo
