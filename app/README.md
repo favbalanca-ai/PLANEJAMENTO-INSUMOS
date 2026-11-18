@@ -71,6 +71,20 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Dois estoques, um por fazenda (v360)** — Água Viva (FA) e Espora (FE) passam a ter saldo próprio; o razão
+  MOVIMENTAÇÃO ESTOQUE continua um só, com a coluna **LOCAL**. Unificado = soma; individualizado = filtro.
+  `saldoEstoqueDe(produto, local)`; `estoqueEntradas(local)`/`estoqueSaidas(local)` usam `movimentacao.porLocal` da
+  planilha mais o que está pendente no aparelho (compra com `local`; baixa pelo estoque do talhão). Regras: o ESTOQUE
+  inicial do PORTIFÓLIO e as linhas antigas sem LOCAL são da Água Viva. **Estoque de baixa do talhão**
+  (`estoqueDoTalhao`): campo "📦 Estoque de baixa" no painel Culturas do talhão (Automático → pelo prefixo FA/FE do
+  empreendimento · Água Viva · Espora), gravado em `OV.talhao[id].estoque` e na coluna ESTOQUE da ÁREA PLANTIO
+  (edição `estoque`, também no `addtalhao`). Saídas (`pushSaida`, `opSaidaPayload`, devolução) mandam `local`.
+  Entradas: a compra ganha `local` (`compraPayload`); seletor "📦 Estoque de destino" na tela da nota e em Receber
+  nota (`rec-local`), sugerido pelo imóvel do produtor (Cadastros → Imóveis → Fazenda no app, `nfeLocalSugerido`),
+  senão Água Viva. Tela Estoque: chips **Unificado · Água Viva · Espora** (fica no aparelho) e, no unificado, as
+  colunas de saldo por fazenda; o relatório PDF respeita o chip. Recomendação e Operação de Campo mostram o saldo do
+  estoque de baixa do talhão e avisam "💡 a outra fazenda tem X — transferir" (a transferência vem na v361). Nada
+  bloqueia.
 - **Cadastro de máquinas: filtro, renomear e excluir (v359)** — barra de busca (nome, grupo, placa/chassi,
   conjunto, ano, obs) e seletor de grupo com contagem acima da lista (`maqCadFiltra`: esconde os cartões sem
   re-renderizar; contador "N de M"). No formulário de edição há o campo **Nome**: renomear mantém o id `m:…`, então o
