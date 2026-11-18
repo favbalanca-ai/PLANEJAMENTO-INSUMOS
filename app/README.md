@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Etiquetas QR por grupo (v358)** — os botões "🏷️ Etiquetas WhatsApp / App" do Cadastro de máquinas abrem a
+  escolha dos grupos (Trator, Implemento, Caminhão… com a contagem; "marcar todos / nenhum"; inativas ficam de fora) e
+  o botão "Gerar PDF (N etiquetas)". O PDF (`maqEtiquetas(modo, lista)`) sai ordenado por grupo e nome, com um
+  título por grupo e cada grupo em sua própria página; o nome do arquivo leva o grupo quando é um só. Na ficha de cada
+  máquina há "etiqueta só desta máquina: WhatsApp · app" (`maqEtqUma`).
 - **Compatibilidade da calda: análise de mistura (v357)** — na Recomendação, com 2+ produtos, aparece a barra
   "🧪 Analisar mistura" com o chip de risco (🟢 baixo · 🟡 médio · 🔴 alto). Abrindo: **ordem de adição sugerida**
   pela formulação (condicionador → WG/WP → SC → EC → OD → SL → fertilizante → adjuvante/óleo; botão "Aplicar esta
