@@ -235,6 +235,18 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Contagem física / ajuste de inventário (v362)
+
+- `__contagem` (mapa `{id:{id, data, local, status, quem, obs, itens:{produto:{qtd}}, ajustes:[{produto, un, qtd(±),
+  custo, sist, cont}], fechadaEm, del, _u}}`, módulos planejamento/admin, vai no lote) → `writeContagens_`: ignora
+  versão mais antiga, apaga as linhas `[#id]` do razão e, se a contagem está **fechada**, regrava um ajuste por produto:
+  qtd > 0 = **ENTRADA**, qtd < 0 = **SAÍDA** (quantidade positiva), ORIGEM "Ajuste de inventário dd/mm/aaaa [#id]",
+  OBS quem · obs, valor pelo custo médio, LOCAL = estoque da contagem (unificada → `ESTOQUE_PADRAO_`). Aberta, reaberta
+  ou excluída = só apaga as linhas. Registro saneado na aba **CONTAGENS APP**; `contagens_app` em `APP_TODAS_`/
+  `APP_LER_`/`MOD_DADOS`; `__contagem` invalida `movimentacao` e `contagens_app`.
+- Os ajustes são ENTRADA/SAÍDA comuns: entram no total unificado, no `porLocal` e a SAÍDA entra no CONSUMO do
+  PORTIFÓLIO (a planilha acompanha).
+
 ## Transferência de estoque entre fazendas (v361)
 
 - `__transferencia` (mapa `{id:{id, data, de, para, itens:[{produto, un, qtd, custo}], obs, quem, del, _u}}`, módulos

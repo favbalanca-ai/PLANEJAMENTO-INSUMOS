@@ -71,6 +71,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Contagem física do estoque (v362)** — tela `#/contagem` (botão "📋 Contagem física" na tela Estoque; mesma
+  permissão do Estoque). Nova contagem com data, estoque (Unificado · Água Viva · Espora), quem e obs. A tela lista os
+  produtos com movimento (`contLinhas`) com **Sistema** (saldo naquele estoque, agora), **Contado** (digitável) e
+  **Diferença** calculada ao vivo (contadores: contados, batem, sobra, falta); busca, chips (não contados / contados /
+  com diferença), "📥 Colar lista" (`contColarAplicar`: "produto ; qtd", casa pelo nome do portfólio e devolve o que não
+  casou) e "produto fora da lista". **Fechar** (`contFechar`) calcula contado − sistema de cada produto contado (em
+  branco = não mexe) e grava os ajustes: sobra vira ENTRADA, falta vira SAÍDA, ORIGEM "Ajuste de inventário [#id]",
+  LOCAL do estoque (unificada → Água Viva), custo médio. `contAjuste` reflete os ajustes pendentes no saldo até a
+  planilha confirmar (`contPendente`); **Reabrir** apaga os ajustes. Fica em `OV.contagem` (aba **CONTAGENS APP**, lote
+  `__contagem`).
 - **Transferência de estoque entre fazendas (v361)** — na tela Estoque, botão "🔁 Transferir" e painel
   "Transferências entre fazendas" (lista com pendente/✔ e ↩ desfazer). O modal (`transfAbrir/transfRender/transfGravar`)
   pede origem, produto, quantidade, data e observação; o destino é a outra fazenda; mostra os saldos antes → depois e o
