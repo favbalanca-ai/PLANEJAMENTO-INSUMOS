@@ -235,6 +235,17 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Transferência de estoque entre fazendas (v361)
+
+- `__transferencia` (mapa `{id:{id, data, de, para, itens:[{produto, un, qtd, custo}], obs, quem, del, _u}}`, módulos
+  planejamento/campo/admin; vai no lote) → `writeTransferencias_`: ignora versão mais antiga que a da aba, apaga as
+  linhas `[#id]` do razão e regrava 2 por item: **TRANSF. SAÍDA** (LOCAL = origem) e **TRANSF. ENTRADA** (LOCAL =
+  destino), ORIGEM "Transferência FA → FE [#id]", OBS = quem · obs, valor pelo custo médio mandado pelo app. `del:true`
+  só apaga e deixa a lápide. Registro saneado na aba **TRANSFERÊNCIAS APP** (KEY|JSON); `transferencias_app` em
+  `APP_TODAS_`/`APP_LER_`/`MOD_DADOS`; `__transferencia` invalida `movimentacao` e `transferencias_app`.
+- `readMovimentacao`: TIPO que começa com "TRANSF" entra só no `porLocal` (entradas/saidas da fazenda), nunca no total
+  unificado; as fórmulas de CONSUMO do PORTIFÓLIO (só "SAÍDA") também não o contam.
+
 ## Dois estoques: coluna LOCAL no razão e ESTOQUE na ÁREA PLANTIO (v360)
 
 - `MOV_COLS` ganhou **LOCAL** (FA = Água Viva, FE = Espora), criada pelo cabeçalho como VALOR UNIT/VALOR TOTAL
