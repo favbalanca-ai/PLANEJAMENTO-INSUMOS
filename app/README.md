@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Ponte BioFábrica no extrato (v364)** — os lançamentos que o app BioFábrica faz no razão pela ponte do `Code.gs`
+  (ORIGEM "BioFábrica · …", ver `sync/README.md`) chegam em `movimentacao.bio` e aparecem no extrato do produto como
+  "🧫 BioFábrica" (baixa de biológico nas saídas, beneficiado nas entradas). Nada mais muda no app.
 - **Extrato do produto mostra ajustes e transferências (v363)** — `estExtratoOpen`: os ajustes de inventário das
   contagens fechadas entram nas listas (falta = saída "📋 Ajuste de inventário", sobra = entrada), com a contagem, a
   fazenda, quem contou, o custo médio e a marca "pendente" até a planilha confirmar; as compras mostram a fazenda de
