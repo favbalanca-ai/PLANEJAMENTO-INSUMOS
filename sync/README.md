@@ -235,6 +235,27 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Ponte BioFábrica — estoque de biológicos (v364)
+
+O app BioFábrica fala com a **mesma URL /exec** do Planejamento. Não cole nenhum script separado na planilha: ele
+apagaria ou duplicaria o `Code.gs` (`doGet`, `doPost`, `movSheet_`…). Tudo aqui é ramo novo; o fluxo do app não muda.
+
+- **Token**: propriedade do script `BIOFABRICA_TOKEN` (criada sozinha na primeira chamada; Apps Script →
+  Configurações do projeto → Propriedades do script). É o que a BioFábrica precisa receber, junto com a URL /exec.
+  Não usa login nem o token da NF-e.
+- **Ler saldo**: `GET …/exec?acao=biofabrica&token=…` → `{ok, biologicos:[{nome, unidade, saldo, saldoFA, saldoFE}], ts}`;
+  ou `POST {fn:'getEstoque', token}` → `{ok, data:{biologicos}}`. Só produtos da classe **BIOLÓGICOS** do portfólio
+  (`bioProdutos_` lê o pacote em cache; `bioSaldos_` = ESTOQUE inicial + entradas − saídas do razão, total e por fazenda).
+- **Movimentar**: `POST {fn:'movimentar', token, mov:{id, tipo:'ENTRADA'|'SAÍDA', produto, qtd, un, data, origem, obs,
+  local:'FA'|'FE', custo}}` → `bioMovimentar_`: recusa produto que não é biológico do portfólio e quantidade inválida;
+  grava uma linha no razão com ORIGEM `BioFábrica · <origem ou baixa/beneficiado> [#bio:<id>]`, OBS, VALOR (se vier
+  `custo`) e LOCAL (sem `local` = `ESTOQUE_PADRAO_`); reenviar o mesmo `id` substitui (`movDeleteBySources_`).
+  Resposta `{ok, data:{id, tipo, produto, qtd, local, saldo, saldoFA, saldoFE}}` e `aviso` quando a saída deixa o saldo
+  negativo (não bloqueia). Invalida só `movimentacao` no cache.
+- `readMovimentacao` devolve `bio:[{data, tipo:'E'|'S', produto, un, qtd, origem, obs, local, vu}]` (linhas cujo
+  ORIGEM começa com "BioFábrica") para o extrato do app. Essas linhas são ENTRADA/SAÍDA comuns: contam no saldo,
+  no `porLocal` e no CONSUMO do PORTIFÓLIO como qualquer outra.
+
 ## Contagem física / ajuste de inventário (v362)
 
 - `__contagem` (mapa `{id:{id, data, local, status, quem, obs, itens:{produto:{qtd}}, ajustes:[{produto, un, qtd(±),

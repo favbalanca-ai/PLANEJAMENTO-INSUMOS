@@ -688,23 +688,56 @@ function readMovimentacao(){
   var vazio = { entradas:ent, saidas:sai, nfe:nfe, devol:devol, porLocal:porLocal, padrao:ESTOQUE_PADRAO_ };
   if (!s) return vazio;
   var last = s.getLastRow(); if (last < 2) return vazio;
-  var lc = Math.max(6, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ixLoc = -1;
-  for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === 'LOCAL') ixLoc = c;
-  var v = s.getRange(2, 1, last - 1, Math.max(6, ixLoc + 1)).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM (… LOCAL)
+  var lc = Math.max(7, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ixLoc = -1, ixVu = -1, bio = [];
+  for (var c = 0; c < hd.length; c++){ var hh = S(hd[c]).toUpperCase(); if (hh === 'LOCAL') ixLoc = c; else if (hh === 'VALOR UNIT') ixVu = c; }
+  var v = s.getRange(2, 1, last - 1, lc).getValues();   // DATA/HORA, TIPO, PRODUTO, UN, QTD, ORIGEM, OBS (… VALOR UNIT, VALOR TOTAL, LOCAL)
   for (var i = 0; i < v.length; i++){
     var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]), org = S(v[i][5]), loc = (ixLoc >= 0 && _localNorm_(v[i][ixLoc])) || ESTOQUE_PADRAO_;
     // NF-e que já deu entrada: etiqueta [#chave de 44 dígitos] no ORIGEM (o app bloqueia importar de novo)
     var mk = org.match(/\[#(\d{44})\]/), dia = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = dia;
     if (!prod || !qtd) continue;
+    if (/^BioF[áa]brica/i.test(org)) bio.push({ data:dia, tipo:tipo.indexOf('ENTRADA') === 0 ? 'E' : 'S', produto:prod, un:S(v[i][3]), qtd:qtd, origem:org.replace(/\s*\[#[^\]]+\]/, ''), obs:S(v[i][6]), local:loc, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0 });   // v364: lançamentos da BioFábrica (o app mostra no extrato)
     if (tipo.indexOf('TRANSF') === 0){ var tk = /ENTRADA/.test(tipo) ? 'entradas' : 'saidas'; porLocal[loc][tk][prod] = (porLocal[loc][tk][prod] || 0) + qtd; continue; }   // v361: transferência só mexe no saldo por fazenda (o total não muda)
     if (tipo.indexOf('ENTRADA') === 0){ ent[prod] = (ent[prod] || 0) + qtd; porLocal[loc].entradas[prod] = (porLocal[loc].entradas[prod] || 0) + qtd; }
     else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd; porLocal[loc].saidas[prod] = (porLocal[loc].saidas[prod] || 0) + qtd;   // SAÍDA / SAIDA
       if (mk && /^Devolu/i.test(org)){ var mn = org.match(/NF-e (\S+)/), mf = org.match(/NF-e \S+ · ([^\[]*)\[/);   // v316: devolução ao fornecedor (NF-e de troca/entrada)
         devol.push({ chave:mk[1], data:dia, produto:prod, un:S(v[i][3]), qtd:qtd, nNF:mn ? mn[1] : '', forn:mf ? S(mf[1]) : '', origem:org.replace(/\s*\[#[^\]]+\]/, ''), local:loc }); } }
   }
-  return { entradas:ent, saidas:sai, nfe:nfe, devol:devol, porLocal:porLocal, padrao:ESTOQUE_PADRAO_ };
+  return { entradas:ent, saidas:sai, nfe:nfe, devol:devol, porLocal:porLocal, padrao:ESTOQUE_PADRAO_, bio:bio };
 }
+// ===== v364: PONTE BioFábrica — estoque de BIOLÓGICOS pela MESMA URL /exec do Planejamento (nada do app muda) =====
+// GET  …/exec?acao=biofabrica&token=…  → { ok, biologicos:[{nome, unidade, saldo, saldoFA, saldoFE}], ts }
+// POST { fn:'getEstoque', token }  ou  { fn:'movimentar', token, mov:{ id, tipo:'ENTRADA'|'SAÍDA', produto, qtd, un, data, origem, obs, local:'FA'|'FE', custo } }
+//      → { ok, data:{ id, tipo, produto, qtd, local, saldo, saldoFA, saldoFE }, aviso? }  (formato do script que a BioFábrica sugeriu)
+// Só produtos da classe BIOLÓGICOS do portfólio. Grava no razão com ORIGEM "BioFábrica · …" + etiqueta [#bio:id] (reenviar substitui),
+// LOCAL (sem local = estoque padrão) e VALOR quando a BioFábrica mandar o custo. Token próprio: propriedade do script BIOFABRICA_TOKEN
+// (criada sozinha na 1ª chamada — copie em Configurações do projeto → Propriedades do script). Não usa login nem o token da NF-e.
+function bioTokenOk_(t){ t = S(t); return !!t && t === _prop_('BIOFABRICA_TOKEN'); }
+function bioProdutos_(){ var D = {}; try { D = JSON.parse(currentJson(false)) || {}; } catch (e) { D = {}; } var out = {};
+  (D.produtos || []).forEach(function(p){ var n = S(p.produto); if (!n || !/^BIOL/i.test(S(p.classe))) return; out[n.toUpperCase()] = { nome:n, un:S(p.un), estoque:N(p.estoque) }; });
+  return out; }
+function bioSaldos_(){ var P = bioProdutos_(), M = readMovimentacao(), pl = M.porLocal || {}, out = [], r2 = function(x){ return Math.round(x * 100) / 100; };
+  var e = function(k, p){ return ((pl[k] || {}).entradas || {})[p] || 0; }, s = function(k, p){ return ((pl[k] || {}).saidas || {})[p] || 0; };
+  Object.keys(P).forEach(function(k){ var p = P[k], n = p.nome;
+    out.push({ nome:n, unidade:p.un, saldo:r2(p.estoque + (M.entradas[n] || 0) - (M.saidas[n] || 0)), saldoFA:r2(p.estoque + e('FA', n) - s('FA', n)), saldoFE:r2(e('FE', n) - s('FE', n)) }); });
+  out.sort(function(a, b){ return a.nome.localeCompare(b.nome); }); return out; }
+function bioMovimentar_(m){ m = m || {}; var nome = S(m.produto); if (!nome) return { ok:false, error:'produto não informado' };
+  var p = bioProdutos_()[nome.toUpperCase()]; if (!p) return { ok:false, error:'"' + nome + '" não é um produto da classe BIOLÓGICOS no portfólio do Planejamento — cadastre-o lá (Cadastrar insumos) e tente de novo' };
+  var q = N(m.qtd); if (!(q > 0)) return { ok:false, error:'quantidade inválida' };
+  var tipo = /^SA/i.test(S(m.tipo)) ? 'SAÍDA' : 'ENTRADA', id = 'bio:' + (S(m.id) || Utilities.getUuid()), loc = _localNorm_(m.local) || ESTOQUE_PADRAO_;
+  var when = new Date(); if (/^\d{4}-\d{2}-\d{2}/.test(S(m.data))) when = new Date(S(m.data).slice(0, 10) + 'T12:00:00');
+  var origem = 'BioFábrica · ' + (S(m.origem) || (tipo === 'SAÍDA' ? 'baixa' : 'beneficiado')).slice(0, 80) + ' [#' + id + ']', vt = _vt_(m.custo, q);
+  movDeleteBySources_([id]);
+  movAppendRows_([[when, tipo, p.nome, p.un || S(m.un), q, origem, S(m.obs).slice(0, 200), vt[0], vt[1], loc]]);
+  var sal = null; bioSaldos_().some(function(x){ if (x.nome === p.nome){ sal = x; return true; } return false; });
+  var r = { ok:true, data:{ id:id, tipo:tipo, produto:p.nome, qtd:q, local:loc, saldo:sal ? sal.saldo : null, saldoFA:sal ? sal.saldoFA : null, saldoFE:sal ? sal.saldoFE : null } };
+  if (tipo === 'SAÍDA' && sal && (loc === 'FE' ? sal.saldoFE : sal.saldoFA) < -0.0001) r.aviso = 'o saldo de ' + p.nome + ' ficou negativo em ' + loc + ' — confira as entradas no Planejamento';
+  return r; }
+function bioFabricaPost_(payload){ if (!bioTokenOk_(payload.token)) return { ok:false, error:'token da BioFábrica inválido (Planejamento → Apps Script → Propriedades do script → BIOFABRICA_TOKEN)' };
+  if (payload.fn === 'getEstoque') return { ok:true, data:{ biologicos:bioSaldos_() } };
+  if (payload.fn === 'movimentar') return bioMovimentar_((payload.args && payload.args[0]) || payload.mov || {});
+  return { ok:false, error:'ação desconhecida: ' + S(payload.fn) }; }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){ movDeleteBySources_([id]); }
 // ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE.
@@ -3129,6 +3162,9 @@ function doGet_(e){
     var rd = readRecomLink_(prm.id);
     return json(rd ? { ok:true, d:rd } : { ok:false, erro:'recomendação não encontrada — peça para reenviarem' });
   }
+  if (prm.acao === 'biofabrica'){   // v364: ponte BioFábrica (saldo dos biológicos) — token próprio, sem login
+    if (!bioTokenOk_(prm.token)) return json({ ok:false, error:'token da BioFábrica inválido' });
+    return json({ ok:true, biologicos:bioSaldos_(), ts:new Date().toISOString() }); }
   var acc = acessoDe_(prm.s);
   if (prm.acao === 'usuarios'){   // tela Usuários (só administrador)
     if (!(acc && acc.admin)) return json({ ok:false, erro:'só o administrador vê os usuários' });
@@ -3186,6 +3222,8 @@ function doPost(e){
   try {
     var acc = acessoDe_((e && e.parameter && e.parameter.s) || (payload && !Array.isArray(payload) && payload.s)), cfg = loginCfg_();   // v311: token também no corpo do POST
     _ACC_ = acc;
+    if (payload && !Array.isArray(payload) && typeof payload.fn === 'string' && !ks1.length){   // v364: BioFábrica ({fn:'getEstoque'|'movimentar', token}) — fora do fluxo do app
+      var bf = bioFabricaPost_(payload); if (bf && bf.ok && payload.fn === 'movimentar') inval.movimentacao = 1; return json(bf); }
     // v311: com usuários cadastrados, o Financeiro só grava com sessão (mesmo com EXIGIR LOGIN = NÃO)
     var ksFin = Array.isArray(payload && payload.__lote) ? payload.__lote.map(function(p){ return Object.keys(p || {}).filter(function(k){ return k.indexOf('__') === 0; })[0]; }) : ks1;
     if (!(acc && acc.u) && ksFin.some(function(k){ return FIN_SO_SESSAO_[k]; }) && temUsuarios_()){ out.fail = 1; out.msgs.push('entre com seu login para mexer no Financeiro'); return json(out); }
