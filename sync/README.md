@@ -256,9 +256,11 @@ apagaria ou duplicaria o `Code.gs` (`doGet`, `doPost`, `movSheet_`…). Tudo aqu
   custo?}], outros:[{nome, valor}], obs}}` → `bioLote_`. Preço do acabado = (Σ ingrediente qtd × custo + Σ outros) ÷ volume.
   Ingrediente do portfólio (qualquer classe) dá baixa no razão ao **custo médio do Planejamento** (`bioCustoMedio_`, mesma
   conta do app: estoque inicial × custo inicial/última nota/preço de referência, entradas ao valor da nota, saídas ao custo
-  médio da data, lido de `bioRazaoLinhas_`) ou ao `custo` informado; ingrediente fora do portfólio só entra no custo e
-  **precisa** vir com `custo`. Qualquer ingrediente sem preço → `{ok:false, error}` e nada é gravado (o preço nunca sai
-  incompleto). Grava uma SAÍDA por ingrediente (ORIGEM `BioFábrica · Lote <id> · ingrediente`, OBS "para <acabado>") e uma
+  médio da data, lido de `bioRazaoLinhas_`) ou ao `custo` informado. Ingrediente que não está no portfólio mas tem
+  linhas no razão (ex.: nota lançada com outro nome) também dá baixa, ao custo médio das notas dele (ajuste sugerido pela
+  BioFábrica; `fonte:'estoque'`). Nomes casam ignorando maiúsculas e espaços (`_bioKey_`). Ingrediente que não está em
+  lugar nenhum só entra no custo e **precisa** vir com `custo`. Qualquer ingrediente sem preço → `{ok:false, error}` e
+  nada é gravado (o preço nunca sai incompleto). Grava uma SAÍDA por ingrediente (ORIGEM `BioFábrica · Lote <id> · ingrediente`, OBS "para <acabado>") e uma
   ENTRADA do acabado (ORIGEM `BioFábrica · Lote <id>`, OBS com a composição, VALOR UNIT = custo unitário), todas com a
   mesma etiqueta `[#bio:<id>]`: reenviar substitui o lote inteiro. Resposta `{ok, data:{id, produto, volume, local,
   custoTotal, custoUnit, saldo, ingredientes:[{produto, qtd, un, custo, valor, fonte, estoque}], composicao}}`.
