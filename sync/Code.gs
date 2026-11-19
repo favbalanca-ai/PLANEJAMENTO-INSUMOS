@@ -731,29 +731,39 @@ function bioRazaoLinhas_(){ var s = ss().getSheetByName(MOV_SHEET), out = {}; if
   var v = s.getRange(2, 1, last - 1, lc).getValues();
   for (var i = 0; i < v.length; i++){ var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]); if (!prod || !qtd) continue;
     var t = tipo.indexOf('ENTRADA') === 0 ? 'E' : /^SA[IÍ]DA/.test(tipo) ? 'S' : ''; if (!t) continue;   // TRANSF. não mexe no custo médio
-    (out[prod] || (out[prod] = [])).push({ t:t, d:_bioDia_(v[i][0]), qtd:qtd, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0 }); }
+    (out[prod] || (out[prod] = [])).push({ t:t, d:_bioDia_(v[i][0]), qtd:qtd, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0, un:S(v[i][3]) }); }
   return out; }
 // mesma conta do app (custoMedioCalc): estoque inicial × (custo inicial digitado, senão última nota, senão preço de referência); entradas somam ao valor da nota; saídas saem ao custo médio da data
-function bioCustoMedio_(p, raz){ var L = ((raz || {})[p.nome] || []).slice().sort(function(a, b){ return (a.d || '9999').localeCompare(b.d || '9999') || (a.t === 'E' ? 0 : 1) - (b.t === 'E' ? 0 : 1); });
+function bioCustoMedio_(p, lines){ var L = (lines || []).slice().sort(function(a, b){ return (a.d || '9999').localeCompare(b.d || '9999') || (a.t === 'E' ? 0 : 1) - (b.t === 'E' ? 0 : 1); });
   var notas = L.filter(function(e){ return e.t === 'E' && e.vu > 0; }), ult = notas.length ? notas[notas.length - 1] : null;
   var ini = p.estoque, puIni = p.custoIni > 0 ? p.custoIni : ult ? ult.vu : p.preco, sq = ini, sv = ini * puIni, cm = puIni;
   L.forEach(function(e){ if (e.t === 'E'){ var pu = e.vu > 0 ? e.vu : p.preco; sv += e.qtd * pu; sq += e.qtd; cm = sq > 0 ? sv / sq : pu; } else { sq -= e.qtd; sv -= e.qtd * cm; if (sq <= 1e-9) sv = 0; } });
   return cm > 0 ? Math.round(cm * 1e4) / 1e4 : 0; }
-function bioLote_(L){ L = L || {}; var P = bioProdutos_(true), nome = S(L.produto), p = P[nome.toUpperCase()];
+// casa nomes ignorando espaços e maiúsculas (ex.: "SOLUFARM SH 2,5 KG" = "SOLUFARM SH 2,5kg")
+function _bioKey_(s){ return S(s).toUpperCase().replace(/\s+/g, '').trim(); }
+function bioLote_(L){ L = L || {}; var P = bioProdutos_(true), PN = {}; Object.keys(P).forEach(function(k){ PN[_bioKey_(P[k].nome)] = P[k]; });
+  var nome = S(L.produto), p = PN[_bioKey_(nome)];
   if (!nome) return { ok:false, error:'produto acabado não informado' };
   if (!p) return { ok:false, error:'"' + nome + '" não está no portfólio do Planejamento — cadastre-o (Cadastrar insumos, classe BIOLÓGICOS) e reenvie o lote' };
   var vol = N(L.volume); if (!(vol > 0)) return { ok:false, error:'volume final inválido' };
   var ings = Array.isArray(L.ingredientes) ? L.ingredientes : []; if (!ings.length) return { ok:false, error:'lote sem ingredientes' };
-  var raz = bioRazaoLinhas_(), loc = _localNorm_(L.local) || ESTOQUE_PADRAO_, lid = S(L.id) || Utilities.getUuid().slice(0, 8), id = 'bio:' + lid, un = p.un || S(L.un);
+  var raz = bioRazaoLinhas_(), razIx = {};   // índice do razão por nome normalizado: pega o custo médio do estoque de QUALQUER insumo com nota, mesmo fora do portfólio
+  Object.keys(raz).forEach(function(rn){ var k = _bioKey_(rn); if (!razIx[k]) razIx[k] = { nome:rn, lines:[], un:'' }; razIx[k].lines = razIx[k].lines.concat(raz[rn]); if (!razIx[k].un && raz[rn][0]) razIx[k].un = raz[rn][0].un; });
+  var loc = _localNorm_(L.local) || ESTOQUE_PADRAO_, lid = S(L.id) || Utilities.getUuid().slice(0, 8), id = 'bio:' + lid, un = p.un || S(L.un);
   var when = new Date(); if (/^\d{4}-\d{2}-\d{2}/.test(S(L.data))) when = new Date(S(L.data).slice(0, 10) + 'T12:00:00');
   var rows = [], comp = [], total = 0, itens = [];
-  for (var i = 0; i < ings.length; i++){ var g = ings[i] || {}, gn = S(g.produto || g.nome), gq = N(g.qtd), gp = P[gn.toUpperCase()];
+  for (var i = 0; i < ings.length; i++){ var g = ings[i] || {}, gn = S(g.produto || g.nome), gq = N(g.qtd), gk = _bioKey_(gn), gp = PN[gk];
     if (!gn || !(gq > 0)) return { ok:false, error:'ingrediente ' + (i + 1) + ': nome ou quantidade inválidos' };
-    var cu = N(g.custo), fonte = cu > 0 ? 'informado' : 'planejamento'; if (!(cu > 0) && gp) cu = bioCustoMedio_(gp, raz);
-    if (!(cu > 0)) return { ok:false, error: gp ? '"' + gn + '" está sem preço no Planejamento — informe o custo do ingrediente (R$/un) ou cadastre o preço do produto' : '"' + gn + '" não está no portfólio do Planejamento e veio sem custo — informe o custo (R$/un) ou cadastre o produto' };
-    var gun = gp ? (gp.un || S(g.un)) : S(g.un), vt = _vt_(cu, gq); total += vt[1]; comp.push(gn + ' ' + _bioN_(gq) + ' ' + gun + ' × R$ ' + _bioN_(cu));
-    itens.push({ produto:gp ? gp.nome : gn, qtd:gq, un:gun, custo:vt[0], valor:vt[1], fonte:fonte, estoque:!!gp });
-    if (gp) rows.push([when, 'SAÍDA', gp.nome, gun, gq, 'BioFábrica · Lote ' + lid + ' · ingrediente [#' + id + ']', ('para ' + p.nome).slice(0, 200), vt[0], vt[1], loc]); }
+    // de onde vem o preço: 1) custo informado  2) custo médio do produto do portfólio  3) custo médio do insumo no estoque (razão), mesmo fora do portfólio
+    var est = null, lines = null;
+    if (gp){ est = gp; lines = (razIx[_bioKey_(gp.nome)] || {}).lines || []; }
+    else if (razIx[gk]){ est = { nome:razIx[gk].nome, un:razIx[gk].un, estoque:0, custoIni:0, preco:0 }; lines = razIx[gk].lines; }
+    var cu = N(g.custo), fonte = cu > 0 ? 'informado' : (gp ? 'planejamento' : (est ? 'estoque' : ''));
+    if (!(cu > 0) && est) cu = bioCustoMedio_(est, lines);
+    if (!(cu > 0)) return { ok:false, error: est ? '"' + gn + '" está no estoque mas sem preço (nenhuma nota com valor) — registre uma entrada com valor desse insumo e reenvie o lote' : '"' + gn + '" não está no estoque nem no portfólio do Planejamento — registre uma nota/entrada do insumo (ou cadastre-o) e reenvie o lote' };
+    var gun = est ? (est.un || S(g.un)) : S(g.un), vt = _vt_(cu, gq); total += vt[1]; comp.push(gn + ' ' + _bioN_(gq) + ' ' + gun + ' × R$ ' + _bioN_(cu));
+    itens.push({ produto:est ? est.nome : gn, qtd:gq, un:gun, custo:vt[0], valor:vt[1], fonte:fonte, estoque:!!est });
+    if (est) rows.push([when, 'SAÍDA', est.nome, gun, gq, 'BioFábrica · Lote ' + lid + ' · ingrediente [#' + id + ']', ('para ' + p.nome).slice(0, 200), vt[0], vt[1], loc]); }
   (Array.isArray(L.outros) ? L.outros : []).forEach(function(o){ var v = N(o && o.valor); if (v > 0){ total += v; comp.push(S(o.nome || 'outros') + ' R$ ' + _bioN_(v)); } });
   total = Math.round(total * 100) / 100; var cuF = Math.round(total / vol * 1e4) / 1e4, vtp = _vt_(cuF, vol);
   var obs = ('(' + comp.join(' + ') + ') ÷ ' + _bioN_(vol) + ' ' + un + (S(L.obs) ? ' · ' + S(L.obs) : '')).slice(0, 400);
