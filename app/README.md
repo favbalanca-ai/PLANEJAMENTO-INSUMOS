@@ -71,6 +71,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Custo do lote da BioFábrica (v365)** — as linhas da BioFábrica (`movimentacao.bio`) entram no cálculo do custo médio
+  (`_custoMedioCalc`): a entrada do beneficiado vale o custo do lote (VALOR UNIT gravado pelo `Code.gs`; "ref." se veio sem
+  custo) e a baixa do inóculo sai ao custo médio da data (`_cmKeyBio`). Com isso o cabeçalho CUSTO MÉDIO do beneficiado e o
+  custo das aplicações nos talhões refletem (inóculo + meio de cultura + outros) ÷ volume final. O extrato mostra a composição
+  (OBS da linha) na coluna NOTA.
 - **Ponte BioFábrica no extrato (v364)** — os lançamentos que o app BioFábrica faz no razão pela ponte do `Code.gs`
   (ORIGEM "BioFábrica · …", ver `sync/README.md`) chegam em `movimentacao.bio` e aparecem no extrato do produto como
   "🧫 BioFábrica" (baixa de biológico nas saídas, beneficiado nas entradas). Nada mais muda no app.

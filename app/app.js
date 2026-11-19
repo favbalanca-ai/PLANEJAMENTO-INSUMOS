@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-364';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-365';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3380,8 +3380,8 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
       if(a.qtd<0) sai.push({data:c.data||'', tal:'—', op:'Ajuste de inventário', origem:rot, qtd:q, custo:cu, valorReal:q*cu, ajuste:true});
       else ent.push({data:c.data||'', forn:'Ajuste de inventário', nf:rot, qtd:q, pu:cu, ajuste:true, local:loc}); }); });
   // v364: lançamentos da BioFábrica (baixa de biológico / entrada de beneficiado), lidos do razão da planilha
-  (mov.bio||[]).forEach(b=>{ if(b.produto!==prod||!(+b.qtd>0)) return; const vu=+b.vu||0, rot=`${b.origem||'BioFábrica'}${b.obs?' · '+b.obs:''}`;
-    if(b.tipo==='S') sai.push({data:b.data||'', tal:'—', op:'BioFábrica', origem:rot, qtd:+b.qtd, custo:vu||custoMedioDe(prod), valorReal:+b.qtd*(vu||custoMedioDe(prod)), bio:true});
+  (mov.bio||[]).forEach((b,i)=>{ if(b.produto!==prod||!(+b.qtd>0)) return; const vu=+b.vu||0, rot=`${b.origem||'BioFábrica'}${b.obs?' · '+b.obs:''}`;
+    if(b.tipo==='S'){ const cmS=custoMedioCalc().saida[_cmKeyBio(b,i)], cu=cmS!=null?cmS:(vu||custoMedioDe(prod)); sai.push({data:b.data||'', tal:'—', op:'BioFábrica', origem:rot, qtd:+b.qtd, custo:cu, valorReal:+b.qtd*cu, bio:true}); }
     else ent.push({data:b.data||'', forn:'BioFábrica', nf:rot, qtd:+b.qtd, pu:vu, bio:true, local:b.local}); });
   sai.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   ent.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
@@ -9808,6 +9808,10 @@ function _custoMedioCalc(){
     const pu=+it.preco||0; push(p,{t:'E', data:_isISO(c.data)?String(c.data).slice(0,10):'', qtd:q, pu:pu>0?pu:precoDe(p), ref:!(pu>0), forn:c.fornecedor||'', nf:c.nf||'', nfe:!!c.nfe, ord:1}); }));
   talhoesAll().forEach(t=>_usoProdutosRaw(t).forEach(l=>push(l.produto,{t:'S', data:l.data||'', qtd:+l.qtd||0, k:_cmKeySaida(l,t.id), tal:t.id, op:l.op, origem:l.origem, ord:2})));
   (((DATA&&DATA.movimentacao)||{}).devol||[]).forEach(d=>{ if(d.produto&&+d.qtd>0) push(d.produto,{t:'S', data:d.data||'', qtd:+d.qtd, k:'dev|'+d.chave+'|'+d.produto, op:'Devolução', origem:d.origem||'Devolução ao fornecedor', ord:2, dev:true}); });   // v316: devoluções ao fornecedor (NF-e)
+  // v365: lançamentos da BioFábrica entram no custo médio — entrada do beneficiado ao custo do lote (ref. se veio sem custo); baixa do inóculo ao custo médio da data
+  (((DATA&&DATA.movimentacao)||{}).bio||[]).forEach((b,i)=>{ const p=b.produto, q=+b.qtd||0; if(!p||!(q>0)) return; const vu=+b.vu||0;
+    if(b.tipo==='E') push(p,{t:'E', data:b.data||'', qtd:q, pu:vu>0?vu:precoDe(p), ref:!(vu>0), forn:'BioFábrica', nf:b.origem||'', ord:1, bio:true});
+    else push(p,{t:'S', data:b.data||'', qtd:q, k:_cmKeyBio(b,i), op:'BioFábrica', origem:b.origem||'', ord:2, bio:true}); });
   const prods=new Set(Object.keys(ev)); (DATA.produtos||[]).forEach(p=>{ if(p.produto && estoqueDe(p.produto)) prods.add(p.produto); });
   const out={}, saida={}, cmpD=(a,b)=>(a.data||'9999-99-99').localeCompare(b.data||'9999-99-99')||a.ord-b.ord;
   prods.forEach(p=>{
@@ -9825,6 +9829,7 @@ function _custoMedioCalc(){
   });
   return {prod:out, saida};
 }
+function _cmKeyBio(b,i){ return 'bio|'+(b.id||'')+'|'+b.produto+'|'+i; }   // v365: chave da saída da BioFábrica no cálculo (i = posição em movimentacao.bio)
 function custoMedioInfo(p){ return custoMedioCalc().prod[p]||null; }
 function custoMedioDe(p){ const x=custoMedioCalc().prod[p]; return x?x.cm:precoDe(p); }
 // custo médio que valeu numa saída de operação/TS (mesma chave usada no cálculo); sem registro → custo médio atual
