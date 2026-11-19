@@ -697,7 +697,7 @@ function readMovimentacao(){
     var mk = org.match(/\[#(\d{44})\]/), dia = (v[i][0] instanceof Date) ? Utilities.formatDate(v[i][0], tz_(), 'yyyy-MM-dd') : S(v[i][0]).slice(0,10);
     if (mk && tipo.indexOf('ENTRADA') === 0 && !nfe[mk[1]]) nfe[mk[1]] = dia;
     if (!prod || !qtd) continue;
-    if (/^BioF[áa]brica/i.test(org)) bio.push({ data:dia, tipo:tipo.indexOf('ENTRADA') === 0 ? 'E' : 'S', produto:prod, un:S(v[i][3]), qtd:qtd, origem:org.replace(/\s*\[#[^\]]+\]/, ''), obs:S(v[i][6]), local:loc, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0 });   // v364: lançamentos da BioFábrica (o app mostra no extrato)
+    if (/^BioF[áa]brica/i.test(org)) bio.push({ id:((org.match(/\[#([^\]]+)\]/) || [])[1] || ''), data:dia, tipo:tipo.indexOf('ENTRADA') === 0 ? 'E' : 'S', produto:prod, un:S(v[i][3]), qtd:qtd, origem:org.replace(/\s*\[#[^\]]+\]/, ''), obs:S(v[i][6]), local:loc, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0 });   // v364: lançamentos da BioFábrica (o app mostra no extrato e usa no custo médio — v365)
     if (tipo.indexOf('TRANSF') === 0){ var tk = /ENTRADA/.test(tipo) ? 'entradas' : 'saidas'; porLocal[loc][tk][prod] = (porLocal[loc][tk][prod] || 0) + qtd; continue; }   // v361: transferência só mexe no saldo por fazenda (o total não muda)
     if (tipo.indexOf('ENTRADA') === 0){ ent[prod] = (ent[prod] || 0) + qtd; porLocal[loc].entradas[prod] = (porLocal[loc].entradas[prod] || 0) + qtd; }
     else if (tipo.indexOf('SA') === 0){ sai[prod] = (sai[prod] || 0) + qtd; porLocal[loc].saidas[prod] = (porLocal[loc].saidas[prod] || 0) + qtd;   // SAÍDA / SAIDA
@@ -714,9 +714,53 @@ function readMovimentacao(){
 // LOCAL (sem local = estoque padrão) e VALOR quando a BioFábrica mandar o custo. Token próprio: propriedade do script BIOFABRICA_TOKEN
 // (criada sozinha na 1ª chamada — copie em Configurações do projeto → Propriedades do script). Não usa login nem o token da NF-e.
 function bioTokenOk_(t){ t = S(t); return !!t && t === _prop_('BIOFABRICA_TOKEN'); }
-function bioProdutos_(){ var D = {}; try { D = JSON.parse(currentJson(false)) || {}; } catch (e) { D = {}; } var out = {};
-  (D.produtos || []).forEach(function(p){ var n = S(p.produto); if (!n || !/^BIOL/i.test(S(p.classe))) return; out[n.toUpperCase()] = { nome:n, un:S(p.un), estoque:N(p.estoque) }; });
+function bioProdutos_(todas){ var D = {}; try { D = JSON.parse(currentJson(false)) || {}; } catch (e) { D = {}; } var out = {};   // todas=true: portfólio inteiro (ingredientes de um lote — v365)
+  (D.produtos || []).forEach(function(p){ var n = S(p.produto), b = /^BIOL/i.test(S(p.classe)); if (!n || (!todas && !b)) return;
+    out[n.toUpperCase()] = { nome:n, un:S(p.un), estoque:N(p.estoque), preco:N(p.preco), custoIni:N(p.custoIni), bio:b }; });
   return out; }
+// ===== v365: LOTE da BioFábrica com custo — preço do acabado = (inóculo + meio de cultura + outros) ÷ volume final =====
+// POST { fn:'lote', token, lote:{ id, data, local, produto, volume, ingredientes:[{produto, qtd, custo?}], outros:[{nome, valor}], obs } }
+// Ingrediente do portfólio (qualquer classe): baixa no razão ao custo médio do Planejamento (ou ao custo informado). Fora do portfólio:
+// só entra no custo e PRECISA vir com custo. Sem preço em algum ingrediente → o lote é RECUSADO (o preço nunca sai incompleto).
+// Todas as linhas do lote levam a mesma etiqueta [#bio:id]: reenviar substitui o lote inteiro.
+function _bioDia_(x){ if (x instanceof Date) return Utilities.formatDate(x, tz_(), 'yyyy-MM-dd'); var s = S(x), m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : s.slice(0, 10); }
+function _bioN_(x){ x = Math.round(N(x) * 100) / 100; var s = String(x).split('.'); return s[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (s[1] ? ',' + s[1] : ''); }
+function bioRazaoLinhas_(){ var s = ss().getSheetByName(MOV_SHEET), out = {}; if (!s) return out; var last = s.getLastRow(); if (last < 2) return out;
+  var lc = Math.max(9, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], ixVu = -1;
+  for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === 'VALOR UNIT') ixVu = c;
+  var v = s.getRange(2, 1, last - 1, lc).getValues();
+  for (var i = 0; i < v.length; i++){ var tipo = S(v[i][1]).toUpperCase(), prod = S(v[i][2]), qtd = N(v[i][4]); if (!prod || !qtd) continue;
+    var t = tipo.indexOf('ENTRADA') === 0 ? 'E' : /^SA[IÍ]DA/.test(tipo) ? 'S' : ''; if (!t) continue;   // TRANSF. não mexe no custo médio
+    (out[prod] || (out[prod] = [])).push({ t:t, d:_bioDia_(v[i][0]), qtd:qtd, vu:ixVu >= 0 ? N(v[i][ixVu]) : 0 }); }
+  return out; }
+// mesma conta do app (custoMedioCalc): estoque inicial × (custo inicial digitado, senão última nota, senão preço de referência); entradas somam ao valor da nota; saídas saem ao custo médio da data
+function bioCustoMedio_(p, raz){ var L = ((raz || {})[p.nome] || []).slice().sort(function(a, b){ return (a.d || '9999').localeCompare(b.d || '9999') || (a.t === 'E' ? 0 : 1) - (b.t === 'E' ? 0 : 1); });
+  var notas = L.filter(function(e){ return e.t === 'E' && e.vu > 0; }), ult = notas.length ? notas[notas.length - 1] : null;
+  var ini = p.estoque, puIni = p.custoIni > 0 ? p.custoIni : ult ? ult.vu : p.preco, sq = ini, sv = ini * puIni, cm = puIni;
+  L.forEach(function(e){ if (e.t === 'E'){ var pu = e.vu > 0 ? e.vu : p.preco; sv += e.qtd * pu; sq += e.qtd; cm = sq > 0 ? sv / sq : pu; } else { sq -= e.qtd; sv -= e.qtd * cm; if (sq <= 1e-9) sv = 0; } });
+  return cm > 0 ? Math.round(cm * 1e4) / 1e4 : 0; }
+function bioLote_(L){ L = L || {}; var P = bioProdutos_(true), nome = S(L.produto), p = P[nome.toUpperCase()];
+  if (!nome) return { ok:false, error:'produto acabado não informado' };
+  if (!p) return { ok:false, error:'"' + nome + '" não está no portfólio do Planejamento — cadastre-o (Cadastrar insumos, classe BIOLÓGICOS) e reenvie o lote' };
+  var vol = N(L.volume); if (!(vol > 0)) return { ok:false, error:'volume final inválido' };
+  var ings = Array.isArray(L.ingredientes) ? L.ingredientes : []; if (!ings.length) return { ok:false, error:'lote sem ingredientes' };
+  var raz = bioRazaoLinhas_(), loc = _localNorm_(L.local) || ESTOQUE_PADRAO_, lid = S(L.id) || Utilities.getUuid().slice(0, 8), id = 'bio:' + lid, un = p.un || S(L.un);
+  var when = new Date(); if (/^\d{4}-\d{2}-\d{2}/.test(S(L.data))) when = new Date(S(L.data).slice(0, 10) + 'T12:00:00');
+  var rows = [], comp = [], total = 0, itens = [];
+  for (var i = 0; i < ings.length; i++){ var g = ings[i] || {}, gn = S(g.produto || g.nome), gq = N(g.qtd), gp = P[gn.toUpperCase()];
+    if (!gn || !(gq > 0)) return { ok:false, error:'ingrediente ' + (i + 1) + ': nome ou quantidade inválidos' };
+    var cu = N(g.custo), fonte = cu > 0 ? 'informado' : 'planejamento'; if (!(cu > 0) && gp) cu = bioCustoMedio_(gp, raz);
+    if (!(cu > 0)) return { ok:false, error: gp ? '"' + gn + '" está sem preço no Planejamento — informe o custo do ingrediente (R$/un) ou cadastre o preço do produto' : '"' + gn + '" não está no portfólio do Planejamento e veio sem custo — informe o custo (R$/un) ou cadastre o produto' };
+    var gun = gp ? (gp.un || S(g.un)) : S(g.un), vt = _vt_(cu, gq); total += vt[1]; comp.push(gn + ' ' + _bioN_(gq) + ' ' + gun + ' × R$ ' + _bioN_(cu));
+    itens.push({ produto:gp ? gp.nome : gn, qtd:gq, un:gun, custo:vt[0], valor:vt[1], fonte:fonte, estoque:!!gp });
+    if (gp) rows.push([when, 'SAÍDA', gp.nome, gun, gq, 'BioFábrica · Lote ' + lid + ' · ingrediente [#' + id + ']', ('para ' + p.nome).slice(0, 200), vt[0], vt[1], loc]); }
+  (Array.isArray(L.outros) ? L.outros : []).forEach(function(o){ var v = N(o && o.valor); if (v > 0){ total += v; comp.push(S(o.nome || 'outros') + ' R$ ' + _bioN_(v)); } });
+  total = Math.round(total * 100) / 100; var cuF = Math.round(total / vol * 1e4) / 1e4, vtp = _vt_(cuF, vol);
+  var obs = ('(' + comp.join(' + ') + ') ÷ ' + _bioN_(vol) + ' ' + un + (S(L.obs) ? ' · ' + S(L.obs) : '')).slice(0, 400);
+  rows.push([when, 'ENTRADA', p.nome, un, vol, 'BioFábrica · Lote ' + lid + ' [#' + id + ']', obs, vtp[0], vtp[1], loc]);
+  movDeleteBySources_([id]); movAppendRows_(rows);
+  var M = readMovimentacao(), saldo = Math.round((p.estoque + (M.entradas[p.nome] || 0) - (M.saidas[p.nome] || 0)) * 100) / 100;
+  return { ok:true, data:{ id:id, produto:p.nome, un:un, volume:vol, local:loc, custoTotal:total, custoUnit:cuF, saldo:saldo, ingredientes:itens, composicao:obs } }; }
 function bioSaldos_(){ var P = bioProdutos_(), M = readMovimentacao(), pl = M.porLocal || {}, out = [], r2 = function(x){ return Math.round(x * 100) / 100; };
   var e = function(k, p){ return ((pl[k] || {}).entradas || {})[p] || 0; }, s = function(k, p){ return ((pl[k] || {}).saidas || {})[p] || 0; };
   Object.keys(P).forEach(function(k){ var p = P[k], n = p.nome;
@@ -737,6 +781,7 @@ function bioMovimentar_(m){ m = m || {}; var nome = S(m.produto); if (!nome) ret
 function bioFabricaPost_(payload){ if (!bioTokenOk_(payload.token)) return { ok:false, error:'token da BioFábrica inválido (Planejamento → Apps Script → Propriedades do script → BIOFABRICA_TOKEN)' };
   if (payload.fn === 'getEstoque') return { ok:true, data:{ biologicos:bioSaldos_() } };
   if (payload.fn === 'movimentar') return bioMovimentar_((payload.args && payload.args[0]) || payload.mov || {});
+  if (payload.fn === 'lote') return bioLote_(payload.lote || (payload.args && payload.args[0]) || {});   // v365
   return { ok:false, error:'ação desconhecida: ' + S(payload.fn) }; }
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){ movDeleteBySources_([id]); }
@@ -3223,7 +3268,7 @@ function doPost(e){
     var acc = acessoDe_((e && e.parameter && e.parameter.s) || (payload && !Array.isArray(payload) && payload.s)), cfg = loginCfg_();   // v311: token também no corpo do POST
     _ACC_ = acc;
     if (payload && !Array.isArray(payload) && typeof payload.fn === 'string' && !ks1.length){   // v364: BioFábrica ({fn:'getEstoque'|'movimentar', token}) — fora do fluxo do app
-      var bf = bioFabricaPost_(payload); if (bf && bf.ok && payload.fn === 'movimentar') inval.movimentacao = 1; return json(bf); }
+      var bf = bioFabricaPost_(payload); if (bf && bf.ok && (payload.fn === 'movimentar' || payload.fn === 'lote')) inval.movimentacao = 1; return json(bf); }
     // v311: com usuários cadastrados, o Financeiro só grava com sessão (mesmo com EXIGIR LOGIN = NÃO)
     var ksFin = Array.isArray(payload && payload.__lote) ? payload.__lote.map(function(p){ return Object.keys(p || {}).filter(function(k){ return k.indexOf('__') === 0; })[0]; }) : ks1;
     if (!(acc && acc.u) && ksFin.some(function(k){ return FIN_SO_SESSAO_[k]; }) && temUsuarios_()){ out.fail = 1; out.msgs.push('entre com seu login para mexer no Financeiro'); return json(out); }

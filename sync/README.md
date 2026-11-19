@@ -252,7 +252,17 @@ apagaria ou duplicaria o `Code.gs` (`doGet`, `doPost`, `movSheet_`…). Tudo aqu
   `custo`) e LOCAL (sem `local` = `ESTOQUE_PADRAO_`); reenviar o mesmo `id` substitui (`movDeleteBySources_`).
   Resposta `{ok, data:{id, tipo, produto, qtd, local, saldo, saldoFA, saldoFE}}` e `aviso` quando a saída deixa o saldo
   negativo (não bloqueia). Invalida só `movimentacao` no cache.
-- `readMovimentacao` devolve `bio:[{data, tipo:'E'|'S', produto, un, qtd, origem, obs, local, vu}]` (linhas cujo
+- **Lote com custo (v365)**: `POST {fn:'lote', token, lote:{id, data, local, produto, volume, ingredientes:[{produto, qtd,
+  custo?}], outros:[{nome, valor}], obs}}` → `bioLote_`. Preço do acabado = (Σ ingrediente qtd × custo + Σ outros) ÷ volume.
+  Ingrediente do portfólio (qualquer classe) dá baixa no razão ao **custo médio do Planejamento** (`bioCustoMedio_`, mesma
+  conta do app: estoque inicial × custo inicial/última nota/preço de referência, entradas ao valor da nota, saídas ao custo
+  médio da data, lido de `bioRazaoLinhas_`) ou ao `custo` informado; ingrediente fora do portfólio só entra no custo e
+  **precisa** vir com `custo`. Qualquer ingrediente sem preço → `{ok:false, error}` e nada é gravado (o preço nunca sai
+  incompleto). Grava uma SAÍDA por ingrediente (ORIGEM `BioFábrica · Lote <id> · ingrediente`, OBS "para <acabado>") e uma
+  ENTRADA do acabado (ORIGEM `BioFábrica · Lote <id>`, OBS com a composição, VALOR UNIT = custo unitário), todas com a
+  mesma etiqueta `[#bio:<id>]`: reenviar substitui o lote inteiro. Resposta `{ok, data:{id, produto, volume, local,
+  custoTotal, custoUnit, saldo, ingredientes:[{produto, qtd, un, custo, valor, fonte, estoque}], composicao}}`.
+- `readMovimentacao` devolve `bio:[{id, data, tipo:'E'|'S', produto, un, qtd, origem, obs, local, vu}]` (linhas cujo
   ORIGEM começa com "BioFábrica") para o extrato do app. Essas linhas são ENTRADA/SAÍDA comuns: contam no saldo,
   no `porLocal` e no CONSUMO do PORTIFÓLIO como qualquer outra.
 
