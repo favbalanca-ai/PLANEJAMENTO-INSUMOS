@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Renomear / mesclar produto (v366)** — botão "✏️ Renomear" na tela Estoque (só administrador; `renAbrir/renRender/
+  renGravar`). Escolhe o nome antigo e o novo e manda `__renomearProduto {de, para, apagar}`; a planilha troca o nome
+  inteiro em todas as abas (razão, operações concluídas, notas, misturas, contagens, transferências, bulas, plano dos
+  talhões, PORTIFÓLIO) e devolve a contagem por aba, mostrada no modal. O app troca também nos dados do aparelho
+  (`renLocal`: execução, recomendações, compras, contagens, transferências, misturas) e puxa a planilha em seguida.
+  Serve para corrigir grafia (o novo não existe: a linha é renomeada) e para juntar cadastros duplicados (os dois
+  existem: o histórico vai para o novo, o antigo sai do portfólio).
 - **Custo do lote da BioFábrica (v365)** — as linhas da BioFábrica (`movimentacao.bio`) entram no cálculo do custo médio
   (`_custoMedioCalc`): a entrada do beneficiado vale o custo do lote (VALOR UNIT gravado pelo `Code.gs`; "ref." se veio sem
   custo) e a baixa do inóculo sai ao custo médio da data (`_cmKeyBio`). Com isso o cabeçalho CUSTO MÉDIO do beneficiado e o

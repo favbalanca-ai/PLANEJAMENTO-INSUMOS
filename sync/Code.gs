@@ -793,6 +793,77 @@ function bioFabricaPost_(payload){ if (!bioTokenOk_(payload.token)) return { ok:
   if (payload.fn === 'movimentar') return bioMovimentar_((payload.args && payload.args[0]) || payload.mov || {});
   if (payload.fn === 'lote') return bioLote_(payload.lote || (payload.args && payload.args[0]) || {});   // v365
   return { ok:false, error:'ação desconhecida: ' + S(payload.fn) }; }
+// ===== v366: RENOMEAR / MESCLAR PRODUTO (só administrador) =====
+// payload __renomearProduto: { de, para, apagar } → troca o nome do produto em TODAS as abas onde ele aparece, sempre o nome
+// INTEIRO da célula/chave (ignora maiúsculas e espaços nas pontas), nunca um pedaço: razão MOVIMENTAÇÃO ESTOQUE (PRODUTO);
+// abas KEY|JSON (REALIZADO APP, COMPRAS APP, MISTURAS APP, CONTAGENS APP, TRANSFERÊNCIAS APP, RECOM LINKS, BULAS APP,
+// CATÁLOGO EXTRA) — chaves e textos iguais ao nome dentro do JSON, com _u/ATUALIZADO novos para os celulares aceitarem a
+// versão da planilha; abas dos talhões (coluna PRODUTO do plano); DE-PARA NFE e NFE ITENS (PRODUTO APP); PREÇOS local
+// (quando o novo não tem preço). No PORTIFÓLIO: se o novo já existe, estoque/custo inicial/em pedido do antigo passam para
+// ele quando ele não tem, e a linha antiga é apagada (apagar=true, padrão) ou só zerada; se o novo NÃO existe, a linha do
+// antigo é renomeada (serve para corrigir grafia). Devolve a contagem por aba. Mexe na base → o doPost limpa o cache inteiro.
+function _renIgual_(v, DE){ return S(v).toUpperCase() === DE; }
+function _renJson_(x, DE, para, st){
+  if (typeof x === 'string'){ if (_renIgual_(x, DE)){ st.n++; return para; } return x; }
+  if (Array.isArray(x)) return x.map(function(y){ return _renJson_(y, DE, para, st); });
+  if (x && typeof x === 'object'){ var o = {}; Object.keys(x).forEach(function(k){ var nk = k; if (_renIgual_(k, DE)){ nk = para; st.n++; } var nv = _renJson_(x[k], DE, para, st);
+      if (Object.prototype.hasOwnProperty.call(o, nk)){ var a = o[nk];   // os dois nomes na mesma baixa/contagem (em qualquer ordem): soma
+        if (typeof a === 'number' && typeof nv === 'number') nv = a + nv;
+        else if (a && nv && typeof a === 'object' && typeof nv === 'object' && typeof a.qtd === 'number' && typeof nv.qtd === 'number'){ nv = JSON.parse(JSON.stringify(nv)); nv.qtd = a.qtd + nv.qtd; } }
+      o[nk] = nv; }); return o; }
+  return x; }
+// coluna inteira (1-based) de uma aba: troca as células iguais ao nome antigo; devolve quantas
+function _renColuna_(s, col, r0, DE, para){ if (!s) return 0; var last = s.getLastRow(); if (last < r0) return 0;
+  var rg = s.getRange(r0, col, last - r0 + 1, 1), v = rg.getValues(), n = 0;
+  for (var i = 0; i < v.length; i++) if (_renIgual_(v[i][0], DE)){ v[i][0] = para; n++; }
+  if (n) rg.setValues(v); return n; }
+// aba KEY|JSON(|ATUALIZADO): renomeia dentro do JSON (e a KEY, quando é o nome) e carimba a versão; devolve { n, map }
+function _renAba_(nome, DE, para){ var s = sh(nome), out = { n:0, map:{} }; if (!s || s.getLastRow() < 2) return out;
+  var lc = Math.max(2, s.getLastColumn()), hd = s.getRange(1, 1, 1, lc).getValues()[0], cU = -1;
+  for (var c = 0; c < hd.length; c++) if (S(hd[c]).toUpperCase() === 'ATUALIZADO') cU = c;
+  var last = s.getLastRow(), v = s.getRange(2, 1, last - 1, 2).getValues(), agora = Date.now();
+  for (var i = 0; i < v.length; i++){ var k = v[i][0], js = v[i][1]; if (k === '' || k == null) continue; var o; try { o = JSON.parse(js); } catch (e) { continue; }
+    var st = { n:0 }, no = _renJson_(o, DE, para, st), novaK = _renIgual_(k, DE) ? para : null; if (!st.n && novaK == null) continue;
+    if (no && typeof no === 'object' && !Array.isArray(no) && (no._u !== undefined || cU >= 0) && !/LINKS/.test(nome)) no._u = agora;
+    s.getRange(i + 2, 1, 1, 2).setValues([[novaK != null ? novaK : k, JSON.stringify(no)]]);
+    if (cU >= 0) s.getRange(i + 2, cU + 1).setValue(/LINKS/.test(nome) ? new Date() : agora);
+    out.map[novaK != null ? novaK : S(k)] = no; out.n++; }
+  return out; }
+function renomearProduto_(p){
+  var de = S(p && p.de), para = S(p && p.para), apagar = !(p && p.apagar === false);
+  if (!de || !para) return { erro:'informe o nome antigo e o novo' };
+  if (de === para) return { erro:'os dois nomes são iguais' };
+  var DE = de.toUpperCase(), out = { de:de, para:para, abas:{}, total:0 }, add = function(aba, n){ if (n){ out.abas[aba] = (out.abas[aba] || 0) + n; out.total += n; } };
+  // PORTIFÓLIO
+  var P = sh('PORTIFÓLIO'); if (!P) return { erro:'aba PORTIFÓLIO não encontrada' };
+  var nP = Math.max(1, Math.min(430, P.getMaxRows() - 3)), cv = P.getRange(4, 3, nP, 1).getValues(), rDe = 0, rPara = 0;
+  for (var i = 0; i < cv.length; i++){ var nm = S(cv[i][0]); if (!nm) continue; if (!rPara && nm === para) rPara = 4 + i; else if (!rDe && nm.toUpperCase() === DE) rDe = 4 + i; }
+  if (!rPara && !rDe) return { erro:'nem "' + de + '" nem "' + para + '" estão no portfólio — confira os nomes' };
+  if (!rPara){ P.getRange(rDe, 3).setValue(para); add('PORTIFÓLIO (linha renomeada)', 1); rPara = rDe; rDe = 0; }   // só corrigir a grafia
+  else if (rDe){ var cols = [20, pedidoColOf(P), custoIniColOf(P)], mov = 0;   // T = ESTOQUE · EM PEDIDO · CUSTO INICIAL
+    cols.forEach(function(c){ var a = N(P.getRange(rDe, c).getValue()), b = N(P.getRange(rPara, c).getValue()); if (a > 0 && !(b > 0)){ P.getRange(rPara, c).setValue(a); mov++; } });
+    if (mov) add('PORTIFÓLIO (estoque/custo passados ao novo)', mov);
+    cols.forEach(function(c){ P.getRange(rDe, c).clearContent(); });
+    if (apagar){ P.getRange(rDe, 1, 1, 6).clearContent(); add('PORTIFÓLIO (linha antiga apagada)', 1); } else add('PORTIFÓLIO (linha antiga zerada)', 1); }
+  // razão de estoque
+  add(MOV_SHEET, _renColuna_(sh(MOV_SHEET), 3, 2, DE, para));
+  // abas KEY|JSON
+  [REALIZADO_SHEET_APP, 'COMPRAS APP', MIST_SHEET, CONTAGEM_SHEET, TRANSF_SHEET, RECLINK_SHEET, BULAS_SHEET, CATEXTRA_SHEET].forEach(function(nome){
+    var r = _renAba_(nome, DE, para); add(nome, r.n); if (!r.n) return;
+    try { if (nome === MIST_SHEET) writeMisturasApp(r.map); else if (nome === BULAS_SHEET) writeBulasApp(r.map); } catch (e) {} });   // colunas legíveis
+  // abas dos talhões: coluna PRODUTO do plano (as duas safras)
+  var A = sh('ÁREA PLANTIO'), ids = [];
+  if (A && A.getLastRow() >= 2) A.getRange(2, 1, A.getLastRow() - 1, 1).getValues().forEach(function(r){ var id = S(r[0]), up = id.toUpperCase(); if (up.indexOf('TL') === 0 || up.indexOf('NV') === 0) ids.push(id); });
+  var abas = {}; ss().getSheets().forEach(function(x){ abas[x.getName()] = x; });
+  ids.forEach(function(id){ var s = abas[id]; if (!s || s.getLastRow() < 10) return; var m = talColMap(s.getRange(9, 1, 1, 9).getValues()[0]);
+    add('talhão ' + id, _renColuna_(s, m.produto + 1, 10, DE, para)); });
+  // NF-e: memória de-para e itens já classificados
+  if (sh(DEPARA_SHEET)){ var td = sheetCols_(DEPARA_SHEET, DEPARA_COLS); add(DEPARA_SHEET, _renColuna_(td.s, td.col('PRODUTO APP') + 1, 2, DE, para)); }
+  if (sh(NFE_ITENS_SHEET)){ var ti = sheetCols_(NFE_ITENS_SHEET, NFE_ITENS_COLS); add(NFE_ITENS_SHEET, _renColuna_(ti.s, ti.col('PRODUTO APP') + 1, 2, DE, para)); }
+  // PREÇOS local (VLOOKUP do PORTIFÓLIO): só quando o novo ainda não tem preço lá
+  var PR = sh('PREÇOS'); if (PR && PR.getLastRow() >= 2){ var temPara = PR.getRange(2, 1, PR.getLastRow() - 1, 1).getValues().some(function(r){ return S(r[0]) === para; }); if (!temPara) add('PREÇOS', _renColuna_(PR, 1, 2, DE, para)); }
+  return out;
+}
 // remove do razão as linhas cujo ORIGEM contenha a etiqueta [#id] (idempotência: reenviar não duplica)
 function movDeleteBySource(id){ movDeleteBySources_([id]); }
 // ENTRADA de estoque (compra registrada no app): 1 linha por produto na MOVIMENTAÇÃO ESTOQUE.
@@ -2915,7 +2986,7 @@ var MOD_DADOS = {
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __transferencia:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __transferencia:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __renomearProduto:['admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'] };   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -3390,6 +3461,9 @@ function gravaUm_(payload, acc, cfg, out){
       var tf = writeTransferencias_(payload.__transferencia); out.ok = tf.n;
     } else if (payload && payload.__contagem){        // v362: contagem física → ajustes (ENTRADA/SAÍDA) no razão + aba CONTAGENS APP
       var ctg = writeContagens_(payload.__contagem); out.ok = ctg.n;
+    } else if (payload && payload.__renomearProduto){   // v366: renomear/mesclar produto em todas as abas (só administrador)
+      if (acc && acc.u && !acc.admin){ out.fail = 1; out.msgs.push('só administrador'); }
+      else { var rn = renomearProduto_(payload.__renomearProduto); if (rn.erro){ out.fail = 1; out.msgs.push(rn.erro); } else { out.ok = 1; out.renomear = rn; base = true; } }
     } else if (payload && payload.__misturaIa){       // v357: parecer da IA sobre a compatibilidade da calda (nada gravado na planilha)
       var mx = misturaIa_(payload.__misturaIa);
       if (mx && !mx.erro){ out.ok = 1; out.parecer = mx.parecer; } else { out.fail = 1; out.msgs.push('mistura: ' + ((mx && mx.erro) || 'sem parecer')); }
