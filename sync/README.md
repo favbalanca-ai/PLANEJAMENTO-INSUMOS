@@ -235,6 +235,22 @@ Script tiver um `appsscript.json` sem essa lista (ou com uma lista menor), o Goo
   resposta vinha `ok 0` sem `fail`, o app entendia como gravado e descartava o pendente. Payload que não é JSON
   também responde `fail:1`.
 
+## Renomear / mesclar produto (v366)
+
+`__renomearProduto: {de, para, apagar}` (só administrador quando há login; `GRAVA_MOD` admin) → `renomearProduto_`.
+Troca o nome **inteiro** (ignora maiúsculas e espaços nas pontas, nunca um pedaço) em:
+
+- **PORTIFÓLIO**: o novo existe → estoque (T), EM PEDIDO e CUSTO INICIAL do antigo passam para o novo quando ele não
+  tem; a linha antiga é apagada (`apagar` padrão) ou zerada. O novo não existe → a linha do antigo é renomeada.
+- **MOVIMENTAÇÃO ESTOQUE** (coluna PRODUTO), **DE-PARA NFE** e **NFE ITENS** (PRODUTO APP), **PREÇOS** local (se o
+  novo ainda não tem preço lá) e a coluna PRODUTO das **abas dos talhões** (`_renColuna_`).
+- Abas KEY|JSON (`_renAba_` + `_renJson_`): REALIZADO APP (chaves de `baixa`/`ts.baixa`), COMPRAS APP, MISTURAS APP,
+  CONTAGENS APP, TRANSFERÊNCIAS APP, RECOM LINKS, BULAS APP (também a KEY), CATÁLOGO EXTRA. Chave e texto iguais ao nome
+  são trocados; se os dois nomes estavam na mesma baixa/contagem, as quantidades somam. Cada registro mexido ganha `_u`
+  e ATUALIZADO novos, para os celulares aceitarem a versão da planilha (o puxar só troca quando `_u` é maior).
+  MISTURAS APP e BULAS APP são regravadas pelos seus `write*` para refazer as colunas legíveis.
+- Resposta `out.renomear = {de, para, abas:{aba: n}, total}`; mexe na base → cache inteiro limpo.
+
 ## Ponte BioFábrica — estoque de biológicos (v364)
 
 O app BioFábrica fala com a **mesma URL /exec** do Planejamento. Não cole nenhum script separado na planilha: ele
