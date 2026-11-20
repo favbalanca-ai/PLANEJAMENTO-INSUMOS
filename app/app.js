@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-366';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-367';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8578,16 +8578,17 @@ function recomCard(r,t){
     const dif=(it.real!=null&&planTot)?(it.real-planTot):null;
     const difTag=(dif!=null&&Math.abs(dif)>0.0001)?` <span class="rc-dif ${dif>0?'up':'down'}">${dif>0?'+':''}${fmtDose(dif)}</span>`:'';
     const acts=editable?`<span style="display:inline-flex;gap:3px"><button class="icon-btn op-mv" data-act="recomItUp" data-id="${esc(r.id)}" data-i="${i}" title="Antes na ordem de mistura"${i===0?' disabled':''}>▲</button><button class="icon-btn op-mv" data-act="recomItDown" data-id="${esc(r.id)}" data-i="${i}" title="Depois na ordem de mistura"${i===its.length-1?' disabled':''}>▼</button><button class="icon-btn del op-mv" data-act="recomDelItem" data-id="${esc(r.id)}" data-i="${i}" title="Remover">🗑</button></span>`:'';
+    const estHtml=recomEstoqueHtml(r,it,i,editable), semReal=(r.status==='rascunho'||r.status==='enviada'), semCar=!editable&&!it.car;   // v367: no celular, a linha vira o desenho da "Na calda" (nome + dose à esquerda, totais à direita)
     return `<tr>
-      <td class="num"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
-      <td class="c-full">${prodCell}</td>
-      <td class="num">${doseCell}</td>
-      <td class="num">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
-      <td class="rc-est-td">${recomEstoqueHtml(r,it,i,editable)}</td>
-      <td class="num">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
-      <td class="num">${carCell}</td>
-      <td class="num">${realCell}${difTag}</td>
-      <td class="rc-del">${acts}</td></tr>`;
+      <td class="num rc-ord"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
+      <td class="c-full rc-prod">${prodCell}</td>
+      <td class="num rc-dose-td" data-th="Dose/ha">${doseCell}</td>
+      <td class="num rc-tot${planTot?'':' rc-vazio'}" data-th="Total na área">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="rc-est-td${estHtml.indexOf('class="mut">—')>=0?' rc-vazio':''}" data-th="Estoque">${estHtml}</td>
+      <td class="num rc-tk${porTk?'':' rc-vazio'}" data-th="Por tanque">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
+      <td class="num rc-car${semCar?' rc-vazio':''}" data-th="Carência">${carCell}</td>
+      <td class="num rc-real${semReal?' rc-vazio':''}" data-th="Utilizado">${realCell}${difTag}</td>
+      <td class="rc-del${editable?'':' rc-vazio'}">${acts}</td></tr>`;
   }).join('');
   const semHa=its.filter(it=>(it.sem||_isSemente(it))&&+it.ha>0); const semSoma=+semHa.reduce((s,it)=>s+(+it.ha||0),0).toFixed(2);
   const semAviso=(semHa.length>1||(semHa.length===1&&semSoma<area-0.005))?`<div class="rc-obs${Math.abs(semSoma-area)>=0.005?'':' mut'}" style="${Math.abs(semSoma-area)>=0.005?'color:var(--amber)':''}">🌽 Materiais: ${semHa.map(it=>`${esc(it.produto)} ${num(it.ha)} ha`).join(' + ')} = <b>${num(semSoma)} ha</b>${Math.abs(semSoma-area)>=0.005?` ≠ ${num(area)} ha do talhão`:' ✓'}</div>`:'';
