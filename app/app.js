@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-367';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-368';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6014,8 +6014,19 @@ function campoItems(talId, tagoi, opItens, r){
     const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
     return {produto:it.produto,un:it.un,dose,iid,plan:+it.dose||0};
   }).concat((r.extras||[]).map((e,ei)=>({e,ei})).filter(x=>x.e.produto).map(x=>({produto:x.e.produto,un:(PROD[x.e.produto]&&PROD[x.e.produto].un)||'',dose:+x.e.dose||0,ei:x.ei,plan:null})))
-  .filter(x=>x.produto);
+  .filter(x=>x.produto).sort(tankOrdemCmp(r));
 }
+// v368: ORDEM DE MISTURA da aplicação — guardada em r.app.ordem (refs dos itens: iid do plano ou "e<n>" dos extras).
+// Item fora da lista (adicionado depois) fica no fim, na ordem do plano. Tudo que usa campoItems segue a mesma ordem
+// (quadro "Na calda", mensagem de WhatsApp, recomendação criada a partir da operação, caixas "Realizado").
+function tankRef(x){ return x.ei!=null?'e'+x.ei:String(x.iid); }
+function tankOrdemCmp(r){ const o=(r&&r.app&&Array.isArray(r.app.ordem))?r.app.ordem:null; if(!o||!o.length) return ()=>0;
+  const pos={}; o.forEach((ref,i)=>{ if(!(ref in pos)) pos[ref]=i; }); const p=x=>{ const k=tankRef(x); return (k in pos)?pos[k]:1e9; }; return (a,b)=>p(a)-p(b); }
+// move um insumo da calda uma posição para cima/baixo na ordem de mistura e grava na aplicação
+function tankMover(key, ref, dir){ const fk=opFromKey(key), r=realEnsure(key), all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
+  const liq=all.filter(vaiNoTanque), i=liq.findIndex(x=>tankRef(x)===ref), j=i+dir; if(i<0||j<0||j>=liq.length) return;
+  const refs=all.map(tankRef), a=refs.indexOf(tankRef(liq[i])), b=refs.indexOf(tankRef(liq[j])); [refs[a],refs[b]]=[refs[b],refs[a]];
+  r.app=r.app||{}; r.app.ordem=refs; stampReal(key); tankRefresh(key); }
 // ---- dose por TANQUE: a dona ajusta o volume que vai no tanque (ex.: 27,503 L → 27,5 L) e a dose/ha realizada
 // acompanha (volume ÷ ha por tanque). Só mexe no REALIZADO desta aplicação; o planejamento do talhão fica igual.
 function tankHaDe(r){ const app=(r&&r.app)||{}, vazao=+app.vazao||0, tanque=+app.tanque||0; return (vazao>0&&tanque>0)?tanque/vazao:0; }
@@ -6308,9 +6319,11 @@ function campoAppOut(talId, tagoi, opItens, r){
   const liq=all.filter(vaiNoTanque), sol=all.filter(x=>!vaiNoTanque(x));
   const stat=(lbl,val)=>`<div class="app-stat"><span>${lbl}</span><b>${val}</b></div>`;
   const key=`${talId}|${tagoi}`;
-  const liqRows=liq.map(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque, dif=(x.plan!=null&&x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null;   // só mostra a diferença a partir de 0,05%
-    const ref=x.ei!=null?`data-ei="${x.ei}"`:`data-iid="${esc(x.iid)}"`;
-    return `<tr><td>${esc(x.produto)}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
+  const podeOrd=liq.length>1;   // v368: ordem de mistura editável (▲ ▼) quando há mais de um insumo na calda
+  const liqRows=liq.map((x,i)=>{ const total=x.dose*area, porT=x.dose*haPorTanque, dif=(x.plan!=null&&x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null;   // só mostra a diferença a partir de 0,05%
+    const ref=x.ei!=null?`data-ei="${x.ei}"`:`data-iid="${esc(x.iid)}"`, tr=tankRef(x);
+    const ord=podeOrd?`<span class="tk-ord"><span class="op-ord" title="ordem de mistura no tanque">${i+1}</span><span class="tk-mv"><button class="icon-btn op-mv" data-act="tankItUp" data-key="${esc(key)}" data-ref="${esc(tr)}" title="Antes na ordem de mistura"${i===0?' disabled':''}>▲</button><button class="icon-btn op-mv" data-act="tankItDown" data-key="${esc(key)}" data-ref="${esc(tr)}" title="Depois na ordem de mistura"${i===liq.length-1?' disabled':''}>▼</button></span></span>`:'';
+    return `<tr><td>${ord}${esc(x.produto)}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
       <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
       <td class="num">${haPorTanque?`<input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tankDose" data-key="${esc(key)}" ${ref} value="${fmtDose(porT)}" title="Volume deste produto em 1 tanque — digite o valor redondo que vai usar; a dose/ha realizada acompanha">`:'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}${(()=>{ const e=haPorTanque?embDe(x.produto):null; return e?`<br><small class="tk-emb" title="Embalagem cadastrada na bula do produto">📦 ${esc(embTxt(porT,e))}</small>`:''; })()}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
@@ -11811,6 +11824,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='prListaClose'){ const ov=document.getElementById('pr-lista-ov'); if(ov) ov.remove(); }
     else if(a.act==='prListaDo'){ prListaApply(); }
     else if(a.act==='tankRound'){ tankArredondar(a.key); }
+    else if(a.act==='tankItUp'||a.act==='tankItDown'){ tankMover(a.key, a.ref, a.act==='tankItUp'?-1:1); }   // v368: ordem de mistura na aplicação
     else if(a.act==='tsRound'){ tsArredondar(a.key); }
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');

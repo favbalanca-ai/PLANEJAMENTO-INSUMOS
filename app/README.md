@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Ordem de mistura na aplicação (v368)** — no quadro "Na calda (tanque)" do Campo cada insumo tem o número da ordem
+  e setas ▲ ▼ (`tankMover`). A ordem fica em `r.app.ordem` do registro da operação (REALIZADO APP, sincroniza entre
+  aparelhos) e `campoItems` já devolve os itens nessa ordem: quadro, mensagem de WhatsApp, recomendação criada a partir
+  da operação e caixas "Realizado" seguem iguais. Insumo adicionado depois entra no fim; o plano do talhão não muda.
+- **Tabela da recomendação no celular (v367)** — a tabela "Produtos — na ordem de mistura" vira blocos no celular
+  (nome e dose à esquerda, Total na área e Por tanque à direita, estoque embaixo), sem rolar de lado.
 - **Renomear / mesclar produto (v366)** — botão "✏️ Renomear" na tela Estoque (só administrador; `renAbrir/renRender/
   renGravar`). Escolhe o nome antigo e o novo e manda `__renomearProduto {de, para, apagar}`; a planilha troca o nome
   inteiro em todas as abas (razão, operações concluídas, notas, misturas, contagens, transferências, bulas, plano dos
