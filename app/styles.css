@@ -1932,6 +1932,9 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 /* ===== dose por tanque editável (Campo → Recomendação de aplicação) ===== */
 .tk-in{width:92px;text-align:right}
 .tk-dose{font-size:11px}
+.tk-ord{display:inline-flex;align-items:center;gap:4px;margin-right:6px;vertical-align:middle}.tk-ord .op-ord{min-width:20px;height:20px;font-size:11px}   /* v368: ordem de mistura na aplicação */
+.tk-mv{display:inline-flex;gap:2px}.tk-mv .op-mv{width:24px;height:24px;font-size:11px}.tk-mv .op-mv:disabled{opacity:.3}
+@media (max-width:640px){ .tk-ord{display:flex;margin:0 0 3px} .tk-mv .op-mv{width:30px;height:30px;font-size:12px} }
 .tk-up{color:#b45309} .tk-down{color:var(--teal)}
 .app-note .btn{margin-left:6px;vertical-align:middle}
 .tk-emb{color:var(--ink2);font-weight:700;font-size:11px;white-space:nowrap}
@@ -2670,6 +2673,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .mi-prods{font-size:11.5px}
   .mi-stats{font-size:9.5px}
   .mi-row{font-size:10.5px}
+  .tk-mv .op-mv{font-size:9.5px}
   .ag-chips .chip-f{font-size:9.5px}
   .ag-outras{font-size:9.5px}
   .ag-n{font-size:9.5px}
