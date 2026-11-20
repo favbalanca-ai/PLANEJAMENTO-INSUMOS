@@ -1052,6 +1052,39 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 .rc-tbl input.cell{width:78px}
 .rc-tbl input.prod-in{width:100%;min-width:120px}
 .rc-tbl td.rc-del{width:34px;text-align:center}
+/* v367: no CELULAR a tabela da recomendação vira o mesmo desenho da "Na calda (tanque)": nº + insumo e dose à esquerda,
+   Total na área e Por tanque à direita com rótulo em cima, estoque embaixo em linha inteira — nada rola de lado */
+@media (max-width:640px){
+  .rc-tbl thead{display:none}
+  .rc-tbl,.rc-tbl tbody{display:block;width:100%}
+  .rc-tbl tbody tr{display:grid;grid-template-columns:26px minmax(0,1fr) auto;grid-template-areas:"ord prod acts" "ord dose tot" "ord dose tk" "est est est" "car car real";
+    gap:3px 8px;align-items:start;padding:10px 10px 9px;border-bottom:1px solid var(--line)}
+  .rc-tbl tbody tr:last-child{border-bottom:none}
+  .rc-tbl tbody td{display:block;padding:0;border:none;min-height:0;text-align:left}
+  .rc-tbl td.rc-ord{grid-area:ord;padding-top:3px}
+  .rc-tbl td.rc-prod{grid-area:prod;min-width:0}
+  .rc-tbl td.rc-prod b{font-size:14.5px}
+  .rc-tbl td.rc-prod .agp-row{display:flex;gap:4px;align-items:center}
+  .rc-tbl td.rc-prod input{width:100%!important;max-width:none!important;min-width:0!important}
+  .rc-tbl td.rc-dose-td{grid-area:dose;font-size:12px;text-align:left}
+  .rc-tbl td.rc-ord{text-align:left}
+  .rc-tbl td.rc-dose-td input.cell{width:84px}
+  .rc-tbl td.rc-dose-td .rc-dose{font-size:14px;font-weight:700}
+  .rc-tbl td.rc-tot{grid-area:tot}
+  .rc-tbl td.rc-tk{grid-area:tk}
+  .rc-tbl td.rc-tot,.rc-tbl td.rc-tk,.rc-tbl td.rc-car,.rc-tbl td.rc-real{text-align:right;font-size:14px;font-weight:700;color:var(--ink);white-space:nowrap}
+  .rc-tbl td.rc-tot::before,.rc-tbl td.rc-tk::before,.rc-tbl td.rc-car::before,.rc-tbl td.rc-real::before,.rc-tbl td.rc-est-td::before{content:attr(data-th);display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;line-height:1.2}
+  .rc-tbl td.rc-tot small,.rc-tbl td.rc-tk small{font-size:11px;color:var(--muted);font-weight:600}
+  .rc-tbl td.rc-est-td{grid-area:est;min-width:0;font-size:12px;padding-top:2px}
+  .rc-tbl td.rc-car{grid-area:car;text-align:left}
+  .rc-tbl td.rc-car input.cell{width:72px!important}
+  .rc-tbl td.rc-real{grid-area:real}
+  .rc-tbl td.rc-real input.cell{width:96px}
+  .rc-tbl td.rc-del{grid-area:acts;width:auto;text-align:right}
+  .rc-tbl td.rc-del .op-mv{width:34px;height:34px;font-size:13px}
+  .rc-tbl td.rc-vazio{display:none}   /* total/tanque/carência/utilizado sem valor somem (como na "Na calda") */
+  .rc-tbl tr>td.mut[colspan]{grid-column:1 / -1}
+}
 .rc-dif{font-size:11px;font-weight:700;padding:1px 6px;border-radius:10px}
 .rc-dif.up{background:var(--red-soft);color:var(--red)}
 .rc-dif.down{background:var(--green-soft);color:var(--green)}
@@ -2488,6 +2521,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .tl-sub{font-size:10px}
   .rc-op{font-size:9.5px}
   .rc-meta{font-size:10px}
+  .rc-tbl td.rc-prod b{font-size:11.5px}
+  .rc-tbl td.rc-dose-td{font-size:9.5px}
+  .rc-tbl td.rc-dose-td .rc-dose{font-size:11.5px}
+  .rc-tbl td.rc-tot{font-size:11.5px}
+  .rc-tbl td.rc-tk{font-size:11.5px}
+  .rc-tbl td.rc-car{font-size:11.5px}
+  .rc-tbl td.rc-real{font-size:11.5px}
+  .rc-tbl td.rc-est-td{font-size:9.5px}
+  .rc-tbl td.rc-del .op-mv{font-size:10.5px}
   .rc-obs{font-size:10px}
   .rc-hint{font-size:9.5px}
   .rc-ok{font-size:10px}
@@ -2878,7 +2920,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-366';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-367';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11454,16 +11496,17 @@ function recomCard(r,t){
     const dif=(it.real!=null&&planTot)?(it.real-planTot):null;
     const difTag=(dif!=null&&Math.abs(dif)>0.0001)?` <span class="rc-dif ${dif>0?'up':'down'}">${dif>0?'+':''}${fmtDose(dif)}</span>`:'';
     const acts=editable?`<span style="display:inline-flex;gap:3px"><button class="icon-btn op-mv" data-act="recomItUp" data-id="${esc(r.id)}" data-i="${i}" title="Antes na ordem de mistura"${i===0?' disabled':''}>▲</button><button class="icon-btn op-mv" data-act="recomItDown" data-id="${esc(r.id)}" data-i="${i}" title="Depois na ordem de mistura"${i===its.length-1?' disabled':''}>▼</button><button class="icon-btn del op-mv" data-act="recomDelItem" data-id="${esc(r.id)}" data-i="${i}" title="Remover">🗑</button></span>`:'';
+    const estHtml=recomEstoqueHtml(r,it,i,editable), semReal=(r.status==='rascunho'||r.status==='enviada'), semCar=!editable&&!it.car;   // v367: no celular, a linha vira o desenho da "Na calda" (nome + dose à esquerda, totais à direita)
     return `<tr>
-      <td class="num"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
-      <td class="c-full">${prodCell}</td>
-      <td class="num">${doseCell}</td>
-      <td class="num">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
-      <td class="rc-est-td">${recomEstoqueHtml(r,it,i,editable)}</td>
-      <td class="num">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
-      <td class="num">${carCell}</td>
-      <td class="num">${realCell}${difTag}</td>
-      <td class="rc-del">${acts}</td></tr>`;
+      <td class="num rc-ord"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
+      <td class="c-full rc-prod">${prodCell}</td>
+      <td class="num rc-dose-td" data-th="Dose/ha">${doseCell}</td>
+      <td class="num rc-tot${planTot?'':' rc-vazio'}" data-th="Total na área">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
+      <td class="rc-est-td${estHtml.indexOf('class="mut">—')>=0?' rc-vazio':''}" data-th="Estoque">${estHtml}</td>
+      <td class="num rc-tk${porTk?'':' rc-vazio'}" data-th="Por tanque">${porTk?fmtDose(porTk)+(it.un?'<small> '+esc(it.un)+'</small>':''):'<span class="mut">—</span>'}</td>
+      <td class="num rc-car${semCar?' rc-vazio':''}" data-th="Carência">${carCell}</td>
+      <td class="num rc-real${semReal?' rc-vazio':''}" data-th="Utilizado">${realCell}${difTag}</td>
+      <td class="rc-del${editable?'':' rc-vazio'}">${acts}</td></tr>`;
   }).join('');
   const semHa=its.filter(it=>(it.sem||_isSemente(it))&&+it.ha>0); const semSoma=+semHa.reduce((s,it)=>s+(+it.ha||0),0).toFixed(2);
   const semAviso=(semHa.length>1||(semHa.length===1&&semSoma<area-0.005))?`<div class="rc-obs${Math.abs(semSoma-area)>=0.005?'':' mut'}" style="${Math.abs(semSoma-area)>=0.005?'color:var(--amber)':''}">🌽 Materiais: ${semHa.map(it=>`${esc(it.produto)} ${num(it.ha)} ha`).join(' + ')} = <b>${num(semSoma)} ha</b>${Math.abs(semSoma-area)>=0.005?` ≠ ${num(area)} ha do talhão`:' ✓'}</div>`:'';
