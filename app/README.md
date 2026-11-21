@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Ordem de mistura também na recomendação da operação (v371)** — `recomItensFromOp` devolve os itens na ordem de
+  `app.ordem` da operação (os extras não ficam mais no fim) e guarda `iid`/`ei` em cada item; reordenar com ▲ ▼ numa
+  recomendação ligada a uma operação grava a ordem de volta em `app.ordem`. PDF, WhatsApp e quadro "Na calda" ficam iguais.
+  O complemento (`compl`) também passa para a recomendação.
 - **PDF simples da recomendação (v370)** — `exportRecomPDFSimples_` passa a ser o padrão do PDF de aplicação: só campos
   preenchidos (faixa de identificação), tabela de produtos com as colunas que têm dado (ingrediente ativo, carência e
   utilizado só quando existem) e letra maior, calda / condições / segurança em uma linha cada, compatibilidade em uma

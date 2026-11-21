@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-370';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-371';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8195,8 +8195,9 @@ function recomItensFromOp(t, opKey){
   const rl=realOf(opKey), semTS=!!(rl&&rl.ts&&rl.ts.st);
   const out=effItems(t.id,o.tagoi,o.op.itens).filter(it=>it.produto && !(semTS&&_isTS(it)) && !itemFora(rl,it))
     .map(it=>{ const iid=it.kind==='base'?String(it.ii):'a'+it.ai, aj=(rl&&rl.doses&&(iid in rl.doses))?+rl.doses[iid]:null;   // dose ajustada no Campo (por tanque / realizado) manda
-      const o={produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null}; if(aj!=null && +it.dose>0 && Math.abs(aj-(+it.dose))>1e-9) o.plan=+it.dose; return o; })   // v293: plan = dose do planejamento, para a tela mostrar a diferença
-    .concat(((rl&&rl.extras)||[]).filter(e=>e.produto).map(e=>({produto:e.produto, un:(PROD[e.produto]&&PROD[e.produto].un)||'', dose:+e.dose||0, real:null, extra:true})));   // extras do Campo entram
+      const o={produto:it.produto, un:it.un||'', dose:aj!=null?aj:(+it.dose||0), real:null, iid}; if(aj!=null && +it.dose>0 && Math.abs(aj-(+it.dose))>1e-9) o.plan=+it.dose; return o; })   // v293: plan = dose do planejamento, para a tela mostrar a diferença
+    .concat(((rl&&rl.extras)||[]).map((e,ei)=>({e,ei})).filter(x=>x.e.produto).map(x=>({produto:x.e.produto, un:(PROD[x.e.produto]&&PROD[x.e.produto].un)||'', dose:+x.e.dose||0, real:null, extra:true, ei:x.ei, compl:x.e.compl||''})))   // extras do Campo entram (v369: complemento marcado)
+    .sort(tankOrdemCmp(rl));   // v371: mesma ordem de mistura do quadro "Na calda" da operação (iid/ei ficam no item para o caminho de volta)
   const pc=plantioCalc(opKey, rl||{});   // v266: plantio com vários materiais → uma linha de semente por material, com a área de cada um
   if(pc&&pc.multi){ const si=out.findIndex(it=>_isSemente(it)), base=si>=0?out[si]:null;
     const novos=pc.sems.map(m=>({produto:m.produto, un:m.un, dose:base?base.dose:(+pc.sem.dose||0), real:null, ha:m.ha, sem:1}));
@@ -11662,7 +11663,9 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomMistIa'){ misturaIaPedir(a.id); }
     else if(a.act==='recomMistOrdem'){ const r=recomById(a.id); if(r&&r.status==='rascunho'&&r.itens){ const A=misturaAnalise(r), com=r.itens.filter(it=>it.produto), sem=r.itens.filter(it=>!it.produto); r.itens=A.ordem.map(x=>com[x.i]).concat(sem); saveRecom(); route({keepScroll:true}); toast('Ordem de mistura ajustada pela formulação'); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
-      if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom(); route({keepScroll:true}); } } }
+      if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom();
+        if(r.opKey){ const refs=r.itens.filter(x=>x.iid!=null||x.ei!=null).map(tankRef); if(refs.length>1){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; rl.app.ordem=refs; stampReal(r.opKey); } }   // v371: recomendação da operação → a ordem volta para o quadro "Na calda"
+        route({keepScroll:true}); } } }
     else if(a.act==='recomPrint'){ exportRecomPDF(a.id); }
     else if(a.act==='recomEnviar'){ const r=recomById(a.id); if(r){ if(!(r.itens||[]).some(it=>it.produto)){ toast('Adicione ao menos um produto'); return; }
       r.status='enviada'; r.enviadaTs=Date.now(); saveRecom(); recomWhats(a.id); route(); toast('Marcada como enviada ao operador'); } }
