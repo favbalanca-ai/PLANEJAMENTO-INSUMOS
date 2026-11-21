@@ -71,6 +71,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Recomendação de TS fecha junto com a operação (v376)** — quando a operação é concluída direto no Campo
+  (Finalizar), a recomendação de TS dela ficava "enviada" para sempre, pedindo baixa que já tinha sido feita. Agora
+  `tsFecharPelaOp(key)` marca a recomendação como **aprovada** (`aprov.viaOp`, por quem finalizou), com o realizado
+  igual à baixa da operação e **sem mandar saída própria** (`saidaPushed`); o TS da operação fica "feito" com baixa
+  vazia + `viaOp`, e `opBaixaEff` mantém a baixa da operação (nada sai em dobro). `tsConciliarOps()` roda ao abrir
+  Recomendações e o Campo para fechar casos antigos. O card mostra "Finalizada pela operação concluída no Campo" e,
+  em vez de Reabrir, "Ver operação"; reabrir a operação (`tsReabrirPelaOp`) devolve a recomendação para "enviada".
 - **Painel do Campo por fase da safra (v375)** — o Painel descobre a fase da fazenda escolhida (`faseAuto`): safrinha
   já plantada → **Safrinha**; algum talhão colhido ou 1ª colheita prevista a ≤ 20 dias → **Colheita**; tudo plantado →
   **Desenvolvimento**; senão **Plantio**. A fase decide a ordem dos cartões (o 1º é o escuro, de destaque) e esconde os
