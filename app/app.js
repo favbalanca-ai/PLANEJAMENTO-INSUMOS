@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-369';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-370';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8800,16 +8800,16 @@ function exportPlantioPDF(r){
   ${rxAssin(r)}`;
   return h;
 }
-async function exportRecomPDF(id){
-  const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r);
+async function exportRecomPDF(id, modo){   // v370: modo 'simples' (padrão) ou 'completo' — só muda o PDF de aplicação
+  const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r); modo=modo==='completo'?'completo':'simples';
   _PDFLINK=await recomPdfPrep(r); const L=_PDFLINK;
-  let h; try{ h=exportRecomPDF_(r); } finally { _PDFLINK=null; }
+  let h; try{ h=exportRecomPDF_(r, modo); } finally { _PDFLINK=null; }
   if(!h) return;
   const link=(r.status!=='aprovada'&&L)?L.link:'', curto=!!(L&&L.curto);
   const t=findTalhao(r.talhao), tipo=r.tipo==='ts'?'TS':((r.opKey&&plantioCalc(r.opKey))?'Plantio':'Aplicacao');
   const nome=`Recomendacao_${tipo}_${(t?tNome(t):r.talhao)}_${r.data||''}.pdf`.replace(/[\\/:*?"<>|\s]+/g,'_');
   pdfAguarde(true);
-  try{ const blob=await pdfArquivo(h, curto?link:''); pdfPronto(blob, nome, h, link, t?tNome(t):r.talhao); }
+  try{ const blob=await pdfArquivo(h, curto?link:''); pdfPronto(blob, nome, h, link, t?tNome(t):r.talhao, tipo==='Aplicacao'?{rid:id, modo}:null); }
   catch(e){ pdfAguarde(false); toast('Não consegui montar o arquivo ('+(e&&e.message||e)+') — abrindo a impressão'); printDoc(h); }
 }
 // ---- PDF montado no próprio app (html2canvas + jsPDF) ----
@@ -8866,12 +8866,13 @@ function pdfAguarde(on){ const old=document.getElementById('pdf-ov'); if(old) ol
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(420px,100%)"><div class="modal-head"><h3>📄 Gerando o PDF…</h3></div><p class="mut" style="font-size:13px;margin:0">Montando o arquivo com o link de baixa e o QR Code.</p></div>`;
   document.body.appendChild(ov); }
-function pdfPronto(blob, nome, html, link, tal){
+function pdfPronto(blob, nome, html, link, tal, alt){   // v370: alt = {rid, modo} → botão para trocar entre PDF simples e completo
   if(_pdfPronto && _pdfPronto.url) URL.revokeObjectURL(_pdfPronto.url);
   const file=new File([blob], nome, {type:'application/pdf'}), url=URL.createObjectURL(blob);
   let podeEnviar=false; try{ podeEnviar=!!(navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
   const android=/Android/i.test(navigator.userAgent||'');
-  _pdfPronto={file, url, nome, html, link:link||'', tal:tal||''};
+  _pdfPronto={file, url, nome, html, link:link||'', tal:tal||'', alt:alt||null};
+  const altBtn=alt?`<button class="btn btn-outline" data-act="pdfModo" data-id="${esc(alt.rid)}" data-modo="${alt.modo==='simples'?'completo':'simples'}" title="${alt.modo==='simples'?'Receituário com todas as seções (diagnóstico, condições, segurança, compatibilidade)':'Só o essencial: produtos, doses, calda e o link de baixa'}">${alt.modo==='simples'?'📋 Versão completa':'✂️ Versão simples'}</button>`:'';
   pdfAguarde(false);
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(440px,100%)"><div class="modal-head"><h3>📄 PDF pronto</h3><button class="icon-btn" data-act="pdfFechar" title="Fechar">✕</button></div>
@@ -8881,13 +8882,51 @@ function pdfPronto(blob, nome, html, link, tal){
       ${link?'<button class="btn btn-wa" data-act="pdfEnviarLink">🔗 Enviar o link de baixa (WhatsApp)</button>':''}
       <a class="btn btn-primary" href="${url}" download="${esc(nome)}">⬇️ Baixar PDF</a>
       <a class="btn btn-outline" href="${url}" target="_blank" rel="noopener">👁 Abrir</a>
-      <button class="btn btn-ghost" data-act="pdfImprimir">🖨 Imprimir</button></div></div>`;
+      ${altBtn}<button class="btn btn-ghost" data-act="pdfImprimir">🖨 Imprimir</button></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
   document.body.appendChild(ov);
 }
-function exportRecomPDF_(r){
+// v370: PDF SIMPLES (padrão) — só o que está preenchido: faixa de identificação, produtos (colunas que têm dado), calda e
+// condições em uma linha, compatibilidade em uma linha (bloco inteiro só com alerta), segurança curta, link de baixa, assinaturas
+function exportRecomPDFSimples_(r){
+  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
+  const kv=(l,v)=>v?`<div><small>${l}</small>${v}</div>`:'';
+  const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
+  const temAtivo=its.some(it=>it.ativo), temCar=its.some(it=>it.car), temReal=its.some(it=>it.real!=null), temTk=cd.haTk>0;
+  let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))}</span></div>
+  <div class="rx-kv rx-kv-s">${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}${kv('Aplicação',esc(r.nome||''))}${kv('Estádio',esc(r.estadio||''))}${kv('Alvo',esc(r.alvo||''))}${kv('Máquina',esc(r.maquina||''))}</div>
+  <div class="rx-sec"><h2>Produtos — na ordem de mistura no tanque</h2>
+    <table class="rx rx-s pdf-ops"><thead><tr><th style="width:5%">#</th><th>Produto</th><th class="num" style="width:13%">Dose/ha</th><th class="num" style="width:15%">Total (${num(area)} ha)</th>${temTk?'<th class="num" style="width:15%">Por tanque</th>':''}${temCar?'<th class="num" style="width:10%">Carência</th>':''}${temReal?'<th class="num" style="width:13%">Utilizado</th>':''}</tr></thead><tbody>`;
+  its.forEach((it,i)=>{ const bR=bulaDoseRef(it), e=temTk?embDe(it.produto):null;
+    h+=`<tr><td class="num">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].classe?` <span class="mut2">${esc(PROD[it.produto].classe)}</span>`:''}${it.compl?`<br><span class="mut2">↳ complementa ${esc(it.compl)}</span>`:''}${temAtivo&&it.ativo?`<br><span class="mut2">${esc(it.ativo)}</span>`:''}</td>
+      <td class="num"><b class="${bulaDoseCls(bR.st).trim()}">${fmtDose(it.dose)} ${esc(it.un||'')}</b>${bR.st==='acima'?`<br><span class="dose-acima">ACIMA da bula (${esc(bR.txt)})</span>`:''}</td>
+      <td class="num">${(area&&it.dose)?`${fmtDose(it.dose*area)} ${esc(it.un||'')}`:'—'}</td>
+      ${temTk?`<td class="num">${it.dose?`<b>${fmtDose(it.dose*cd.haTk)} ${esc(it.un||'')}</b>${e?`<br><span class="mut2">${esc(embTxt(it.dose*cd.haTk,e))}</span>`:''}`:'—'}</td>`:''}
+      ${temCar?`<td class="num">${it.car?`${esc(it.car)} d`:'—'}</td>`:''}${temReal?`<td class="num">${it.real!=null?`${fmtDose(it.real)} ${esc(it.un||'')}`:''}</td>`:''}</tr>`; });
+  if(!its.length) h+=`<tr><td colspan="7">— sem produtos —</td></tr>`;
+  h+=`</tbody></table>`;
+  const notas=[]; if(r.adjuvante) notas.push(`Adjuvante / pH: ${esc(r.adjuvante)}`); if(bulaPhTxt(its)) notas.push(`pH ideal da calda (bula): ${esc(bulaPhTxt(its))}`);
+  const MX=misturaResumoTxt(r);
+  if(MX){ const al=MX.A.alertas.filter(x=>x.nivel!=='info'), grave=al.length>0||(MX.A.risco&&MX.A.risco!=='baixo')||(MX.ia&&MX.ia.risco&&MX.ia.risco!=='baixo');
+    if(grave) h+=`<div class="rx-note rx-mist"><b>Compatibilidade da calda</b> — ${esc(MX.linha)}${MX.A.ordemDif?`<br>Ordem de adição sugerida: ${esc(MX.A.ordem.map((p,k)=>`${k+1}. ${p.produto}`).join(' → '))}`:''}${al.length?`<ul>${al.map(x=>`<li>${esc(x.txt)}</li>`).join('')}</ul>`:''}${MX.ia&&(MX.ia.pares||[]).some(p=>p.risco!=='baixo')?`<ul>${MX.ia.pares.filter(p=>p.risco!=='baixo').map(p=>`<li><b>${esc(p.a)} + ${esc(p.b)}</b> (${esc(mistRiscoLbl(p.risco)||p.risco)}): ${esc(p.motivo||'')}${p.fazer?` — ${esc(p.fazer)}`:''}</li>`).join('')}</ul>`:''}</div>`;
+    else notas.push(`Compatibilidade da calda: ${esc(MX.linha)}`); }
+  if(notas.length) h+=`<div class="rx-note">${notas.join(' · ')}</div>`;
+  h+=`</div>`;
+  const calda=[]; if(cd.calda) calda.push(`<b>${num(cd.calda)} L/ha</b>`); if(cd.tk) calda.push(`tanque ${num(cd.tk)} L`); if(cd.haTk) calda.push(`${num(cd.haTk)} ha por tanque`); if(cd.nTk) calda.push(`<b>${cd.nTk} tanque(s)</b>${(cd.ultimo&&cd.ultimo<cd.haTk-0.01)?` (último: ${num(cd.ultimo)} ha)`:''}`); if(cd.total) calda.push(`${num(cd.total)} L no total`);
+  const cond=[]; if(r.ponta) cond.push(`ponta ${esc(r.ponta)}`); if(r.pressao) cond.push(`${esc(r.pressao)} bar`); if(r.velocidade) cond.push(`${esc(r.velocidade)} km/h`); if(r.horario) cond.push(`horário ${esc(r.horario)}`); if(+r.tmax) cond.push(`temperatura ≤ ${esc(String(r.tmax))} °C`); if(+r.urmin) cond.push(`umidade ≥ ${esc(String(r.urmin))} %`); if(+r.vmax) cond.push(`vento ≤ ${esc(String(r.vmax))} km/h`); if(r.cond) cond.push(esc(r.cond));
+  const seg=[]; if(r.epi) seg.push(`EPI: ${esc(r.epi)}`); if(r.reentrada) seg.push(`reentrada ${esc(r.reentrada)} h`); if(temCar) seg.push('carência na tabela');
+  if(calda.length||cond.length||seg.length) h+=`<div class="rx-sec rx-lines">${calda.length?`<div class="rx-line">💧 <b>Calda:</b> ${calda.join(' · ')}</div>`:''}${cond.length?`<div class="rx-line">🌤 <b>Condições:</b> ${cond.join(' · ')}</div>`:''}${seg.length?`<div class="rx-line">🦺 <b>Segurança:</b> ${seg.join(' · ')}</div>`:''}</div>`;
+  if(r.obs) h+=`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`;
+  h+=recomPdfLink(r);
+  h+=`<div class="rx-warn rx-warn-s">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Fazer o teste da jarra antes de misturar no tanque. Tríplice lavagem e devolução das embalagens vazias.</div>
+  <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
+  <div class="pdf-foot">Planejamento de Safra 26/27 · gerado em ${fmtDataBR(new Date().toISOString().slice(0,10))} · status: ${esc((RECOM_ST[r.status]||{}).lbl||r.status)} · versão simples</div>`;
+  return h;
+}
+function exportRecomPDF_(r, modo){
   if(r.tipo==='ts') return exportTsPDF(r);
   if(r.opKey && opTemSemente(r.opKey.split('|')[0], r.opKey.split('|')[1]||'') && plantioCalc(r.opKey)) return exportPlantioPDF(r);
+  if(modo!=='completo') return exportRecomPDFSimples_(r);   // v370: simples é o padrão
   const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
   const kv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
@@ -11875,6 +11914,7 @@ document.addEventListener('click',e=>{
       toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
     }
     else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
+    else if(a.act==='pdfModo'){ exportRecomPDF(a.id, a.modo); }   // v370: PDF simples ↔ completo
     else if(a.act==='estExtrato'){ estExtratoOpen(a.prod); return; }
     else if(a.act==='extFechar'){ const o=document.getElementById('ext-ov'); if(o) o.remove(); return; }
     else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
