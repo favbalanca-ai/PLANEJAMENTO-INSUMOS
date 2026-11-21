@@ -2328,6 +2328,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .est-locf{align-items:center}.est-loc-td{white-space:nowrap}
 .rc-est-loc{font-size:11px;line-height:1.3}.rc-est-outro{font-size:11px;line-height:1.3;color:#1f4a55;font-weight:600}
 .ci-est-outro{display:inline-block;font-size:10.5px;color:#1f4a55;font-weight:600;margin-left:4px;white-space:normal}
+.ci-compl{display:inline-block;font-size:10.5px;color:#1b7f79;font-weight:700;margin-left:4px;white-space:normal}   /* v369: complemento de outro produto (mesmo ativo) */
+.ci-sim{margin:6px 0 2px}.rc-sim-btns{display:inline-flex;gap:4px;flex:none}
 /* v358: etiquetas por grupo */
 .etq-grupos{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:6px 0}.etq-g{display:flex;align-items:center;gap:6px;font-size:13px}.etq-g input{width:18px;height:18px;flex:none}.etq-links{font-size:12px;margin:4px 0}
 /* v357: compatibilidade da calda (análise de mistura) */
@@ -2924,7 +2926,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-368';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-369';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8935,7 +8937,7 @@ function campoItems(talId, tagoi, opItens, r){
     const iid=it.kind==='base'?String(it.ii):'a'+it.ai;
     const dose=(r.doses&&(iid in r.doses))?+r.doses[iid]:+it.dose;
     return {produto:it.produto,un:it.un,dose,iid,plan:+it.dose||0};
-  }).concat((r.extras||[]).map((e,ei)=>({e,ei})).filter(x=>x.e.produto).map(x=>({produto:x.e.produto,un:(PROD[x.e.produto]&&PROD[x.e.produto].un)||'',dose:+x.e.dose||0,ei:x.ei,plan:null})))
+  }).concat((r.extras||[]).map((e,ei)=>({e,ei})).filter(x=>x.e.produto).map(x=>({produto:x.e.produto,un:(PROD[x.e.produto]&&PROD[x.e.produto].un)||'',dose:+x.e.dose||0,ei:x.ei,plan:null,compl:x.e.compl||''})))
   .filter(x=>x.produto).sort(tankOrdemCmp(r));
 }
 // v368: ORDEM DE MISTURA da aplicação — guardada em r.app.ordem (refs dos itens: iid do plano ou "e<n>" dos extras).
@@ -9245,7 +9247,7 @@ function campoAppOut(talId, tagoi, opItens, r){
   const liqRows=liq.map((x,i)=>{ const total=x.dose*area, porT=x.dose*haPorTanque, dif=(x.plan!=null&&x.plan>0&&Math.abs(x.dose/x.plan-1)>=0.0005)?(x.dose/x.plan-1)*100:null;   // só mostra a diferença a partir de 0,05%
     const ref=x.ei!=null?`data-ei="${x.ei}"`:`data-iid="${esc(x.iid)}"`, tr=tankRef(x);
     const ord=podeOrd?`<span class="tk-ord"><span class="op-ord" title="ordem de mistura no tanque">${i+1}</span><span class="tk-mv"><button class="icon-btn op-mv" data-act="tankItUp" data-key="${esc(key)}" data-ref="${esc(tr)}" title="Antes na ordem de mistura"${i===0?' disabled':''}>▲</button><button class="icon-btn op-mv" data-act="tankItDown" data-key="${esc(key)}" data-ref="${esc(tr)}" title="Depois na ordem de mistura"${i===liq.length-1?' disabled':''}>▼</button></span></span>`:'';
-    return `<tr><td>${ord}${esc(x.produto)}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
+    return `<tr><td>${ord}${esc(x.produto)}${x.compl?` ${complTag(x.compl)}`:''}<br><small class="mut tk-dose">${fmtDose(x.dose)} ${esc(x.un)}/ha${dif!=null?` · <b class="${dif>0?'tk-up':'tk-down'}">${dif>0?'+':''}${nf1.format(dif)}%</b> vs planejado (${fmtDose(x.plan)})`:''}</small></td>
       <td class="num">${fmtDose(total)}<small> ${esc(x.un)}</small></td>
       <td class="num">${haPorTanque?`<input class="cell tk-in${dif!=null?' edited':''}" inputmode="decimal" data-edit="tankDose" data-key="${esc(key)}" ${ref} value="${fmtDose(porT)}" title="Volume deste produto em 1 tanque — digite o valor redondo que vai usar; a dose/ha realizada acompanha">`:'—'}${haPorTanque?`<small> ${esc(x.un)}</small>`:''}${(()=>{ const e=haPorTanque?embDe(x.produto):null; return e?`<br><small class="tk-emb" title="Embalagem cadastrada na bula do produto">📦 ${esc(embTxt(porT,e))}</small>`:''; })()}</td></tr>`; }).join('');
   const solRows=sol.map(x=>{ const total=x.dose*area;
@@ -9298,7 +9300,7 @@ function campoAppMsg(key){
     if(caldaTotal) L.push(`🧪 Calda ${num(caldaTotal)} L · ${nT} tanque(s)`);
     L.push(''); L.push(haPorTanque?'*Na calda (por tanque):*':'*Na calda (total):*');
     liq.forEach(x=>{ const total=x.dose*area, porT=x.dose*haPorTanque, e=haPorTanque?embDe(x.produto):null;
-      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}${e?` (${embTxt(porT,e)})`:''}`); });
+      L.push(`• ${x.produto}: ${haPorTanque?num(porT):num(total)} ${x.un}${e?` (${embTxt(porT,e)})`:''}${x.compl?` _(complementa ${x.compl})_`:''}`); });   // v369
   }
   if(sol.length){ L.push(''); L.push('*Distribuição (total na área):*');
     sol.forEach(x=>{ const total=x.dose*area; L.push(`• ${x.produto}: ${num(total)} ${x.un}`); }); }
@@ -11330,11 +11332,11 @@ const _RX_ATIVO_STOP=/^(OLEO|ESTER|ESTERES|METILICO|METIL|ETIL|SAIS|ACIDO|SODIO|
 function ativoToks(s){ return [...new Set(String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().split(/[^A-Z]+/).filter(t=>t.length>=4&&!_RX_ATIVO_STOP.test(t)))]; }
 function prodAtivoDe(nome){ const b=bulaDe(nome); return (b&&b.ia)||((PROD[nome]||{}).ativos)||''; }
 // produtos da MESMA classe com ativo em comum e saldo em estoque, do mais parecido (todos os ativos iguais) e maior saldo para o menor
-function prodSimilares(nome){ const p=PROD[nome]; if(!p) return []; const cl=String(p.classe||'').trim().toUpperCase(); if(!cl||/SEMENTE|M[ÁA]QUINA/.test(cl)) return [];
+function prodSimilares(nome, loc){ const p=PROD[nome]; if(!p) return []; const cl=String(p.classe||'').trim().toUpperCase(); if(!cl||/SEMENTE|M[ÁA]QUINA/.test(cl)) return [];   // v369: loc = saldo só daquele estoque (fazenda)
   const at=ativoToks(prodAtivoDe(nome)); if(!at.length) return [];
   const out=[]; for(const n in PROD){ if(n===nome) continue; const q=PROD[n]; if(!q||String(q.classe||'').trim().toUpperCase()!==cl) continue;
     const bt=ativoToks(prodAtivoDe(n)), com=bt.filter(t=>at.includes(t)); if(!com.length) continue;
-    const saldo=saldoEstoqueDe(n); if(!(saldo>0)) continue;
+    const saldo=saldoEstoqueDe(n, loc||''); if(!(saldo>0)) continue;
     out.push({produto:n, un:q.un||'', saldo, preco:precoDe(n), total:(com.length===at.length&&com.length===bt.length), comum:com}); }
   return out.sort((a,b)=>(b.total-a.total)||(b.saldo-a.saldo)).slice(0,6); }
 // quanto desse produto já está prometido em OUTRAS recomendações pendentes (enviadas / com retorno, ainda não aprovadas)
@@ -11355,7 +11357,7 @@ function recomEstoqueHtml(r,it,i,editable){ const E=recomEstoqueDe(r,it); if(E.s
   else if(E.aperta) main=`<span class="rc-est warn">⚠ pode faltar</span><div class="rc-est-sub mut">saldo ${fmtDose(E.saldo)} ${u}</div>`; else main=`<span class="rc-est ok">✅ ${fmtDose(E.saldo)} ${u}</span>`;
   main+=locTag+outroTag;
   const aberto=RECOM_UI.sim===`${r.id}|${i}`; let sim='';
-  if(aberto){ const L=prodSimilares(it.produto); sim=`<div class="rc-sim">${L.length?L.map(s=>`<div class="rc-sim-row"><span><b>${esc(s.produto)}</b> <small class="mut">${s.total?'mesmo ativo':'ativo em comum: '+esc(s.comum.join(', ').toLowerCase())}</small><br><small>saldo <b>${fmtDose(s.saldo)} ${esc(s.un)}</b>${s.preco>0?` · ${brl(s.preco)}/${esc(s.un||'un')}`:''}</small></span>${editable?`<button class="btn btn-outline btn-sm" data-act="recomTrocarIns" data-id="${esc(r.id)}" data-i="${i}" data-novo="${esc(s.produto)}" title="Põe este produto no lugar; a dose fica para você conferir">Trocar</button>`:''}</div>`).join(''):`<div class="mut">Nenhum produto da mesma classe com o mesmo ativo em estoque.</div>`}</div>`; }
+  if(aberto){ const L=prodSimilares(it.produto); sim=`<div class="rc-sim">${L.length?L.map(s=>`<div class="rc-sim-row"><span><b>${esc(s.produto)}</b> <small class="mut">${s.total?'mesmo ativo':'ativo em comum: '+esc(s.comum.join(', ').toLowerCase())}</small><br><small>saldo <b>${fmtDose(s.saldo)} ${esc(s.un)}</b>${s.preco>0?` · ${brl(s.preco)}/${esc(s.un||'un')}`:''}</small></span>${editable?`<span class="rc-sim-btns">${E.st==='parcial'?`<button class="btn btn-primary btn-sm" data-act="recomComplementar" data-id="${esc(r.id)}" data-i="${i}" data-novo="${esc(s.produto)}" title="Divide a dose: ${esc(it.produto)} com o que o saldo permite e este produto completa, nos mesmos tanques">Complementar</button>`:''}<button class="btn btn-outline btn-sm" data-act="recomTrocarIns" data-id="${esc(r.id)}" data-i="${i}" data-novo="${esc(s.produto)}" title="Põe este produto no lugar; a dose fica para você conferir">Trocar</button></span>`:''}</div>`).join(''):`<div class="mut">Nenhum produto da mesma classe com o mesmo ativo em estoque.</div>`}</div>`; }   // v369: Complementar
   return main+link+comp+sim; }
 function recomEstoqueResumo(r,its){ const E=its.filter(it=>it.produto).map(it=>recomEstoqueDe(r,it)); const sem=E.filter(e=>e.st==='sem').length, parc=E.filter(e=>e.st==='parcial').length, ap=E.filter(e=>e.aperta).length, cob=E.filter(e=>e.cobre).length, loc=E.length?E[0].loc:estoqueDoTalhao(r.talhao);
   if(!sem&&!parc&&!ap) return ''; return `<div class="rc-obs rc-est-res">📦 Estoque ${esc(estoqueNome(loc))}: ${[sem?`<b>${sem}</b> insumo(s) sem saldo`:'', parc?`<b>${parc}</b> com saldo parcial`:'', ap?`<b>${ap}</b> comprometido(s) em outras recomendações`:''].filter(Boolean).join(' · ')}.${cob?` <b>${cob}</b> tem saldo no estoque ${esc(estoqueNome(estoqueOutro(loc)))}.`:''} Não bloqueia: confira "similares"${cob?', transfira entre as fazendas':''} ou providencie a compra.</div>`; }
@@ -11381,12 +11383,40 @@ function bulaDoseTag(produto, cultKey, dose, itUn){ const D=bulaDoseCultura(prod
   function faixaTxt(D){ return (D.mn!=null&&D.mx!=null)?`${fmtDose(D.mn)} a ${fmtDose(D.mx)}`:(D.mx!=null?`até ${fmtDose(D.mx)}`:`a partir de ${fmtDose(D.mn)}`); } }
 // v350: etiqueta de saldo para a Operação de Campo (tabela "registrar execução"): precisa = dose (realizada ou planejada) × área da operação
 // v360: saldo do estoque de baixa do talhão (t); se falta e o outro estoque tem, mostra
-function campoEstoqueTag(produto, precisa, t){ const p=String(produto||'').trim(); if(!p||!PROD[p]) return ''; const loc=estoqueDoTalhao(t), outro=estoqueOutro(loc), saldo=+saldoEstoqueDe(p,loc).toFixed(4), sOutro=+saldoEstoqueDe(p,outro).toFixed(4), un=esc((PROD[p]||{}).un||''), pr=+(+precisa||0).toFixed(4);
+function campoEstoqueTag(produto, precisa, t, ref){ const p=String(produto||'').trim(); if(!p||!PROD[p]) return ''; const loc=estoqueDoTalhao(t), outro=estoqueOutro(loc), saldo=+saldoEstoqueDe(p,loc).toFixed(4), sOutro=+saldoEstoqueDe(p,outro).toFixed(4), un=esc((PROD[p]||{}).un||''), pr=+(+precisa||0).toFixed(4);
   const tit=`saldo no estoque ${estoqueNome(loc)} (estoque de baixa deste talhão)${pr>0?` · esta operação precisa de ${fmtDose(pr)} ${un} (dose × área)`:''} · ${saldosTxt(p, un)}`;
   const ot=(sOutro>0&&(saldo<=0||(pr>0&&saldo+1e-6<pr)))?` <small class="ci-est-outro">💡 ${esc(estoqueNome(outro))} tem ${fmtDose(sOutro)} ${un} · <a class="link" data-act="transfAbrir" data-prod="${esc(p)}" data-de="${outro}" data-para="${loc}" data-qtd="${Math.min(Math.max(0,pr-saldo)||sOutro, sOutro)}">transferir</a></small>`:'';   // v361
+  // v369: saldo parcial → "complementar com similar" (mesmo ativo, com saldo neste estoque); ref = {key, ref} do insumo na operação
+  const sims=(ref&&pr>0&&saldo>0&&saldo+1e-6<pr)?prodSimilares(p, loc):[], kc=ref?`${ref.key}|${ref.ref}`:'';
+  const cl=sims.length?` <small class="ci-est-outro">· <a class="link" data-act="campoCompl" data-key="${esc(ref.key)}" data-ref="${esc(ref.ref)}" title="Divide a dose: este produto com o que o saldo permite e um similar completa, nos mesmos tanques">complementar com similar${CAMPO_COMPL===kc?' ▴':' ▸'}</a></small>`:'';
+  const lista=(sims.length&&CAMPO_COMPL===kc)?`<div class="rc-sim ci-sim">${sims.map(s=>`<div class="rc-sim-row"><span><b>${esc(s.produto)}</b> <small class="mut">${s.total?'mesmo ativo':'ativo em comum: '+esc(s.comum.join(', ').toLowerCase())}</small><br><small>saldo <b>${fmtDose(s.saldo)} ${esc(s.un)}</b> em ${esc(estoqueNome(loc))}</small></span><button class="btn btn-outline btn-sm" data-act="campoComplDo" data-key="${esc(ref.key)}" data-ref="${esc(ref.ref)}" data-novo="${esc(s.produto)}" title="Põe este produto como complemento, com a dose calculada">Complementar</button></div>`).join('')}</div>`:'';
   if(saldo<=0) return `<span class="ci-est err" title="${esc(tit)}">⛔ sem estoque em ${esc(estoqueNome(loc))}</span>${ot}`;
-  if(pr>0 && saldo+1e-6<pr) return `<span class="ci-est warn" title="${esc(tit)}">⚠ ${esc(estoqueNome(loc))}: saldo ${fmtDose(saldo)} ${un} · falta ${fmtDose(+(pr-saldo).toFixed(4))} ${un}</span>${ot}`;
+  if(pr>0 && saldo+1e-6<pr) return `<span class="ci-est warn" title="${esc(tit)}">⚠ ${esc(estoqueNome(loc))}: saldo ${fmtDose(saldo)} ${un} · falta ${fmtDose(+(pr-saldo).toFixed(4))} ${un}</span>${cl}${ot}${lista}`;
   return `<span class="ci-est ok" title="${esc(tit)}">✅ ${esc(estoqueNome(loc))}: saldo ${fmtDose(saldo)} ${un}</span>`; }
+// ===== v369: COMPLEMENTAR COM SIMILAR — o saldo não cobre dose × área: o produto fica com a dose que o saldo permite e um
+// similar (mesmo ingrediente ativo, com saldo) completa a diferença, nos mesmos tanques. Se as duas bulas têm a concentração
+// (ex.: 480 g/L e 240 g/L), a dose do complemento é convertida; senão assume 1 para 1 e avisa para conferir.
+let CAMPO_COMPL='';   // "key|ref" do insumo com a lista de similares aberta na Operação de Campo
+function concNum(prod){ const s=String(((bulaDe(prod)||{}).conc)||'').replace(',','.'); let m=s.match(/(\d+(?:\.\d+)?)\s*(g|kg|mg|ml|l)\s*\/\s*(l|kg)/i); if(m) return {v:+m[1], un:(m[2]+'/'+m[3]).toLowerCase()}; m=s.match(/(\d+(?:\.\d+)?)\s*%/); return m?{v:+m[1], un:'%'}:null; }
+function complFator(de, para){ const a=concNum(de), b=concNum(para); if(a&&b&&a.un===b.un&&a.v>0&&b.v>0) return {f:a.v/b.v, ok:true, txt:`${a.v} → ${b.v} ${a.un}`}; return {f:1, ok:false, txt:''}; }
+function complCalc(prod, dose, area, saldo, novo){ dose=+dose||0; area=+area||0; saldo=+saldo||0; if(!(dose>0)||!(area>0)||!(saldo>0)||saldo+1e-6>=dose*area||!PROD[novo]) return null;
+  const doseA=Math.floor(saldo/area*1000)/1000, resto=+(dose-doseA).toFixed(4), F=complFator(prod, novo), doseB=Math.round(resto*F.f*1000)/1000; if(!(doseA>0)||!(doseB>0)) return null;
+  return {doseA, doseB, resto, fator:F, usaA:+(doseA*area).toFixed(2), usaB:+(doseB*area).toFixed(2)}; }
+function complToast(prod, novo, c, un){ toast(`${prod} ${fmtDose(c.doseA)} + ${novo} ${fmtDose(c.doseB)} ${un}/ha${c.fator.ok?` (concentração ${c.fator.txt})`:' — mesma concentração assumida: confira na bula'}`); }
+// Operação de Campo: ref = iid do plano ou "e<n>" do extra. O complemento entra como insumo extra logo depois do original na ordem de mistura.
+function campoComplementar(key, ref, novo){ const fk=opFromKey(key), t=findTalhao(fk.talId), r=realEnsure(key); if(!t||!PROD[novo]) return;
+  const all=campoItems(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r), it=all.find(x=>tankRef(x)===ref); if(!it) return;
+  const area=opAreaDe(t,r), loc=estoqueDoTalhao(t), saldo=+saldoEstoqueDe(it.produto,loc).toFixed(4), c=complCalc(it.produto, it.dose, area, saldo, novo);
+  if(!c){ toast('Não dá para dividir: confira a dose, a área e o saldo'); return; }
+  tankSetDose(key, it, c.doseA);
+  r.extras.push({produto:novo, dose:c.doseB, compl:it.produto}); const refs=all.map(tankRef), k=refs.indexOf(ref); refs.splice(k+1, 0, 'e'+(r.extras.length-1)); r.app=r.app||{}; r.app.ordem=refs;
+  CAMPO_COMPL=''; stampReal(key); route({keepScroll:true}); complToast(it.produto, novo, c, PROD[novo].un||it.un||''); }
+// Recomendação avulsa: o complemento vira um item logo abaixo do original
+function recomComplementar(rid, i, novo){ const r=recomById(rid); if(!r||!r.itens||!r.itens[+i]||!PROD[novo]) return; const it=r.itens[+i], E=recomEstoqueDe(r,it), area=(+it.ha>0)?+it.ha:(+r.area||0);
+  const c=complCalc(it.produto, it.dose, area, E.saldo, novo); if(!c){ toast('Não dá para dividir: confira a dose, a área e o saldo'); return; }
+  it.dose=c.doseA; r.itens.splice(+i+1, 0, {produto:novo, un:PROD[novo].un||it.un||'', dose:c.doseB, real:null, ativo:prodAtivoDe(novo)||it.ativo||'', car:it.car||'', compl:it.produto});
+  RECOM_UI.sim=''; saveRecom(); route({keepScroll:true}); complToast(it.produto, novo, c, PROD[novo].un||it.un||''); }
+function complTag(de){ return de?`<small class="ci-compl" title="dose dividida: este produto completa o que faltou de ${esc(de)} (mesmo ingrediente ativo)">↳ complementa ${esc(de)}</small>`:''; }
 function recomTrocarIns(rid, i, novo){ const r=recomById(rid); if(!r||!r.itens||!r.itens[+i]||!PROD[novo]) return; const it=r.itens[+i], antigo=it.produto; it.produto=novo; it.un=PROD[novo].un||it.un||''; it.ativo=prodAtivoDe(novo)||it.ativo||''; RECOM_UI.sim='';
   saveRecom(); route({keepScroll:true}); toast(`${antigo} → ${novo} (saldo ${fmtDose(saldoEstoqueDe(novo))} ${PROD[novo].un||''}) — confira a dose`); }
 // ===== v357: COMPATIBILIDADE DA CALDA (análise de mistura) — regras locais com os dados da bula + parecer da IA (planilha, __misturaIa) =====
@@ -11497,6 +11527,7 @@ function recomCard(r,t){
     const prodCell=editable
       ? `<span class="agp-row"><input list="prodlist" class="txt prod-in" ${F('itProd')} data-reci="${i}" value="${esc(it.produto||'')}" placeholder="insumo"><button type="button" class="btn btn-outline btn-sm" data-act="recomInsumo" data-id="${esc(r.id)}" data-i="${i}" title="Buscar insumo (portfólio + catálogo MAPA)">🔍</button></span><br><input class="txt" ${F('itAtivo')} data-reci="${i}" value="${esc(it.ativo||'')}" placeholder="ingrediente ativo" style="font-size:11px;margin-top:3px;max-width:240px">`
       : `<b>${esc(it.produto||'—')}</b>${it.ativo?`<br><small class="mut">${esc(it.ativo)}</small>`:''}`;
+    const prodCellC=prodCell+(it.compl?`<br>${complTag(it.compl)}`:'');   // v369: complemento de outro produto (mesmo ativo)
     const dCls=bulaDoseCls(bulaDoseRef(it).st), dAvHtml=bulaRefHtml(it, editable);   // v294: referência da bula por insumo; dose acima da bula em vermelho
     const doseCell=(editable
       ? `<input class="cell${dCls}" inputmode="decimal" ${F('itDose')} data-reci="${i}" value="${it.dose||''}" placeholder="0"><small> ${esc(it.un||'')}/ha</small>`
@@ -11516,7 +11547,7 @@ function recomCard(r,t){
     const estHtml=recomEstoqueHtml(r,it,i,editable), semReal=(r.status==='rascunho'||r.status==='enviada'), semCar=!editable&&!it.car;   // v367: no celular, a linha vira o desenho da "Na calda" (nome + dose à esquerda, totais à direita)
     return `<tr>
       <td class="num rc-ord"><span class="op-ord" title="ordem de mistura">${i+1}</span></td>
-      <td class="c-full rc-prod">${prodCell}</td>
+      <td class="c-full rc-prod">${prodCellC}</td>
       <td class="num rc-dose-td" data-th="Dose/ha">${doseCell}</td>
       <td class="num rc-tot${planTot?'':' rc-vazio'}" data-th="Total na área">${planTot?fmtDose(planTot)+(it.un?'<small> '+esc(it.un)+'</small>':''):'—'}</td>
       <td class="rc-est-td${estHtml.indexOf('class="mut">—')>=0?' rc-vazio':''}" data-th="Estoque">${estHtml}</td>
@@ -13523,14 +13554,14 @@ V.campo = function(arg){
       const rv=(r.doses&&(iid in r.doses))?r.doses[iid]:'';
       const diff=rv!=='' && +rv!==+it.dose, fora=itemFora(r,it), trava=r.status==='concluido';
       return `<tr${fora?' class="ci-off"':''}>
-        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}${(mostraEst&&!fora)?campoEstoqueTag(it.produto, (rv!==''?+rv:+it.dose)*areaOp, t):''}${fora?'':bulaDoseTag(it.produto, ckOp, rv!==''?+rv:+it.dose, it.un)}</td>
+        <td class="ci-prod">${it.classe?`<span class="classe-tag">${esc(it.classe)}</span> `:''}<b>${esc(it.produto||'—')}</b>${fora?' <span class="ci-off-tag">fora desta aplicação</span>':''}${(mostraEst&&!fora)?campoEstoqueTag(it.produto, (rv!==''?+rv:+it.dose)*areaOp, t, {key:o.key, ref:iid}):''}${fora?'':bulaDoseTag(it.produto, ckOp, rv!==''?+rv:+it.dose, it.un)}</td>
         <td class="num ci-plan">${fmtDose(it.dose)}<small> ${esc(it.un||'')}</small></td>
         <td class="num ci-real">${fora?'<span class="mut">—</span>':`<input class="cell${diff?' edited':''}" inputmode="decimal" data-edit="realDose" data-key="${esc(o.key)}" data-iid="${iid}" value="${rv}" placeholder="${fmtDose(it.dose)}">`}
           ${trava?'':`<button class="icon-btn ci-x${fora?' on':''}" data-act="realExcl" data-key="${esc(o.key)}" data-iid="${iid}" title="${fora?'Voltar a usar este produto nesta aplicação':'Tirar este produto desta aplicação (o planejamento não muda)'}">${fora?'↩':'✕'}</button>`}</td>
       </tr>`;
     }).join('');
     const extrasRows=(r.extras||[]).map((ex,ei)=>`<tr class="ci-extra">
-        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano">${mostraEst?campoEstoqueTag(ex.produto, (+ex.dose||0)*areaOp, t):''}${bulaDoseTag(ex.produto, ckOp, +ex.dose||0, (PROD[ex.produto]||{}).un)}</td>
+        <td class="ci-prod"><span class="pill pill-buy">extra</span> <input list="prodlist" class="txt prod-in" data-edit="realExtraProd" data-key="${esc(o.key)}" data-ei="${ei}" value="${esc(ex.produto||'')}" placeholder="insumo usado fora do plano">${complTag(ex.compl)}${mostraEst?campoEstoqueTag(ex.produto, (+ex.dose||0)*areaOp, t, {key:o.key, ref:'e'+ei}):''}${bulaDoseTag(ex.produto, ckOp, +ex.dose||0, (PROD[ex.produto]||{}).un)}</td>
         <td class="num ci-plan mut">—</td>
         <td class="num ci-real"><input class="cell" inputmode="decimal" data-edit="realExtraDose" data-key="${esc(o.key)}" data-ei="${ei}" value="${ex.dose!=null?ex.dose:''}" placeholder="dose">
           <button class="icon-btn del" title="Remover extra" data-act="realDelExtra" data-key="${esc(o.key)}" data-ei="${ei}">🗑</button></td>
@@ -14419,7 +14450,12 @@ document.addEventListener('click',e=>{
     else if(a.act==='realExcl'){ const r=realEnsure(a.key); r.excl=r.excl||{};
       if(r.excl[a.iid]) delete r.excl[a.iid]; else { r.excl[a.iid]=true; if(r.doses) delete r.doses[a.iid]; }
       if(!Object.keys(r.excl).length) delete r.excl; stampReal(a.key); realClean(a.key); route({keepScroll:true}); }
-    else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ r.extras.splice(+a.ei,1); realClean(a.key); saveOverrides(); route(); } }
+    else if(a.act==='realDelExtra'){ const r=realOf(a.key); if(r&&r.extras){ const ei=+a.ei; r.extras.splice(ei,1);
+      if(r.app&&Array.isArray(r.app.ordem)) r.app.ordem=r.app.ordem.filter(x=>x!=='e'+ei).map(x=>(/^e\d+$/.test(x)&&+x.slice(1)>ei)?'e'+(+x.slice(1)-1):x);   // v369: a ordem de mistura acompanha a renumeração dos extras
+      realClean(a.key); saveOverrides(); route(); } }
+    else if(a.act==='campoCompl'){ const k=`${a.key}|${a.ref}`; CAMPO_COMPL=(CAMPO_COMPL===k)?'':k; route({keepScroll:true}); }   // v369: complementar com similar
+    else if(a.act==='campoComplDo'){ campoComplementar(a.key, a.ref, a.novo); }
+    else if(a.act==='recomComplementar'){ recomComplementar(a.id, a.i, a.novo); }
     else if(a.act==='lgEntrar'){ lgEntrar(); }
     else if(a.act==='sessSair'){ sessSair(); }
     else if(a.act==='ctTrocarPin'){ ctTrocarPin(); }

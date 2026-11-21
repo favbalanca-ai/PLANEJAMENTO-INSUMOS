@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Complementar com similar (v369)** — quando o saldo do estoque de baixa não cobre dose × área, aparece "complementar
+  com similar" (Operação de Campo, `campoEstoqueTag`) e o botão "Complementar" na lista de similares da recomendação
+  (`recomEstoqueHtml`). `complCalc` divide: o produto fica com a dose que o saldo permite (saldo ÷ área, 3 casas, para
+  baixo) e o similar (mesmo ingrediente ativo, com saldo naquele estoque) entra com o que falta, convertido pela
+  concentração das bulas quando as duas têm (`concNum`/`complFator`; senão 1 para 1 e aviso). No Campo o complemento vira
+  insumo extra logo depois do original na ordem de mistura (`campoComplementar`, `compl` no extra); na recomendação vira
+  item abaixo (`recomComplementar`). O par aparece com "↳ complementa X" nas tabelas, no quadro "Na calda" e no WhatsApp.
+  Remover um extra renumera `app.ordem`.
 - **Ordem de mistura na aplicação (v368)** — no quadro "Na calda (tanque)" do Campo cada insumo tem o número da ordem
   e setas ▲ ▼ (`tankMover`). A ordem fica em `r.app.ordem` do registro da operação (REALIZADO APP, sincroniza entre
   aparelhos) e `campoItems` já devolve os itens nessa ordem: quadro, mensagem de WhatsApp, recomendação criada a partir
