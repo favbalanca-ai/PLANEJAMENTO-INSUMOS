@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-374';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-375';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9677,10 +9677,11 @@ function tlRow(e){
 // de semente aprovada (finalizada) ou operação com semente concluída no Campo (mesma regra do plantioRealDe, que dá o
 // dia 0 do DAE). Área: a do talhão; se a operação de plantio foi parcial ou a recomendação aprovada tinha área menor,
 // vale a área feita. Plantio parcial ainda não encerrado soma só a área feita.
-function areaPlantadaResumo(tals){
+// v375: `seqFix` força a safra ('principal' | 'safrinha'); sem ele vale a safra atual do talhão. Na safrinha só entram os talhões que têm 2ª cultura.
+function areaPlantadaResumo(tals, seqFix){
   let ha=0, total=0, n=0, parc=0;
-  tals.forEach(t=>{ const a=areaDe(t)||0; if(!a) return; total+=a;
-    const seq=talSafraAtual(t), pk=plantingOpOf(t.id,seq), r=pk?(OV.realizado&&OV.realizado[`${t.id}|${pk}`]):null;
+  tals.forEach(t=>{ const a=areaDe(t)||0; if(!a) return; if(seqFix==='safrinha'&&!temSafrinha(t)) return; total+=a;
+    const seq=seqFix||talSafraAtual(t), pk=plantingOpOf(t.id,seq), r=pk?(OV.realizado&&OV.realizado[`${t.id}|${pk}`]):null;
     if(plantioRealDe(t.id,seq)){ let f=a;
       if(r&&opAreaFeita(r)) f=Math.min(a,opAreaFeita(r));
       else { const rc=(RECOM&&RECOM.registros||[]).filter(x=>x.tipo!=='ts'&&x.talhao===t.id&&x.status==='aprovada'&&recomSeq(x)===seq&&(x.itens||[]).some(it=>it.produto&&_isSemente(it))&&+x.area>0);
@@ -9689,10 +9690,41 @@ function areaPlantadaResumo(tals){
     else if(r&&r.status==='parcial'&&opAreaFeita(r)){ ha+=Math.min(a,opAreaFeita(r)); parc++; } });
   return {ha, total, n, parc, pct: total?Math.round(ha/total*100):0};
 }
+// ---- v375: PAINEL POR FASE DA SAFRA ----
+// talhão COLHIDO quando o "Colhido/ha" está preenchido em Resultados ou uma operação com "colheita" no nome foi concluída no Campo
+function talColhido(t, seq){
+  const rs=OV.result&&OV.result[`${t.id}|${seq}`]; if(rs&&rs.prodHa!=null&&rs.prodHa!=='') return true;
+  return opsDoTalhao(t).some(o=>o.seq===seq && /colheita/i.test((o.op&&o.op.nome)||'') && ((realOf(o.key)||{}).status==='concluido'));
+}
+function areaColhidaResumo(tals, seq){
+  let ha=0, total=0, n=0;
+  tals.forEach(t=>{ const a=areaDe(t)||0; if(!a) return; if(seq==='safrinha'&&!temSafrinha(t)) return; total+=a; if(talColhido(t,seq)){ ha+=a; n++; } });
+  return {ha, total, n, pct: total?Math.round(ha/total*100):0};
+}
+// recomendações: em andamento (rascunho, enviada, retorno) × finalizadas (aprovada)
+function recomResumo(lista){
+  const r={andamento:0, finalizadas:0, total:0};
+  (lista||[]).forEach(x=>{ const s=recomNorm(x).status; r.total++; if(s==='aprovada') r.finalizadas++; else r.andamento++; });
+  r.pct=r.total?Math.round(r.finalizadas/r.total*100):0; return r;
+}
+const FASE_KEY='planejamento_painel_fase';   // escolha manual da fase (só neste aparelho); vazio = automático
+const FASES={ plantio:{lbl:'Plantio',ico:'🌱'}, desenvolvimento:{lbl:'Desenvolvimento',ico:'🌿'}, colheita:{lbl:'Colheita',ico:'🌾'}, safrinha:{lbl:'Safrinha',ico:'🌽'} };
+// fase automática: safrinha já plantada → Safrinha · algum talhão colhido ou colheita prevista a ≤20 d → Colheita · tudo plantado → Desenvolvimento · senão Plantio
+function faseAuto(tals){
+  const apl=areaPlantadaResumo(tals,'principal'), col=areaColhidaResumo(tals,'principal'), saf=areaPlantadaResumo(tals,'safrinha');
+  if(saf.n>0||saf.parc>0) return 'safrinha';
+  if(col.n>0) return 'colheita';
+  const hj=_hojeISO(), prox=tals.map(t=>plantioRealDe(t.id,'principal')?colheitaPrevDe(t.id,'principal'):'').filter(Boolean).sort()[0];
+  if(prox && Math.round((new Date(prox+'T00:00:00')-new Date(hj+'T00:00:00'))/86400000)<=20) return 'colheita';
+  if(apl.total && apl.pct>=100) return 'desenvolvimento';
+  return 'plantio';
+}
+function faseSafra(tals){ let m=''; try{ m=localStorage.getItem(FASE_KEY)||''; }catch(e){} const auto=faseAuto(tals); const manual=!!(m&&FASES[m]); return {fase:manual?m:auto, auto, manual}; }
 V.campopainel = function(){
   const tals=fazTalhoes(), okT=id=>!oqFaz||fazOk(findTalhao(id));   // v250: filtrado pela fazenda escolhida
   const prog=campoProgress(fazOk), pctDone=prog.total?Math.round(prog.done/prog.total*100):0;
-  const apl=areaPlantadaResumo(tals);
+  const apl=areaPlantadaResumo(tals,'principal'), col=areaColhidaResumo(tals,'principal'), saf=areaPlantadaResumo(tals,'safrinha'), temSaf=tals.some(temSafrinha);
+  const FS=faseSafra(tals), fase=FS.fase, F=FASES[fase];
   const ev=camposEventos().filter(e=>!e.talhao||okT(e.talhao));
   const d30=Date.now()-30*86400000;
   const fT=r=>!r.talhao||okT(r.talhao);
@@ -9704,22 +9736,33 @@ V.campopainel = function(){
   const talAtiv=new Set(ev.filter(e=>e.talhao).map(e=>e.talhao)).size;
   const ult=ev[0];
   const ultTxt=ult?(_diasC(ult.ts)===0?'hoje':(_diasC(ult.ts)===1?'ontem':_diasC(ult.ts)+' dias atrás')):'—';
+  // v375: cartões por chave; a fase decide a ordem (1º = destaque) e quais ficam escondidos
+  const rec=recomResumo(recom);
+  const kpi=(k, label, value, sub, o)=>{ o=o||{}; const T=o.go?'a':'div'; return `<${T} class="kpi${o.accent?' accent':''}${o.go?' kpi-link':''}" data-kpi="${k}"${o.go?` data-go="${o.go}"`:''}${o.title?` title="${esc(o.title)}"`:''}><div class="k-label">${label}</div><div class="k-value"${o.small?' style="font-size:20px"':''}>${value}</div>${o.pct!=null?`<div class="k-bar"><div style="width:${Math.min(100,o.pct)}%"></div></div>`:''}<div class="k-sub">${sub}</div></${T}>`; };
+  const C={
+    ops:  a=>kpi('ops','Operações executadas',`${pctDone}%`,`${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}`,{accent:a,pct:pctDone,go:'#/campo'}),
+    plant:a=>kpi('plant',`Área plantada${temSaf?' · 1ª cultura':''}`,`${apl.pct}%`,`${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}`,{accent:a,pct:apl.pct,title:'Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo'}),
+    col:  a=>kpi('col',`Área colhida${temSaf?' · 1ª cultura':''}`,`${col.pct}%`,`${num(col.ha)} de ${num(col.total)} ha · ${col.n} talhão(ões)`,{accent:a,pct:col.pct,go:'#/resultados',title:'Talhão colhido: "Colhido/ha" preenchido em Resultados ou operação com "colheita" no nome concluída no Campo'}),
+    saf:  a=>kpi('saf','Plantio da safrinha',`${saf.pct}%`,`${num(saf.ha)} de ${num(saf.total)} ha · ${saf.n} talhão(ões)${saf.parc?` · ${saf.parc} parcial`:''}`,{accent:a,pct:saf.pct,title:'2ª cultura plantada: recomendação de semente aprovada ou operação com semente concluída no Campo'}),
+    rec:  a=>kpi('rec','Recomendações finalizadas',`${rec.pct}%`,`${rec.andamento} em andamento · ${rec.finalizadas} finalizada${rec.finalizadas===1?'':'s'} · ${rec.total} no total`,{accent:a,pct:rec.pct,go:'#/recomendacao',title:'Em andamento: rascunho, enviada ou retorno recebido · Finalizada: aplicação aprovada'}),
+    monit:a=>kpi('monit','Monitoramentos · 30 dias',monit30.length,`${monit.length} no total`,{accent:a}),
+    chuva:a=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return kpi('chuva','Chuva · 30 dias',`${nf0.format(mm30)} mm`,chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro',{accent:a});
+      const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), u=ed.slice().reverse().find(x=>x.mm>0);
+      return kpi('chuva','Chuva · 30 dias 🌦️',`${nf0.format(s30)} mm`,`estação${u?' · última '+_dtBRc(u.d)+' · '+nfmm(u.mm)+' mm':' · sem chuva'}`,{accent:a,go:'#/chuva',title:'Chuva medida pela estação (app Monitor de Irrigação)'}); },
+    tal:  a=>kpi('tal','Talhões com atividade',talAtiv,`de ${tals.length} talhões`,{accent:a}),
+    stand:a=>kpi('stand','Contagens de stand',stand.length,stand[0]?'última '+_dtBRc(stand[0].data):'—',{accent:a}),
+    ult:  a=>kpi('ult','Última atividade',ultTxt,ult?CAMPO_TIPOS[ult.tipo].lbl:'nenhuma',{accent:a,small:true}),
+    ev:   a=>kpi('ev','Eventos no histórico',ev.length,'<a class="link" data-go="#/timeline">ver timeline →</a>',{accent:a})
+  };
+  const ORDEM={ plantio:['plant','ops','rec','monit','chuva'], desenvolvimento:['ops','rec','monit','chuva','tal'], colheita:['col',temSaf?'saf':'ops','ops','rec','monit'], safrinha:['saf','col','ops','rec','monit'] }[fase];
+  const OCULTA={ plantio:['col','saf'], desenvolvimento:['col','saf'], colheita:temSaf?[]:['saf'], safrinha:[] }[fase];
+  const chaves=ORDEM.filter((k,i,a)=>a.indexOf(k)===i).concat(Object.keys(C).filter(k=>!ORDEM.includes(k))).filter(k=>!OCULTA.includes(k));
+  const cards=chaves.map((k,i)=>C[k](i===0));
+  const faseSel=`<select class="sel fase-sel" id="painel-fase" title="Mudar a fase troca os cartões em destaque; vale só neste aparelho"><option value=""${FS.manual?'':' selected'}>Automático · ${FASES[FS.auto].lbl}</option>${Object.keys(FASES).map(k=>`<option value="${k}"${FS.manual&&fase===k?' selected':''}>${FASES[k].ico} ${FASES[k].lbl}</option>`).join('')}</select>`;
   return `${fazSelectHtml('faz-top')}
-  <div class="kpi-grid">
-    <div class="kpi accent"><div class="k-label">Operações executadas</div><div class="k-value">${pctDone}%</div><div class="k-sub">${prog.done}/${prog.total}${prog.running?` · ${prog.running} em andamento`:''}</div></div>
-    <div class="kpi kpi-plantio" title="Plantio finalizado: recomendação de semente aprovada ou operação com semente concluída no Campo"><div class="k-label">Área plantada</div><div class="k-value">${apl.pct}%</div><div class="k-sub">${num(apl.ha)} de ${num(apl.total)} ha · ${apl.n} talhão(ões)${apl.parc?` · ${apl.parc} parcial`:''}</div></div>
-    <div class="kpi"><div class="k-label">Monitoramentos · 30 dias</div><div class="k-value">${monit30.length}</div><div class="k-sub">${monit.length} no total</div></div>
-    ${(()=>{ const ed=chuvaEstDias(oqFaz); if(!ed.length) return `<div class="kpi"><div class="k-label">Chuva · 30 dias</div><div class="k-value">${nf0.format(mm30)} mm</div><div class="k-sub">${chuva[0]?'última '+_dtBRc(chuva[0].data)+' · '+chuva[0].mm+' mm':'sem registro'}</div></div>`;
-      const hj=_hojeISO(), d=new Date(hj+'T00:00:00'); d.setDate(d.getDate()-29); const ini=d.toISOString().slice(0,10), s30=chuvaEstSoma(ed,ini,hj), ult=ed.slice().reverse().find(x=>x.mm>0);
-      return `<a class="kpi kpi-link" data-go="#/chuva" title="Chuva medida pela estação (app Monitor de Irrigação)"><div class="k-label">Chuva · 30 dias 🌦️</div><div class="k-value">${nf0.format(s30)} mm</div><div class="k-sub">estação${ult?' · última '+_dtBRc(ult.d)+' · '+nfmm(ult.mm)+' mm':' · sem chuva'}</div></a>`; })()}
-    <div class="kpi"><div class="k-label">Talhões com atividade</div><div class="k-value">${talAtiv}</div><div class="k-sub">de ${tals.length} talhões</div></div>
-  </div>
-  <div class="kpi-grid">
-    <div class="kpi"><div class="k-label">Contagens de stand</div><div class="k-value">${stand.length}</div><div class="k-sub">${stand[0]?'última '+_dtBRc(stand[0].data):'—'}</div></div>
-    <div class="kpi"><div class="k-label">Recomendações</div><div class="k-value">${recom.length}</div><div class="k-sub">${recom[0]?'última '+_dtBRc(recom[0].data):'—'}</div></div>
-    <div class="kpi"><div class="k-label">Última atividade</div><div class="k-value" style="font-size:20px">${ultTxt}</div><div class="k-sub">${ult?CAMPO_TIPOS[ult.tipo].lbl:'nenhuma'}</div></div>
-    <div class="kpi"><div class="k-label">Eventos no histórico</div><div class="k-value">${ev.length}</div><div class="k-sub"><a class="link" data-go="#/timeline">ver timeline →</a></div></div>
-  </div>
+  <div class="fase-bar"><span class="fase-ico">${F.ico}</span><span class="fase-tx"><b>Fase: ${F.lbl}</b><small class="mut"> · ${FS.manual?'escolhida por você':'automático'}</small></span>${faseSel}</div>
+  <div class="kpi-grid">${cards.slice(0,5).join('')}</div>
+  <div class="kpi-grid">${cards.slice(5).join('')}</div>
   <div class="panel"><div class="panel-head"><h2>Atividade recente</h2><span class="sub"><a class="link" data-go="#/timeline">ver tudo →</a></span></div>
     <div class="tl">${ev.slice(0,8).map(tlRow).join('')||'<p class="mut" style="padding:16px">Nenhum evento ainda. Registre monitoramentos, chuva, stand e recomendações nos atalhos abaixo.</p>'}</div></div>
   <div class="panel"><div class="panel-head"><h2>Registrar</h2></div>
@@ -11278,6 +11321,7 @@ function copiaMaquinas(srcId,dstId,plano){
 document.addEventListener('change',e=>{
   if(e.target.matches&&e.target.matches('[data-finsel]')){ const id=e.target.dataset.finsel; if(e.target.checked) FIN_SEL.add(id); else FIN_SEL.delete(id); route({keepScroll:true}); return; }   // v313: seleção p/ baixa em lote
   if(e.target.id==='camp-talhao'){ location.hash='#/campo/'+encodeURIComponent(e.target.value); return; }
+  if(e.target.id==='painel-fase'){ const v=e.target.value; if(v&&FASES[v]) lsSet(FASE_KEY,v); else { try{ localStorage.removeItem(FASE_KEY); }catch(x){} } route({keepScroll:true}); toast(v?`Painel na fase ${FASES[v].lbl} (só neste aparelho)`:'Painel de volta ao automático'); return; }   // v375
   if(e.target.id==='rec-local'){ REC.local=localNorm(e.target.value); return; }   // v360: estoque de destino do recebimento
   if(TRANSF_F&&/^tr-(de|prod|qtd)$/.test(e.target.id||'')){ transfLer(); transfRender(); return; }   // v361: recalcula os saldos mostrados
   if(REN_F&&/^rn-(de|para|apagar)$/.test(e.target.id||'')){ renLer(); renRender(); return; }   // v366: atualiza a explicação do que vai acontecer
