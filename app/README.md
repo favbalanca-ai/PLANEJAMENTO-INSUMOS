@@ -71,6 +71,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **PDF simples da recomendação (v370)** — `exportRecomPDFSimples_` passa a ser o padrão do PDF de aplicação: só campos
+  preenchidos (faixa de identificação), tabela de produtos com as colunas que têm dado (ingrediente ativo, carência e
+  utilizado só quando existem) e letra maior, calda / condições / segurança em uma linha cada, compatibilidade em uma
+  linha (o bloco inteiro só quando há alerta), link de baixa com QR, aviso curto e assinaturas. Na janela "PDF pronto"
+  o botão "📋 Versão completa" gera o receituário com todas as seções (`exportRecomPDF(id,'completo')`), e de lá
+  "✂️ Versão simples" volta. TS e plantio não mudam.
 - **Complementar com similar (v369)** — quando o saldo do estoque de baixa não cobre dose × área, aparece "complementar
   com similar" (Operação de Campo, `campoEstoqueTag`) e o botão "Complementar" na lista de similares da recomendação
   (`recomEstoqueHtml`). `complCalc` divide: o produto fica com a dose que o saldo permite (saldo ÷ área, 3 casas, para

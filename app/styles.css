@@ -707,6 +707,15 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .rx-big b{display:block;font-size:26px;line-height:1.1}
   #print-area .rx-big span{font-size:10.5px;color:#333}
   #print-area .rx-warn{font-size:10px;color:#333;background:#f3f3f3;border:1px solid #ccc;padding:5px 8px;margin-top:6px}
+  /* v370: PDF simples — faixa de identificação só com o que tem valor, tabela maior, calda/condições/segurança em linhas */
+  #print-area .rx-kv-s{grid-template-columns:repeat(auto-fit,minmax(104px,1fr));font-size:11.5px;margin-bottom:4px}
+  #print-area .rx-kv-s b{font-size:12.5px}
+  #print-area table.rx-s{font-size:12px}
+  #print-area table.rx-s th,#print-area table.rx-s td{padding:6px 6px}
+  #print-area table.rx-s td b{font-size:12.5px}
+  #print-area .rx-lines{margin-top:6px}
+  #print-area .rx-line{font-size:11.5px;padding:4px 0;border-bottom:1px dotted #bbb}
+  #print-area .rx-warn-s{font-size:9.5px;margin-top:8px}
   /* Produtos planejados por operação — um CARTÃO por operação (borda sempre imprime; cores forçadas) */
   #print-area .pop-head,#print-area .pop-seq,#print-area .pop-card,#print-area .pop-card *,#print-area .pop-tot{-webkit-print-color-adjust:exact;print-color-adjust:exact}
   #print-area .pop-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin:10px 0 6px;padding:8px 10px;border:1.5px solid #2f4a55;border-radius:6px}
