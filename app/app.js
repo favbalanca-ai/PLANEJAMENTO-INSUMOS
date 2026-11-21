@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-372';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-373';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9370,11 +9370,13 @@ function talStatusOps(t){
   late.sort((a,b)=>a.dd-b.dd); soon.sort((a,b)=>a.dd-b.dd);
   return {nivel:late.length?'late':soon.length?'soon':tem?'ok':'none', late, soon, prox};
 }
+// v373: pontos de monitoramento com GPS da fazenda escolhida no Mapa (sem fazenda escolhida = todos; ponto de talhão desconhecido fica)
+function mapaPontosMonit(){ return monitLista().filter(r=>{ if(r.lat==null||r.lng==null) return false; if(!oqFaz) return true; const t=findTalhao(r.talhao); return !t||fazOk(t); }); }
 async function mapaInit(){
   const el=document.getElementById('mapa-canvas'); if(!el) return;
   let L; try{ L=await loadLeaflet(); }catch(e){
     el.innerHTML='<div class="mut" style="padding:26px;text-align:center">🌐 O mapa precisa de internet para carregar. Sem conexão, use os links 📍 de cada registro na tela de Monitoramento.</div>'; return; }
-  const pts=monitLista().filter(r=>r.lat!=null&&r.lng!=null);
+  const pts=mapaPontosMonit();   // v373: só os pontos da fazenda escolhida (antes entravam todos e o enquadramento abria as duas fazendas)
   if(_map){ try{ _map.stop(); }catch(e){} try{ _map.remove(); }catch(e){} _map=null; }   // para animação pendente antes de tirar o mapa antigo
   MAPA_CALOR.layers=[]; MAPA_CALOR.pontos=[];
   _map=L.map(el).setView(pts.length?[pts[0].lat,pts[0].lng]:[-15.78,-47.93], pts.length?14:4);
@@ -9424,7 +9426,7 @@ const CALOR_KEY='planejamento_mapa_calor';
 const MAPA_CALOR=Object.assign({on:false, cat:'', alvo:'', dias:30, layers:[], pontos:[], info:null}, (()=>{ try{ return JSON.parse(localStorage.getItem(CALOR_KEY))||{}; }catch(e){ return {}; } })());
 function calorSalvar(){ lsSet(CALOR_KEY, JSON.stringify({on:MAPA_CALOR.on, cat:MAPA_CALOR.cat, alvo:MAPA_CALOR.alvo, dias:MAPA_CALOR.dias})); }
 function calorPontos(){ const hj=_hojeISO(), de=MAPA_CALOR.dias>0?(()=>{ const d=new Date(hj+'T12:00:00'); d.setDate(d.getDate()-MAPA_CALOR.dias); return d.toISOString().slice(0,10); })():'';
-  return monitLista().filter(r=>r.lat!=null&&r.lng!=null && (!MAPA_CALOR.cat||r.categoria===MAPA_CALOR.cat) && (!MAPA_CALOR.alvo||r.alvo===MAPA_CALOR.alvo) && (!de||String(r.data||'').slice(0,10)>=de)); }
+  return mapaPontosMonit().filter(r=>(!MAPA_CALOR.cat||r.categoria===MAPA_CALOR.cat) && (!MAPA_CALOR.alvo||r.alvo===MAPA_CALOR.alvo) && (!de||String(r.data||'').slice(0,10)>=de)); }
 function calorPeso(r){ const nv=_numc(r.nivel), lm=_numc(r.limiar); if(nv!=null&&lm!=null&&lm>0) return Math.max(0.15, nv/lm); if(nv!=null&&nv>0) return 1; return 0.6; }   // sem nível: presença conta um pouco
 function calorCor(v){ return v<.25?'#ffffb2':v<.5?'#fecc5c':v<.75?'#fd8d3c':v<1?'#f03b20':'#bd0026'; }
 function calorCelula(ha){ return ha<=60?20:ha<=150?30:40; }   // m — talhão grande, célula maior (mantém o mapa leve)
