@@ -42,6 +42,10 @@ que mudou em linguagem simples ao final de cada tarefa.
 ## Checklist de entrega (toda mudança)
 
 - [ ] Mudou `app/app.js`? Suba a `APP_VERSION` (linha 5, formato `AAAA.MM.DD-N`).
+- [ ] Mudou `app/styles.css`? CSS novo vai **antes** do bloco gerado
+      `/* ===== Celular: fonte ~…` (fim do arquivo). Rode
+      `python3 scripts/css_fonte_celular.py` — ele **apaga tudo que estiver depois
+      desse marcador** e regera o bloco. Confira com `grep` que a regra nova sobreviveu.
 - [ ] Rode `python3 scripts/build_singlefile.py` (regera `planejamento_app.html`
       e `version.json`). Commite os dois.
 - [ ] Mudou `app/sw.js`? Troque o texto de `VERSAO`.

@@ -2337,6 +2337,68 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rc-mist-foot{margin-top:6px;font-size:11.5px;color:var(--muted)}
 .rx-mist ul{margin:4px 0 0;padding-left:16px}
 
+/* v374 — Campo (talhão): cabeçalho compacto, linha do tempo com bolinha colorida por status, produtos em etiquetas, concluídas recolhidas */
+.cp-top{padding:10px 12px;gap:6px}
+.cp-topbtns{margin-bottom:2px}
+.cp-tinfo{font-size:12px;gap:2px 8px}
+.cp-prog-bar{height:5px;border-radius:3px}
+.cp-progtx{font-size:12px;color:var(--muted);margin-top:-2px}
+.cp-progtx b{color:var(--ink);font-size:13px}
+.cp-progtx .late{color:#a61b1b;font-weight:700}
+.cp-chip{padding:4px 10px;font-size:12px}
+.cp-chip b{font-size:10.5px}
+.cp-seqhd{text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted);margin:12px 0 8px 36px}
+.cp-tl{position:relative}
+.cp-row{display:grid;grid-template-columns:28px minmax(0,1fr);gap:8px;position:relative;margin-bottom:10px}
+.cp-row::before{content:"";position:absolute;left:13px;top:38px;bottom:-12px;width:2px;background:#dfe6ea}
+.cp-row:last-child::before{display:none}
+.cp-row .cp-n{width:28px;height:28px;border-radius:14px;margin-top:10px;background:#c3ccd2;color:#fff;font-size:12.5px;font-weight:800;display:flex;align-items:center;justify-content:center;position:relative;z-index:1}
+.cp-row.st-ok .cp-n{background:#1f9d55}
+.cp-row.st-and .cp-n,.cp-row.st-parc .cp-n,.cp-row.today .cp-n{background:#e0a800}
+.cp-row.late .cp-n{background:#c62828}
+.cp-row.st-canc .cp-n{background:#fff;color:#9aa7ad;border:2px solid #c3ccd2}
+.cp-row.prox .cp-n{box-shadow:0 0 0 3px rgba(31,74,85,.22)}
+.cp-row .cp-card{margin-bottom:0;border-left:1px solid var(--line);opacity:1}
+.cp-row.st-ok .cp-card,.cp-row.st-canc .cp-card{background:#fbfcfc}
+.cp-row.prox .cp-card{border-color:rgba(31,74,85,.45);box-shadow:0 0 0 1px rgba(31,74,85,.25),0 4px 14px rgba(0,0,0,.07)}
+.cp-row .cp-face{padding:10px 12px 6px;gap:8px}
+.cp-row .cp-main{display:grid;gap:4px}
+.cp-row .cp-title{display:block;font-size:14px}
+.cp-row .cp-when{display:flex}
+.cp-row .cp-act{padding:2px 12px 10px}
+.cp-row .cp-act:empty{display:none}
+.cp-row .cp-act .btn-wa{width:auto;flex:1 1 auto;margin-top:0}
+.cp-prods{display:flex;flex-wrap:wrap;gap:4px;line-height:1.3;overflow:visible;-webkit-line-clamp:unset;margin-top:2px}
+.cp-p{font-size:11.5px;background:#f0f4f6;border-radius:7px;padding:2px 7px;color:var(--ink);max-width:100%;line-height:1.35}
+.cp-p b{font-weight:600;color:var(--muted);margin-left:4px}
+.cp-p.ex{background:var(--green-soft);color:var(--green)}
+.cp-p.off{text-decoration:line-through;color:var(--muted);background:transparent;border:1px dashed var(--line)}
+.cp-row .cp-maq{display:block}
+.cp-tag.and{background:var(--amber-soft);color:#7a5600}
+.cp-tag.next{text-transform:none;letter-spacing:0}
+.cp-done>summary{list-style:none;cursor:pointer}
+.cp-done>summary::-webkit-details-marker{display:none}
+.cp-done>summary .panel-chevron{color:var(--muted);align-self:center;transition:transform .15s}
+.cp-done[open]>summary .panel-chevron{transform:rotate(90deg)}
+.cp-done .cp-title{font-size:13.5px;font-weight:700;color:var(--ink2)}
+.cp-done:not([open])>summary.cp-face{padding-bottom:10px}
+.cp-donebody{padding:0 12px 6px;display:grid;gap:4px}
+.cp-hoje{display:flex;align-items:center;gap:8px;margin:2px 0 10px;font-size:11px;font-weight:700;color:#7a5600;white-space:nowrap}
+.cp-hoje::before{content:"";width:28px;height:2px;background:#e0a800;border-radius:1px}
+.cp-hoje::after{content:"";flex:1;height:1px;background:#f0cf7a}
+.cp-det>summary{font-weight:600;background:#f9fafb}
+
+/* v375 — Painel por fase da safra */
+.fase-bar{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:12px}
+.fase-ico{font-size:22px;line-height:1}
+.fase-tx{flex:1;min-width:0;font-size:13.5px;color:var(--ink)}
+.fase-sel{flex:0 0 auto;max-width:170px;font-size:12.5px;padding:6px 8px;font-weight:600}
+.kpi .k-bar{height:4px;border-radius:2px;background:#e6ecef;overflow:hidden;margin-top:8px}
+.kpi .k-bar>div{height:100%;background:linear-gradient(90deg,#1f9d55,#2fbf71);border-radius:2px}
+.kpi.accent .k-bar{background:rgba(255,255,255,.22)}
+.kpi.accent .k-bar>div{background:#fff}
+@media (max-width:640px){ .fase-tx{font-size:13px} .fase-sel{max-width:150px;font-size:12px} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2442,10 +2504,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .lt-st .lt-date b{font-size:9.5px}
   .lt-st .lt-card{font-size:9.5px}
   .lt-stc{font-size:9.5px}
-  .cp-tinfo{font-size:10px}
   .cp-tinfo b{font-size:13px}
   .cp-prog{font-size:9.5px}
-  .cp-chip{font-size:10px}
   .cp-n{font-size:10px}
   .cp-title{font-size:11.5px}
   .cp-when{font-size:10px}
@@ -2807,4 +2867,16 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .etq-links{font-size:9.5px}
   .rc-mist{font-size:10px}
   .rc-mist-foot{font-size:9.5px}
+  .cp-tinfo{font-size:9.5px}
+  .cp-progtx{font-size:9.5px}
+  .cp-progtx b{font-size:10.5px}
+  .cp-chip{font-size:9.5px}
+  .cp-seqhd{font-size:9.5px}
+  .cp-row .cp-n{font-size:10px}
+  .cp-row .cp-title{font-size:11.5px}
+  .cp-p{font-size:9.5px}
+  .cp-done .cp-title{font-size:11px}
+  .fase-ico{font-size:18px}
+  .fase-tx{font-size:10.5px}
+  .fase-sel{font-size:9.5px}
 }

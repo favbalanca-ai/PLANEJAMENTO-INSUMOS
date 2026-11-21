@@ -71,6 +71,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Painel do Campo por fase da safra (v375)** — o Painel descobre a fase da fazenda escolhida (`faseAuto`): safrinha
+  já plantada → **Safrinha**; algum talhão colhido ou 1ª colheita prevista a ≤ 20 dias → **Colheita**; tudo plantado →
+  **Desenvolvimento**; senão **Plantio**. A fase decide a ordem dos cartões (o 1º é o escuro, de destaque) e esconde os
+  que não fazem sentido (área colhida e safrinha fora da colheita). Cartões novos: **Área colhida** (talhão colhido =
+  "Colhido/ha" preenchido em Resultados ou operação com "colheita" no nome concluída no Campo, `talColhido`/
+  `areaColhidaResumo`), **Plantio da safrinha** (`areaPlantadaResumo(tals,'safrinha')`, só talhões com 2ª cultura) e
+  **Recomendações finalizadas** (`recomResumo`: em andamento = rascunho/enviada/retorno × finalizadas = aprovada).
+  Os cartões de % ganham barra fina. A faixa "Fase: … · automático" tem um seletor para forçar outra fase, guardado só
+  no aparelho (`planejamento_painel_fase`); "Automático" volta ao cálculo.
 - **Tela Campo do talhão redesenhada (v374)** — as operações ficam numa linha do tempo vertical, com a bolinha
   numerada na cor do status (verde ✓ feita, âmbar em andamento/hoje, vermelha atrasada, cinza pendente, ✕ não
   realizada; a próxima ganha um anel). Concluídas e não realizadas vêm **recolhidas** numa linha só (toque para
