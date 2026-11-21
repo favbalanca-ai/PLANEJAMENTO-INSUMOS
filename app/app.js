@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-376';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-377';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -6300,30 +6300,36 @@ function tsMarca(r, feito, quem){
 }
 function tsMarcaSalva(r, feito, quem){ const re=tsMarca(r,feito,quem); if(!r||!r.tsOp) return;
   saveOverrides(); scheduleRealizadoPush(); if(re) pushOpSaida(r.tsOp).catch(()=>{}); }
-// v376: operação concluída no CAMPO (Finalizar) com a recomendação de TS ainda aberta → a recomendação fecha sozinha como
-// aprovada. A baixa já saiu pela operação (id op:), então a recomendação NÃO manda saída (saidaPushed) e o TS fica
-// marcado "feito" com baixa vazia + viaOp (opBaixaEff mantém a baixa da operação; nada sai em dobro).
-function tsFecharPelaOp(key, rl){
+// v376/v377: operação concluída no CAMPO (Finalizar) com recomendação ainda aberta → a recomendação fecha sozinha como
+// aprovada. Vale para a recomendação de TS (tsOp) e para a de aplicação ligada à operação (opKey). A baixa já saiu pela
+// operação (id op:), então a recomendação NÃO manda saída própria (saidaPushed); no TS a operação fica "feito" com baixa
+// vazia + viaOp (opBaixaEff mantém a baixa da operação; nada sai em dobro).
+function recomDaOp(key){ return (RECOM&&RECOM.registros||[]).filter(x=>x&&((x.tipo==='ts'&&x.tsOp===key)||(x.tipo!=='ts'&&x.opKey===key))); }
+function recomFecharPelaOp(key, rl){
   rl=rl||realOf(key); if(!rl||rl.status!=='concluido') return 0;
-  const recs=(RECOM&&RECOM.registros||[]).filter(x=>x&&x.tipo==='ts'&&x.tsOp===key&&recomNorm(x).status!=='aprovada'); if(!recs.length) return 0;
-  const fk=opFromKey(key), t=fk?findTalhao(fk.talId):null, area=opAreaFeita(rl)||(t?areaDe(t):0)||0, b=rl.baixa||{};
+  const recs=recomDaOp(key).filter(x=>recomNorm(x).status!=='aprovada'); if(!recs.length) return 0;
+  const fk=opFromKey(key), t=fk?findTalhao(fk.talId):null, area=opAreaFeita(rl)||(t?areaDe(t):0)||0, b=rl.baixa||{}, quem=(rl.app&&rl.app.operador)||'';
   recs.forEach(r=>{
     (r.itens||[]).forEach(it=>{ if(!it.produto) return; if(it.real==null||it.real===''){ it.real=(b[it.produto]!=null)?+(+b[it.produto]).toFixed(2):+(((+it.dose)||0)*((+it.ha>0)?+it.ha:(area||+r.area||0))).toFixed(2); } });
-    r.status='aprovada'; r.aprov={por:(rl.app&&rl.app.operador)||'Campo', ts:Date.now(), viaOp:true}; r.saidaPushed=true;
-    rl.ts=rl.ts||{}; Object.assign(rl.ts,{st:'feito', recom:r.id, quem:(rl.app&&rl.app.operador)||'', em:Date.now(), baixa:{}, viaOp:true});
+    r.status='aprovada'; r.aprov={por:quem||'Campo', ts:Date.now(), viaOp:true}; r.saidaPushed=true;
+    if(r.tipo==='ts'){ rl.ts=rl.ts||{}; Object.assign(rl.ts,{st:'feito', recom:r.id, quem, em:Date.now(), baixa:{}, viaOp:true}); }
+    else { try{ misturaDeRecom(r); }catch(e){} }   // aplicação aprovada → banco de misturas (como na aprovação normal)
   });
   rl._u=tsAgora(); saveRecom(); saveOverrides(); scheduleRealizadoPush(); return recs.length;
 }
-// operação reaberta no Campo: a recomendação de TS que tinha sido fechada POR ELA volta a "enviada" (a baixa da operação foi desfeita)
-function tsReabrirPelaOp(key, rl){
-  let n=0; (RECOM&&RECOM.registros||[]).forEach(r=>{ if(!r||r.tipo!=='ts'||r.tsOp!==key||!(r.aprov&&r.aprov.viaOp)) return;
-    r.status='enviada'; r.aprov=null; r.saidaPushed=false; (r.itens||[]).forEach(it=>{ it.real=null; }); n++; });
-  if(n){ rl=rl||realOf(key); if(rl&&rl.ts){ rl.ts.st='enviada'; delete rl.ts.baixa; delete rl.ts.quem; delete rl.ts.em; delete rl.ts.viaOp; delete rl.ts.recom; } saveRecom(); }
+const tsFecharPelaOp=recomFecharPelaOp;
+// operação reaberta no Campo: as recomendações que tinham sido fechadas POR ELA voltam a "enviada" (a baixa da operação foi desfeita)
+function recomReabrirPelaOp(key, rl){
+  let n=0, ts=false; recomDaOp(key).forEach(r=>{ if(!(r.aprov&&r.aprov.viaOp)) return;
+    r.status='enviada'; r.aprov=null; r.saidaPushed=false; (r.itens||[]).forEach(it=>{ it.real=null; }); if(r.tipo==='ts') ts=true; else { try{ mistRemoverDeRecom(r.id); }catch(e){} } n++; });
+  if(n){ rl=rl||realOf(key); if(ts&&rl&&rl.ts){ rl.ts.st='enviada'; delete rl.ts.baixa; delete rl.ts.quem; delete rl.ts.em; delete rl.ts.viaOp; delete rl.ts.recom; } saveRecom(); }
   return n;
 }
-// varredura (ao abrir Recomendações ou o Campo): recomendações de TS abertas cuja operação já está concluída — dados
-// antigos ou operação concluída em outro aparelho
-function tsConciliarOps(){ let n=0; (RECOM&&RECOM.registros||[]).forEach(x=>{ if(!x||x.tipo!=='ts'||!x.tsOp||recomNorm(x).status==='aprovada') return; const rl=realOf(x.tsOp); if(rl&&rl.status==='concluido') n+=tsFecharPelaOp(x.tsOp, rl); }); return n; }
+const tsReabrirPelaOp=recomReabrirPelaOp;
+// varredura (ao abrir Recomendações ou o Campo): recomendações abertas cuja operação já está concluída — dados antigos
+// ou operação concluída em outro aparelho
+function recomConciliarOps(){ let n=0; const feitas=new Set(); (RECOM&&RECOM.registros||[]).forEach(x=>{ if(!x||recomNorm(x).status==='aprovada') return; const key=x.tipo==='ts'?x.tsOp:x.opKey; if(!key||feitas.has(key)) return; const rl=realOf(key); if(rl&&rl.status==='concluido'){ n+=recomFecharPelaOp(key, rl); feitas.add(key); } }); return n; }
+const tsConciliarOps=recomConciliarOps;
 // baixa da operação SEM a semente e os produtos de TS quando o TS já deu baixa deles (não conta em dobro)
 function opBaixaEff(r, b0){ const b=b0||(r&&r.baixa)||{}; if(!tsFeito(r) || r.ts.viaOp) return b;   // b0: baixa de UMA etapa (relatório Agro1, v271) · viaOp (v376): a baixa é da própria operação
   if(r.ts.recom){ const rr=recomById(r.ts.recom); if(rr&&rr.tsCfg&&rr.tsCfg.semInfo) return {}; }   // operação só de TS: tudo já saiu pela recomendação de TS
@@ -8994,7 +9000,7 @@ function exportRecomPDF_(r, modo){
   return h;
 }
 V.recomendacao=function(arg){
-  try{ tsConciliarOps(); }catch(e){}   // v376: TS cuja operação já foi concluída no Campo fecha sozinha
+  try{ recomConciliarOps(); }catch(e){}   // v376/v377: recomendação cuja operação já foi concluída no Campo fecha sozinha
   const all=fazTalhoes();   // v251: fazenda escolhida (mesma do quadro, Painel e Mapa)
   if(!all.length) return `<div class="empty">Nenhum talhão${oqFaz?' nesta fazenda':''}.</div>`;
   // #/recomendacao → todos os talhões; #/recomendacao/<id> → só aquele talhão (links do mapa, do Campo e do seletor)
@@ -10720,7 +10726,7 @@ function campoQuadro(){
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Toque no cartão para ver datas e produtos · <b>DAA</b> = dias desde a aplicação · <b>Pos. Ciclo</b> = dias depois do plantio (negativo = antes) · <b>+</b> abre a operação · ⚠ aplicada em data diferente da estimada · 🔔 retorno do operador aguardando aprovação.</p>`;
 }
 V.campo = function(arg){
-  try{ tsConciliarOps(); }catch(e){}   // v376
+  try{ recomConciliarOps(); }catch(e){}   // v376/v377
   const all=talhoesAll();
   if(!all.length) return `<div class="empty">Nenhum talhão para operar.</div>`;
   if(!arg || !all.some(t=>t.id===arg)) return campoQuadro();   // sem talhão: quadro de todas as operações
@@ -11633,8 +11639,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='opFinalizar'){ finalizarOpModal(a.key); return; }
     else if(a.act==='opRestante'){ const r=realEnsure(a.key), t=findTalhao(a.key.slice(0,a.key.indexOf('|'))); if(!t) return;   // nova etapa com a área que falta
       r.etapas=(r.etapas||[]).concat([r.etapaAtual||{data:r.data, area:opAreaFeita(r), baixa:r.baixa||{}}]); delete r.etapaAtual; r.app=r.app||{}; r.app.area=opRestante(t,r); r.status='andamento'; stampReal(a.key); campoOpen.add(a.key); route(); toast(`Nova etapa: ${num(r.app.area)} ha restantes`); return; }
-    else if(a.act==='opFinalizarSem'){ const r=realEnsure(a.key); if(!ask('Encerrar a operação sem aplicar o restante da área?')) return; r.status='concluido'; stampReal(a.key); try{ tsFecharPelaOp(a.key, r); }catch(e){} route(); toast('Operação encerrada (parcial)'); return; }
-    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; delete r.etapas; delete r.etapaAtual; delete r.areaFeita; try{ tsReabrirPelaOp(a.key, r); }catch(e){} stampReal(a.key); route(); toast('Operação reaberta'); return; }
+    else if(a.act==='opFinalizarSem'){ const r=realEnsure(a.key); if(!ask('Encerrar a operação sem aplicar o restante da área?')) return; r.status='concluido'; stampReal(a.key); try{ recomFecharPelaOp(a.key, r); }catch(e){} route(); toast('Operação encerrada (parcial)'); return; }
+    else if(a.act==='opReabrir'){ const r=realEnsure(a.key); r.status='andamento'; clearOpSaida(a.key); delete r.baixa; delete r.etapas; delete r.etapaAtual; delete r.areaFeita; try{ recomReabrirPelaOp(a.key, r); }catch(e){} stampReal(a.key); route(); toast('Operação reaberta'); return; }
     else if(a.act==='finClose'){ const ov=document.getElementById('fin-ov'); if(ov) ov.remove(); return; }
     else if(a.act==='finConfirm'){ const key=a.key, r=realEnsure(key), baixa={};
       document.querySelectorAll('#fin-ov [data-finprod]').forEach(inp=>{ const p=inp.dataset.finprod, v=_mmC(inp.value); if(p && v>0) baixa[p]=(baixa[p]||0)+v; });
@@ -11651,7 +11657,7 @@ document.addEventListener('click',e=>{
         if(!parcial && r.areaFeita>=areaTal-0.005 && !(r.etapas&&r.etapas.length) && Math.abs(r.areaFeita-areaTal)<0.005) delete r.areaFeita; }   // igual ao talhão: sem marca especial
       r.saidaPushed=false; fillDosesFromBaixa(key); stampReal(key);
       try{ maybePlantioConcluido(key); }catch(e){}
-      try{ if(r.status==='concluido' && tsFecharPelaOp(key, r)) toast('Recomendação de TS desta operação marcada como finalizada'); }catch(e){}   // v376
+      try{ if(r.status==='concluido' && recomFecharPelaOp(key, r)) toast('Recomendação desta operação marcada como finalizada'); }catch(e){}   // v376/v377
       const ov=document.getElementById('fin-ov'); if(ov) ov.remove();
       route(); toast(r.status==='parcial'?`Aplicação parcial registrada (${num(r.areaFeita)} ha) — baixa do que foi aplicado`:(syncUrl()?'Operação concluída — dando baixa no estoque…':'Operação concluída — baixa registrada'));
       pushOpSaida(key).then(ok=>{ if(ok) route({keepScroll:true}); }); return; }

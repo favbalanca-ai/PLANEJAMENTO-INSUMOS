@@ -71,6 +71,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Recomendação de aplicação também fecha junto com a operação (v377)** — o mesmo da v376 para a recomendação
+  comum ligada à operação pelo Campo (`opKey`): `recomFecharPelaOp` / `recomReabrirPelaOp` / `recomConciliarOps`
+  (`recomDaOp(key)` junta TS e aplicação). Na aplicação, ao fechar entra no banco de misturas como na aprovação normal;
+  ao reabrir a operação a mistura não avaliada é removida.
 - **Recomendação de TS fecha junto com a operação (v376)** — quando a operação é concluída direto no Campo
   (Finalizar), a recomendação de TS dela ficava "enviada" para sempre, pedindo baixa que já tinha sido feita. Agora
   `tsFecharPelaOp(key)` marca a recomendação como **aprovada** (`aprov.viaOp`, por quem finalizou), com o realizado
