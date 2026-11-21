@@ -2311,6 +2311,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .est-locf{align-items:center}.est-loc-td{white-space:nowrap}
 .rc-est-loc{font-size:11px;line-height:1.3}.rc-est-outro{font-size:11px;line-height:1.3;color:#1f4a55;font-weight:600}
 .ci-est-outro{display:inline-block;font-size:10.5px;color:#1f4a55;font-weight:600;margin-left:4px;white-space:normal}
+.ci-compl{display:inline-block;font-size:10.5px;color:#1b7f79;font-weight:700;margin-left:4px;white-space:normal}   /* v369: complemento de outro produto (mesmo ativo) */
+.ci-sim{margin:6px 0 2px}.rc-sim-btns{display:inline-flex;gap:4px;flex:none}
 /* v358: etiquetas por grupo */
 .etq-grupos{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;margin:6px 0}.etq-g{display:flex;align-items:center;gap:6px;font-size:13px}.etq-g input{width:18px;height:18px;flex:none}.etq-links{font-size:12px;margin:4px 0}
 /* v357: compatibilidade da calda (análise de mistura) */
