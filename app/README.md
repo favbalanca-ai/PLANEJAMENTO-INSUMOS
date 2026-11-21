@@ -71,6 +71,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Tela Campo do talhão redesenhada (v374)** — as operações ficam numa linha do tempo vertical, com a bolinha
+  numerada na cor do status (verde ✓ feita, âmbar em andamento/hoje, vermelha atrasada, cinza pendente, ✕ não
+  realizada; a próxima ganha um anel). Concluídas e não realizadas vêm **recolhidas** numa linha só (toque para
+  abrir; `campoDoneOpen` lembra as abertas, e `oqAbrir` abre a operação vinda do quadro). Marcador **"Hoje"**
+  entre o passado e a 1ª operação futura. Produtos em etiquetas (`.cp-p`; extra verde, tirado da aplicação riscado).
+  Cabeçalho compacto: sem o nome repetido, barra fina e texto "N de M concluídas · pendentes · em andamento ·
+  atrasadas" (`.cp-progtx`), chips menores. Saiu o selo de status à direita do cartão; o rodapé do cartão virou
+  "Registrar execução" (ou "Detalhes" na concluída). Botões de ação e registro não mudaram.
 - **Mapa só da fazenda escolhida (v373)** — os pontos de monitoramento com GPS passam pelo filtro da fazenda
   (`mapaPontosMonit`), como os contornos e as anotações já passavam; antes eles entravam no enquadramento e o mapa
   abria as duas fazendas ao escolher uma. O mapa de calor (`calorPontos`) usa a mesma lista.

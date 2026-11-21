@@ -2935,7 +2935,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-373';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-374';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -13281,7 +13281,10 @@ function finAreaInfo(area, areaTal, feita){ const tot=(+feita||0)+(+area||0); if
 // ---- Operação de Campo: estado da tela (sessão) ----
 let campoFiltro='todas';                  // todas | pendente | andamento | concluido
 const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
-document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.matches&&d.matches('details.cp-det')){ const k=d.dataset.key; if(d.open) campoOpen.add(k); else campoOpen.delete(k); } },true);
+const campoDoneOpen=new Set();   // v374: operações concluídas/não realizadas que a pessoa abriu (vêm recolhidas)
+document.addEventListener('toggle',e=>{ const d=e.target; if(!d||!d.matches) return; const k=d.dataset.key;
+  if(d.matches('details.cp-det')){ if(d.open) campoOpen.add(k); else campoOpen.delete(k); }
+  else if(d.matches('details.cp-done')){ if(d.open) campoDoneOpen.add(k); else campoDoneOpen.delete(k); } },true);
 // operações REAIS do talhão para o campo: com insumo, com execução registrada ou com máquina escolhida — na ordem do planejamento
 function campoOpsDoTalhao(t){ return memo('cot|'+t.id, ()=>_campoOpsDoTalhao(t)); }
 function _campoOpsDoTalhao(t){
@@ -13599,8 +13602,9 @@ V.campo = function(arg){
   const nPos={}; let nP=0, nS=0; ops.forEach(o=>{ nPos[o.key]=(o.seq==='safrinha')?++nS:++nP; });
   const visiveis=ops.filter(o=>campoFiltro==='todas'||stOf(o)===campoFiltro||(campoFiltro==='andamento'&&stOf(o)==='parcial'));
   const chip=(v,l,n)=>`<button class="cp-chip${campoFiltro===v?' on':''}" data-act="campoFiltro" data-val="${v}">${l}${n!=null?` <b>${n}</b>`:''}</button>`;
-  let lastSeq='';
-  const opsHtml=visiveis.map(o=>{
+  let lastSeq='', hojeMarcado=false; const hojeISO=hoje.toISOString().slice(0,10);
+  const nAtras=ops.filter(o=>{ if(stOf(o)!=='pendente') return false; const d=diasAte(opDataPlan(t.id,o.tagoi,o.op.dap)); return d!=null&&d<0; }).length;
+  const opsHtml=visiveis.map((o,idx)=>{
     const r=realOf(o.key)||{status:'pendente',data:'',obs:'',doses:{},extras:[]};
     const items=effItems(t.id,o.tagoi,o.op.itens), areaOp=opAreaDe(t, r), mostraEst=r.status!=='concluido', ckOp=culturaKey(o.seq==='safrinha'?empSafDe(t):empDe(t));   // v350: saldo do estoque por insumo (concluída já baixou) · v353: cultura da operação p/ a dose da bula
     const insRows=items.map(it=>{
@@ -13633,8 +13637,9 @@ V.campo = function(arg){
     else if(r.status==='parcial') prazo=`<span class="cp-tag parc">◔ parcial · ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha</span>`;
     else if(r.status==='cancelado') prazo=`<span class="cp-tag">🚫 não será realizada</span>`;
     else if(dd!=null){ prazo= dd<0?`<span class="cp-tag late">atrasada ${-dd} d</span>`:(dd===0?`<span class="cp-tag today">hoje</span>`:`<span class="cp-tag">em ${dd} d</span>`); }
-    const resumo=(o.items||[]).map(it=>itemFora(r,it)?`<s class="mut" title="fora desta aplicação">${esc(it.produto)}</s>`:`${esc(it.produto)} <span>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</span>`)
-      .concat((r.extras||[]).filter(e=>e.produto).map(e=>`<span class="pill pill-buy">extra</span> ${esc(e.produto)} <span>${fmtDose(e.dose)} ${esc((PROD[e.produto]||{}).un||'')}/ha</span>`)).join(' · ');
+    // v374: produtos como etiquetas (chips) — mais fácil de bater o olho no celular
+    const resumo=(o.items||[]).map(it=>itemFora(r,it)?`<span class="cp-p off" title="fora desta aplicação">${esc(it.produto)}</span>`:`<span class="cp-p">${esc(it.produto)}<b>${fmtDose(it.dose)} ${esc(it.un||'')}/ha</b></span>`)
+      .concat((r.extras||[]).filter(e=>e.produto).map(e=>`<span class="cp-p ex" title="insumo extra, fora do plano">${esc(e.produto)}<b>${fmtDose(e.dose)} ${esc((PROD[e.produto]||{}).un||'')}/ha</b></span>`)).join('');
     // ação principal do cartão, conforme o status
     const soTS=!!(tc&&tc.soTS);
     const tsBtn=(tc && !soTS && r.status!=='concluido' && tsSt!=='feito')?`<button class="btn btn-outline btn-sm" data-act="waTs" data-key="${esc(o.key)}">🧪 ${tsSt==='enviada'?'Reenviar TS':'Enviar TS'}</button>`:'';
@@ -13651,21 +13656,27 @@ V.campo = function(arg){
         <div class="cp-btns"><button class="btn btn-primary btn-sm" data-act="recomAprovar" data-id="${esc(rr.id)}">✅ Aprovar baixa</button><button class="btn btn-outline btn-sm" data-act="recomReprovar" data-id="${esc(rr.id)}">✖ Reprovar</button></div></div>`).join('');
     const plLinha=(pc&&pc.semM)?`<div class="cp-maq">🌱 ${nf0.format(pc.pop)}/ha · ${fmtSemM(pc.semM)} por metro</div>`:'';
     const sep=(o.seq!==lastSeq && (o.seq==='safrinha'||ops.some(x=>x.seq==='safrinha')))?`<div class="cp-seqhd">${o.seq==='safrinha'?'2ª cultura (safrinha)':'1ª cultura'} · ${esc(o.cultura||'—')}</div>`:''; lastSeq=o.seq;
-    return `${sep}<div class="cp-card ${st.cls}${isProx?' prox':''}">
-      <div class="cp-face">
-        <span class="cp-n">${nPos[o.key]}</span>
-        <div class="cp-main">
-          <div class="cp-title">${esc(o.op.nome)}${isProx?' <span class="cp-tag next">PRÓXIMA</span>':''}</div>
-          <div class="cp-when">${quando?`📅 ${quando}`:'<span class="mut">sem data — defina o plantio no talhão</span>'} ${prazo}</div>
-          ${resumo?`<div class="cp-prods">${resumo}</div>`:''}
-          ${conj?`<div class="cp-maq">🚜 ${esc(conj)}</div>`:''}
-          ${plLinha}${tsLinha}
-        </div>
-        <span class="camp-badge ${st.cls}">${st.lbl}</span>
-      </div>
+    // v374: linha do tempo — bolinha numerada com a cor do status (verde feita · âmbar andamento/hoje · vermelha atrasada · cinza pendente);
+    // concluídas e não realizadas ficam recolhidas numa linha só (toque para abrir); marcador "Hoje" antes da 1ª operação futura
+    const feita=r.status==='concluido', canc=r.status==='cancelado', fechada=feita||canc;
+    const atrasada=r.status==='pendente' && dd!=null && dd<0, ehHoje=!fechada && dd===0;
+    const hojeMk=(!hojeMarcado && !fechada && dd!=null && dd>=0 && idx>0)?`<div class="cp-hoje">Hoje · ${fmtDataBR(hojeISO)}</div>`:''; if(hojeMk||(dd!=null&&dd>=0&&!fechada)) hojeMarcado=true;
+    const tagAnd=(r.status==='andamento')?'<span class="cp-tag and">em andamento</span>':'';
+    const corpo=`${resumo?`<span class="cp-prods">${resumo}</span>`:''}${conj?`<span class="cp-maq">🚜 ${esc(conj)}</span>`:''}${plLinha}${tsLinha}`;
+    const face=`<span class="cp-main">
+          <span class="cp-title">${canc?`<s>${esc(o.op.nome)}</s>`:esc(o.op.nome)}${isProx?' <span class="cp-tag next">Próxima</span>':''}</span>
+          <span class="cp-when">${quando?`📅 ${quando}`:'<span class="mut">sem data — defina o plantio no talhão</span>'} ${prazo}${tagAnd}${feita&&r.saidaPushed?' <span class="cp-tag ok">📦 baixa ✓</span>':''}</span>
+          ${fechada?'':corpo}
+        </span>${fechada?'<span class="panel-chevron">▸</span>':''}`;
+    const T=fechada?'details':'div', S=fechada?'summary':'div';
+    return `${sep}${hojeMk}<div class="cp-row ${st.cls}${isProx?' prox':''}${atrasada?' late':''}${ehHoje?' today':''}">
+      <span class="cp-n">${feita?'✓':canc?'✕':nPos[o.key]}</span>
+      <${T} class="cp-card ${st.cls}${isProx?' prox':''}${fechada?' cp-done':''}"${fechada?` data-key="${esc(o.key)}"${campoDoneOpen.has(o.key)?' open':''}`:''}>
+      <${S} class="cp-face">${face}</${S}>
+      ${fechada&&corpo?`<div class="cp-donebody">${corpo}</div>`:''}
       ${retHtml}<div class="cp-act">${acao}</div>
       <details class="cp-det" data-key="${esc(o.key)}"${campoOpen.has(o.key)?' open':''}>
-        <summary><span>Detalhes · registrar execução</span><span class="panel-chevron">▸</span></summary>
+        <summary><span>${fechada?'Detalhes':'Registrar execução'}</span><span class="panel-chevron">▸</span></summary>
         <div class="cp-det-in">
       <div class="camp-strow">${sbtn('pendente')}${sbtn('andamento')}${sbtn('concluido')}${sbtn('cancelado')}</div>
       ${r.status==='parcial'?`<div class="camp-actbar"><span class="camp-done-tag parc">◔ Parcial — ${num(opAreaFeita(r))} de ${num(areaDe(t))} ha${(r.etapas&&r.etapas.length)?` em ${r.etapas.length+1} etapas`:''}</span><button class="btn btn-ghost btn-sm" data-act="opReabrir" data-key="${esc(o.key)}">↩ Reabrir</button></div>`:''}
@@ -13724,6 +13735,7 @@ V.campo = function(arg){
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
         </div>
       </details>
+      </${T}>
     </div>`;
   }).join('') || (ops.length?`<div class="cp-empty">Nenhuma operação ${campoFiltro==='concluido'?'concluída':campoFiltro==='andamento'?'em andamento':campoFiltro==='cancelado'?'marcada como não realizada':'pendente'} neste talhão.</div>`:'<div class="cp-empty">Este talhão não tem operações planejadas.</div>');
   const plantio=plantioEffDe(t.id,'principal'), col=colheitaPrevDe(t.id,'principal');
@@ -13731,13 +13743,14 @@ V.campo = function(arg){
   <div class="cp-top">
     <div class="cp-topbtns"><a class="btn btn-ghost btn-sm" data-go="#/campo">← Quadro de operações</a><button class="btn btn-outline btn-sm" data-act="naOpen" data-id="${esc(t.id)}">➕ Nova ação</button></div>
     <div class="cp-sel"><select class="sel" id="camp-talhao">${tOpt}</select></div>
-    <div class="cp-tinfo"><b>${esc(tNome(t))}</b> <span>${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
+    <div class="cp-tinfo"><span>${num(areaDe(t))} ha · ${esc(empDe(t)||'—')}${empSafDe(t)&&empSafDe(t)!=='—'?` → ${esc(empSafDe(t))}`:''}</span>
       ${(plantio||col)?`<span>${plantio?`🌱 plantio ${fmtDataBR(plantio)}`:''}${col?` · 🌾 colheita ${fmtDataBR(col)}`:''}</span>`:''}</div>
-    <div class="cp-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div><span><b>${cnt.concluido}</b>/${ops.length} concluídas · ${pct}%</span></div>
+    <div class="cp-prog"><div class="cp-prog-bar"><div style="width:${pct}%"></div></div></div>
+    <div class="cp-progtx"><b>${cnt.concluido}</b> de ${nValidas} concluídas${cnt.pendente?` · ${cnt.pendente} pendente${cnt.pendente>1?'s':''}`:''}${cnt.andamento?` · ${cnt.andamento} em andamento`:''}${nAtras?` · <span class="late">${nAtras} atrasada${nAtras>1?'s':''}</span>`:''}</div>
     <div class="cp-chips">${chip('todas','Todas',ops.length)}${chip('pendente','Pendentes',cnt.pendente)}${chip('andamento','Em andamento',cnt.andamento)}${chip('concluido','Concluídas',cnt.concluido)}${cnt.cancelado?chip('cancelado','Não realizadas',cnt.cancelado):''}</div>
   </div>
-  ${opsHtml}
-  <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">Toque em <b>Detalhes</b> para registrar data, doses realizadas (em branco = conforme o plano), insumos extras e a recomendação de aplicação. Salvo no aparelho e sincronizado com a planilha.</p>`;
+  <div class="cp-tl">${opsHtml}</div>
+  <p class="mut" style="font-size:11px;text-align:center;margin:12px 0 4px">Toque em <b>Registrar execução</b> para a data, as doses realizadas (em branco = conforme o plano), insumos extras e a recomendação de aplicação. Operações concluídas ficam recolhidas: toque nelas para abrir. Salvo no aparelho e sincronizado com a planilha.</p>`;
 };
 
 V.sync = function(){
@@ -14430,7 +14443,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='slogLimpar'){ if(confirm('Limpar o log detalhado?')){ try{ localStorage.removeItem(SYNC_LOG_KEY); }catch(e){} renderSyncLogDet(); } }
     else if(a.act==='hist-clear'){ if(confirm('Limpar o histórico de sincronização?')){ localStorage.removeItem(HIST_KEY); renderHist(); toast('Histórico limpo'); } }
     else if(a.act==='campoFiltro'){ campoFiltro=a.val||'todas'; route({keepScroll:true}); }
-    else if(a.act==='oqAbrir'){ oqFecharTudo(); const i=a.key.indexOf('|'); campoOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
+    else if(a.act==='oqAbrir'){ oqFecharTudo(); const i=a.key.indexOf('|'); campoOpen.add(a.key); campoDoneOpen.add(a.key); location.hash='#/campo/'+a.key.slice(0,i);
       setTimeout(()=>{ const c=document.querySelector(`.cp-det[data-key="${a.key}"]`); if(c) c.closest('.cp-card').scrollIntoView({block:'start', behavior:'smooth'}); }, 120); return; }
     else if(a.act==='oqPop'){ oqPopOpen(act); return; }
     else if(a.act==='naOpen'){ novaAcaoOpen(a.id); return; }
