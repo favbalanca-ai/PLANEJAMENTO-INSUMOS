@@ -2935,7 +2935,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-371';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-372';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11116,6 +11116,8 @@ function recomNovaOpen(sub, tid, src){ novaAcaoFechar(); const all=talhoesAll(),
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 const RECOM_EPI_PADRAO='Luvas nitrílicas, óculos, respirador com filtro, macacão hidrorrepelente, botas e boné árabe';
 // cálculo da calda: ha por tanque, nº de tanques, volume total e produto por tanque
+// v372: vazão (L/ha) para n tanques CHEIOS cobrirem a área — arredonda para baixo (2 casas), assim nunca sobra um tanque a mais
+function vazaoParaTanques(n, tanque, area){ return Math.floor((n*tanque/area)*100)/100; }
 function recomCalda(r){
   const area=+r.area||0, calda=_mmC(r.calda)||0, tk=_mmC(r.tanque)||0;
   const total=area*calda, haTk=(tk&&calda)?tk/calda:0, nTk=(haTk&&area)?Math.ceil(area/haTk-1e-9):0;
@@ -11595,6 +11597,7 @@ function recomCard(r,t){
       <label>Volume de calda (L/ha)<input class="cell" inputmode="decimal" ${F('calda')} value="${esc(r.calda||'')}" placeholder="ex.: 120"></label>
       <label>Tanque (L)<input class="cell" inputmode="decimal" ${F('tanque')} value="${esc(r.tanque||'')}" placeholder="ex.: 3000"></label>
       <label>Adjuvante / pH<input class="txt" ${F('adjuvante')} value="${esc(r.adjuvante||'')}" placeholder="ex.: óleo mineral 0,5% · pH 5,5"></label></div>
+      <div class="app-adjust" style="margin:0 12px 8px"><span>Ajustar o volume de calda para</span><input class="cell" inputmode="numeric" data-adjust-n value="" placeholder="nº" style="width:58px"><span>tanque(s) cheios em ${num(area)} ha</span><button class="btn btn-outline btn-sm" data-act="recomAjustVazao" data-id="${esc(r.id)}" title="Calcula o L/ha para esse número de tanques cheios cobrir a área (nº × tanque ÷ área)">Calcular</button></div>
       ${caldaTxt?`<div class="rc-obs">💧 ${caldaTxt}</div>`:''}${bulaPhTxt(its)?`<div class="rc-obs">📘 pH ideal da calda (bula): ${esc(bulaPhTxt(its))}</div>`:''}`)}
     ${sec('Aplicação',`<div class="app-grid" style="padding:6px 12px 10px">
       <label>Máquina / conjunto<select class="sel" ${F('maquina')}><option value="">— escolher —</option>${conjOptsHtml(r.maquina||'', recomTipoConj(r), (r.maquina&&!maquinasAll().some(m=>m.conjunto===r.maquina))?`<option value="${esc(r.maquina)}" selected>${esc(r.maquina)}</option>`:'')}<option value="__outra">✏️ Outra (digitar)…</option></select>${conjRendTxt(r.maquina,area)?`<small class="rc-conj">🚜 ${esc(conjRendTxt(r.maquina,area))}</small>`:''}</label>
@@ -13708,8 +13711,8 @@ V.campo = function(arg){
           <div class="app-adjust">
             <span>Ajustar vazão para</span>
             <input class="cell" inputmode="numeric" data-adjust-n value="" placeholder="nº" style="width:58px">
-            <span>tanque(s) cheios na área</span>
-            <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}">Calcular vazão</button>
+            <span>tanque(s) cheios em ${num(opAreaDe(t,r))} ha</span>
+            <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}" title="Calcula a vazão (L/ha) para esse número de tanques cheios cobrir a área a aplicar (nº × tanque ÷ área)">Calcular vazão</button>
           </div>
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
           <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
@@ -14838,16 +14841,22 @@ document.addEventListener('click',e=>{
     else if(a.act==='ajustVazao'){
       const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]');
       const n=numBR((nEl&&nEl.value)||'');
-      const fk=opFromKey(a.key), t=findTalhao(fk.talId), area=t?areaDe(t):0;
-      const r=realEnsure(a.key); r.app=r.app||{}; const tanque=+r.app.tanque||0;
+      const fk=opFromKey(a.key), t=findTalhao(fk.talId), r=realEnsure(a.key); r.app=r.app||{}; const tanque=+r.app.tanque||0, area=t?opAreaDe(t,r):0;   // v372: ÁREA A APLICAR (não a do talhão)
       if(!n||n<=0){ toast('Informe o número de tanques'); return; }
       if(!tanque){ toast('Preencha o volume do tanque primeiro'); return; }
       if(!area){ toast('Talhão sem área'); return; }
-      const vazao=Math.floor((n*tanque/area)*100)/100;   // arredonda para baixo: garante caber em n tanques
-      r.app.vazao=vazao; realClean(a.key); saveOverrides();
+      const vazao=vazaoParaTanques(n, tanque, area);   // arredonda para baixo: garante caber em n tanques
+      r.app.vazao=vazao; realClean(a.key); stampReal(a.key);   // v372: carimba a versão (os outros aparelhos recebem)
       const vz=document.querySelector('input[data-edit="realApp"][data-field="vazao"][data-key="'+a.key+'"]'); if(vz) vz.value=vazao;
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
-      toast(`Vazão ajustada: ${nf1.format(vazao)} L/ha para ${n} tanque(s)`);
+      toast(`Vazão ${nf2.format(vazao)} L/ha: ${n} tanque(s) de ${num(tanque)} L cobrem ${num(area)} ha (${nf1.format(tanque/vazao)} ha por tanque)`);
+    }
+    else if(a.act==='recomAjustVazao'){   // v372: mesma conta na recomendação (área da recomendação); leva para o Campo quando é de uma operação
+      const r=recomById(a.id); if(!r) return; const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]'), n=numBR((nEl&&nEl.value)||''), tanque=_mmC(r.tanque)||0, area=+r.area||0;
+      if(!n||n<=0){ toast('Informe o número de tanques'); return; } if(!tanque){ toast('Preencha o tanque (L) primeiro'); return; } if(!area){ toast('Recomendação sem área'); return; }
+      const vazao=vazaoParaTanques(n, tanque, area); r.calda=String(vazao);
+      if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{}; rl.app.vazao=vazao; stampReal(r.opKey); }
+      saveRecom(); route({keepScroll:true}); toast(`Volume de calda ${nf2.format(vazao)} L/ha: ${n} tanque(s) de ${num(tanque)} L cobrem ${num(area)} ha`);
     }
     else if(a.act==='pdfFechar'){ const o=document.getElementById('pdf-ov'); if(o) o.remove(); }
     else if(a.act==='pdfModo'){ exportRecomPDF(a.id, a.modo); }   // v370: PDF simples ↔ completo
