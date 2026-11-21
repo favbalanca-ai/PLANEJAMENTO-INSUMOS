@@ -71,6 +71,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   pedidos à planilha que voltam com "Você não tem permissão para chamar UrlFetchApp.fetch…" mostram a instrução:
   rodar `autorizarPermissoes` no Apps Script e aceitar (`permAviso`). A função nova no Code.gs pede todas as
   permissões de uma vez (planilha, Drive, internet, Gmail, gatilhos).
+- **Mapa só da fazenda escolhida (v373)** — os pontos de monitoramento com GPS passam pelo filtro da fazenda
+  (`mapaPontosMonit`), como os contornos e as anotações já passavam; antes eles entravam no enquadramento e o mapa
+  abria as duas fazendas ao escolher uma. O mapa de calor (`calorPontos`) usa a mesma lista.
 - **Nº de tanques (v372)** — a caixa "Ajustar vazão para N tanque(s) cheios" da Operação de Campo passa a usar a
   **área a aplicar** (`opAreaDe`, não a do talhão) e carimba a versão (`stampReal`); a recomendação ganha a mesma caixa
   na seção Calda (`recomAjustVazao`, área da recomendação; leva a vazão para o Campo quando é de uma operação).
