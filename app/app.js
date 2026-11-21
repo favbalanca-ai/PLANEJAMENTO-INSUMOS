@@ -9758,7 +9758,7 @@ V.campopainel = function(){
   const OCULTA={ plantio:['col','saf'], desenvolvimento:['col','saf'], colheita:temSaf?[]:['saf'], safrinha:[] }[fase];
   const chaves=ORDEM.filter((k,i,a)=>a.indexOf(k)===i).concat(Object.keys(C).filter(k=>!ORDEM.includes(k))).filter(k=>!OCULTA.includes(k));
   const cards=chaves.map((k,i)=>C[k](i===0));
-  const faseSel=`<select class="sel fase-sel" id="painel-fase" title="Mudar a fase troca os cartões em destaque; vale só neste aparelho"><option value=""${FS.manual?'':' selected'}>Automático · ${FASES[FS.auto].lbl}</option>${Object.keys(FASES).map(k=>`<option value="${k}"${FS.manual&&fase===k?' selected':''}>${FASES[k].ico} ${FASES[k].lbl}</option>`).join('')}</select>`;
+  const faseSel=`<select class="sel fase-sel" id="painel-fase" title="Mudar a fase troca os cartões em destaque; vale só neste aparelho"><option value=""${FS.manual?'':' selected'}>Automático</option>${Object.keys(FASES).map(k=>`<option value="${k}"${FS.manual&&fase===k?' selected':''}>${FASES[k].ico} ${FASES[k].lbl}</option>`).join('')}</select>`;
   return `${fazSelectHtml('faz-top')}
   <div class="fase-bar"><span class="fase-ico">${F.ico}</span><span class="fase-tx"><b>Fase: ${F.lbl}</b><small class="mut"> · ${FS.manual?'escolhida por você':'automático'}</small></span>${faseSel}</div>
   <div class="kpi-grid">${cards.slice(0,5).join('')}</div>
