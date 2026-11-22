@@ -3007,7 +3007,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-378';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-379';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7992,7 +7992,7 @@ function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Co
 function maqWhats(){ const c=DATA&&DATA.config_app&&DATA.config_app.maquinas; return String((c&&c.whats)||(OV&&OV.maqWa)||'').replace(/\D/g,''); }
 // v355: mensagem do QR — máquina em negrito (*…* no WhatsApp), cada campo com o que digitar e a unidade; a etiqueta [m:id] vai no fim, em itálico
 // v356: linha "Horímetro anterior" com o último lançamento (abastecimento, leitura, OS ou horímetro inicial) — o QR é impresso, então o valor é o do dia da etiqueta e a linha diz isso
-function maqWaTexto(m){ const h=maqHorimetro(m); return `⛽ *ABASTECIMENTO*  _[${m.id}]_\n🚜 *${m.nome}*\n🕐 Horímetro anterior: ${h>0?numH(h)+' h':'—'}\n\nDigite o número depois dos dois-pontos e envie:\n⏱ Horas: \n⛽ Volume (L): `; }   // v378: curta; os dois campos ficam no fim (o cursor do WhatsApp já cai ali); o código da máquina vai no título
+function maqWaTexto(m){ const h=maqHorimetro(m); return `⛽ *ABASTECIMENTO*  _[${m.id}]_\n🚜 *${m.nome}*\n🕐 Horímetro anterior: ${h>0?numH(h)+' h':'—'}\n\n⏱ Horas: \n\n⛽ Volume (L): `; }   // v378: curta; os dois campos ficam no fim (o cursor do WhatsApp já cai ali); o código da máquina vai no título · v379: sem explicação e com 1 linha em branco entre os campos
 function maqWaLink(m){ const n=maqWhats(); if(!n) return ''; return `https://wa.me/${n.startsWith('55')?n:'55'+n}?text=${encodeURIComponent(maqWaTexto(m))}`; }
 // conversa exportada (Android: "dd/mm/aaaa hh:mm - Nome: msg" · iPhone: "[dd/mm/aaaa, hh:mm:ss] Nome: msg"); mensagens de várias linhas continuam até o próximo cabeçalho
 function waParse(txt){ const out=[]; let cur=null; const rx=/^‎?\[?(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\]?\s*(?:-\s*)?([^:]{1,60}?):\s(.*)$/;

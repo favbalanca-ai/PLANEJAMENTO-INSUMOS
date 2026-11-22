@@ -211,8 +211,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
 - **Mensagem do WhatsApp das máquinas curta (v378)** — o QR da etiqueta WhatsApp abre agora só:
-  "⛽ *ABASTECIMENTO* _[m:id]_ / 🚜 *máquina* / 🕐 Horímetro anterior: 1.250,5 h / Digite o número depois dos
-  dois-pontos e envie: / ⏱ Horas: / ⛽ Volume (L):" (`maqWaTexto`). Os dois campos ficam no fim porque o cursor do
+  "⛽ *ABASTECIMENTO* _[m:id]_ / 🚜 *máquina* / 🕐 Horímetro anterior: 1.250,5 h / (linha em branco) /
+  ⏱ Horas: / (linha em branco) / ⛽ Volume (L):" (`maqWaTexto`; v379: sem a frase de explicação e com uma linha em
+  branco entre os campos, para não digitar na linha errada). Os dois campos ficam no fim porque o cursor do
   WhatsApp já cai ali; origem fica como tanque e o operador é quem mandou a mensagem. `waInterpreta` lê **Horas:**
   como horímetro e **Volume (L):** como litros (com ou sem colchetes) e continua lendo as mensagens antigas.
   O texto fica gravado no QR: etiquetas já impressas seguem abrindo a mensagem antiga até serem reimpressas
