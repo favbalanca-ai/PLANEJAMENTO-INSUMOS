@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Painel "Recomendação de aplicação" não fecha mais a cada toque; máquina não volta para a antiga (v381)** —
+  os painéis `details.camp-app` (aplicação, TS e plantio) ganham `data-key` e o conjunto `campoAppOpen` (como
+  `campoOpen`): qualquer botão que re-renderiza a tela (insumo extra, complementar, finalizar etc.) mantém o painel
+  como estava. Ao trocar a máquina no Campo, a recomendação já enviada da operação passa a acompanhar
+  (`x.maquina`), porque `opMaqCampo` prefere a máquina da recomendação enviada e a tela voltava a mostrar a antiga.
 - **Análise de mistura no cartão da operação (v380)** — na Operação de Campo, dentro de "Recomendação de
   aplicação", logo abaixo do quadro "Na calda" e antes do botão de WhatsApp, entra a mesma barra da recomendação:
   "🧪 Analisar mistura" + chip de risco pelas regras (e o da IA, se houver). O painel é o mesmo (`misturaHtml`) sobre
