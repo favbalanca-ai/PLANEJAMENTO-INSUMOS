@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Análise de mistura no cartão da operação (v380)** — na Operação de Campo, dentro de "Recomendação de
+  aplicação", logo abaixo do quadro "Na calda" e antes do botão de WhatsApp, entra a mesma barra da recomendação:
+  "🧪 Analisar mistura" + chip de risco pelas regras (e o da IA, se houver). O painel é o mesmo (`misturaHtml`) sobre
+  um objeto montado da operação (`mistAlvo('op:<key>')`: itens na ordem do quadro). "Aplicar esta ordem" grava
+  `r.app.ordem` da operação (o quadro "Na calda", o WhatsApp e o PDF acompanham). "Pedir parecer da IA" guarda o
+  parecer em `rl.mist` (sincroniza com a operação) e `recomFromCampoOp` leva esse parecer para a recomendação, então o
+  WhatsApp/PDF já saem com o bloco "Compatibilidade da calda" preenchido pela IA. Nada bloqueia o envio.
 - **Mensagem do WhatsApp das máquinas curta (v378)** — o QR da etiqueta WhatsApp abre agora só:
   "⛽ *ABASTECIMENTO* _[m:id]_ / 🚜 *máquina* / 🕐 Horímetro anterior: 1.250,5 h / (linha em branco) /
   ⏱ Horas: / (linha em branco) / ⛽ Volume (L):" (`maqWaTexto`; v379: sem a frase de explicação e com uma linha em
