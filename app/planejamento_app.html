@@ -3011,7 +3011,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-380';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-381';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9250,7 +9250,7 @@ function plantioOut(c){
 // seção "Recomendação de plantio" do cartão da operação (aba Campo)
 function plantioSec(t,o,r,pc){
   const K=esc(o.key), va=f=>(r.app&&r.app[f]!=null)?r.app[f]:'';
-  return `<details class="camp-app panel-collapse">
+  return `<details class="camp-app panel-collapse" data-key="${esc(o.key)}|pl"${campoAppOpen.has(o.key+'|pl')?' open':''}>
         <summary class="camp-app-sum"><span>🌱 Recomendação de plantio</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
@@ -13443,9 +13443,11 @@ function finAreaInfo(area, areaTal, feita){ const tot=(+feita||0)+(+area||0); if
 let campoFiltro='todas';                  // todas | pendente | andamento | concluido
 const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
 const campoDoneOpen=new Set();   // v374: operações concluídas/não realizadas que a pessoa abriu (vêm recolhidas)
+const campoAppOpen=new Set();    // v381: painéis "Recomendação de aplicação / TS / plantio" abertos (sobrevivem ao re-render)
 document.addEventListener('toggle',e=>{ const d=e.target; if(!d||!d.matches) return; const k=d.dataset.key;
   if(d.matches('details.cp-det')){ if(d.open) campoOpen.add(k); else campoOpen.delete(k); }
-  else if(d.matches('details.cp-done')){ if(d.open) campoDoneOpen.add(k); else campoDoneOpen.delete(k); } },true);
+  else if(d.matches('details.cp-done')){ if(d.open) campoDoneOpen.add(k); else campoDoneOpen.delete(k); }
+  else if(d.matches('details.camp-app')&&k){ if(d.open) campoAppOpen.add(k); else campoAppOpen.delete(k); } },true);
 // operações REAIS do talhão para o campo: com insumo, com execução registrada ou com máquina escolhida — na ordem do planejamento
 function campoOpsDoTalhao(t){ return memo('cot|'+t.id, ()=>_campoOpsDoTalhao(t)); }
 function _campoOpsDoTalhao(t){
@@ -13850,7 +13852,7 @@ V.campo = function(arg){
         <tbody>${insRows||'<tr><td colspan="3" class="mut" style="padding:8px 10px">Sem insumos planejados nesta operação.</td></tr>'}${extrasRows}</tbody>
       </table></div>
       <button class="btn btn-outline btn-sm" data-act="realAddExtra" data-key="${esc(o.key)}">+ insumo extra</button>
-      ${tc?`<details class="camp-app panel-collapse"${soTS?' open':''}>
+      ${tc?`<details class="camp-app panel-collapse" data-key="${esc(o.key)}|ts"${(soTS||campoAppOpen.has(o.key+'|ts'))?' open':''}>
         <summary class="camp-app-sum"><span>🧪 Recomendação de TS (tratamento de sementes)${soTS?' — operação de TS':''}</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
@@ -13865,7 +13867,7 @@ V.campo = function(arg){
           <button class="btn btn-outline btn-sm" data-act="pdfTs" data-key="${esc(o.key)}">🖨 PDF do TS (com link de baixa)</button></div>
         </div>
       </details>`:''}
-      ${soTS?'':pc?plantioSec(t,o,r,pc):`<details class="camp-app panel-collapse">
+      ${soTS?'':pc?plantioSec(t,o,r,pc):`<details class="camp-app panel-collapse" data-key="${esc(o.key)}"${campoAppOpen.has(o.key)?' open':''}>
         <summary class="camp-app-sum"><span>🚿 Recomendação de aplicação</span><span class="panel-chevron">▸</span></summary>
         <div class="camp-app-in">
           <div class="app-grid">
@@ -14218,6 +14220,7 @@ function applyEdit(el){
     const key=el.dataset.key, r0=OV.realizado[key];
     if(!(r0 && r0.status==='concluido')){ const i=key.indexOf('|'); conjGravarOp(key.slice(0,i), key.slice(i+1), el.value);
       if(r0 && r0.app && r0.app.maq!=null){ delete r0.app.maq; stampReal(key); }
+      let ch=false; ((RECOM&&RECOM.registros)||[]).forEach(x=>{ if(x.opKey===key && x.tipo!=='ts' && x.status!=='aprovada' && !x.retorno && x.maquina!==el.value){ x.maquina=el.value; ch=true; } }); if(ch) saveRecom();   // v381: a recomendação aberta desta operação acompanha (opMaqCampo prefere a enviada)
       saveOverrides(); toast('Máquina da operação atualizada no planejamento'); route({keepScroll:true}); return; }
   }
   if(kind==='realTs'){   // modo Campo: recomendação de TS (bags por batelada, sementes por bag, PMS, nº de bateladas)
