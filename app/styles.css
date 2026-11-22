@@ -2399,6 +2399,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .kpi.accent .k-bar>div{background:#fff}
 @media (max-width:640px){ .fase-tx{font-size:13px} .fase-sel{max-width:150px;font-size:12px} }
 
+/* v380 — análise de mistura dentro do cartão da operação (Campo) */
+.camp-app-in .rc-mist-bar{padding:8px 0 4px}
+.camp-app-in .rc-mist{margin:0 0 10px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}

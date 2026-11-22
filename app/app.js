@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-379';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-380';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8282,6 +8282,7 @@ function recomFromCampoOp(opKey){
   // tanque e vazão: SEMPRE os atuais do Campo enquanto o operador não respondeu
   // (antes copiava só na 1ª vez — corrigir o tanque no Campo não mudava o PDF/WhatsApp)
   if(!ehPlantio && !r.retorno) r.itens=recomItensFromOp(t, opKey);   // aplicação: segue o Campo (produto tirado sai, extra entra, dose do plano)
+  if(!r.retorno && rl && rl.mist && (!r.mist || (+rl.mist.ts||0)>=(+r.mist.ts||0))) r.mist=rl.mist;   // v380: parecer da IA pedido no Campo vai junto (WhatsApp/PDF)
   if(!ehPlantio && !r.retorno && rl && rl.app){
     if(rl.app.vazao!=null && rl.app.vazao!=='') r.calda=String(rl.app.vazao);
     if(rl.app.tanque!=null && rl.app.tanque!=='') r.tanque=String(rl.app.tanque); }
@@ -8619,12 +8620,18 @@ function mistRiscoLbl(k){ return (MIST_RISCO[k]||{}).lbl||''; }
 // texto curto para o WhatsApp e o PDF
 function misturaResumoTxt(r){ const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2) return null; const A=misturaAnalise(r), ia=r.mist||null, top=A.alertas.filter(x=>x.nivel!=='info').slice(0,3);
   return {A, ia, top, linha:ia?`IA: ${mistRiscoLbl(ia.risco)}${ia.resumo?' — '+ia.resumo:''}`:`${mistRiscoLbl(A.risco)} pelas regras do app (formulação, pH, bula, ativos)`}; }
-async function misturaIaPedir(id){ const r=recomById(id); if(!r||mistIaLendo) return; const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2){ toast('Precisa de pelo menos 2 produtos'); return; }
+// v380: alvo da análise de mistura — recomendação (id) ou operação do Campo ("op:<key>"): a operação vira um objeto
+// no formato da recomendação (itens na ordem do quadro "Na calda"); o parecer da IA fica em rl.mist e sincroniza com a operação
+function mistAlvo(id){ id=String(id||''); if(id.indexOf('op:')!==0) return recomById(id);
+  const key=id.slice(3), fk=opFromKey(key), t=fk?findTalhao(fk.talId):null; if(!t||!fk.op) return null; const rl=realEnsure(key);
+  return {id, opKey:key, talhao:t.id, cultura:(fk.tagoi[0]==='S'?empSafDe(t):empDe(t))||'', alvo:'', calda:(rl.app&&rl.app.vazao)||'', adjuvante:'', itens:recomItensFromOp(t,key), mist:rl.mist||null, _rl:rl}; }
+function mistSalvarParecer(r, mist){ if(r._rl){ r._rl.mist=mist; stampReal(r.opKey); } else { r.mist=mist; saveRecom(); } }
+async function misturaIaPedir(id){ const r=mistAlvo(id); if(!r||mistIaLendo) return; const its=(r.itens||[]).filter(it=>it.produto); if(its.length<2){ toast('Precisa de pelo menos 2 produtos'); return; }
   if(!syncUrl()){ toast('Configure a Sincronização: é a planilha que fala com a IA'); return; }
   const A=misturaAnalise(r), pl={id:r.id, cultura:r.cultura||'', alvo:r.alvo||'', calda:+_mmC(r.calda)||0, adjuvante:r.adjuvante||'', produtos:A.itens.map(x=>({produto:x.produto, ativo:x.ativo, classe:x.classe, formulacao:x.formTxt||x.tipo, tipo:x.tipo, ph:x.phTxt, conc:x.conc, grupo:x.grupo, obs:x.obs, dose:+x.dose||0, un:x.un||''})), regras:A.alertas.map(x=>`[${x.nivel}] ${x.txt}`), historico:mistHistTxt(A.hist)};
   mistIaLendo=r.id; RECOM_UI.mist[r.id]=true; route({keepScroll:true}); let j=null; try{ j=await syncPost(syncUrl(), JSON.stringify({__misturaIa:pl})); }catch(e){ j=null; } mistIaLendo='';
   if(!(j&&j.parecer)){ const m=permAviso((j&&j.msgs&&j.msgs[0])||'sem resposta da planilha'); toast('Sem parecer da IA: '+m); route({keepScroll:true}); return; }
-  r.mist=Object.assign({}, j.parecer, {ts:Date.now(), assin:mistAssin(its)}); saveRecom(); route({keepScroll:true}); toast(`Parecer da IA: ${mistRiscoLbl(r.mist.risco)}`); }
+  r.mist=Object.assign({}, j.parecer, {ts:Date.now(), assin:mistAssin(its)}); mistSalvarParecer(r, r.mist); route({keepScroll:true}); toast(`Parecer da IA: ${mistRiscoLbl(r.mist.risco)}`); }
 function recomCard(r,t){
   const st=RECOM_ST[r.status]||RECOM_ST.rascunho;
   const area=+r.area||0, its=r.itens||[], cd=recomCalda(r);
@@ -10874,6 +10881,7 @@ V.campo = function(arg){
             <button class="btn btn-outline btn-sm" data-act="ajustVazao" data-key="${esc(o.key)}" title="Calcula a vazão (L/ha) para esse número de tanques cheios cobrir a área a aplicar (nº × tanque ÷ área)">Calcular vazão</button>
           </div>
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
+          ${(()=>{ try{ const mr=mistAlvo('op:'+o.key); return mr?misturaHtml(mr, r.status!=='concluido'):''; }catch(e){ return ''; } })()}
           <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
           <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${esc(o.key)}">🖨 PDF (com link de baixa)</button></div>
         </div>
@@ -11760,6 +11768,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='contAddProd'){ const i=document.getElementById('ct-addprod'), p=((i&&i.value)||'').trim(); if(!PROD[p]){ toast('Escolha um produto do portfólio'); return; } const c=contDe(a.id); if(c&&c.status==='aberta'){ c.itens=c.itens||{}; if(!c.itens[p]) c.itens[p]={qtd:0}; c._u=tsAgora(); saveOverrides(); CONT_UI.q=p; route({keepScroll:true}); toast(`${p} incluído — digite a quantidade`); } }
     else if(a.act==='recomMist'){ RECOM_UI.mist[a.id]=!RECOM_UI.mist[a.id]; route({keepScroll:true}); }   // v357: compatibilidade da calda
     else if(a.act==='recomMistIa'){ misturaIaPedir(a.id); }
+    else if(a.act==='recomMistOrdem' && String(a.id).indexOf('op:')===0){ const r=mistAlvo(a.id); if(r&&r.itens&&r._rl.status!=='concluido'){ const A=misturaAnalise(r), com=r.itens.filter(it=>it.produto); const refs=A.ordem.map(x=>{ const it=com[x.i]; return it.ei!=null?'e'+it.ei:String(it.iid); }); r._rl.app=r._rl.app||{}; r._rl.app.ordem=refs; stampReal(r.opKey); route({keepScroll:true}); toast('Ordem de mistura da operação ajustada pela formulação'); } }   // v380: no Campo
     else if(a.act==='recomMistOrdem'){ const r=recomById(a.id); if(r&&r.status==='rascunho'&&r.itens){ const A=misturaAnalise(r), com=r.itens.filter(it=>it.produto), sem=r.itens.filter(it=>!it.produto); r.itens=A.ordem.map(x=>com[x.i]).concat(sem); saveRecom(); route({keepScroll:true}); toast('Ordem de mistura ajustada pela formulação'); } }
     else if(a.act==='recomItUp'||a.act==='recomItDown'){ const r=recomById(a.id); if(r&&r.itens){ const i=+a.i, j=a.act==='recomItUp'?i-1:i+1;   // ordem de mistura
       if(j>=0&&j<r.itens.length){ const tmp=r.itens[i]; r.itens[i]=r.itens[j]; r.itens[j]=tmp; saveRecom();
