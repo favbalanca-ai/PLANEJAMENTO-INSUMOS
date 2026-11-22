@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Mensagem do WhatsApp das máquinas curta (v378)** — o QR da etiqueta WhatsApp abre agora só:
+  "⛽ *ABASTECIMENTO* _[m:id]_ / 🚜 *máquina* / 🕐 Horímetro anterior: 1.250,5 h / Digite o número depois dos
+  dois-pontos e envie: / ⏱ Horas: / ⛽ Volume (L):" (`maqWaTexto`). Os dois campos ficam no fim porque o cursor do
+  WhatsApp já cai ali; origem fica como tanque e o operador é quem mandou a mensagem. `waInterpreta` lê **Horas:**
+  como horímetro e **Volume (L):** como litros (com ou sem colchetes) e continua lendo as mensagens antigas.
+  O texto fica gravado no QR: etiquetas já impressas seguem abrindo a mensagem antiga até serem reimpressas
+  (Cadastro → 🏷️ Etiquetas WhatsApp).
 - **Horímetro anterior na mensagem do WhatsApp (v356)** — logo abaixo da máquina a mensagem traz
   "🕐 Horímetro anterior (horas): 1.250 h — último lançamento até dd/mm/aaaa" (`maqHorimetro`: último abastecimento,
   leitura, OS ou horímetro inicial). Como o QR é impresso, o valor é o do dia da etiqueta e a linha diz a data;

@@ -3007,7 +3007,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-377';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-378';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -7964,7 +7964,7 @@ async function maqEtiquetas(modo, lista){ modo=modo==='whats'?'whats':'app'; if(
   const ms=lista.slice().sort((a,b)=>maqGrupoLbl(a).localeCompare(maqGrupoLbl(b))||String(a.nome).localeCompare(String(b.nome))); if(!ms.length){ toast('Nenhuma máquina'); return; } toast('Montando etiquetas…');
   try{ const svgs=await Promise.all(ms.map(modo==='whats'?maqQrWaSvg:maqQrSvg)), grupos=[...new Set(ms.map(maqGrupoLbl))];
     const etq=(m,i)=>`<div style="border:1px solid #000;border-radius:6px;padding:8px;text-align:center;break-inside:avoid"><div style="width:140px;height:140px;margin:0 auto">${svgs[i].replace('<svg','<svg style="width:140px;height:140px"')}</div><div style="font-weight:700;font-size:13px;margin-top:6px">${esc(m.nome)}</div><div style="font-size:10px;color:#555">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''} · ${modo==='whats'?'📱 WhatsApp':'App'}</div></div>`;
-    const html=`<h1>Etiquetas QR — ${modo==='whats'?'WhatsApp':'app'}</h1><p style="font-size:11px">Cole na máquina. ${modo==='whats'?'A câmera comum do celular abre o WhatsApp com a mensagem pronta: preencha horímetro e litros e envie.':'No app: Máquinas → Abastecimento → 📷 Ler QR.'}</p>`
+    const html=`<h1>Etiquetas QR — ${modo==='whats'?'WhatsApp':'app'}</h1><p style="font-size:11px">Cole na máquina. ${modo==='whats'?'A câmera comum do celular abre o WhatsApp com a mensagem pronta: digite as horas e o volume e envie.':'No app: Máquinas → Abastecimento → 📷 Ler QR.'}</p>`
       +grupos.map((g,gi)=>{ const idx=ms.map((m,i)=>maqGrupoLbl(m)===g?i:-1).filter(i=>i>=0); return `<h2 class="etq-grupo" style="font-size:15px;margin:${gi?'0':'6px'} 0 8px;padding-bottom:3px;border-bottom:2px solid #000${gi?';page-break-before:always':''}">${esc(g)} <span style="font-weight:400;font-size:11px;color:#555">· ${idx.length} etiqueta${idx.length===1?'':'s'}</span></h2><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${idx.map(i=>etq(ms[i],i)).join('')}</div>`; }).join('');
     const slug=s=>_bkNorm(s).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
     const blob=await pdfArquivo(html,''); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`etiquetas_${modo==='whats'?'whatsapp':'app'}_${grupos.length===1?(ms.length===1?slug(ms[0].nome):slug(grupos[0])):'por_grupo'}.pdf`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); toast(`PDF das etiquetas pronto: ${ms.length} etiqueta(s) em ${grupos.length} grupo(s)`); }
@@ -7992,7 +7992,7 @@ function maqDoQr(txt){ txt=String(txt||'').trim(); if(!txt){ toast('Nenhum QR Co
 function maqWhats(){ const c=DATA&&DATA.config_app&&DATA.config_app.maquinas; return String((c&&c.whats)||(OV&&OV.maqWa)||'').replace(/\D/g,''); }
 // v355: mensagem do QR — máquina em negrito (*…* no WhatsApp), cada campo com o que digitar e a unidade; a etiqueta [m:id] vai no fim, em itálico
 // v356: linha "Horímetro anterior" com o último lançamento (abastecimento, leitura, OS ou horímetro inicial) — o QR é impresso, então o valor é o do dia da etiqueta e a linha diz isso
-function maqWaTexto(m){ const h=maqHorimetro(m), dt=_dtBRc(_hojeISO()); return `⛽ *ABASTECIMENTO*\n🚜 *${m.nome}*\n🕐 Horímetro anterior (horas): ${h>0?numH(h)+' h — último lançamento até '+dt:'sem lançamento até '+dt}\n\nDigite depois dos dois-pontos e envie:\n⏱ Horímetro atual (horas): \n⛽ Litros abastecidos: \n🛢 Origem (tanque ou posto): tanque\n💲 Valor pago (só se posto): \n👤 Operador: \n📝 Obs: \n\n_[${m.id}]_`; }
+function maqWaTexto(m){ const h=maqHorimetro(m); return `⛽ *ABASTECIMENTO*  _[${m.id}]_\n🚜 *${m.nome}*\n🕐 Horímetro anterior: ${h>0?numH(h)+' h':'—'}\n\nDigite o número depois dos dois-pontos e envie:\n⏱ Horas: \n⛽ Volume (L): `; }   // v378: curta; os dois campos ficam no fim (o cursor do WhatsApp já cai ali); o código da máquina vai no título
 function maqWaLink(m){ const n=maqWhats(); if(!n) return ''; return `https://wa.me/${n.startsWith('55')?n:'55'+n}?text=${encodeURIComponent(maqWaTexto(m))}`; }
 // conversa exportada (Android: "dd/mm/aaaa hh:mm - Nome: msg" · iPhone: "[dd/mm/aaaa, hh:mm:ss] Nome: msg"); mensagens de várias linhas continuam até o próximo cabeçalho
 function waParse(txt){ const out=[]; let cur=null; const rx=/^‎?\[?(\d{1,2})\/(\d{1,2})\/(\d{2,4}),?\s+(\d{1,2}):(\d{2})(?::\d{2})?\]?\s*(?:-\s*)?([^:]{1,60}?):\s(.*)$/;
@@ -8000,13 +8000,13 @@ function waParse(txt){ const out=[]; let cur=null; const rx=/^‎?\[?(\d{1,2})\/
   return out; }
 // entende uma mensagem: ABASTECIMENTO / HORÍMETRO / MANUTENÇÃO (ou texto livre com os campos)
 function waInterpreta(msg){ const T=msg.texto||'', N=_bkNorm(T).replace(/[*_~]/g,'').replace(/^[^A-Z]+/,''); const campo=rx=>{ const m=T.match(rx); return m?m[1].trim():''; };   // v355: ignora negrito/itálico e o emoji do começo
-  const tipo=/^\s*ABASTEC/.test(N)?'abast':/^\s*HORIMETRO/.test(N)?'leitura':/^\s*MANUTEN|^\s*OS\b|^\s*DEFEITO|^\s*QUEBR/.test(N)?'os':(/HORIMETRO|LITROS/.test(N)?'abast':null);
+  const tipo=/^\s*ABASTEC/.test(N)?'abast':/^\s*HORIMETRO/.test(N)?'leitura':/^\s*MANUTEN|^\s*OS\b|^\s*DEFEITO|^\s*QUEBR/.test(N)?'os':(/HORIMETRO|LITROS|\bHORAS\s*:|\bVOLUME\b/.test(N)?'abast':null);   // v378: "Horas:" e "Volume" (mensagem curta)
   if(!tipo) return null;
   let m=null; const tag=T.match(/\[(m:[A-Z0-9-]+)\]/i); if(tag) m=maqDe(tag[1]);
   if(!m){ const linhas=T.split('\n').map(l=>_bkNorm(l).replace(/[*_~]/g,'').replace(/^[^A-Z0-9]+/,'').trim()); let prim=(linhas[0]||'').replace(/^(ABASTECIMENTO|HORIMETRO|MANUTENCAO|OS|DEFEITO|QUEBROU)\s*[·:\-–]?\s*/,'').replace(/\[.*$/,'').trim(); if(!prim&&linhas[1]) prim=linhas[1].replace(/\[.*$/,'').trim();   // v355: a máquina pode vir na 2ª linha (mensagem nova do QR)
     const ms=maqTodas(); m=ms.find(x=>_bkNorm(x.nome)===prim)||ms.find(x=>prim&&prim.includes(_bkNorm(x.nome)))||ms.find(x=>prim&&prim.length>=4&&_bkNorm(x.nome).includes(prim))||null; }
   // v355: rótulos podem ter explicação entre o nome e os dois-pontos ("Horímetro atual (horas): 1234", "Litros abastecidos: 50") · v356: a linha "Horímetro anterior" da etiqueta é só informação e não conta
-  const hor=numBR(campo(/hor[ií]metro(?![ \t]+anterior)(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)), litros=numBR(campo(/litros?(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)), valor=numBR(campo(/valor(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*R?\$?\s*([\d.,]+)/i)), origem=/posto/i.test(campo(/origem(?:[ \t]+[a-z(][^·:=\n]*)?[:=]?\s*(\w+)/i)||'')?'posto':'tanque';   // a explicação entre o rótulo e os dois-pontos começa com letra ou "(" — "HORÍMETRO · máquina" (título) não conta
+  const hor=numBR(campo(/hor[ií]metro(?![ \t]+anterior)(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)||campo(/(?:^|\n)[^\w\n]*horas(?:[ \t]*\([^)]*\))?[ \t]*[:=]\s*\[?\s*([\d.,]+)/i)), litros=numBR(campo(/litros?(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*([\d.,]+)/i)||campo(/(?:^|\n)[^\w\n]*volume(?:[ \t]*\([^)]*\))?(?:[ \t]+[a-z][^·:=\n\d]*)?[ \t]*[:=]\s*\[?\s*([\d.,]+)/i)), valor=numBR(campo(/valor(?:[ \t]+[a-z(][^·:=\n\d]*)?[:=]?\s*R?\$?\s*([\d.,]+)/i)), origem=/posto/i.test(campo(/origem(?:[ \t]+[a-z(][^·:=\n]*)?[:=]?\s*(\w+)/i)||'')?'posto':'tanque';   // a explicação entre o rótulo e os dois-pontos começa com letra ou "(" — "HORÍMETRO · máquina" (título) não conta
   const oper=campo(/operador\s*[:=]\s*([^\n]+)/i), obs=campo(/obs\.?[^:=\n]*[:=]\s*([^\n]+)/i);
   const desc=tipo==='os'?(T.split('\n').slice(1).join(' ').trim()||T.replace(/^\s*\S+\s*[·:\-–]?\s*/,'').trim()):'';
   const id='wa:'+sigHash(`${msg.data} ${msg.hora} ${msg.quem} ${T}`);
