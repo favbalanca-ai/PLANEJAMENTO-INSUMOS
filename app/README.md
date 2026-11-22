@@ -210,6 +210,16 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Máquinas: medidor por horas ou por quilômetros (v383)** — cada máquina tem um **medidor** (`m.medidor`:
+  `'h'` horímetro, `'km'` odômetro, vazio = automático pelo grupo: Caminhão, Caminhonete, veículo, carro, pick-up,
+  utilitário, moto, van, ônibus → km; `MAQ_KM_RX`). O número gravado não muda (`hor`, `horIni`, `cadaH/ultH`); mudam
+  rótulo, unidade e consumo: `maqMedI(m)` dá nome/unidade, `consTxt(m, L/un)` mostra **km/L** no veículo e **L/h**
+  nas máquinas, `consRuim` compara com o planejado do jeito certo (km/L abaixo × L/h acima). Vale no Abastecimento
+  (rótulo, lista, aviso ao salvar), Frota e ficha (odômetro, km rodados na safra, custo por km, gráfico em km/L),
+  preventivas (a cada N km, faltam N km), OS e checklist, relatórios em PDF (frota separa horas e km rodados), mensagem
+  do WhatsApp da etiqueta ("🛣 Km:" e "Odômetro anterior") e importação ("Km:", "Odômetro:", "quilômetros").
+  Cadastro: campo "Medidor" (automático / horas / quilômetros); rótulos de horímetro inicial, consumo esperado,
+  custo planejado, vida útil e uso por mês seguem o medidor. Sobe pela sincronização do cadastro (`__maqCad`).
 - **Bula: catálogo MAPA avisa produto ausente; leitura pela IA enxuta e com plano B (v382)** — "Buscar no
   catálogo MAPA" continua listando os produtos parecidos, mas, quando o nome em si não está nos dados abertos
   (ex.: Cletodim 240 EC Brilliance, registro mais novo que o CSV do MAPA), avisa com a data dos dados e sugere usar um
