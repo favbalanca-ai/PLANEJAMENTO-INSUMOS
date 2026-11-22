@@ -443,6 +443,18 @@ function bulaArquivo_(f){ return driveArquivo_(f, 'Bulas', 'application/pdf', 'b
 // payload __bulaIa: { produto, b64 (PDF escolhido no aparelho) | url (link do Drive já anexado na ficha), nome }.
 // Devolve { bula:{campos da ficha}, extra:{registro no formato do catálogo}, resumo }. O registro vai para CATÁLOGO EXTRA
 // (KEY = "r:<registro MAPA>" ou "p:<produto>"), que o app mescla ao catálogo em todo aparelho (chave catalogo_extra do doGet).
+// v382: JSON cortado no meio (resposta da IA no limite de tokens) → fecha strings, listas e objetos abertos e tenta de novo
+function _jsonRepara_(txt){ txt = String(txt || ''); var i = txt.lastIndexOf('{'); if (i < 0) return null;
+  for (var tent = 0; tent < 40 && txt.length; tent++){
+    var pilha = [], str = false, esc = false, t = txt;
+    for (var k = 0; k < t.length; k++){ var ch = t[k]; if (str){ if (esc) esc = false; else if (ch === '\\') esc = true; else if (ch === '"') str = false; continue; }
+      if (ch === '"') str = true; else if (ch === '{' || ch === '[') pilha.push(ch === '{' ? '}' : ']'); else if (ch === '}' || ch === ']') pilha.pop(); }
+    var fim = (str ? '"' : '') ; t = t.replace(/[,:\s]+$/, ''); if (str) t = t + '"'; t = t.replace(/,\s*$/, '');
+    while (pilha.length) t += pilha.pop();
+    try { return JSON.parse(t); } catch (e) {}
+    var corte = Math.max(txt.lastIndexOf(','), txt.lastIndexOf('{'), txt.lastIndexOf('[')); if (corte <= 0) return null; txt = txt.slice(0, corte);
+  }
+  return null; }
 var CATEXTRA_SHEET = 'CATÁLOGO EXTRA';
 function bulaIa_(p){
   var key = iaChave_(); if (!key) return { erro:'IA desligada: falta ANTHROPIC_KEY nas Propriedades do Script' };
@@ -455,20 +467,34 @@ function bulaIa_(p){
   var bytes = blob.getBytes(); if (bytes.length > 20 * 1024 * 1024) return { erro:'PDF grande demais (máximo 20 MB)' };
   if (!(bytes.length > 4 && bytes[0] === 37 && bytes[1] === 80)) return { erro:'o arquivo não é um PDF' };
   var b64 = Utilities.base64Encode(bytes);
-  var system = 'Você lê a BULA (rótulo) de um agrotóxico ou produto agrícola registrado no Brasil, em PDF, para o sistema de uma fazenda de grãos. Responda SOMENTE com JSON válido, sem comentários nem markdown. Números com ponto decimal. Se um campo não existir na bula, deixe vazio, 0 ou lista vazia. ' +
+  // v382: resposta enxuta — alvos só pelo nome comum (até 15 por cultura), sem nome científico: bulas de herbicida com 20
+  // culturas × 30 alvos estouravam o limite de saída (JSON cortado = "IA respondeu fora do formato") e demoravam demais.
+  var system = 'Você lê a BULA (rótulo) de um agrotóxico ou produto agrícola registrado no Brasil, em PDF, para o sistema de uma fazenda de grãos. Responda SOMENTE com JSON válido, compacto (sem espaços nem quebras de linha desnecessários), sem comentários nem markdown. Números com ponto decimal. Se um campo não existir na bula, deixe vazio, 0 ou lista vazia. ' +
     'Formato: {"marca":"nome comercial","registro":"nº do registro no MAPA, só dígitos","titular":"empresa titular do registro","ingredientes":[{"nome":"nome comum do ingrediente ativo","grupo_quimico":"","conc":"ex.: 100 g/L"}],' +
-    '"classe":"Herbicida|Fungicida|Inseticida|Acaricida|Acaricida/Inseticida|Nematicida|Regulador de Crescimento|Adjuvante|Fertilizante|Inoculante|Outro","formulacao":"sigla e nome, ex.: SC - Suspensão Concentrada","tox_categoria":"1 a 5 ou vazio","tox_texto":"ex.: Produto Pouco Tóxico","ambiental":"classe de periculosidade ambiental","modo_acao":"","grupo_resistencia":"código IRAC/FRAC/HRAC, ex.: IRAC 3A + 30","ph_calda":"","reentrada_horas":0,"embalagens":["ex.: 5 L"],' +
-    '"culturas":[{"cultura":"nome da cultura como na bula","alvos":[{"alvo":"nome comum","nome_cientifico":""}],"dose_min":0,"dose_max":0,"dose_un":"ex.: L/ha, mL/ha, g/ha, kg/ha, mL/100 kg de sementes","volume_calda":"ex.: 100 a 200 L/ha","carencia_dias":0,"num_aplicacoes":"","intervalo_dias":""}],' +
-    '"obs":"compatibilidade, mistura, restrições — até 300 caracteres"}. Liste TODAS as culturas e TODOS os alvos da tabela de indicações. Dose na unidade da bula (produto comercial, não ingrediente ativo). Carência em dias por cultura ("sem restrição" = 0).';
-  var payload = { model:IA_MODELO, max_tokens:12000, system:system, messages:[{ role:'user', content:[{ type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } }, { type:'text', text:'Extraia os dados desta bula. O produto no sistema chama-se "' + produto.replace(/"/g, '') + '".' }] }] };
-  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
-  catch (e) { return { erro:'IA sem resposta: ' + e }; }
-  var code = resp.getResponseCode(), body = resp.getContentText();
-  if (code !== 200) return { erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 160) };
-  var d; try { var j = JSON.parse(body), texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); d = JSON.parse(texto.slice(texto.indexOf('{'), texto.lastIndexOf('}') + 1)); }
-  catch (e) { return { erro:'IA respondeu fora do formato' }; }
-  var r = _bulaIaSaneia_(d, produto); if (r.erro) return r;
-  try { var ex = {}; ex[r.extra.key] = r.extra; writeMapApp(CATEXTRA_SHEET, ex); } catch (e) { r.aviso = 'catálogo extra não gravado: ' + e; }
+    '"classe":"Herbicida|Fungicida|Inseticida|Acaricida|Acaricida/Inseticida|Nematicida|Regulador de Crescimento|Adjuvante|Fertilizante|Inoculante|Outro","formulacao":"sigla e nome, ex.: SC - Suspensão Concentrada","tox_categoria":"1 a 5 ou vazio","tox_texto":"ex.: Produto Pouco Tóxico","ambiental":"classe de periculosidade ambiental","grupo_resistencia":"ex.: HRAC A / IRAC 3A / FRAC 11","modo_acao":"","ph_calda":"","reentrada_horas":0,"embalagens":["ex.: 5 L"],' +
+    '"culturas":[{"cultura":"nome da cultura como na bula","alvos":["nome comum do alvo"],"dose_min":0,"dose_max":0,"dose_un":"ex.: L/ha, mL/ha, g/ha, kg/ha, mL/100 kg de sementes","volume_calda":"ex.: 100 a 200 L/ha","carencia_dias":0,"num_aplicacoes":"","intervalo_dias":""}],' +
+    '"obs":"compatibilidade, mistura, restrições — até 300 caracteres"}. Liste todas as culturas da tabela de indicações (até 30) e, em cada uma, até 15 alvos pelo NOME COMUM (sem nome científico; priorize os principais). Dose na unidade da bula (produto comercial, não ingrediente ativo). Carência em dias por cultura ("sem restrição" = 0).';
+  var systemCurto = 'Você lê a BULA (rótulo) de um agrotóxico registrado no Brasil, em PDF. Responda SOMENTE com JSON válido e compacto, sem markdown. Formato: {"marca":"","registro":"só dígitos","titular":"","ingredientes":[{"nome":"","grupo_quimico":"","conc":""}],"classe":"","formulacao":"","tox_categoria":"","tox_texto":"","ambiental":"","grupo_resistencia":"","modo_acao":"","ph_calda":"","reentrada_horas":0,"embalagens":[],"culturas":[{"cultura":"","alvos":[],"dose_min":0,"dose_max":0,"dose_un":"","volume_calda":"","carencia_dias":0}],"obs":""}. Em culturas, liste só as 8 principais, SEM alvos (alvos:[]), com dose e carência.';
+  var doc = { type:'document', source:{ type:'base64', media_type:'application/pdf', data:b64 } }, pergunta = 'Extraia os dados desta bula. O produto no sistema chama-se "' + produto.replace(/"/g, '') + '".';
+  var chamada = function(sys, maxTok){   // devolve { d } ou { erro }
+    var payload = { model:IA_MODELO, max_tokens:maxTok, system:sys, messages:[{ role:'user', content:[doc, { type:'text', text:pergunta }] }] };
+    var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+    catch (e) { return { erro:'IA sem resposta: ' + e }; }
+    var code = resp.getResponseCode(), body = resp.getContentText();
+    if (code !== 200){ var em = ''; try { em = JSON.parse(body).error.message; } catch (e2) {} return { erro:'IA recusou (HTTP ' + code + '): ' + (em || body).slice(0, 200) }; }
+    var j; try { j = JSON.parse(body); } catch (e3) { return { erro:'IA respondeu fora do formato' }; }
+    var texto = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+    texto = texto.slice(texto.indexOf('{'));
+    var d; try { d = JSON.parse(texto.slice(0, texto.lastIndexOf('}') + 1)); } catch (e4) { d = _jsonRepara_(texto); }
+    if (!d) return { erro:(j.stop_reason === 'max_tokens') ? 'bula muito longa: a resposta da IA foi cortada' : 'IA respondeu fora do formato', cortada:j.stop_reason === 'max_tokens' };
+    if (j.stop_reason === 'max_tokens') d._cortada = true;
+    return { d:d };
+  };
+  var c1 = chamada(system, 12000), d = c1.d, aviso = '';
+  if (!d){ var c2 = chamada(systemCurto, 4000); if (!c2.d) return { erro:c1.erro + ' (tentei de novo só com a ficha: ' + c2.erro + ')' }; d = c2.d; aviso = 'Bula extensa: a IA preencheu a ficha e as doses das principais culturas, sem a lista de alvos (' + c1.erro + ').'; }
+  else if (d._cortada) aviso = 'Bula extensa: a lista de culturas/alvos pode ter ficado incompleta.';
+  var r = _bulaIaSaneia_(d, produto); if (r.erro) return r; if (aviso) r.aviso = aviso;
+  try { var ex = {}; ex[r.extra.key] = r.extra; writeMapApp(CATEXTRA_SHEET, ex); } catch (e) { r.aviso = (r.aviso ? r.aviso + ' · ' : '') + 'catálogo extra não gravado: ' + e; }
   return r;
 }
 // só aceita o que faz sentido; monta a ficha (campos de BULA_CAMPOS do app) e o registro do catálogo (formato do produtos.json)
@@ -476,7 +502,7 @@ function _bulaIaSaneia_(d, produto){ d = d && typeof d === 'object' ? d : {};
   var num = function(v){ if (typeof v === 'number') return isFinite(v) ? v : 0; var s = S(v).replace(/\./g, '').replace(',', '.').replace(/[^\d.\-]/g, ''); var n = parseFloat(s); return isFinite(n) ? n : 0; };
   var ings = (Array.isArray(d.ingredientes) ? d.ingredientes : []).map(function(x){ x = x || {}; return { nome:S(x.nome).slice(0, 80), grupo:S(x.grupo_quimico).slice(0, 60), conc:S(x.conc).slice(0, 30) }; }).filter(function(x){ return x.nome; });
   if (!ings.length) return { erro:'a IA não encontrou o ingrediente ativo na bula' };
-  var culturas = (Array.isArray(d.culturas) ? d.culturas : []).map(function(c){ c = c || {}; return { cultura:S(c.cultura).slice(0, 60), alvos:(Array.isArray(c.alvos) ? c.alvos : []).map(function(a){ a = a || {}; return [S(a.alvo).slice(0, 80), S(a.nome_cientifico).slice(0, 80)]; }).filter(function(a){ return a[0]; }),
+  var culturas = (Array.isArray(d.culturas) ? d.culturas : []).map(function(c){ c = c || {}; return { cultura:S(c.cultura).slice(0, 60), alvos:(Array.isArray(c.alvos) ? c.alvos : []).map(function(a){ if (typeof a === 'string') return [S(a).slice(0, 80), '']; a = a || {}; return [S(a.alvo).slice(0, 80), S(a.nome_cientifico).slice(0, 80)]; }).filter(function(a){ return a[0]; }),   // v382: alvo pode vir só como texto
       doseMin:num(c.dose_min), doseMax:num(c.dose_max), doseUn:S(c.dose_un).slice(0, 30), calda:S(c.volume_calda).slice(0, 60), carencia:num(c.carencia_dias), nApl:S(c.num_aplicacoes).slice(0, 30), intervalo:S(c.intervalo_dias).slice(0, 30) }; }).filter(function(c){ return c.cultura; });
   var dmin = 0, dmax = 0, dun = '', car = null; culturas.forEach(function(c){ if (c.doseMin > 0 && (!dmin || c.doseMin < dmin)) dmin = c.doseMin; if (c.doseMax > dmax) dmax = c.doseMax; if (!dun && c.doseUn) dun = c.doseUn; if (c.carencia > 0 && (car == null || c.carencia > car)) car = c.carencia; });
   var toxCat = S(d.tox_categoria).replace(/\D/g, '').slice(0, 1), toxTxt = S(d.tox_texto).slice(0, 80), tox = toxCat ? (toxCat + (toxTxt ? ' — ' + toxTxt : '')) : toxTxt;

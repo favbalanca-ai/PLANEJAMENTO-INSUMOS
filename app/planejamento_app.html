@@ -3011,7 +3011,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-381';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-382';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -10419,7 +10419,9 @@ async function bulaMapaBuscar(){ const p=bulaEditProd, box=document.getElementBy
   const ov=document.getElementById('bula-ov'), inp=ov&&ov.querySelector('input[data-bula="reg"]'), reg=((inp&&inp.value)||'').trim();
   let lista=reg&&d._porReg[reg]?[d._porReg[reg]]:agrofitBuscarNome(p);
   if(!lista.length){ box.innerHTML=`<span class="mut">Nenhum produto parecido com “${esc(p)}” no catálogo. <a class="link" data-go="#/catalogo">Abrir o catálogo</a></span>`; return; }
-  box.innerHTML=`<div class="mut" style="font-size:11px">Escolha o registro certo (${lista.length}):</div>`+lista.map(x=>`<button type="button" class="ag-cand" data-act="bulaMapaUsar" data-r="${esc(x.r)}"><b>${esc((x.m||[]).join(' · '))}</b> <span class="ag-cl">${esc(x.c)}</span><br><small>${esc(x.ia)} · ${esc(x.t)} · reg. ${esc(x.r)}</small></button>`).join(''); }
+  const exato=lista.some(x=>(x.m||[]).some(m=>_agNorm(m).replace(/[^a-z0-9]+/g,' ').trim()===_agNorm(p).replace(/[^a-z0-9]+/g,' ').trim()));
+  box.innerHTML=`<div class="mut" style="font-size:11px">Escolha o registro certo (${lista.length}):</div>`+lista.map(x=>`<button type="button" class="ag-cand" data-act="bulaMapaUsar" data-r="${esc(x.r)}"><b>${esc((x.m||[]).join(' · '))}</b> <span class="ag-cl">${esc(x.c)}</span><br><small>${esc(x.ia)} · ${esc(x.t)} · reg. ${esc(x.r)}</small></button>`).join('')
+    +(exato?'':`<div class="mut" style="font-size:11px;margin-top:4px">“${esc(p)}” não está nos dados abertos do MAPA (atualizados em ${esc(fmtDataBR(d.atualizado||''))}) — produto novo ou nome diferente. Pode usar um igual da lista (mesmo ativo, concentração e formulação) ou 🤖 <b>Ler a bula com a IA</b>, que cadastra o produto no catálogo do app.</div>`); }   // v382: avisa quando o produto em si não existe no catálogo
 function bulaMapaUsar(r){ const d=AGROFIT.dados, p=d&&d._porReg[r], ov=document.getElementById('bula-ov'); if(!p||!ov) return;
   const sp=agrofitIaSplit(p.ia), tox=(m=>m?`${m[1]} — ${(p.tox.split(/\s[–—-]\s/)[1]||'').trim()}`:p.tox)(/Categoria\s*(\d)/i.exec(p.tox||''));
   const vals={ia:sp.ia||p.ia, conc:sp.conc, tox, grupo:[p.c,p.ma].filter(Boolean).join(' · '), form:p.f, reg:p.r};
@@ -10443,7 +10445,7 @@ async function bulaIaLer(file){ const p=bulaEditProd, ov=document.getElementById
   let n=0; for(const f in r.bula){ const i=ov2.querySelector(`input[data-bula="${f}"]`), v=r.bula[f]; if(!i||v===''||v==null) continue; const s=String(v); if(i.value.trim()!==s){ i.value=s; i.classList.add('edited'); n++; } }
   if(r.extra&&r.extra.key){ if(!DATA) DATA={}; DATA.catalogo_extra=DATA.catalogo_extra||{}; DATA.catalogo_extra[r.extra.key]=r.extra; try{ if(AGROFIT.dados) agrofitExtraMescla(AGROFIT.dados); }catch(e){} }
   const ds=(r.extra&&r.extra.doses)||[], tb=ds.length?`<table class="bula-ia-tb"><thead><tr><th>Cultura</th><th>Dose</th><th>Carência</th><th>Alvos</th></tr></thead><tbody>${ds.slice(0,12).map(d=>`<tr><td>${esc(d.cu)}</td><td>${d.min||d.max?`${d.min&&d.max&&d.min!==d.max?fmtDose(d.min)+' a ':''}${fmtDose(d.max||d.min)} ${esc(d.un||'')}`:'—'}</td><td>${d.car?d.car+' d':'—'}</td><td>${(((r.extra.alvos||{})[d.cu])||[]).slice(0,4).map(a=>esc(a[0])).join(', ')||'—'}</td></tr>`).join('')}${ds.length>12?`<tr><td colspan="4" class="mut">+${ds.length-12} cultura(s)</td></tr>`:''}</tbody></table>`:'';
-  if(box) box.innerHTML=`<span class="lim-ok">✔ Bula lida: ${esc(r.resumo||'')} — ${n} campo(s) preenchido(s). Confira e toque em Salvar.</span>${tb}<span class="mut" style="font-size:11px">O produto entrou no 🏛️ Catálogo MAPA do app como complemento (aba CATÁLOGO EXTRA), para todos os aparelhos.</span>`;
+  if(box) box.innerHTML=`<span class="lim-ok">✔ Bula lida: ${esc(r.resumo||'')} — ${n} campo(s) preenchido(s). Confira e toque em Salvar.</span>${r.aviso?`<div class="bula-warn" style="font-size:11px">⚠️ ${esc(r.aviso)}</div>`:''}${tb}<span class="mut" style="font-size:11px">O produto entrou no 🏛️ Catálogo MAPA do app como complemento (aba CATÁLOGO EXTRA), para todos os aparelhos.</span>`;
   toast(`Bula lida pela IA: ${n} campo(s) preenchido(s)`); }
 // produtos lidos da bula (DATA.catalogo_extra) entram no catálogo do app quando o registro não está nos dados abertos do MAPA
 function agrofitExtraMescla(d){ const ex=(DATA&&DATA.catalogo_extra)||{}; if(!d||!Array.isArray(d.produtos)) return 0; const cu=d.culturas=d.culturas||[]; d._porReg=d._porReg||{}; let n=0;

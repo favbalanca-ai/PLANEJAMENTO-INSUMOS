@@ -92,6 +92,10 @@ forçam a sincronização quando você quiser. Em conflito, a **planilha vence**
 - **`__bulaBaixar`** `{url, tipo}`: a planilha baixa o PDF do link com `UrlFetchApp` (só aceita arquivo que começa
   com `%PDF`, até 15 MB, resposta 200), grava na pasta "Bulas" e responde `arquivo:{url,id,nome,kb}`; erro vem em
   `msgs`. Não invalida o cache.
+- **`__bulaIa`** (v351; v382): lê o PDF da bula com a IA. Na v382 a resposta pedida ficou enxuta (alvos só pelo nome
+  comum, até 15 por cultura, sem nome científico — bulas de herbicida estouravam o limite de saída e o JSON vinha
+  cortado); JSON cortado é reparado (`_jsonRepara_`); se mesmo assim falhar, a planilha refaz a leitura só com a
+  ficha e as doses das 8 principais culturas e devolve `aviso`. Erros HTTP da API voltam com a mensagem real.
 
 ## Revisão fase 2 — planilha rápida de verdade (Code.gs, out/2026)
 - **Gravação incremental nas abas KEY|JSON** (`writeMapIncr_`, usada por `writeMapApp` e `writeMapAppLeg_`): lê só

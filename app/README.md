@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Bula: catálogo MAPA avisa produto ausente; leitura pela IA enxuta e com plano B (v382)** — "Buscar no
+  catálogo MAPA" continua listando os produtos parecidos, mas, quando o nome em si não está nos dados abertos
+  (ex.: Cletodim 240 EC Brilliance, registro mais novo que o CSV do MAPA), avisa com a data dos dados e sugere usar um
+  igual (mesmo ativo, concentração e formulação) ou ler a bula com a IA. A leitura (`bulaIaLer`) mostra `r.aviso`
+  do Code.gs ("bula extensa…"). Code.gs v382: pede alvos só pelo nome comum (até 15 por cultura, sem nome
+  científico), repara JSON cortado (`_jsonRepara_`) e, se ainda falhar, refaz a leitura só com a ficha e as doses
+  das principais culturas; erros da API vêm com a mensagem real.
 - **Painel "Recomendação de aplicação" não fecha mais a cada toque; máquina não volta para a antiga (v381)** —
   os painéis `details.camp-app` (aplicação, TS e plantio) ganham `data-key` e o conjunto `campoAppOpen` (como
   `campoOpen`): qualquer botão que re-renderiza a tela (insumo extra, complementar, finalizar etc.) mantém o painel
