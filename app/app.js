@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-383';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-384';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -525,6 +525,7 @@ function loadOverrides(){
   OV.maqAttr       = OV.maqAttr       || {}; // conjunto -> {largura,velocidade,eficiencia,l_h}
   OV.maqApp        = OV.maqApp        || {}; OV.abast = OV.abast || {}; OV.osMaq = OV.osMaq || {};   // v295: módulo Máquinas (cadastro, abastecimentos, OS)
   OV.transf        = OV.transf        || {}; // v361: transferências de estoque entre fazendas: id -> {id,data,de,para,itens:[{produto,un,qtd,custo}],obs,quem,del,_u}
+  OV.movAv         = OV.movAv         || {}; // v384: movimentos avulsos de estoque (empréstimo, devolução, venda a terceiro, compra sem nota): id -> {id,tipo,data,local,produto,un,qtd,custo,valor,pessoa,obs,ref,quem,del,_u}
   OV.contagem      = OV.contagem      || {}; // v362: contagens físicas: id -> {id,data,local,status:'aberta'|'fechada',quem,obs,itens:{produto:{qtd}},ajustes:[{produto,un,qtd,custo,sist,cont}],del,_u}
   OV.maqAdd        = OV.maqAdd        || []; // conjuntos montados: [{conjunto,maquina,implemento,largura,velocidade,eficiencia,l_h,rs_hm}]
   OV.opAdd         = {}; // operações agora são os 12 slots da planilha (por posição) — descarta operações locais antigas
@@ -1670,6 +1671,7 @@ function estoqueEntradas(local){
     (COMPRAS&&COMPRAS.registros||[]).forEach(c=>{ if(!ok(c)) return; (c.itens||[]).forEach(it=>{ if(it.produto) m[it.produto]=(m[it.produto]||0)+(+it.qtd||0); }); });
   }
   if(local){ const tj=transfAjuste(local,'para'); for(const k in tj) m[k]=(m[k]||0)+tj[k]; }   // v361: transferências pendentes que ENTRAM neste estoque
+  { const mj=movAvAjuste(local,'E'); for(const k in mj) m[k]=(m[k]||0)+mj[k]; }   // v384: movimentos avulsos pendentes (entradas)
   { const cj=contAjuste(local,'ent'); for(const k in cj) m[k]=(m[k]||0)+cj[k]; }   // v362: ajustes de inventário pendentes (positivos)
   return m;
 }
@@ -2621,6 +2623,69 @@ function transfRender(){ let ov=document.getElementById('transf-ov'); if(!TRANSF
     ${p?`<div class="transf-saldos"><span>${esc(estoqueNome(f.de))}: <b>${fmtDose(sDe)} ${esc(un)}</b>${q>0?` → ${fmtDose(+(sDe-q).toFixed(4))}`:''}</span><span>${esc(estoqueNome(f.para))}: <b>${fmtDose(sPara)} ${esc(un)}</b>${q>0?` → ${fmtDose(+(sPara+q).toFixed(4))}`:''}</span>${cm>0?`<span class="mut">custo médio ${brl(cm)}/${esc(un||'un')}${q>0?` · ${brl0(cm*q)}`:''}</span>`:''}</div>`:(f.produto?`<div class="bula-warn" style="margin:4px 0">Produto não encontrado no portfólio.</div>`:'')}
     ${aviso}
     <div class="cp-btns" style="margin-top:10px"><button class="btn btn-primary" data-act="transfGravar"${(p&&q>0)?'':' disabled'}>🔁 Transferir${p&&q>0?` ${fmtDose(q)} ${esc(un)}`:''}</button><button class="btn btn-outline" data-act="transfFechar">Cancelar</button></div></div>`; }
+// ===== v384: MOVIMENTOS AVULSOS DE ESTOQUE — empréstimo recebido/cedido, devolução, venda a terceiro, compra sem nota, outro =====
+// Um movimento = 1 linha no razão (ENTRADA ou SAÍDA, ORIGEM "<tipo> · <pessoa> [#mv:id]", LOCAL da fazenda), pelo custo médio
+// (ou pelo valor informado na compra). Fica em OV.movAv (aba MOVIMENTOS APP, merge pelo _u); "desfazer" = del:true (a planilha apaga a linha).
+// Empréstimo fica PENDENTE até as devoluções (ref = id do empréstimo) somarem a quantidade.
+const MOVAV_TIPOS={
+  emp_rec:{lbl:'Empréstimo recebido', ico:'📥', dir:'E', pend:'devolver', pessoa:'De quem (emprestou para a fazenda)', origem:'Empréstimo recebido', ajuda:'Peguei emprestado de alguém: entra no estoque e fica pendente de devolução.'},
+  emp_ced:{lbl:'Empréstimo cedido', ico:'📤', dir:'S', pend:'receber', pessoa:'Para quem (pegou emprestado)', origem:'Empréstimo cedido', ajuda:'Emprestei para alguém: sai do estoque e fica pendente de receber de volta.'},
+  dev_env:{lbl:'Devolução enviada', ico:'↩️', dir:'S', pessoa:'Para quem', origem:'Devolução de empréstimo', ajuda:'Devolvi o que tinha pegado emprestado: sai do estoque e baixa a pendência.'},
+  dev_rec:{lbl:'Devolução recebida', ico:'↪️', dir:'E', pessoa:'De quem', origem:'Devolução de empréstimo', ajuda:'Recebi de volta o que tinha emprestado: entra no estoque e baixa a pendência.'},
+  venda:{lbl:'Venda a terceiro', ico:'💰', dir:'S', pessoa:'Comprador', origem:'Venda a terceiro', valor:true, ajuda:'Vendi para alguém: sai do estoque pelo custo médio; o valor da venda fica anotado.'},
+  compra:{lbl:'Compra sem nota', ico:'🛒', dir:'E', pessoa:'Vendedor', origem:'Compra sem nota', valor:true, ajuda:'Comprei sem nota fiscal (ex.: do vizinho): entra no estoque pelo valor pago.'},
+  outro_e:{lbl:'Outra entrada', ico:'➕', dir:'E', pessoa:'Origem', origem:'Entrada avulsa', ajuda:'Entrada que não é compra nem empréstimo (brinde, sobra, acerto).'},
+  outro_s:{lbl:'Outra saída', ico:'➖', dir:'S', pessoa:'Destino', origem:'Saída avulsa', ajuda:'Saída que não é aplicação nem venda (perda, doação, acerto).'} };
+function movAvLista(){ return Object.values((OV&&OV.movAv)||{}).filter(t=>t&&!t.del&&MOVAV_TIPOS[t.tipo]).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||((+b._u||0)-(+a._u||0))); }
+function movAvPendente(t){ const srv=movAvServerOk()?DATA.movimentos_app:null; if(!srv) return true; const s=srv[t.id]; return !s||(+t._u||0)>(+s._u||0); }   // ainda não está no razão da planilha
+// ajuste PENDENTE por produto num estoque (dir 'E' entradas / 'S' saídas); o que já está na planilha vem em movimentacao.porLocal
+function movAvAjuste(local, dir){ const m={}, srv=movAvServerOk()?DATA.movimentos_app:null, add=(t,sinal)=>{ const T=MOVAV_TIPOS[t&&t.tipo]; if(!T||T.dir!==dir||(local&&localNorm(t.local)!==local)) return; if(t.produto&&+t.qtd>0) m[t.produto]=(m[t.produto]||0)+sinal*(+t.qtd); };
+  Object.values((OV&&OV.movAv)||{}).forEach(t=>{ if(!t) return; const s=srv&&srv[t.id]; if(!movAvPendente(t)) return; if(!t.del) add(t,1); if(s&&!s.del) add(s,-1); });
+  return m; }
+// devoluções já feitas de um empréstimo e o que falta
+function movAvDevolvido(id){ return movAvLista().filter(x=>x.ref===id&&(x.tipo==='dev_env'||x.tipo==='dev_rec')).reduce((s,x)=>s+(+x.qtd||0),0); }
+function movAvPendencias(){ return movAvLista().filter(t=>MOVAV_TIPOS[t.tipo].pend).map(t=>{ const dev=movAvDevolvido(t.id); return {t, dev, resta:+Math.max(0,(+t.qtd||0)-dev).toFixed(4)}; }).filter(x=>x.resta>1e-6); }
+let MOVAV_F=null;
+function movAvAbrir(pre){ pre=pre||{}; const tipo=MOVAV_TIPOS[pre.tipo]?pre.tipo:'emp_rec';
+  MOVAV_F={tipo, produto:String(pre.produto||''), qtd:pre.qtd>0?+(+pre.qtd).toFixed(4):'', local:localNorm(pre.local)||ESTOQUE_PADRAO, data:_hojeISO(), pessoa:String(pre.pessoa||''), valor:'', obs:'', ref:String(pre.ref||'')}; movAvRender(); }
+function movAvFechar(){ MOVAV_F=null; movAvRender(); }
+function movAvLer(){ const f=MOVAV_F, ov=document.getElementById('movav-ov'); if(!f||!ov) return f; const g=id=>ov.querySelector('#'+id);
+  if(g('mv-tipo')&&!f.ref) f.tipo=MOVAV_TIPOS[g('mv-tipo').value]?g('mv-tipo').value:f.tipo; if(g('mv-prod')) f.produto=g('mv-prod').value.trim(); if(g('mv-qtd')) f.qtd=g('mv-qtd').value.trim()===''?'':numBR(g('mv-qtd').value);
+  if(g('mv-local')) f.local=localNorm(g('mv-local').value)||f.local; if(g('mv-data')) f.data=g('mv-data').value||f.data; if(g('mv-pessoa')) f.pessoa=g('mv-pessoa').value; if(g('mv-valor')) f.valor=g('mv-valor').value.trim()===''?'':numBR(g('mv-valor').value); if(g('mv-obs')) f.obs=g('mv-obs').value; return f; }
+function movAvRender(){ let ov=document.getElementById('movav-ov'); if(!MOVAV_F){ if(ov) ov.remove(); return; }
+  if(!ov){ ov=document.createElement('div'); ov.id='movav-ov'; ov.className='modal-ov'; ov.addEventListener('click',e=>{ if(e.target===ov) movAvFechar(); }); document.body.appendChild(ov); }
+  const f=MOVAV_F, T=MOVAV_TIPOS[f.tipo], p=f.produto&&PROD[f.produto]?f.produto:'', un=p?(PROD[p].un||''):'', sal=p?+saldoEstoqueDe(p,f.local).toFixed(4):null, q=+f.qtd||0, cm=p?custoMedioDe(p):0, ref=f.ref?(OV.movAv||{})[f.ref]:null;
+  const depois=sal!=null&&q>0?+(sal+(T.dir==='E'?q:-q)).toFixed(4):null;
+  const aviso=(T.dir==='S'&&p&&q>0&&q>sal+1e-6)?`<div class="nfe-aviso warn" style="margin:6px 0">⚠ ${esc(estoqueNome(f.local))} tem só ${fmtDose(sal)} ${esc(un)}: o saldo vai ficar negativo (${fmtDose(depois)}). Confira antes de confirmar.</div>`:'';
+  const refTxt=ref?`<div class="nfe-aviso info" style="margin:6px 0">${T.ico} Baixa o empréstimo de <b>${fmtDose(ref.qtd)} ${esc(ref.un||'')}</b> de ${esc(ref.produto)} (${esc(ref.pessoa||'—')}, ${esc(fmtDataBR(ref.data))}): faltam <b>${fmtDose(+Math.max(0,(+ref.qtd||0)-movAvDevolvido(ref.id)).toFixed(4))} ${esc(ref.un||'')}</b>. Pode devolver em partes.</div>`:'';
+  ov.innerHTML=`${prodDatalist()}<div class="modal-box"><div class="modal-head"><h3>↔ Movimento avulso de estoque</h3><button class="icon-btn" data-act="movAvFechar" title="Fechar">✕</button></div>
+    <div class="mq-form"><label style="flex-basis:100%">Tipo<select class="sel" id="mv-tipo"${f.ref?' disabled':''}>${Object.keys(MOVAV_TIPOS).filter(k=>f.ref?k===f.tipo:!/^dev_/.test(k)).map(k=>`<option value="${k}"${k===f.tipo?' selected':''}>${MOVAV_TIPOS[k].ico} ${MOVAV_TIPOS[k].lbl}</option>`).join('')}</select></label></div>
+    <p class="mut" style="font-size:12px;margin:0 0 8px">${esc(T.ajuda)}${T.dir==='E'?' Entra':' Sai'} no estoque escolhido, ${T.valor&&T.dir==='E'?'pelo valor pago (ou custo médio se não informar)':'pelo custo médio'}. Vale para todos os aparelhos.</p>
+    ${refTxt}
+    <div class="mq-form"><label style="flex-basis:100%">Produto<input list="prodlist" class="txt" id="mv-prod" value="${esc(f.produto)}" placeholder="insumo do portfólio"${f.ref?' disabled':''}></label>
+      <label>Quantidade${un?` (${esc(un)})`:''}<input class="cell" inputmode="decimal" id="mv-qtd" value="${f.qtd!==''?fmtDose(f.qtd):''}" placeholder="0"></label><label>Estoque<select class="sel" id="mv-local">${Object.keys(FAZENDAS).map(k=>`<option value="${k}"${k===f.local?' selected':''}>${esc(FAZENDAS[k])}</option>`).join('')}</select></label>
+      <label>${esc(T.pessoa)}<input class="txt" id="mv-pessoa" value="${esc(f.pessoa)}" placeholder="nome"></label><label>Data<input type="date" class="cell" id="mv-data" value="${esc(f.data)}"></label>
+      ${T.valor?`<label>Valor total (R$)${T.dir==='E'?'':' — opcional'}<input class="cell" inputmode="decimal" id="mv-valor" value="${f.valor!==''?nf2.format(f.valor):''}" placeholder="${cm>0&&q>0?nf2.format(cm*q):'0,00'}"></label>`:''}
+      <label style="flex-basis:100%">Observação<input class="txt" id="mv-obs" value="${esc(f.obs)}" placeholder="opcional"></label></div>
+    ${p?`<div class="transf-saldos"><span>${esc(estoqueNome(f.local))}: <b>${fmtDose(sal)} ${esc(un)}</b>${q>0?` → ${fmtDose(depois)}`:''}</span>${cm>0?`<span class="mut">custo médio ${brl(cm)}/${esc(un||'un')}${q>0?` · ${brl0(cm*q)}`:''}</span>`:''}</div>`:(f.produto?`<div class="bula-warn" style="margin:4px 0">Produto não encontrado no portfólio.</div>`:'')}
+    ${aviso}
+    <div class="cp-btns" style="margin-top:10px"><button class="btn btn-primary" data-act="movAvGravar"${(p&&q>0)?'':' disabled'}>${T.ico} ${T.lbl}${p&&q>0?` · ${fmtDose(q)} ${esc(un)}`:''}</button><button class="btn btn-outline" data-act="movAvFechar">Cancelar</button></div></div>`; }
+function movAvGravar(){ const f=movAvLer(); if(!f) return; const T=MOVAV_TIPOS[f.tipo], p=f.produto; if(!T) return; if(!p||!PROD[p]){ toast('Escolha um produto do portfólio'); return; } const q=+f.qtd||0; if(!(q>0)){ toast('Informe a quantidade'); return; }
+  if(f.ref){ const r=(OV.movAv||{})[f.ref]; if(r){ const resta=+Math.max(0,(+r.qtd||0)-movAvDevolvido(r.id)).toFixed(4); if(q>resta+1e-6&&!ask(`Faltavam ${fmtDose(resta)} ${r.un||''} e você está devolvendo ${fmtDose(q)}. Continuar mesmo assim?`)) return; } }
+  const valor=T.valor&&+f.valor>0?+(+f.valor).toFixed(2):0, cm=+(custoMedioDe(p)||0), custo=(T.dir==='E'&&valor>0)?+(valor/q).toFixed(4):+cm.toFixed(4);
+  const id='mv'+Date.now().toString(36)+Math.random().toString(36).slice(2,5), t={id, tipo:f.tipo, data:f.data||_hojeISO(), local:f.local, produto:p, un:PROD[p].un||'', qtd:+q.toFixed(4), custo, valor, pessoa:String(f.pessoa||'').trim().slice(0,80), obs:String(f.obs||'').trim().slice(0,200), ref:f.ref||'', quem:(sessUsuario()||{}).nome||'', _u:tsAgora()};
+  OV.movAv[id]=t; saveOverrides(); loteAgendar('__movAvulso'); movAvFechar(); route({keepScroll:true}); toast(`${T.ico} ${T.lbl}: ${fmtDose(q)} ${PROD[p].un||''} de ${p}${t.pessoa?' · '+t.pessoa:''}${syncUrl()?'':' (salvo no aparelho; configure a Sincronização)'}`); }
+function movAvDesfazer(id){ const t=OV.movAv&&OV.movAv[id]; if(!t||t.del) return; const T=MOVAV_TIPOS[t.tipo]||{lbl:'movimento'}; const devs=movAvLista().filter(x=>x.ref===id); if(devs.length){ toast('Desfaça antes as devoluções ligadas a este empréstimo'); return; }
+  if(!ask(`Desfazer "${T.lbl}" de ${fmtDose(t.qtd)} ${t.un||''} de ${t.produto}${t.pessoa?' ('+t.pessoa+')':''}?\n\nA linha sai do razão em todos os aparelhos.`)) return;
+  t.del=true; t._u=tsAgora(); saveOverrides(); loteAgendar('__movAvulso'); route({keepScroll:true}); toast('Movimento desfeito'); }
+function movAvListaHtml(lim){ const L=movAvLista(), P=movAvPendencias(); if(!L.length&&!syncUrl()&&!P.length) return '';
+  const pend=P.map(x=>{ const t=x.t, T=MOVAV_TIPOS[t.tipo], dev=T.pend==='devolver'?'dev_env':'dev_rec', Td=MOVAV_TIPOS[dev];
+    return `<div class="transf-row movav-pend"><span class="mut">${esc(fmtDataBR(t.data))}</span><span>${T.ico} <b>${esc(t.produto)}</b> ${fmtDose(x.resta)} ${esc(t.un||'')} <span class="mut">${T.pend==='devolver'?'a devolver para':'a receber de'} <b>${esc(t.pessoa||'—')}</b>${x.dev>0?` · já ${T.pend==='devolver'?'devolvido':'recebido'} ${fmtDose(x.dev)}`:''} · ${esc(estoqueNome(t.local))}</span></span><span class="transf-st"><button class="btn btn-primary btn-sm" data-act="movAvAbrir" data-tipo="${dev}" data-ref="${esc(t.id)}" data-prod="${esc(t.produto)}" data-qtd="${x.resta}" data-pessoa="${esc(t.pessoa||'')}" data-local="${esc(t.local||'')}">${Td.ico} ${T.pend==='devolver'?'Devolver':'Receber de volta'}</button></span></div>`; }).join('');
+  const rows=L.slice(0,lim||12).map(t=>{ const T=MOVAV_TIPOS[t.tipo], pd=movAvPendente(t);
+    return `<div class="transf-row"><span class="mut">${esc(fmtDataBR(t.data))}</span><span>${T.ico} ${esc(T.lbl)}: <b>${esc(t.produto)}</b> ${T.dir==='E'?'+':'−'}${fmtDose(t.qtd)} ${esc(t.un||'')}${t.pessoa?` <span class="mut">· ${esc(t.pessoa)}</span>`:''} <span class="mut">· ${esc(estoqueNome(t.local))}</span>${t.valor?` <span class="mut">· ${brl0(t.valor)}</span>`:''}${t.quem?` <small class="mut">· ${esc(t.quem)}</small>`:''}${t.obs?` <small class="mut">· ${esc(t.obs)}</small>`:''}</span><span class="transf-st">${pd?'<span class="cr-st pend" title="ainda não foi para a planilha">pendente</span>':'<span class="cr-st ok" title="já está no razão da planilha">✓</span>'}<button class="icon-btn del" data-act="movAvDesfazer" data-id="${esc(t.id)}" title="Desfazer (apaga do razão)">🗑</button></span></div>`; }).join('');
+  return `<div class="panel"><div class="panel-head"><h2>↔ Movimentos avulsos</h2><span class="sub">empréstimo, devolução, venda a terceiro, compra sem nota${P.length?` · <b>${P.length} pendência(s)</b>`:''}</span><div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="movAvAbrir">↔ Novo movimento</button></div>
+    ${pend?`<div class="movav-pendh mut">Pendências de empréstimo</div><div class="transf-list">${pend}</div>`:''}
+    <div class="transf-list">${rows||'<p class="mut" style="padding:8px 14px">Use quando um produto entra ou sai sem nota e sem aplicação: pegou emprestado, emprestou, devolveu, vendeu para alguém ou comprou do vizinho.</p>'}${L.length>(lim||12)?`<p class="mut" style="padding:4px 14px;font-size:12px">+${L.length-(lim||12)} mais antigo(s)</p>`:''}</div></div>`; }
 // ===== v366: RENOMEAR / MESCLAR PRODUTO (só administrador) — a planilha troca o nome em todas as abas =====
 let REN_F=null;
 function renAbrir(pre){ pre=pre||{}; REN_F={de:String(pre.de||''), para:'', apagar:true, lendo:false, res:null, erro:''}; renRender(); }
@@ -2641,7 +2706,7 @@ function renRender(){ let ov=document.getElementById('ren-ov'); if(!REN_F){ if(o
 // troca o nome nos dados guardados neste aparelho (a planilha já trocou; o puxar confirma com a versão dela)
 function renLocal(de, para){ const DE=de.toUpperCase(), ig=v=>String(v||'').trim().toUpperCase()===DE, st={n:0};
   const fx=x=>{ if(typeof x==='string') return ig(x)?(st.n++,para):x; if(Array.isArray(x)) return x.map(fx); if(x&&typeof x==='object'){ const o={}; Object.keys(x).forEach(k=>{ const nk=ig(k)?(st.n++,para):k; let nv=fx(x[k]); if(Object.prototype.hasOwnProperty.call(o,nk)){ const a=o[nk]; if(typeof a==='number'&&typeof nv==='number') nv=a+nv; else if(a&&nv&&typeof a==='object'&&typeof nv==='object'&&typeof a.qtd==='number'&&typeof nv.qtd==='number'){ nv=Object.assign({},nv,{qtd:a.qtd+nv.qtd}); } } o[nk]=nv; }); return o; } return x; };
-  try{ ['realizado','contagem','transf','misturas','bulas'].forEach(k=>{ if(OV&&OV[k]&&typeof OV[k]==='object') OV[k]=fx(OV[k]); }); saveOverrides(); }catch(e){}
+  try{ ['realizado','contagem','transf','movAv','misturas','bulas'].forEach(k=>{ if(OV&&OV[k]&&typeof OV[k]==='object') OV[k]=fx(OV[k]); }); saveOverrides(); }catch(e){}
   try{ if(RECOM&&RECOM.registros){ RECOM.registros=fx(RECOM.registros); saveRecom(); } }catch(e){}
   try{ if(typeof COMPRAS!=='undefined'&&COMPRAS&&COMPRAS.registros){ COMPRAS.registros=fx(COMPRAS.registros); saveCompras(); } }catch(e){}
   try{ if(typeof MIST!=='undefined'&&MIST&&MIST.reg){ MIST.reg=fx(MIST.reg); lsSet(MIST_KEY, JSON.stringify(MIST)); } }catch(e){}
@@ -3277,6 +3342,7 @@ function estoqueSaidas(local){
     opBaixas(false);
   }
   if(local){ const tj=transfAjuste(local,'de'); for(const k in tj) add(k, tj[k]); }   // v361: transferências pendentes que SAEM deste estoque
+  { const mj=movAvAjuste(local,'S'); for(const k in mj) add(k, mj[k]); }   // v384: movimentos avulsos pendentes (saídas)
   { const cj=contAjuste(local,'sai'); for(const k in cj) add(k, cj[k]); }   // v362: ajustes de inventário pendentes (negativos)
   return m;
 }
@@ -3337,13 +3403,14 @@ V.estoque=function(){
   <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
     <label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-go="#/contagem" title="Inventário: digitar o que foi contado no galpão, comparar com o sistema e aplicar os ajustes">📋 Contagem física</button><button class="btn btn-outline btn-sm" data-act="transfAbrir" title="Transferir produto de um estoque (fazenda) para o outro">🔁 Transferir</button>${nfeEhAdmin()?`<button class="btn btn-outline btn-sm" data-act="renAbrir" title="Trocar o nome de um produto (ou juntar dois cadastros) em todas as abas da planilha">✏️ Renomear</button>`:''}<button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
+    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-go="#/contagem" title="Inventário: digitar o que foi contado no galpão, comparar com o sistema e aplicar os ajustes">📋 Contagem física</button><button class="btn btn-outline btn-sm" data-act="transfAbrir" title="Transferir produto de um estoque (fazenda) para o outro">🔁 Transferir</button><button class="btn btn-outline btn-sm" data-act="movAvAbrir" title="Empréstimo, devolução, venda a terceiro, compra sem nota">↔ Movimento avulso</button>${nfeEhAdmin()?`<button class="btn btn-outline btn-sm" data-act="renAbrir" title="Trocar o nome de um produto (ou juntar dois cadastros) em todas as abas da planilha">✏️ Renomear</button>`:''}<button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
   <div class="classe-filter est-locf" id="est-locf" style="margin:2px 0 6px" title="Um estoque por fazenda (coluna LOCAL do razão). Unificado = soma dos dois."><span class="mut" style="font-size:12px;align-self:center">Estoque:</span><button class="chip-f${LOC===''?' on':''}" data-estloc="">Unificado</button>${Object.keys(FAZENDAS).map(k=>`<button class="chip-f${LOC===k?' on':''}" data-estloc="${k}">${esc(FAZENDAS[k])}</button>`).join('')}</div>
   <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque${LOC?` · ${esc(estoqueNome(LOC))}`:' · unificado'}</h2><span class="sub">${LOC?(LOC===ESTOQUE_PADRAO?'inicial + entradas − saídas desta fazenda':'entradas − saídas desta fazenda (o inicial do PORTIFÓLIO é da Água Viva)'):'inicial + entradas − saídas = saldo · as duas fazendas somadas'}</span></div>
     <div class="table-wrap fix-hd"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th>${LOC?'':Object.keys(FAZENDAS).map(k=>`<th class="num c-more est-loc-td" title="saldo no estoque ${esc(estoqueNome(k))}">${esc(estoqueNome(k).replace('Fazenda ',''))}</th>`).join('')}<th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
       <tbody>${body||`<tr><td colspan="${LOC?13:15}" class="mut" style="padding:14px">Sem produtos.</td></tr>`}</tbody></table></div></div>
   ${transfListaHtml()}
+  ${movAvListaHtml()}
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.<br><b>Custo médio</b> = o que foi pago nas notas (custo real com frete e impostos) ponderado com o estoque inicial; o estoque inicial vale pelo <b>custo inicial</b> digitado, senão pela última nota, senão pelo preço de referência (<span class="pill cm-ref">ref.</span>).</p>`;
 };
 // RELATÓRIO DE ESTOQUE (PDF): indicadores, resumo por classe e posição por produto (inicial, entradas, saídas,
@@ -3412,6 +3479,8 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
     (c.ajustes||[]).forEach(a=>{ if(a.produto!==prod||!(+a.qtd)) return; const q=Math.abs(+a.qtd), cu=+a.custo||custoMedioDe(prod)||0;
       if(a.qtd<0) sai.push({data:c.data||'', tal:'—', op:'Ajuste de inventário', origem:rot, qtd:q, custo:cu, valorReal:q*cu, ajuste:true});
       else ent.push({data:c.data||'', forn:'Ajuste de inventário', nf:rot, qtd:q, pu:cu, ajuste:true, local:loc}); }); });
+  movAvLista().forEach(t=>{ if(t.produto!==prod||!(+t.qtd>0)) return; const T=MOVAV_TIPOS[t.tipo], rot=`${T.lbl}${t.pessoa?' · '+t.pessoa:''}${t.obs?' · '+t.obs:''}`, cu=+t.custo||custoMedioDe(prod);   // v384: movimentos avulsos
+    if(T.dir==='S') sai.push({data:t.data||'', tal:'—', op:T.lbl, origem:rot, qtd:+t.qtd, custo:cu, valorReal:+t.qtd*cu, avulso:true}); else ent.push({data:t.data||'', forn:T.lbl, nf:rot, qtd:+t.qtd, pu:cu, avulso:true, local:t.local}); });
   // v364: lançamentos da BioFábrica (baixa de biológico / entrada de beneficiado), lidos do razão da planilha
   (mov.bio||[]).forEach((b,i)=>{ if(b.produto!==prod||!(+b.qtd>0)) return; const vu=+b.vu||0, rot=`${b.origem||'BioFábrica'}${b.obs?' · '+b.obs:''}`;
     if(b.tipo==='S'){ const cmS=custoMedioCalc().saida[_cmKeyBio(b,i)], cu=cmS!=null?cmS:(vu||custoMedioDe(prod)); sai.push({data:b.data||'', tal:'—', op:'BioFábrica', origem:rot, qtd:+b.qtd, custo:cu, valorReal:+b.qtd*cu, bio:true}); }
@@ -4856,6 +4925,10 @@ function _mapApplyPulled(campo, map, sigFn, getLast, setLast, tipo){ if(!map||ty
   const pend=sigFn()!==getLast() && !!getLast(); if(changed){ saveOverrides(); if(!pend) setLast(sigFn()); } if(pend) loteAgendar(tipo); return changed; }
 function maqApplyPulled(m){ return _mapApplyPulled('maqApp', m, maqSig, ()=>lastMaqSig, v=>{ lastMaqSig=v; }, '__maqCad'); }
 // v361: transferências entre fazendas (aba TRANSFERÊNCIAS APP) — mesmo padrão
+let lastMovAvSig='';   // v384
+function movAvSig(){ return sigHash(JSON.stringify((OV&&OV.movAv)||{})); }
+function movAvServerOk(){ return !!(DATA && DATA.movimentos_app && typeof DATA.movimentos_app==='object'); }
+function movAvApplyPulled(m){ return _mapApplyPulled('movAv', m, movAvSig, ()=>lastMovAvSig, v=>{ lastMovAvSig=v; }, '__movAvulso'); }
 let lastTransfSig='';
 function transfSig(){ return sigHash(JSON.stringify((OV&&OV.transf)||{})); }
 function transfServerOk(){ return !!(DATA && DATA.transferencias_app && typeof DATA.transferencias_app==='object'); }
@@ -11383,6 +11456,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='painel-fase'){ const v=e.target.value; if(v&&FASES[v]) lsSet(FASE_KEY,v); else { try{ localStorage.removeItem(FASE_KEY); }catch(x){} } route({keepScroll:true}); toast(v?`Painel na fase ${FASES[v].lbl} (só neste aparelho)`:'Painel de volta ao automático'); return; }   // v375
   if(e.target.id==='rec-local'){ REC.local=localNorm(e.target.value); return; }   // v360: estoque de destino do recebimento
   if(TRANSF_F&&/^tr-(de|prod|qtd)$/.test(e.target.id||'')){ transfLer(); transfRender(); return; }   // v361: recalcula os saldos mostrados
+  if(MOVAV_F&&/^mv-(tipo|prod|qtd|local|valor)$/.test(e.target.id||'')){ movAvLer(); movAvRender(); return; }   // v384
   if(REN_F&&/^rn-(de|para|apagar)$/.test(e.target.id||'')){ renLer(); renRender(); return; }   // v366: atualiza a explicação do que vai acontecer
   if(e.target.matches&&e.target.matches('input[data-sf="dist"]')){ const f=standFormAtual(); if(f){ f.dist=e.target.checked; route({keepScroll:true}); } return; }
   if(e.target.matches&&e.target.matches('[data-sf="nLin"]')){ const f=standFormAtual(); if(f){ const n=Math.max(1,Math.min(40,Math.round(numBR(e.target.value))||1)); if(n===f.linhas.length) return; while(f.linhas.length<n) f.linhas.push({n:'',dom:'',dup:'',aus:'',pos:[]}); f.linhas.length=n; setTimeout(()=>route({keepScroll:true}),0); } return; }
@@ -11777,6 +11851,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomTrocarIns'){ recomTrocarIns(a.id, a.i, a.novo); }
     else if(a.act==='transfAbrir'){ transfAbrir({produto:a.prod||'', de:a.de||'', para:a.para||'', qtd:+a.qtd||0}); }   // v361: transferência entre fazendas
     else if(a.act==='transfFechar'){ transfFechar(); } else if(a.act==='transfGravar'){ transfGravar(); } else if(a.act==='transfDesfazer'){ transfDesfazer(a.id); }
+    else if(a.act==='movAvAbrir'){ movAvAbrir({tipo:a.tipo||'', ref:a.ref||'', produto:a.prod||'', qtd:+a.qtd||0, pessoa:a.pessoa||'', local:a.local||''}); }   // v384
+    else if(a.act==='movAvFechar'){ movAvFechar(); } else if(a.act==='movAvGravar'){ movAvGravar(); } else if(a.act==='movAvDesfazer'){ movAvDesfazer(a.id); }
     else if(a.act==='renAbrir'){ renAbrir({de:a.prod||''}); } else if(a.act==='renFechar'){ renFechar(); } else if(a.act==='renGravar'){ renGravar(); }   // v366: renomear/mesclar produto
     else if(a.act==='contNova'){ contNova(); } else if(a.act==='contFechar'){ contFechar(a.id); } else if(a.act==='contReabrir'){ contReabrir(a.id); } else if(a.act==='contExcluir'){ contExcluir(a.id); }   // v362: contagem física
     else if(a.act==='contSo'){ CONT_UI.so=a.v||''; route({keepScroll:true}); } else if(a.act==='contColarToggle'){ CONT_UI.colar=!CONT_UI.colar; CONT_UI.msg=''; if(!CONT_UI.colar) CONT_UI.colarTxt=''; route({keepScroll:true}); } else if(a.act==='contColarAplicar'){ contColarAplicar(a.id); }
@@ -12524,6 +12600,7 @@ const LOTE_TIPOS={
   __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
   __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
   __transferencia:{ lbl:'Transferências de estoque', ok:()=>transfServerOk(), dados:()=>(OV.transf||{}), sig:()=>transfSig(), last:()=>lastTransfSig, set:v=>{ lastTransfSig=v; } },   // v361
+  __movAvulso:   { lbl:'Movimentos avulsos de estoque', ok:()=>movAvServerOk(), dados:()=>(OV.movAv||{}), sig:()=>movAvSig(), last:()=>lastMovAvSig, set:v=>{ lastMovAvSig=v; } },   // v384
   __contagem:    { lbl:'Contagens físicas', ok:()=>contServerOk(), dados:()=>(OV.contagem||{}), sig:()=>contSig(), last:()=>lastContSig, set:v=>{ lastContSig=v; } },   // v362
   __conjunto:    { lbl:'Conjuntos',     ok:()=>conjServerOk(),    dados:()=>(OV.conjApp||{}),    sig:()=>conjSig(),      last:()=>lastConjSig,      set:v=>{ lastConjSig=v; } },   // v302
   __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
@@ -12589,7 +12666,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__movAvulso:'Movimentos avulsos de estoque',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -12798,6 +12875,7 @@ function applyPulledData(d, raw){
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
   try{ transfApplyPulled(d.transferencias_app); }catch(e){}   // v361: transferências entre fazendas
+  try{ movAvApplyPulled(d.movimentos_app); }catch(e){}   // v384: movimentos avulsos
   try{ contApplyPulled(d.contagens_app); }catch(e){}   // v362: contagens físicas
   try{ checkApplyPulled(d.checklist_app); }catch(e){}       // v340: checklist pré-uso
   try{ conjApplyPulled(d.conjuntos_app); }catch(e){}         // v302: conjuntos (montados, edições, conjunto por operação)
