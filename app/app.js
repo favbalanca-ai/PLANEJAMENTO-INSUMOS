@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-384';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-385';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3346,7 +3346,7 @@ function estoqueSaidas(local){
   { const cj=contAjuste(local,'sai'); for(const k in cj) add(k, cj[k]); }   // v362: ajustes de inventário pendentes (negativos)
   return m;
 }
-let estoqueQ='', estoqueClasse='', estoqueSoMov=false, estoqueSaldo='';   // saldo: '' todos · nz não zerado · pos · neg · zero
+let estoqueQ='', estoqueClasse='', estoqueSoMov=true, estoqueSaldo='';   // v385: 'só com movimento' ligado por padrão   // saldo: '' todos · nz não zerado · pos · neg · zero
 let estoqueLocal=''; try{ estoqueLocal=localStorage.getItem('planejamento_est_local')||''; }catch(e){}   // v360: '' = unificado · 'FA' · 'FE' (fica no aparelho)
 const EST_SALDO={'':'Todos os saldos', nz:'Não zerado', pos:'Positivo', neg:'Negativo', zero:'Zerado'};
 const _estSaldoTipo=v=>v>0.0001?'pos':(v<-0.0001?'neg':'zero');
@@ -3364,6 +3364,7 @@ V.estoque=function(){
     const porEst={}; Object.keys(FAZENDAS).forEach(k=>{ porEst[k]=(k===ESTOQUE_PADRAO?estoqueDe(n):0)+(porLoc[k].e[n]||0)-(porLoc[k].s[n]||0); });
     return {produto:n, classe:(p.classe||'').trim()||'—', un:p.un||'', ini, ent, sai, saldo:ini+ent-sai, porEst, ped, preco, cm, ci, aEnt:ne.aEntregar, trans:ne.emTransito, avar:ne.avariado}; })
     .sort((a,b)=>a.produto.localeCompare(b.produto,'pt'));
+  const MOB=estMobile(); if(MOB) rows.sort((a,b)=>(b.saldo-a.saldo)||a.produto.localeCompare(b.produto,'pt'));   // v385: no celular, quem tem mais saldo primeiro
   const comMov=rows.filter(r=>r.ini||r.ent||r.sai||r.ped);
   const valSaldo=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*r.preco,0);
   const valReal=rows.reduce((a,r)=>a+Math.max(0,r.saldo)*(r.cm>0?r.cm:r.preco),0), nRef=rows.filter(r=>r.saldo>0.0001&&(!r.ci||r.ci.ref||!(r.cm>0))).length;
@@ -3374,7 +3375,13 @@ V.estoque=function(){
   const classes=Object.keys(clsCount).sort((a,b)=>a.localeCompare(b,'pt'));
   const chips=`<button class="chip-f${estoqueClasse===''?' on':''}" data-estf="">Todas <span style="opacity:.55">${rows.length}</span></button>`+
     classes.map(c=>`<button class="chip-f${estoqueClasse===c?' on':''}" data-estf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('');
-  const body=rows.map(r=>{
+  const cards=MOB?rows.map(r=>{ const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0, comp=recomComprometido(r.produto), st=r.saldo<-0.0001?'neg':r.saldo<=0.0001?'sem':(comp>0&&r.saldo-comp<-0.0001)?'aperta':'ok';
+    const stTxt=st==='neg'?'saldo negativo':st==='sem'?'sem estoque':st==='aperta'?`vai faltar · ${fmtDose(comp)} em recomendações`:(comp>0?`${fmtDose(comp)} em recomendações`:'');
+    const locs=LOC?'':Object.keys(FAZENDAS).filter(k=>Math.abs(r.porEst[k])>0.0001).map(k=>`${esc(estoqueNome(k).replace('Fazenda ',''))} ${num(r.porEst[k])}`).join(' · ');
+    return `<div class="es-card ${st}" data-act="estExtrato" data-prod="${esc(r.produto)}" data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}" role="button">
+      <div class="es-main"><div class="es-nome">${esc(r.produto)}</div><div class="es-sub">${r.classe&&r.classe!=='—'?`<span class="classe-tag">${esc(r.classe)}</span>`:''}${locs?`<span>${locs}</span>`:''}${r.cm>0?`<span>${brl(r.cm)}/${esc(r.un||'un')}</span>`:''}${r.ped>0?`<span>📦 pedido ${num(r.ped)}</span>`:''}${r.trans>0?`<span>🚚 trânsito ${num(r.trans)}</span>`:''}</div></div>
+      <div class="es-saldo"><b>${num(r.saldo)}</b><small>${esc(r.un||'')}</small>${stTxt?`<span class="es-st">${stTxt}</span>`:''}</div></div>`; }).join(''):'';
+  const body=MOB?'':rows.map(r=>{
     const cls=r.saldo<-0.0001?'neg':(r.saldo>0?'ok':'');
     const mov=(r.ini||r.ent||r.sai||r.ped||r.aEnt||r.trans||r.avar)?1:0;
     return `<tr data-search="${esc((r.produto+' '+r.classe).toLowerCase())}" data-classe="${esc(r.classe)}" data-mov="${mov}" data-saldo="${_estSaldoTipo(r.saldo)}">
@@ -3400,15 +3407,18 @@ V.estoque=function(){
     <div class="kpi"><div class="k-label">Entradas (compras)${LOC?` · ${esc(estoqueNome(LOC).replace('Fazenda ',''))}`:''}</div><div class="k-value">${nf0.format(totEntradas)}</div><div class="k-sub">${podeTela('entradas')?`<a class="link" data-go="#/entradas">ver notas →</a>`:''}</div></div>
     <div class="kpi"><div class="k-label">Saídas por aplicação</div><div class="k-value">${nf0.format(totSaidas)}</div><div class="k-sub">${negativos?`<span style="color:var(--red)">${negativos} com saldo negativo</span>`:rows.length+' produtos'}</div></div>
   </div>
-  <div class="toolbar"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
-    <label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
+  <div class="es-top">
+  <div class="toolbar es-tb"><div class="search"><input id="q-est" value="${esc(estoqueQ)}" placeholder="Buscar produto…" autocomplete="off"></div>
+    <details class="es-menu"><summary class="btn btn-primary btn-sm">➕ Lançar</summary><div class="es-menu-in">
+      ${podeTela('entradas')?`<a data-go="#/entradas">📥 Entrada por nota</a>`:''}<a data-act="movAvAbrir">↔ Movimento avulso <small>empréstimo, venda, compra sem nota</small></a><a data-act="transfAbrir">🔁 Transferência entre fazendas</a><a data-go="#/contagem">📋 Contagem física</a>${nfeEhAdmin()?`<a data-act="renAbrir">✏️ Renomear / mesclar produto</a>`:''}<a data-act="estPDF">🖨 Relatório PDF</a></div></details></div>
+  <div class="toolbar es-tb2"><label class="est-saldo-f" title="Filtrar pelo saldo do produto">Saldo <select class="sel" id="est-saldo">${Object.keys(EST_SALDO).map(k=>{ const n=k?rows.filter(r=>estSaldoPassaK(k,_estSaldoTipo(r.saldo))).length:rows.length; return `<option value="${k}"${k===estoqueSaldo?' selected':''}>${EST_SALDO[k]} (${n})</option>`; }).join('')}</select></label>
     <button class="chip-f${estoqueSoMov?' on':''}" data-act="estToggleMov" title="Mostrar só produtos com estoque, entrada, saída ou em pedido">só com movimento</button>
-    <div class="spacer"></div><button class="btn btn-outline btn-sm" data-go="#/contagem" title="Inventário: digitar o que foi contado no galpão, comparar com o sistema e aplicar os ajustes">📋 Contagem física</button><button class="btn btn-outline btn-sm" data-act="transfAbrir" title="Transferir produto de um estoque (fazenda) para o outro">🔁 Transferir</button><button class="btn btn-outline btn-sm" data-act="movAvAbrir" title="Empréstimo, devolução, venda a terceiro, compra sem nota">↔ Movimento avulso</button>${nfeEhAdmin()?`<button class="btn btn-outline btn-sm" data-act="renAbrir" title="Trocar o nome de um produto (ou juntar dois cadastros) em todas as abas da planilha">✏️ Renomear</button>`:''}<button class="btn btn-outline btn-sm" data-act="estPDF" title="Relatório do estoque em PDF (respeita classe, busca e 'só com movimento')">🖨 Relatório PDF</button><button class="btn btn-primary btn-sm" data-go="#/entradas">📥 Notas</button></div>
-  <div class="classe-filter est-locf" id="est-locf" style="margin:2px 0 6px" title="Um estoque por fazenda (coluna LOCAL do razão). Unificado = soma dos dois."><span class="mut" style="font-size:12px;align-self:center">Estoque:</span><button class="chip-f${LOC===''?' on':''}" data-estloc="">Unificado</button>${Object.keys(FAZENDAS).map(k=>`<button class="chip-f${LOC===k?' on':''}" data-estloc="${k}">${esc(FAZENDAS[k])}</button>`).join('')}</div>
-  <div class="classe-filter" id="est-clsf" style="margin:2px 0 10px">${chips}</div>
+    <span class="classe-filter est-locf" id="est-locf" title="Um estoque por fazenda (coluna LOCAL do razão). Unificado = soma dos dois."><button class="chip-f${LOC===''?' on':''}" data-estloc="">Unificado</button>${Object.keys(FAZENDAS).map(k=>`<button class="chip-f${LOC===k?' on':''}" data-estloc="${k}">${esc(FAZENDAS[k].replace('Fazenda ',''))}</button>`).join('')}</span></div>
+  <div class="classe-filter es-chips" id="est-clsf">${chips}</div>
+  </div>
   <div class="panel"><div class="panel-head"><h2>Controle de estoque${LOC?` · ${esc(estoqueNome(LOC))}`:' · unificado'}</h2><span class="sub">${LOC?(LOC===ESTOQUE_PADRAO?'inicial + entradas − saídas desta fazenda':'entradas − saídas desta fazenda (o inicial do PORTIFÓLIO é da Água Viva)'):'inicial + entradas − saídas = saldo · as duas fazendas somadas'}</span></div>
-    <div class="table-wrap fix-hd"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th>${LOC?'':Object.keys(FAZENDAS).map(k=>`<th class="num c-more est-loc-td" title="saldo no estoque ${esc(estoqueNome(k))}">${esc(estoqueNome(k).replace('Fazenda ',''))}</th>`).join('')}<th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
-      <tbody>${body||`<tr><td colspan="${LOC?13:15}" class="mut" style="padding:14px">Sem produtos.</td></tr>`}</tbody></table></div></div>
+    ${MOB?`<div class="es-list" id="est-cards">${cards||'<p class="mut" style="padding:14px">Sem produtos.</p>'}</div><p class="mut es-dica">Toque no produto para ver o extrato, acertar o estoque inicial, o custo e o pedido.</p>`:`<div class="table-wrap fix-hd"><table id="est-tbl"><thead><tr><th>Produto</th><th class="num">Inicial</th><th class="num c-more" title="R$ por unidade do estoque inicial da safra">Custo inicial</th><th class="num">Em pedido</th><th class="num">Entradas</th><th class="num">Saídas (aplic.)</th><th class="num">Saldo</th>${LOC?'':Object.keys(FAZENDAS).map(k=>`<th class="num c-more est-loc-td" title="saldo no estoque ${esc(estoqueNome(k))}">${esc(estoqueNome(k).replace('Fazenda ',''))}</th>`).join('')}<th>Un</th><th class="num c-more">A entregar</th><th class="num c-more">Em trânsito</th><th class="num c-more">Avariado</th><th class="num c-more" title="custo médio ponderado: estoque inicial + notas">Custo médio</th><th class="num c-more">Valor saldo</th></tr></thead>
+      <tbody>${body||`<tr><td colspan="${LOC?13:15}" class="mut" style="padding:14px">Sem produtos.</td></tr>`}</tbody></table></div>`}</div>
   ${transfListaHtml()}
   ${movAvListaHtml()}
   <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px"><b>Saldo = Inicial + Entradas − Saídas.</b> Inicial vai para a planilha (ESTOQUE); Entradas vêm das <b>compras</b>; Saídas das <b>recomendações aprovadas</b>. Entradas e Saídas ficam na planilha (aba MOVIMENTAÇÃO ESTOQUE) e <b>sincronizam entre os aparelhos</b> — puxe a planilha para ver as de outros celulares.<br><b>Custo médio</b> = o que foi pago nas notas (custo real com frete e impostos) ponderado com o estoque inicial; o estoque inicial vale pelo <b>custo inicial</b> digitado, senão pela última nota, senão pelo preço de referência (<span class="pill cm-ref">ref.</span>).</p>`;
@@ -3498,6 +3508,9 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
   const ov=document.createElement('div'); ov.id='ext-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(720px,100%)"><div class="modal-head"><h3>📒 Extrato — ${esc(prod)}${un?` <small class="mut">(${esc(un)})</small>`:''}</h3><button class="icon-btn" data-act="extFechar" title="Fechar">✕</button></div>
     <div style="overflow:auto;max-height:70vh">
+      ${(()=>{ const r=PROD[prod]; if(!r) return ''; const ini=estoqueDe(prod)||0, cIni=custoIniDe(prod), ped=pedidoDe(prod), un2=r.un||'un';   // v385: acertos e atalhos no extrato (no celular a tabela não aparece)
+        return `<div class="ext-edit mq-form"><label>Estoque inicial (${esc(un2)})<input class="cell${(prod in OV.estoque)?' edited':''}" inputmode="decimal" data-edit="estoque" data-prod="${esc(prod)}" value="${ini||''}" placeholder="0"></label><label>Custo inicial (R$/${esc(un2)})<input class="cell${(OV.custoIni&&prod in OV.custoIni)?' edited':''}" inputmode="decimal" data-edit="custoIni" data-prod="${esc(prod)}" value="${cIni>0?fmtDose(cIni):''}" placeholder="—"></label><label>Em pedido (${esc(un2)})<input class="cell${(prod in OV.pedido)?' edited':''}" inputmode="decimal" data-edit="pedido" data-prod="${esc(prod)}" value="${ped>0?ped:''}" placeholder="0"></label></div>
+        <div class="cp-btns ext-acts"><button class="btn btn-outline btn-sm" data-act="movAvAbrir" data-prod="${esc(prod)}">↔ Movimento avulso</button><button class="btn btn-outline btn-sm" data-act="transfAbrir" data-prod="${esc(prod)}">🔁 Transferir</button></div>`; })()}
       ${ci?`<div class="ext-cm"><span><small>Custo médio</small><b>${brl(ci.cm)}</b>${un?'/'+esc(un):''}${(ci.ref||!ci.nEnt)?' <span class="pill cm-ref">ref.</span>':''}</span><span><small>Estoque inicial</small><b>${num(ci.ini)}</b> × ${brl(ci.puIni)} <small class="mut">(${ci.fonte==='digitado'?'custo digitado':ci.fonte==='nota'?'última nota':'preço de referência'})</small></span><span><small>Saldo a custo real</small><b>${brl0(ci.saldoV)}</b></span></div>`:''}
       <div class="ext-sec">📤 Saídas <b>${num(tS+Math.max(0,difS))}</b>${un?' '+esc(un):''}${vS?` <small class="mut">· ${brl0(vS)} a custo médio</small>`:''}</div>
       <table class="camp-ins ext-tbl"><thead><tr><th>Data</th><th>Talhão</th><th>Operação</th><th>Origem</th><th class="num">Qtd</th><th class="num">Custo</th></tr></thead><tbody>
@@ -3515,9 +3528,10 @@ function estExtratoOpen(prod){ if(!prod) return; const mov=(DATA&&DATA.movimenta
       <p class="mut" style="font-size:11.5px;margin:10px 0 0">Saídas vêm das operações concluídas (baixa), do TS feito, das recomendações aprovadas, das devoluções ao fornecedor (NF-e de troca/entrada), dos <b>ajustes de inventário</b> (falta na contagem) e das baixas da <b>BioFábrica</b> (biológicos) e dos <b>movimentos avulsos</b> (empréstimo cedido, devolução, venda a terceiro); entradas, das compras registradas, dos ajustes de inventário (sobra na contagem), dos beneficiados da BioFábrica e dos movimentos avulsos (empréstimo recebido, compra sem nota). Cada saída vale pelo <b>custo médio do dia</b> da aplicação (estoque inicial + notas até ali). O razão completo fica na aba <b>MOVIMENTAÇÃO ESTOQUE</b> da planilha (coluna ORIGEM tem o talhão/operação, a nota ou a contagem; VALOR UNIT e VALOR TOTAL, o custo; LOCAL, a fazenda).</p>
     </div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); }); document.body.appendChild(ov); }
+function estMobile(){ try{ return window.innerWidth<=640; }catch(e){ return false; } }   // v385: celular = cartões; computador = tabela
 function filterEstoque(){
   const q=(estoqueQ||'').toLowerCase().trim();
-  document.querySelectorAll('#est-tbl tbody tr').forEach(tr=>{
+  document.querySelectorAll('#est-tbl tbody tr, #est-cards .es-card').forEach(tr=>{
     const s=tr.getAttribute('data-search')||'', cl=tr.getAttribute('data-classe')||'', mv=tr.getAttribute('data-mov')==='1';
     const show=(!q||s.includes(q)) && (!estoqueClasse||cl===estoqueClasse) && (!estoqueSoMov||mv) && estSaldoPassa(tr.getAttribute('data-saldo')||'zero');
     tr.style.display=show?'':'none'; });
@@ -10520,6 +10534,7 @@ let campoFiltro='todas';                  // todas | pendente | andamento | conc
 const campoOpen=new Set(), campoOpenInit=new Set();   // cartões abertos · talhões já inicializados (abre a PRÓXIMA)
 const campoDoneOpen=new Set();   // v374: operações concluídas/não realizadas que a pessoa abriu (vêm recolhidas)
 const campoAppOpen=new Set();    // v381: painéis "Recomendação de aplicação / TS / plantio" abertos (sobrevivem ao re-render)
+document.addEventListener('click',e=>{ const a=e.target&&e.target.closest&&e.target.closest('.es-menu-in a'); if(a){ const d=a.closest('details'); if(d) d.open=false; } });   // v385: menu Lançar fecha ao escolher
 document.addEventListener('toggle',e=>{ const d=e.target; if(!d||!d.matches) return; const k=d.dataset.key;
   if(d.matches('details.cp-det')){ if(d.open) campoOpen.add(k); else campoOpen.delete(k); }
   else if(d.matches('details.cp-done')){ if(d.open) campoDoneOpen.add(k); else campoDoneOpen.delete(k); }
