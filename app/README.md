@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Extrato: de onde vem o "em recomendações" (v386)** — o extrato do produto ganha a seção "📋 Em recomendações",
+  com cada recomendação **enviada** ou com **retorno** (ainda sem baixa) que compromete o produto: data, talhão
+  (link que fecha o extrato e abre `#/recomendacao/<talhão>`, `extIrRecom`), nome/alvo, situação e a quantidade
+  (dose × área, ou × ha do item). O total bate com o chip "N em recomendações" do cartão (`recomComprometido`).
 - **Tela Estoque mais fácil no celular (v385)** — em telas até 640 px (`estMobile`) a tabela dá lugar a **cartões**:
   nome, classe, saldo grande com a unidade e uma cor (verde tem, âmbar "vai faltar" quando as recomendações enviadas
   comprometem mais que o saldo, cinza sem estoque, vermelho negativo), e embaixo os saldos por fazenda, o custo médio
