@@ -2464,6 +2464,28 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ext-acts{margin:0 0 8px}
 @media (max-width:640px){ .es-top{top:-1px} .es-tb2 .est-saldo-f .sel{max-width:150px;font-size:12px} .es-chips .chip-f{padding:5px 10px;font-size:12px} }
 
+/* v388 — Frota no celular: cartões na mesma linha do Estoque */
+.fr-list{display:grid}
+.fr-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);border-left:4px solid #c3ccd2;cursor:pointer;background:var(--card)}
+.fr-card:first-child{border-top:none}
+.fr-card.ok{border-left-color:#1f9d55}
+.fr-card.aviso{border-left-color:#e0a800}
+.fr-card.erro{border-left-color:#c62828}
+.fr-card.sem{background:#fbfcfc}
+.fr-main{flex:1;min-width:0}
+.fr-nome{font-weight:700;font-size:13.5px;color:var(--ink);line-height:1.25}
+.fr-sub{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:11.5px;color:var(--muted);margin-top:3px;align-items:center}
+.fr-sub .classe-tag{font-size:10px}
+.fr-al{font-size:11.5px;margin-top:4px;font-weight:600;color:var(--ink2)}
+.fr-al.aviso{color:#8a6d00}
+.fr-al.erro{color:#a61b1b}
+.fr-al.ok{color:var(--muted);font-weight:500}
+.fr-al small{font-weight:700;background:#eef2f4;border-radius:8px;padding:0 5px;color:var(--ink2)}
+.fr-num{flex:none;text-align:right;display:grid;justify-items:end;line-height:1.1}
+.fr-num b{font-size:19px;font-weight:800;color:var(--ink)}
+.fr-num small{font-size:10.5px;color:var(--muted);margin-top:1px}
+.fr-card.sem .fr-num b{color:var(--muted)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2950,6 +2972,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .es-sub{font-size:9.5px}
   .es-saldo b{font-size:15.5px}
   .es-chips .chip-f{font-size:9.5px}
+  .fr-nome{font-size:11px}
+  .fr-sub{font-size:9.5px}
+  .fr-al{font-size:9.5px}
+  .fr-num b{font-size:15.5px}
 }
 
 </style>
@@ -3061,7 +3087,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-387';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-388';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8286,10 +8312,23 @@ function maqFichaOpen(id){ const m=maqDe(id); if(!m){ toast('Máquina não encon
     ${maqDocsStatus(m).length?`<details class="tf-sec"><summary><h4>📄 Documentos</h4><span class="mut">${maqDocsStatus(m).length}</span></summary>${maqDocsHtml(m,false)}</details>`:''}
     <details class="tf-sec" open><summary><h4>🕓 Histórico</h4><span class="mut">${ev.length}</span></summary><div class="mq-hist">${hist||'<p class="mut tf-vazio">Nenhum registro.</p>'}${ev.length>LIM?`<p class="mut tf-vazio">+${ev.length-LIM} registro(s) mais antigos — veja no PDF</p>`:''}</div></details></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
+let FROTA_UI={q:'', grupo:'', soAl:false};   // v388: busca, grupo e "só com alerta" da Frota (só na memória)
+function filterFrota(){ const q=(FROTA_UI.q||'').toLowerCase().trim(); document.querySelectorAll('.fr-card, .mq-list .mq-card').forEach(c=>{ const s=c.getAttribute('data-search')||'', g=c.getAttribute('data-grupo')||'', al=c.getAttribute('data-al')==='1';
+  c.style.display=((!q||s.includes(q)) && (!FROTA_UI.grupo||g===FROTA_UI.grupo) && (!FROTA_UI.soAl||al))?'':'none'; }); }
 V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
   const temDado=m=>abastLista(m.id).length||osLista(m.id).length||(m.plano||[]).length||maqHorimetro(m)>0; ms.sort((a,b)=>(temDado(b)?1:0)-(temDado(a)?1:0)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));   // quem tem registro aparece primeiro
-  const rows=ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0], I=maqMedI(m), U=I.un;
-    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}"><div class="mq-head"><b class="mq-nome" data-act="maqFicha" data-maq="${esc(m.id)}" title="Abrir a ficha da máquina (histórico e gráficos)">${esc(m.nome)} ›</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
+  const MOB=estMobile(), grupos={}; ms.forEach(m=>{ const g=maqGrupoLbl(m); grupos[g]=(grupos[g]||0)+1; });
+  const nAlM=ms.filter(m=>maqAlertas(m).length).length;
+  const chipsG=`<button class="chip-f${FROTA_UI.grupo===''?' on':''}" data-frg="">Todas <span style="opacity:.55">${ms.length}</span></button>`+Object.keys(grupos).sort((a,b)=>a.localeCompare(b,'pt')).map(g=>`<button class="chip-f${FROTA_UI.grupo===g?' on':''}" data-frg="${esc(g)}">${esc(g)} <span style="opacity:.55">${grupos[g]}</span></button>`).join('');
+  const cards=MOB?ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0], I=maqMedI(m), U=I.un, dado=!!temDado(m);
+    const st=al.some(a=>a.nivel==='erro')?'erro':al.length?'aviso':dado?'ok':'sem';
+    const sub=[c.horas?`${numH(c.horas)} ${U} na safra`:'', c.litros?`${numH(c.litros)} L`:'', c.lhReal?consTxt(m,c.lhReal):'', c.custoH?`${brl(c.custoH)}/${U}`:''].filter(Boolean);
+    const linha=al.length?`<div class="fr-al ${al[0].nivel}">${al[0].nivel==='erro'?'⛔':'⚠️'} ${esc(al[0].txt)}${al.length>1?` <small>+${al.length-1}</small>`:''}</div>`:(prox?`<div class="fr-al ok">📅 ${esc(prox.p.nome)} · ${esc(planoTxt(prox))}</div>`:'');
+    return `<div class="fr-card ${st}" data-act="maqFicha" data-maq="${esc(m.id)}" data-search="${esc((m.nome+' '+maqGrupoLbl(m)+' '+(m.ident||'')).toLowerCase())}" data-grupo="${esc(maqGrupoLbl(m))}" data-al="${al.length?1:0}" role="button" title="Abrir a ficha da máquina">
+      <div class="fr-main"><div class="fr-nome">${esc(m.nome)}</div><div class="fr-sub"><span class="classe-tag">${esc(maqGrupoLbl(m))}</span>${sub.map(x=>`<span>${x}</span>`).join('')}${!dado?'<span class="mut">sem registro ainda</span>':''}</div>${linha}</div>
+      <div class="fr-num"><b>${hor?numH(hor):'—'}</b>${hor?`<small>${esc(U)}</small>`:''}</div></div>`; }).join(''):'';
+  const rows=MOB?'':ms.map(m=>{ const c=maqCustos(m), al=maqAlertas(m), hor=maqHorimetro(m), prox=planoStatus(m)[0], I=maqMedI(m), U=I.un;
+    return `<div class="mq-card${al.some(a=>a.nivel==='erro')?' erro':al.length?' aviso':''}" data-search="${esc((m.nome+' '+maqGrupoLbl(m)+' '+(m.ident||'')).toLowerCase())}" data-grupo="${esc(maqGrupoLbl(m))}" data-al="${al.length?1:0}"><div class="mq-head"><b class="mq-nome" data-act="maqFicha" data-maq="${esc(m.id)}" title="Abrir a ficha da máquina (histórico e gráficos)">${esc(m.nome)} ›</b><span class="mut">${esc(m.grupo||'')}${m.ident?' · '+esc(m.ident):''}</span><div class="spacer"></div><a class="btn btn-outline btn-sm" data-go="#/abastecimento/${encodeURIComponent(m.id)}">⛽ Abastecer</a><a class="btn btn-outline btn-sm" data-go="#/manutencao/${encodeURIComponent(m.id)}">🔧 OS</a><button class="icon-btn" data-act="maqPdf" data-maq="${esc(m.id)}" title="Relatório desta máquina em PDF">📄</button></div>
       <div class="rel-uso-kpis mq-kpis"><span><small>${I.nome}</small>${hor?numH(hor)+' '+U:'—'}</span><span><small>${I.uso} na safra</small>${c.horas?numH(c.horas)+' '+U:'—'}${!c.horasHor&&c.horasCampo?'<small class="mut" style="text-transform:none"> (Campo)</small>':''}</span><span><small>Combustível</small>${c.litros?`${numH(c.litros)} L · ${brl0(c.comb)}`:'—'}</span><span><small>Consumo</small>${consTxt(m,c.lhReal)}${m.lh?`<small class="mut" style="text-transform:none"> plan. ${numH(m.lh)}</small>`:''}</span><span><small>Peças · serviços</small>${brl0(c.pecas+c.os)}</span><span class="${c.custoH&&m.rsHm&&c.custoH>m.rsHm*1.2?'mq-ruim':''}" title="${c.fixoH?`variável ${brl(c.custoHVar)}/${U} + fixo ${brl(c.fixoH)}/${U} (depreciação, seguro, operador)`:'só combustível, peças e serviços — preencha o custo fixo no Cadastro'}"><small>Custo por ${I.porUn} real</small>${c.custoH?brl(c.custoH)+'/'+U:'—'}${m.rsHm?`<small class="mut" style="text-transform:none"> plan. ${brl0(m.rsHm)}</small>`:''}${c.fixoH?`<small class="mut" style="text-transform:none"> · fixo ${brl0(c.fixoH)}</small>`:''}</span><span><small>Próxima preventiva</small>${prox?`${esc(prox.p.nome)} · ${prox.st==='vencida'?'<b style="color:var(--red)">'+planoTxt(prox)+'</b>':planoTxt(prox)}`:'<span class="mut">sem plano</span>'}</span></div>
       ${(()=>{ const ht=maqHorasPorTalhao(m); return ht.length?`<div class="mq-talhoes mut">🌱 horas no Campo: ${ht.slice(0,5).map(x=>`${esc(x.talhao)} (${numH(x.h)} h)`).join(' · ')}${ht.length>5?' · …':''}</div>`:''; })()}${_alertHtml(al)}</div>`; }).join('');
   const tot=ms.reduce((s,m)=>{ const c=maqCustos(m); s.comb+=c.comb; s.pecas+=c.pecas+c.os; s.fixos+=c.fixos; if(maqEhKm(m)) s.km+=c.horas; else { s.horas+=c.horas; s.custoH+=c.total; } s.litros+=c.litros; return s; },{comb:0,pecas:0,fixos:0,horas:0,km:0,custoH:0,litros:0}), nAl=ms.reduce((s,m)=>s+maqAlertas(m).length,0);
@@ -8298,8 +8337,14 @@ V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return 
     ${(()=>{ const inv=ms.filter(m=>m.inv&&!m.inv.baixada); const at=inv.reduce((s,m)=>s+(+m.inv.valorAtual||0),0), nv=inv.reduce((s,m)=>s+(+m.inv.valorNovo||0),0); return inv.length?`<div class="kpi" title="soma do valor atual do inventário AgroGestão das máquinas ativas"><div class="k-label">Valor da frota (inventário)</div><div class="k-value">${brl0(at)}</div><div class="k-sub">${inv.length} bens · valor novo ${brl0(nv)}</div></div>`:''; })()}
     <div class="kpi"><div class="k-label">Tanque da fazenda</div><div class="k-value">${numH(T.saldo)} L</div><div class="k-sub">${numH(T.ent)} L entraram · ${numH(T.sai)} L abastecidos${T.precoMedio?' · '+brl(T.precoMedio)+'/L':''}</div></div>
     <div class="kpi${nAl?' kpi-neg':''}"><div class="k-label">Alertas</div><div class="k-value">${nAl}</div><div class="k-sub">preventivas, OS abertas, consumo</div></div></div>
-    <div class="toolbar" style="margin:0 0 10px"><a class="btn btn-primary btn-sm" data-go="#/abastecimento">⛽ Registrar abastecimento</a><a class="btn btn-outline btn-sm" data-go="#/manutencao">🔧 Ordens de serviço</a><a class="btn btn-outline btn-sm" data-go="#/maqcad">🗂️ Cadastro</a><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="maqPdf" title="PDF com o custo de todas as máquinas">📄 Relatório da frota</button>${maqWhats()?`<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="whats" title="PDF com o QR do WhatsApp de cada máquina (mensagem pronta)">🏷️ Etiquetas WhatsApp</button>`:''}<button class="btn btn-outline btn-sm" data-act="maqEtiquetas" data-modo="app" title="PDF com o QR do app de cada máquina">🏷️ Etiquetas App</button></div>
-    <div class="mq-list">${rows}</div>
+    <div class="es-top">
+    <div class="toolbar es-tb"><div class="search"><input id="q-frota" value="${esc(FROTA_UI.q)}" placeholder="Buscar máquina…" autocomplete="off"></div>
+      <details class="es-menu"><summary class="btn btn-primary btn-sm">➕ Lançar</summary><div class="es-menu-in">
+        <a data-go="#/abastecimento">⛽ Abastecimento</a><a data-go="#/manutencao">🔧 Ordem de serviço</a><a data-go="#/checklist">✅ Checklist pré-uso</a><a data-go="#/maqcad">🗂️ Cadastro de máquinas</a><a data-act="maqPdf">📄 Relatório da frota (PDF)</a>${maqWhats()?`<a data-act="maqEtiquetas" data-modo="whats">🏷️ Etiquetas WhatsApp</a>`:''}<a data-act="maqEtiquetas" data-modo="app">🏷️ Etiquetas App</a></div></details></div>
+    <div class="toolbar es-tb2"><button class="chip-f${FROTA_UI.soAl?' on':''}" data-act="frSoAl" title="Só máquinas com preventiva vencida/perto, OS aberta ou consumo fora">⚠️ só com alerta <span style="opacity:.55">${nAlM}</span></button></div>
+    <div class="classe-filter es-chips" id="fr-grupos">${chipsG}</div>
+    </div>
+    ${MOB?`<div class="panel"><div class="es-list fr-list">${cards}</div><p class="mut es-dica">Toque na máquina para abrir a ficha: histórico, gráficos, abastecer, OS e cadastro.</p></div>`:`<div class="mq-list">${rows}</div>`}
     <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 4px">Custo real por hora (ou por km nos veículos) = (combustível + peças e serviços das notas + ordens de serviço) ÷ horas do horímetro ou km do odômetro (ou horas do Campo quando não há leitura) <b>+ custo fixo por hora/km</b> (depreciação, seguro/licenciamento e operador, do Cadastro). Planejado vem da aba CUSTO OPERAÇÃO.</p>`; };
 V.abastecimento=function(arg){ const ms=maqTodas(); if(arg) MQ_UI.maq=decodeURIComponent(arg); const m=MQ_UI.maq?maqDe(MQ_UI.maq):null, u=m?abastUltimo(m.id):null, hor=m?maqHorimetro(m):0, I=maqMedI(m), U=I.un, T=tanqueSaldo(), hoje=_hojeISO(), hh=new Date().toTimeString().slice(0,5);
   const topo=`<div class="panel"><div class="panel-head"><h2>⛽ Abastecimento</h2><span class="sub">escolha a máquina pelo nome ou leia o QR Code colado nela</span></div>
@@ -14669,6 +14714,8 @@ document.addEventListener('click',e=>{
   if(tlf){ timelineTipo=tlf.dataset.tlf||''; tlf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); tlf.classList.add('on'); filterTimeline(); return; }
   const clf=e.target.closest('#pr-clsf .chip-f');
   if(clf){ precoClasse=clf.dataset.clsf||''; clf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); clf.classList.add('on'); filterPrecos(); return; }
+  const frg=e.target.closest('#fr-grupos .chip-f');   // v388: grupo da Frota
+  if(frg){ FROTA_UI.grupo=frg.dataset.frg||''; frg.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); frg.classList.add('on'); filterFrota(); return; }
   const ecf=e.target.closest('#est-clsf .chip-f');
   if(ecf){ estoqueClasse=ecf.dataset.estf||''; ecf.parentElement.querySelectorAll('.chip-f').forEach(b=>b.classList.remove('on')); ecf.classList.add('on'); filterEstoque(); return; }
   const elc=e.target.closest('#est-locf .chip-f');   // v360: Unificado · Água Viva · Espora
@@ -15024,6 +15071,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='relUsoTal'){ relUsoTal=a.id||''; route(); const el=document.getElementById('rel-uso'); if(el) el.scrollIntoView({block:'start'}); }
     else if(a.act==='prBuscarValor'){ precosBuscarValor(); }
     else if(a.act==='prToggleSemPreco'){ precoSemPreco=!precoSemPreco; act.classList.toggle('on',precoSemPreco); filterPrecos(); }
+    else if(a.act==='frSoAl'){ FROTA_UI.soAl=!FROTA_UI.soAl; act.classList.toggle('on',FROTA_UI.soAl); filterFrota(); }   // v388
     else if(a.act==='estToggleMov'){ estoqueSoMov=!estoqueSoMov; act.classList.toggle('on',estoqueSoMov); filterEstoque(); }
     else if(a.act==='cmpDel'){ if(ask('Excluir esta compra? (as entradas dela saem do estoque — em todos os aparelhos)')){ excluirCompra(a.id); route(); toast('Compra excluída'); } }
     else if(a.act==='cmpSync'){ pushEntradasPendentes(); }
@@ -15253,6 +15301,7 @@ document.addEventListener('input',e=>{
   if(e.target.id==='q-preco'){ precoQ=e.target.value; filterPrecos(); }
   if(e.target.id==='q-tl'){ timelineQ=e.target.value; filterTimeline(); }
   if(e.target.id==='q-est'){ estoqueQ=e.target.value; filterEstoque(); }
+  if(e.target.id==='q-frota'){ FROTA_UI.q=e.target.value; filterFrota(); }   // v388
   if(e.target.id==='q-fin'){ FIN_UI.q=e.target.value; clearTimeout(window._finQT); window._finQT=setTimeout(()=>route({keepScroll:true}),250); return; }
   if(e.target.matches('[data-finf]')){ if(finDraft){ const f=e.target.dataset.finf; finDraft[f]=(f==='valor')?_mmC(e.target.value):e.target.value; finRascunhoSalvar(); if(f==='tipo') route({keepScroll:true}); } return; }
   if(e.target.matches('[data-finlote]')){ if(finLote){ const f=e.target.dataset.finlote; finLote[f]=e.target.value; if(f==='conta') route({keepScroll:true}); } return; }

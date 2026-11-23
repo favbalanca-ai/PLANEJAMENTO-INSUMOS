@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Frota no celular na mesma linha do Estoque (v388)** — em telas até 640 px os cartões grandes dão lugar a
+  **cartões compactos** (`.fr-card`): nome, grupo, linha com uso na safra / litros / consumo / custo por hora ou km,
+  a leitura do horímetro ou odômetro grande à direita e a borda na cor do estado (verde com registro, âmbar aviso,
+  vermelho preventiva vencida ou OS parada, cinza sem registro); embaixo, o 1º alerta ou a próxima preventiva.
+  Tocar abre a ficha (`maqFicha`), que já tem Abastecer, Nova OS, PDF e Cadastro. Barra: busca + **➕ Lançar**
+  (abastecimento, OS, checklist, cadastro, relatório, etiquetas), chip "⚠️ só com alerta" e os grupos numa linha
+  deslizante; bloco fixo no topo (`.es-top`). `FROTA_UI` + `filterFrota` filtram cartões compactos e grandes. No
+  computador os cartões grandes continuam, com a mesma barra.
 - **Recomendação de talhão apagado não compromete mais; excluir pelo extrato (v387)** — recomendações cujo talhão
   não existe mais (`recomOrfa`: apagado ou renomeado) ficavam invisíveis na tela Recomendações (que filtra pela
   fazenda do talhão) mas continuavam contando em `recomComprometido`. Agora são ignoradas no comprometido, aparecem
