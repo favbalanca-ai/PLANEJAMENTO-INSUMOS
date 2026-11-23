@@ -761,6 +761,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area table.pop-t td.tot{font-weight:800}
   #print-area table.pop-t td.tot small{font-weight:400;color:#444}
   #print-area .pop-tot{display:flex;justify-content:space-between;gap:10px;margin:4px 0 8px;padding:6px 10px;border:1.5px solid #2f4a55;border-radius:6px;background:#dfe8ec;font-size:11.5px}
+  /* v389: rastro de aplicação (limite do talhão, linha AB, bússola) */
+  #print-area .rs-sec{break-inside:avoid;page-break-inside:avoid}
+  #print-area .rs-sec h2 small{font-weight:400;font-size:9.5px;color:#555;text-transform:none;margin-left:6px}
+  #print-area .rs-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:12px;align-items:start}
+  #print-area .rs-mapbox{border:1px solid #cfd8dc;border-radius:6px;padding:4px;background:#fff}
+  #print-area .rs-map{display:block;width:100%;height:auto}
+  #print-area .rs-sem{font-size:11px;color:#555;padding:40px 10px;text-align:center}
+  #print-area .rs-kv div{border-bottom:1px dotted #bbb;padding:3px 0;font-size:12px}
+  #print-area .rs-kv small{display:block;font-size:8.5px;color:#555;text-transform:uppercase;letter-spacing:.04em}
+  #print-area .rs-kv b{font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em}
+  #print-area .rs-jd b{font-size:15.5px}
+  #print-area .rs-rec{font-size:11px;color:#555;font-family:inherit}
+  #print-area .rs-dica{font-size:9.5px;color:#444;margin-top:6px;border:0!important;font-size:9.5px}
+  #print-area .rs-buss{text-align:center;margin-bottom:4px}
+  #print-area .rs-buss svg{width:170px;height:170px}
+  #print-area .rs-map,#print-area .rs-bussola{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* ---- mobile / toque ---- */
@@ -2486,6 +2502,22 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fr-num small{font-size:10.5px;color:var(--muted);margin-top:1px}
 .fr-card.sem .fr-num b{color:var(--muted)}
 
+/* v389: prévia do rastro de aplicação na recomendação */
+.rs-prev{margin:0 12px 10px;padding:8px 10px;border:1px solid var(--line,#dfe5e8);border-radius:8px;background:#fff}
+.rs-prev h2{font-size:13px;margin:0 0 6px;border:0;padding:0}
+.rs-prev h2 small{font-weight:400;font-size:11px;color:#667;margin-left:6px}
+.rs-prev .rs-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:10px;align-items:start}
+.rs-prev .rs-mapbox{border:1px solid #dfe5e8;border-radius:6px;padding:2px;background:#fff}
+.rs-prev .rs-map{width:100%;height:auto;display:block}
+.rs-prev .rs-sem{font-size:12px;color:#667;padding:30px 8px;text-align:center}
+.rs-prev .rs-kv div{font-size:12px;padding:3px 0;border-bottom:1px dotted #ccd}
+.rs-prev .rs-kv small{display:block;font-size:9px;color:#667;text-transform:uppercase;letter-spacing:.04em}
+.rs-prev .rs-kv b{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.rs-prev .rs-rec{font-size:11px;color:#667;font-family:inherit}
+.rs-prev .rs-dica{font-size:10.5px;color:#556;margin-top:6px;border:0!important}
+.rs-prev .rs-buss{text-align:center}.rs-prev .rs-buss svg{width:150px;height:150px}
+@media(max-width:640px){.rs-prev .rs-grid{grid-template-columns:1fr}}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2976,6 +3008,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .fr-sub{font-size:9.5px}
   .fr-al{font-size:9.5px}
   .fr-num b{font-size:15.5px}
+  .rs-prev h2{font-size:10.5px}
+  .rs-prev .rs-sem{font-size:9.5px}
+  .rs-prev .rs-kv div{font-size:9.5px}
+  .rs-prev .rs-kv b{font-size:10.5px}
 }
 
 </style>
@@ -3087,7 +3123,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-388';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-389';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11463,6 +11499,8 @@ function recomCreate(talId, opKey){
     produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
   recomNorm(r);
   { const m=bulaReentradaMax(r.itens); if(m&&!r.reentrada) r.reentrada=String(m); }   // reentrada sugerida pela bula (a maior entre os produtos)
+  const ant=RECOM.registros.filter(x=>x.talhao===talId&&(x.rsA||x.rsB||String(x.rsRumo??'')!=='')).sort((x,y)=>String(y.data||'').localeCompare(String(x.data||''))||String(y.id).localeCompare(String(x.id)))[0];   // v389: rastro do talhão
+  if(ant) ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>{ if(ant[k]!=null&&ant[k]!=='') r[k]=ant[k]; });
   RECOM.registros.push(r); saveRecom(); return r;
 }
 // folha "Buscar insumo" da recomendação: portfólio primeiro, depois o catálogo MAPA filtrado pela cultura; i==null → linha nova
@@ -11521,6 +11559,7 @@ function recomSetField(el){
   else if(f==='calda'||f==='tanque'){ r[f]=v; rerender=true;   // recalcula a calda por tanque
     if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{};   // e leva para o Campo (os dois ficam iguais)
       rl.app[f==='calda'?'vazao':'tanque']=String(v).trim()===''?null:numBR(v); stampReal(r.opKey); } }
+  else if(/^rs(Modo|A|B|Rumo|Larg)$/.test(f)){ r[f]=v; rerender=true; }   // v389: rastro de aplicação (prévia do desenho)
   else if(f==='resp'||f==='crea'){ r[f]=v; try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); d[f]=v; localStorage.setItem(RECOM_TEC_KEY, JSON.stringify(d)); }catch(e){} }
   else { r[f]=v; }
   saveRecom();
@@ -11609,6 +11648,7 @@ function recomWhats(id){
   const apl=[r.tipoApl, r.maquina, conjRendTxt(r.maquina,+r.area||0), r.ponta?`ponta ${r.ponta}`:'', r.pressao?`${r.pressao} bar`:'', r.velocidade?`${r.velocidade} km/h`:''].filter(Boolean).join(' · ');
   if(apl) x+=`Aplicação: ${apl}\n`;
   const cond=recomCondTxt(r); if(cond) x+=`Condições: ${cond}\n`;
+  x+=rastroWaTxt(r);   // v389
   const seg=[r.epi?`EPI: ${r.epi}`:'', r.reentrada?`reentrada ${r.reentrada} h`:''].filter(Boolean).join(' · ');
   if(seg) x+=`\n⚠️ ${seg}\n`;
   if(r.resp) x+=`Resp. técnico: ${r.resp}${r.crea?` · ${r.crea}`:''}\n`;
@@ -11923,6 +11963,7 @@ function recomCard(r,t){
       <label>UR mín (%)<input class="cell" inputmode="decimal" ${F('urmin')} value="${esc(r.urmin??'')}"></label>
       <label>Vento máx (km/h)<input class="cell" inputmode="decimal" ${F('vmax')} value="${esc(r.vmax??'')}"></label>
       <label style="grid-column:1/-1">Outras condições<input class="txt" ${F('cond')} value="${esc(r.cond||'')}" placeholder="ex.: sem orvalho, sem chuva nas próximas 2 h"></label></div>`)}
+    ${sec('Rastro de aplicação', rastroSecHtml(r, F))}
     ${sec('Segurança',`<div class="app-grid" style="padding:6px 12px 10px">
       <label style="grid-column:1/-1">EPI obrigatório<input class="txt" ${F('epi')} value="${esc(r.epi||'')}"></label>
       <label>Intervalo de reentrada (h)<input class="cell" inputmode="numeric" ${F('reentrada')} value="${esc(r.reentrada||'')}" placeholder="ex.: 24"></label></div>`)}
@@ -11993,6 +12034,97 @@ function recomCard(r,t){
 }
 // impressão: RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO (receituário agronômico) em PDF
 // bloco do LINK de baixa no PDF (clicável no PDF salvo; no papel, o operador abre pelo WhatsApp)
+// ===== v389: RASTRO DE APLICAÇÃO — limite do talhão no PDF, linha AB (padrão John Deere) e bússola para aplicação aérea =====
+const RASTRO_LARG={terra:30, aereo:20};
+const fmtM=v=>(+v||0).toLocaleString('pt-BR',{maximumFractionDigits:1});   // padrão: largura da barra (m) / faixa do avião (m) quando não informado
+let _rsClipN=0;
+function geoParse(s){ const m=String(s||'').trim().match(/^(-?\d{1,3}(?:\.\d+)?)[,;\s]+(-?\d{1,3}(?:\.\d+)?)$/); if(!m) return null; const la=+m[1], lo=+m[2]; return (Math.abs(la)<=90&&Math.abs(lo)<=180)?[la,lo]:null; }
+function geoFmt(p){ return p?`${(+p[0]).toFixed(6)}, ${(+p[1]).toFixed(6)}`:''; }
+function geoAz(a,b){ const rad=Math.PI/180, f1=a[0]*rad, f2=b[0]*rad, dl=(b[1]-a[1])*rad; const y=Math.sin(dl)*Math.cos(f2), x=Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dl); return ((Math.atan2(y,x)/rad)+360)%360; }
+function geoDist(a,b){ const rad=Math.PI/180, R=6371008.8, f1=a[0]*rad, f2=b[0]*rad, dl=(b[1]-a[1])*rad, df=f2-f1; const h=Math.sin(df/2)**2+Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)**2; return 2*R*Math.asin(Math.min(1,Math.sqrt(h))); }
+function geoDest(a,az,d){ const rad=Math.PI/180, R=6371008.8, f1=a[0]*rad, l1=a[1]*rad, t=az*rad, dr=d/R; const f2=Math.asin(Math.sin(f1)*Math.cos(dr)+Math.cos(f1)*Math.sin(dr)*Math.cos(t)); const l2=l1+Math.atan2(Math.sin(t)*Math.sin(dr)*Math.cos(f1), Math.cos(dr)-Math.sin(f1)*Math.sin(f2)); return [+(f2/rad).toFixed(7), +(l2/rad).toFixed(7)]; }
+// projeção local em metros (x = leste, y = norte) em torno de um centro
+function geoProj(c){ const rad=Math.PI/180, kx=111320*Math.cos(c[0]*rad), ky=110574; return { to:p=>[(p[1]-c[1])*kx, (p[0]-c[0])*ky], from:q=>[+(c[0]+q[1]/ky).toFixed(7), +(c[1]+q[0]/kx).toFixed(7)] }; }
+function fmtGrau(g){ if(g==null||!isFinite(g)) return ''; g=Math.round(((g%360)+360)%360*10)/10; if(g>=360) g-=360; const i=Math.floor(g), d=Math.round((g-i)*10); return `${String(i).padStart(3,'0')}${d?','+d:''}°`; }
+// rumo sugerido: o lado reto mais comprido do contorno (trechos seguidos com quase o mesmo rumo contam como um lado só)
+function limRumoSugerido(lm){ const an=(lm&&lm.coords&&lm.coords[0])||[]; if(an.length<3) return null; const n=an.length, segs=[];
+  for(let i=0;i<n;i++){ const a=an[i], b=an[(i+1)%n], d=geoDist(a,b); if(d>0.5) segs.push({a,b,d,az:geoAz(a,b)}); }
+  if(!segs.length) return null; let best=null;
+  for(let i=0;i<segs.length;i++){ let d=segs[i].d, j=i, az0=segs[i].az; for(let k=1;k<segs.length;k++){ const s2=segs[(i+k)%segs.length]; let df=Math.abs(s2.az-az0); df=Math.min(df,360-df); if(df>6) break; d+=s2.d; j=(i+k)%segs.length; }
+    if(!best||d>best.d) best={a:segs[i].a, b:segs[j].b, d}; }
+  return {a:best.a, b:best.b, rumo:+geoAz(best.a,best.b).toFixed(1), m:Math.round(best.d)}; }
+// ponto B: onde a linha que sai de A no rumo dado cruza a borda do talhão (o cruzamento mais distante)
+function rastroBorda(lm,a,rumo){ const P=geoProj(limCentro(lm)), rad=Math.PI/180, d=[Math.sin(rumo*rad),Math.cos(rumo*rad)], o=P.to(a), rg=(lm.coords[0]||[]).map(P.to); let best=null;
+  for(let i=0;i<rg.length;i++){ const p=rg[i], q=rg[(i+1)%rg.length], ex=q[0]-p[0], ey=q[1]-p[1], den=d[0]*ey-d[1]*ex; if(Math.abs(den)<1e-9) continue;
+    const t=((p[0]-o[0])*ey-(p[1]-o[1])*ex)/den, u=((p[0]-o[0])*d[1]-(p[1]-o[1])*d[0])/den; if(t>1&&u>=0&&u<=1&&(!best||t>best)) best=t; }
+  return best?P.from([o[0]+d[0]*best, o[1]+d[1]*best]):null; }
+function rastroModo(r){ if(r.rsModo==='terra'||r.rsModo==='aereo') return r.rsModo; const nm=r.maquina||'', m=maqByConj[nm]||maquinasAll().find(x=>x.conjunto===nm||x.nome===nm)||Object.values((OV&&OV.maqApp)||{}).find(x=>x&&x.nome===nm);
+  const g=(m&&m.grupo)||maqGrupoGuess(nm,'')||''; return /avi[aã]o|a[ée]re|drone|aeronave/i.test(g+' '+nm+' '+(r.tipoApl||''))?'aereo':'terra'; }
+// tudo o que o PDF e a tela precisam: limite, modo, pontos A/B, rumo (A→B, informado ou sugerido), largura, passadas
+function rastroCalc(r){ const lm=limitesAll()[r.talhao]||null, modo=rastroModo(r), rN=String(r.rsRumo??'').trim().replace(',','.');
+  let a=geoParse(r.rsA), b=geoParse(r.rsB), rumo=(rN!==''&&isFinite(+rN))?(((+rN)%360)+360)%360:null, fonte='';
+  const larg=(+String(r.rsLarg||'').replace(',','.'))||RASTRO_LARG[modo];
+  if(a&&b){ rumo=+geoAz(a,b).toFixed(1); fonte='ab'; }
+  else if(a&&rumo!=null){ b=(lm&&rastroBorda(lm,a,rumo))||geoDest(a,rumo,1000); fonte='arumo'; }
+  else if(rumo!=null&&lm){ const s=limRumoSugerido(lm); if(s){ a=s.a; b=(rastroBorda(lm,a,rumo))||geoDest(a,rumo,s.m); } fonte='rumo'; }
+  else if(rumo==null&&lm){ const s=limRumoSugerido(lm); if(s){ rumo=s.rumo; a=s.a; b=s.b; fonte='sug'; } }
+  const c=lm?limCentro(lm):(a||null); let passadas=0, largura=0;
+  if(lm&&rumo!=null){ const P=geoProj(c), rad=Math.PI*rumo/180, n=[Math.cos(rad),-Math.sin(rad)]; let mn=1e12, mx=-1e12; (lm.coords[0]||[]).forEach(p=>{ const q=P.to(p), v=q[0]*n[0]+q[1]*n[1]; mn=Math.min(mn,v); mx=Math.max(mx,v); }); largura=mx-mn; passadas=Math.ceil(largura/larg); }
+  return {lm, modo, a, b, rumo, larg, fonte, c, largura, passadas, rec:rumo!=null?(rumo+180)%360:null}; }
+// desenho do talhão (norte para cima) com as passadas, a linha AB, a seta do norte e a escala
+function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||240, pad=26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
+  let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; pts.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); });
+  const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
+  const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' ')), cid='rsclip'+(++_rsClipN);
+  let tracks='', ab='';
+  if(R.rumo!=null){ const rad=Math.PI*R.rumo/180, d=[Math.sin(rad),Math.cos(rad)], n=[Math.cos(rad),-Math.sin(rad)]; let pn=1e12,px=-1e12,dn=1e12,dx=-1e12;
+    pts.forEach(q=>{ const v=q[0]*n[0]+q[1]*n[1], w=q[0]*d[0]+q[1]*d[1]; pn=Math.min(pn,v); px=Math.max(px,v); dn=Math.min(dn,w); dx=Math.max(dx,w); });
+    const base=R.a?(()=>{ const q=P.to(R.a); return q[0]*n[0]+q[1]*n[1]; })():pn, k0=Math.floor((pn-base)/R.larg), k1=Math.ceil((px-base)/R.larg), step=Math.max(1,Math.ceil((k1-k0)/120));
+    for(let k=k0;k<=k1;k+=step){ const off=base+k*R.larg, p1=[n[0]*off+d[0]*(dn-60), n[1]*off+d[1]*(dn-60)], p2=[n[0]*off+d[0]*(dx+60), n[1]*off+d[1]*(dx+60)]; tracks+=`<line x1="${X(p1)}" y1="${Y(p1)}" x2="${X(p2)}" y2="${Y(p2)}"/>`; }
+    if(R.a&&R.b){ const qa=P.to(R.a), qb=P.to(R.b), ax=X(qa), ay=Y(qa), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*10, hy=by-uy*10;
+      ab=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#c62828" stroke-width="2.4"/><polygon points="${bx},${by} ${(hx-uy*5).toFixed(1)},${(hy+ux*5).toFixed(1)} ${(hx+uy*5).toFixed(1)},${(hy-ux*5).toFixed(1)}" fill="#c62828"/>
+        <circle cx="${ax}" cy="${ay}" r="9" fill="#fff" stroke="#c62828" stroke-width="2"/><text x="${ax}" y="${ay+4}" font-size="11" font-weight="700" text-anchor="middle" fill="#c62828">A</text>
+        <circle cx="${bx}" cy="${by}" r="9" fill="#fff" stroke="#c62828" stroke-width="2"/><text x="${bx}" y="${by+4}" font-size="11" font-weight="700" text-anchor="middle" fill="#c62828">B</text>`; } }
+  const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
+  const ha=lm.ha||limAreaHa(lm.coords), t=findTalhao(lm.id||'')||null;
+  return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
+    <defs><clipPath id="${cid}"><polygon points="${poly[0]}"/></clipPath></defs>
+    <polygon points="${poly[0]}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round"/>${poly.slice(1).map(pp=>`<polygon points="${pp}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2"/>`).join('')}
+    <g clip-path="url(#${cid})" stroke="#9fb3a8" stroke-width=".7" opacity=".75">${tracks}</g>${ab}
+    <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111">N</text></g>
+    <line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
+    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha · centro ${esc(geoFmt(R.c))}</text>
+  </svg>`; }
+// bússola (norte verdadeiro) com o rumo de aplicação e o rumo de volta (recíproco)
+function bussolaSvg(rumo, S){ S=S||170; const c=S/2, r=c-14, rad=g=>(g-90)*Math.PI/180; let t='';
+  for(let g=0;g<360;g+=10){ const big=g%30===0, r1=r-(big?10:5), x1=c+r1*Math.cos(rad(g)), y1=c+r1*Math.sin(rad(g)), x2=c+r*Math.cos(rad(g)), y2=c+r*Math.sin(rad(g));
+    t+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#333" stroke-width="${big?1.5:.7}"/>`;
+    if(big&&g%90!==0) t+=`<text x="${(c+(r-18)*Math.cos(rad(g))).toFixed(1)}" y="${(c+(r-18)*Math.sin(rad(g))+2.5).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#444">${g}</text>`; }
+  const card=[['N',0,'#c62828'],['E',90,'#111'],['S',180,'#111'],['W',270,'#111']].map(([l,g,col])=>`<text x="${(c+(r+8)*Math.cos(rad(g))).toFixed(1)}" y="${(c+(r+8)*Math.sin(rad(g))+3.5).toFixed(1)}" font-size="10" font-weight="800" text-anchor="middle" fill="${col}">${l}</text>`).join('');
+  const seta=(az,dash)=>`<g transform="rotate(${az.toFixed(1)} ${c} ${c})"><line x1="${c}" y1="${c}" x2="${c}" y2="${c-(r-22)}" stroke="${dash?'#777':'#c62828'}" stroke-width="${dash?1.6:3.2}"${dash?' stroke-dasharray="4 3"':''}/><polygon points="${c},${c-(r-12)} ${c-5},${c-(r-24)} ${c+5},${c-(r-24)}" fill="${dash?'#777':'#c62828'}"/></g>`;
+  return `<svg class="rs-bussola" viewBox="0 0 ${S} ${S}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bússola com o rumo de aplicação"><circle cx="${c}" cy="${c}" r="${r}" fill="#fff" stroke="#333" stroke-width="1.5"/>${t}${card}${rumo!=null?seta((rumo+180)%360,true)+seta(rumo,false):''}<circle cx="${c}" cy="${c}" r="3" fill="#111"/>
+    ${rumo!=null?`<rect x="${c-22}" y="${c+8}" width="44" height="15" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${c+19}" font-size="10" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</svg>`; }
+// bloco do PDF (e prévia na tela): desenho do talhão + quadro do rastro (linha AB) ou bússola (aérea)
+function rastroPdfHtml(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) return '';
+  const t=findTalhao(r.talhao), aereo=R.modo==='aereo', kv=(l,v)=>v?`<div><small>${l}</small><b>${v}</b></div>`:'';
+  const map=R.lm?rastroSvg(R,{w:320,h:240,nome:t?tNome(t):r.talhao}):`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small></div>`;
+  const pass=R.passadas?`${R.passadas} <small style="font-size:10px;text-transform:none">(${Math.round(R.largura)} m de largura ÷ ${fmtM(R.larg)} m)</small>`:'';
+  let info;
+  if(aereo) info=`<div class="rs-buss">${bussolaSvg(R.rumo,170)}</div><div class="rs-kv">${kv('Rumo de aplicação · norte verdadeiro',R.rumo!=null?`${fmtGrau(R.rumo)} <span class="rs-rec">/ volta ${fmtGrau(R.rec)}</span>`:'')}${kv('Centro do talhão (lat, long)',geoFmt(R.c))}${kv('Entrada sugerida (ponto A)',geoFmt(R.a))}${kv('Faixa de aplicação',`${fmtM(R.larg)} m`)}${kv('Passadas (estimativa)',pass)}<div class="rs-dica">Graus a partir do norte verdadeiro (não magnético). A seta cheia é o rumo de aplicação e a tracejada o rumo de volta.</div></div>`;
+  else info=`<div class="rs-kv rs-jd">${kv('Ponto A (lat, long)',geoFmt(R.a))}${kv('Ponto B (lat, long)',geoFmt(R.b))}${kv('Rumo A → B · norte verdadeiro',fmtGrau(R.rumo))}${kv('Largura da barra',`${fmtM(R.larg)} m`)}${kv('Passadas (estimativa)',pass)}<div class="rs-dica">Monitor John Deere: Orientação → Linha AB → <b>A + B</b> (digitar os dois pontos) ou <b>A + direção</b> (ponto A e o rumo). Coordenadas em graus decimais, WGS 84.</div></div>`;
+  return `<div class="rx-sec rs-sec"><h2>${aereo?'✈️ Aplicação aérea — rumo para o piloto':'📐 Rastro de aplicação — linha AB (padrão John Deere)'}${R.fonte==='sug'?' <small>rumo sugerido pelo lado maior do talhão</small>':''}</h2><div class="rs-grid"><div class="rs-mapbox">${map}</div><div class="rs-info">${info}</div></div></div>`; }
+function rastroWaTxt(r){ const R=rastroCalc(r); if(R.rumo==null&&!R.a) return ''; return `${R.modo==='aereo'?'✈️ Rumo':'📐 Rastro'}: ${R.a?`A ${geoFmt(R.a)} · `:''}${R.b&&R.modo!=='aereo'?`B ${geoFmt(R.b)} · `:''}${fmtGrau(R.rumo)} NV${R.modo==='aereo'?` / volta ${fmtGrau(R.rec)}`:''} · ${fmtM(R.larg)} m${R.a?`\n📍 Ponto A: https://maps.google.com/?q=${R.a[0]},${R.a[1]}`:''}\n`; }
+// seção da recomendação (edição): tipo, pontos, rumo, largura, botões e a prévia do desenho
+function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', auto=rastroModo(Object.assign({},r,{rsModo:''}));
+  return `<div class="app-grid" style="padding:6px 12px 6px">
+      <label>Tipo de aplicação<select class="sel" ${F('rsModo')}><option value="">automático (${auto==='aereo'?'aérea':'terrestre'})</option><option value="terra"${r.rsModo==='terra'?' selected':''}>terrestre — linha AB</option><option value="aereo"${r.rsModo==='aereo'?' selected':''}>aérea — rumo para o piloto</option></select></label>
+      <label>Ponto A (lat, long)<input class="txt" ${F('rsA')} value="${esc(r.rsA||'')}" placeholder="${R.a&&R.fonte==='sug'?esc(geoFmt(R.a)):'-14.723456, -46.456789'}"></label>
+      <label>Ponto B (lat, long)<input class="txt" ${F('rsB')} value="${esc(r.rsB||'')}" placeholder="${R.b&&R.fonte==='sug'?esc(geoFmt(R.b)):'opcional (ou informe o rumo)'}"></label>
+      <label>Rumo (° norte verdadeiro)<input class="cell" inputmode="decimal" ${F('rsRumo')} value="${esc(r.rsRumo??'')}" placeholder="${R.rumo!=null?fmtGrau(R.rumo):'ex.: 58,4'}"${R.fonte==='ab'?' title="calculado de A para B"':''}></label>
+      <label>${aereo?'Faixa do avião (m)':'Largura da barra (m)'}<input class="cell" inputmode="decimal" ${F('rsLarg')} value="${esc(r.rsLarg||'')}" placeholder="${RASTRO_LARG[R.modo]}"></label></div>
+    <div class="bulk-add" style="padding:0 12px 8px"><button class="btn btn-outline btn-sm" data-act="rsGps" data-id="${esc(r.id)}" title="Parado na cabeceira, grava a posição do celular como ponto A">📍 Meu GPS → ponto A</button><button class="btn btn-outline btn-sm" data-act="rsSugerir" data-id="${esc(r.id)}" title="Rumo e pontos pelo lado mais comprido do contorno">📐 Sugerir pelo talhão</button>${(r.rsA||r.rsB||String(r.rsRumo??'')!==''||r.rsModo)?`<button class="btn btn-ghost btn-sm" data-act="rsLimpar" data-id="${esc(r.id)}">Limpar</button>`:''}</div>
+    ${R.lm?'':'<div class="rc-obs">🗺️ Este talhão ainda não tem contorno importado — o desenho sai no PDF quando o limite for importado em <b>Mapa → Limites</b>.</div>'}
+    <div class="rs-prev">${rastroPdfHtml(r)||'<span class="mut">Informe o rumo ou os pontos A e B para ver o rastro.</span>'}</div>`; }
 function recomPdfLink(r){
   if(r.status==='aprovada') return `<div class="rx-link" style="border-color:#555;background:#f3f3f3"><span>✅ <b>Baixa já registrada</b>${r.retorno&&r.retorno.quem?' por '+esc(r.retorno.quem):''}${r.aprov&&r.aprov.ts?' · aprovada em '+fmtDataBR(_dISO(r.aprov.ts)):''} — esta cópia não tem link de baixa.</span></div>`;
   const L=_PDFLINK||{link:recomLink(r), curto:false, qr:''};
@@ -12171,6 +12303,7 @@ function exportRecomPDFSimples_(r){
   const cond=[]; if(r.ponta) cond.push(`ponta ${esc(r.ponta)}`); if(r.pressao) cond.push(`${esc(r.pressao)} bar`); if(r.velocidade) cond.push(`${esc(r.velocidade)} km/h`); if(r.horario) cond.push(`horário ${esc(r.horario)}`); if(+r.tmax) cond.push(`temperatura ≤ ${esc(String(r.tmax))} °C`); if(+r.urmin) cond.push(`umidade ≥ ${esc(String(r.urmin))} %`); if(+r.vmax) cond.push(`vento ≤ ${esc(String(r.vmax))} km/h`); if(r.cond) cond.push(esc(r.cond));
   const seg=[]; if(r.epi) seg.push(`EPI: ${esc(r.epi)}`); if(r.reentrada) seg.push(`reentrada ${esc(r.reentrada)} h`); if(temCar) seg.push('carência na tabela');
   if(calda.length||cond.length||seg.length) h+=`<div class="rx-sec rx-lines">${calda.length?`<div class="rx-line">💧 <b>Calda:</b> ${calda.join(' · ')}</div>`:''}${cond.length?`<div class="rx-line">🌤 <b>Condições:</b> ${cond.join(' · ')}</div>`:''}${seg.length?`<div class="rx-line">🦺 <b>Segurança:</b> ${seg.join(' · ')}</div>`:''}</div>`;
+  h+=rastroPdfHtml(r);   // v389: limite do talhão + linha AB / bússola
   if(r.obs) h+=`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`;
   h+=recomPdfLink(r);
   h+=`<div class="rx-warn rx-warn-s">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Fazer o teste da jarra antes de misturar no tanque. Tríplice lavagem e devolução das embalagens vazias.</div>
@@ -12210,6 +12343,7 @@ function exportRecomPDF_(r, modo){
   <div class="rx-sec"><h2>6. Segurança</h2><div class="rx-kv">
     ${kv('EPI obrigatório',esc(r.epi||''),'w2')}${kv('Intervalo de reentrada',r.reentrada?`${esc(r.reentrada)} h`:'')}${kv('Carência',its.some(it=>it.car)?'ver tabela':'')}</div>
     <div class="rx-warn">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Não aplicar fora das condições indicadas. Fazer a tríplice lavagem e destinar as embalagens vazias ao ponto de recebimento. Manter o receituário junto ao operador durante a aplicação.</div></div>
+  ${rastroPdfHtml(r)}
   ${r.obs?`<div class="rx-sec"><h2>7. Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
   ${recomPdfLink(r)}
   <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
@@ -15243,6 +15377,11 @@ document.addEventListener('click',e=>{
       const box=document.querySelector('[data-appout="'+a.key+'"]'); if(box) box.innerHTML=campoAppOut(fk.talId,fk.tagoi,fk.op?fk.op.itens:[],r);
       toast(`Vazão ${nf2.format(vazao)} L/ha: ${n} tanque(s) de ${num(tanque)} L cobrem ${num(area)} ha (${nf1.format(tanque/vazao)} ha por tanque)`);
     }
+    else if(a.act==='rsSugerir'){ const r=recomById(a.id); if(!r) return; const lm=limitesAll()[r.talhao], sg=lm&&limRumoSugerido(lm); if(!sg){ toast('Talhão sem contorno importado (Mapa → Limites)'); return; }
+      r.rsA=geoFmt(sg.a); r.rsB=geoFmt(sg.b); r.rsRumo=String(sg.rumo).replace('.',','); saveRecom(); route({keepScroll:true}); toast(`Rumo ${fmtGrau(sg.rumo)} pelo lado maior do talhão (${sg.m} m)`); }
+    else if(a.act==='rsLimpar'){ const r=recomById(a.id); if(!r) return; ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>delete r[k]); saveRecom(); route({keepScroll:true}); }
+    else if(a.act==='rsGps'){ const r=recomById(a.id); if(!r) return; if(!('geolocation' in navigator)){ toast('GPS não suportado neste aparelho'); return; } toast('📍 procurando o GPS…');
+      navigator.geolocation.getCurrentPosition(p=>{ r.rsA=`${(+p.coords.latitude).toFixed(6)}, ${(+p.coords.longitude).toFixed(6)}`; saveRecom(); route({keepScroll:true}); toast(`Ponto A gravado (±${Math.round(p.coords.accuracy||0)} m)`); }, e=>toast('Sem posição do GPS: '+(e&&e.message||'')), {enableHighAccuracy:true, timeout:15000, maximumAge:0}); }
     else if(a.act==='recomAjustVazao'){   // v372: mesma conta na recomendação (área da recomendação); leva para o Campo quando é de uma operação
       const r=recomById(a.id); if(!r) return; const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]'), n=numBR((nEl&&nEl.value)||''), tanque=_mmC(r.tanque)||0, area=+r.area||0;
       if(!n||n<=0){ toast('Informe o número de tanques'); return; } if(!tanque){ toast('Preencha o tanque (L) primeiro'); return; } if(!area){ toast('Recomendação sem área'); return; }

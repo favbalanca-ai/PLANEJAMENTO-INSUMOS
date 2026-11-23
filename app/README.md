@@ -210,6 +210,18 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389)** — o PDF da recomendação (simples e
+  completo) ganhou o bloco **Rastro de aplicação** com o desenho do talhão (contorno importado em Mapa → Limites),
+  norte para cima, escala, área e coordenadas do centro. **Terrestre (linha AB, padrão John Deere):** ponto A, ponto B,
+  rumo A→B em graus do norte verdadeiro, largura da barra e passadas estimadas; dá para informar A + B, A + rumo (o app
+  projeta o B na borda) ou só o rumo, e sem nada informado o app sugere o rumo pelo lado mais comprido do talhão.
+  **Aérea** (máquina do grupo Avião agrícola ou tipo escolhido à mão): bússola com N/E/S/W, graus a cada 30°, seta do
+  rumo e tracejada do rumo de volta, faixa do avião e passadas. Na recomendação em edição há a seção **Rastro de
+  aplicação** (tipo, pontos, rumo, largura, botões 📍 Meu GPS → ponto A e 📐 Sugerir pelo talhão, prévia do desenho).
+  A mensagem de WhatsApp leva A, B, rumo e o link do ponto A; uma recomendação nova herda o rastro da última do mesmo
+  talhão. Funções `geoAz/geoDist/geoDest/geoProj`, `limRumoSugerido`, `rastroBorda`, `rastroModo`, `rastroCalc`,
+  `rastroSvg`, `bussolaSvg`, `rastroPdfHtml`, `rastroWaTxt`, `rastroSecHtml`; campos novos `rsModo/rsA/rsB/rsRumo/rsLarg`
+  na recomendação (sobem com ela, sem mudança no Code.gs).
 - **Frota no celular na mesma linha do Estoque (v388)** — em telas até 640 px os cartões grandes dão lugar a
   **cartões compactos** (`.fr-card`): nome, grupo, linha com uso na safra / litros / consumo / custo por hora ou km,
   a leitura do horímetro ou odômetro grande à direita e a borda na cor do estado (verde com registro, âmbar aviso,
