@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Tela Estoque mais fácil no celular (v385)** — em telas até 640 px (`estMobile`) a tabela dá lugar a **cartões**:
+  nome, classe, saldo grande com a unidade e uma cor (verde tem, âmbar "vai faltar" quando as recomendações enviadas
+  comprometem mais que o saldo, cinza sem estoque, vermelho negativo), e embaixo os saldos por fazenda, o custo médio
+  e o pedido. Ordem por saldo; "só com movimento" ligado por padrão. Tocar abre o **extrato**, que ganhou os acertos
+  (estoque inicial, custo inicial, em pedido) e os atalhos Movimento avulso / Transferir. A barra virou busca +
+  botão **➕ Lançar** (menu: entrada por nota, movimento avulso, transferência, contagem, renomear, PDF), filtros
+  numa linha (saldo, só com movimento, Unificado / fazendas) e as classes numa linha deslizante; o bloco fica fixo
+  no topo ao rolar. No computador a tabela continua, com o mesmo menu. `filterEstoque` filtra linhas e cartões.
 - **Movimentos avulsos de estoque (v384)** — na tela Estoque, botão "↔ Movimento avulso" e painel "Movimentos
   avulsos" (com as pendências de empréstimo em cima). Tipos (`MOVAV_TIPOS`): empréstimo recebido (entra, fica "a
   devolver"), empréstimo cedido (sai, fica "a receber"), devolução enviada/recebida (ligada ao empréstimo por `ref`;
