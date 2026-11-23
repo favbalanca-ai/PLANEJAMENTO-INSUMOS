@@ -300,6 +300,17 @@ apagaria ou duplicaria o `Code.gs` (`doGet`, `doPost`, `movSheet_`…). Tudo aqu
 - Os ajustes são ENTRADA/SAÍDA comuns: entram no total unificado, no `porLocal` e a SAÍDA entra no CONSUMO do
   PORTIFÓLIO (a planilha acompanha).
 
+## Movimentos avulsos de estoque (v384)
+
+- **`__movAvulso`** (Planejamento, Campo e Admin): mapa `id → {id, tipo, data, local, produto, un, qtd, custo, valor,
+  pessoa, obs, ref, quem, del, _u}`, merge pelo `_u` (`writeMovAvulsos_`). Tipos: `emp_rec` (entrada), `emp_ced`
+  (saída), `dev_env` (saída, `ref` = empréstimo recebido), `dev_rec` (entrada, `ref` = empréstimo cedido), `venda`
+  (saída), `compra` (entrada), `outro_e`, `outro_s`.
+- Cada movimento vira **1 linha** na `MOVIMENTAÇÃO ESTOQUE`: TIPO ENTRADA/SAÍDA, ORIGEM "Empréstimo recebido · Felipe
+  [#mv…]", OBS (quem · "vendido por R$ …" / "pago R$ …" · observação), VALOR UNIT = custo (custo médio do app; na
+  compra sem custo, valor ÷ qtd), LOCAL da fazenda. Reenviar substitui (`movDeleteBySources_`); `del:true` apaga a
+  linha e deixa a lápide na aba **MOVIMENTOS APP** (KEY|JSON), que volta como `movimentos_app`.
+
 ## Transferência de estoque entre fazendas (v361)
 
 - `__transferencia` (mapa `{id:{id, data, de, para, itens:[{produto, un, qtd, custo}], obs, quem, del, _u}}`, módulos

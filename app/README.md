@@ -210,6 +210,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Movimentos avulsos de estoque (v384)** — na tela Estoque, botão "↔ Movimento avulso" e painel "Movimentos
+  avulsos" (com as pendências de empréstimo em cima). Tipos (`MOVAV_TIPOS`): empréstimo recebido (entra, fica "a
+  devolver"), empréstimo cedido (sai, fica "a receber"), devolução enviada/recebida (ligada ao empréstimo por `ref`;
+  pode ser em partes), venda a terceiro (sai; valor anotado), compra sem nota (entra pelo valor pago), outra
+  entrada/saída. Cada um vira **1 linha no razão** (ENTRADA/SAÍDA, ORIGEM "tipo · pessoa [#mv:id]", LOCAL, custo
+  médio ou valor ÷ qtd) pelo payload `__movAvulso` (mapa, merge pelo `_u`) e um registro na aba **MOVIMENTOS APP**
+  (`movimentos_app` no puxar), que todos os aparelhos recebem. Saldo por fazenda e unificado consideram os
+  pendentes (`movAvAjuste`), o extrato do produto mostra as linhas, "desfazer" apaga do razão (empréstimo com
+  devoluções ligadas não pode ser desfeito antes delas). Code.gs v384 (`writeMovAvulsos_`).
 - **Máquinas: medidor por horas ou por quilômetros (v383)** — cada máquina tem um **medidor** (`m.medidor`:
   `'h'` horímetro, `'km'` odômetro, vazio = automático pelo grupo: Caminhão, Caminhonete, veículo, carro, pick-up,
   utilitário, moto, van, ônibus → km; `MAQ_KM_RX`). O número gravado não muda (`hor`, `horIni`, `cadaH/ultH`); mudam

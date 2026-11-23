@@ -2403,6 +2403,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .camp-app-in .rc-mist-bar{padding:8px 0 4px}
 .camp-app-in .rc-mist{margin:0 0 10px}
 
+/* v384 — movimentos avulsos de estoque */
+.movav-pendh{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:8px 14px 2px}
+.transf-row.movav-pend{background:#fffaf0}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
