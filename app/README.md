@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Recomendação de talhão apagado não compromete mais; excluir pelo extrato (v387)** — recomendações cujo talhão
+  não existe mais (`recomOrfa`: apagado ou renomeado) ficavam invisíveis na tela Recomendações (que filtra pela
+  fazenda do talhão) mas continuavam contando em `recomComprometido`. Agora são ignoradas no comprometido, aparecem
+  no extrato marcadas "⚠️ talhão apagado" com a quantidade riscada, e cada linha da seção "Em recomendações" ganha
+  uma lixeira (`extRecomDel`) que exclui a recomendação deste aparelho (sem mexer no estoque) e reabre o extrato.
 - **Extrato: de onde vem o "em recomendações" (v386)** — o extrato do produto ganha a seção "📋 Em recomendações",
   com cada recomendação **enviada** ou com **retorno** (ainda sem baixa) que compromete o produto: data, talhão
   (link que fecha o extrato e abre `#/recomendacao/<talhão>`, `extIrRecom`), nome/alvo, situação e a quantidade
