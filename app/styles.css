@@ -2447,6 +2447,28 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ext-acts{margin:0 0 8px}
 @media (max-width:640px){ .es-top{top:-1px} .es-tb2 .est-saldo-f .sel{max-width:150px;font-size:12px} .es-chips .chip-f{padding:5px 10px;font-size:12px} }
 
+/* v388 — Frota no celular: cartões na mesma linha do Estoque */
+.fr-list{display:grid}
+.fr-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line);border-left:4px solid #c3ccd2;cursor:pointer;background:var(--card)}
+.fr-card:first-child{border-top:none}
+.fr-card.ok{border-left-color:#1f9d55}
+.fr-card.aviso{border-left-color:#e0a800}
+.fr-card.erro{border-left-color:#c62828}
+.fr-card.sem{background:#fbfcfc}
+.fr-main{flex:1;min-width:0}
+.fr-nome{font-weight:700;font-size:13.5px;color:var(--ink);line-height:1.25}
+.fr-sub{display:flex;flex-wrap:wrap;gap:2px 8px;font-size:11.5px;color:var(--muted);margin-top:3px;align-items:center}
+.fr-sub .classe-tag{font-size:10px}
+.fr-al{font-size:11.5px;margin-top:4px;font-weight:600;color:var(--ink2)}
+.fr-al.aviso{color:#8a6d00}
+.fr-al.erro{color:#a61b1b}
+.fr-al.ok{color:var(--muted);font-weight:500}
+.fr-al small{font-weight:700;background:#eef2f4;border-radius:8px;padding:0 5px;color:var(--ink2)}
+.fr-num{flex:none;text-align:right;display:grid;justify-items:end;line-height:1.1}
+.fr-num b{font-size:19px;font-weight:800;color:var(--ink)}
+.fr-num small{font-size:10.5px;color:var(--muted);margin-top:1px}
+.fr-card.sem .fr-num b{color:var(--muted)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2933,4 +2955,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .es-sub{font-size:9.5px}
   .es-saldo b{font-size:15.5px}
   .es-chips .chip-f{font-size:9.5px}
+  .fr-nome{font-size:11px}
+  .fr-sub{font-size:9.5px}
+  .fr-al{font-size:9.5px}
+  .fr-num b{font-size:15.5px}
 }
