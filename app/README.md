@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Limites dos talhões importados + polígono com furo (v391)** — `app/limites.json` passou a trazer o contorno de 16
+  talhões (antes só a ÁREA 1): ESTEVÃO, ÁREA 2, ÁREA 2 B, ÁREA 3, CAPOEIRINHA, RONCADOR, BARRO BRANCO, P200 e P120 vieram
+  dos shapefiles do Drive (amostragem de solo 2022/2025) e os pivôs P 01 a P 06 da Espora vieram do KMZ do projeto de
+  irrigação (círculos casados pela área). ÁREA 2 e ÁREA 3 são polígonos **com furo** (o P200 e o P120 ficam dentro
+  deles): `limAreaHa` desconta o furo, `limContem`/`talhaoNaPosicao` não consideram "dentro" quem está no furo (e, em
+  sobreposição, fica o talhão menor) e o desenho do PDF usa um `path` com `fill-rule="evenodd"`. CAPOEIRINHA e RONCADOR
+  usam contorno de 2022, menor que a área atual: conferir e reimportar quando houver arquivo novo. T01 e T02 seguem sem
+  contorno.
 - **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389, ajuste v390)** — o PDF da recomendação (simples e
   completo) traz, no cabeçalho de identificação, uma **miniatura do talhão** (contorno importado em Mapa → Limites,
   norte para cima) e, como texto junto dos outros dados, as coordenadas e o rumo. **Terrestre:** o ponto A e a seta do

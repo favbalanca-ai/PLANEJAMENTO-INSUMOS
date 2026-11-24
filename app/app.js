@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-390';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-391';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8967,7 +8967,7 @@ function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w
   const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
   const ha=lm.ha||limAreaHa(lm.coords);
   return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
-    <polygon points="${poly[0]}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round"/>${poly.slice(1).map(pp=>`<polygon points="${pp}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2"/>`).join('')}
+    <path d="${poly.map(pp=>'M'+pp.replace(/ /g,' L')+' Z').join(' ')}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" fill-rule="evenodd"/>
     ${marca}
     <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111">N</text></g>
     ${o.mini?'':`<line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
@@ -9284,9 +9284,11 @@ function loadLimBase(){ return fetch('limites.json',{cache:'no-store'}).then(r=>
 function limitesAll(){ const out={}; Object.keys(LIM_BASE||{}).forEach(k=>out[k]=LIM_BASE[k]);
   const o=(OV&&OV.limites)||{}; Object.keys(o).forEach(k=>{ if(o[k]&&o[k].del) delete out[k]; else if(o[k]&&o[k].coords) out[k]=o[k]; }); return out; }
 // área (ha) de anéis [[lat,lng]…] — fórmula esférica com o raio médio da Terra
-function limAreaHa(rings){ const R=6371008.8, rad=Math.PI/180; let tot=0;
-  (rings||[]).forEach(r=>{ let s=0; for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; s+=(b[1]-a[1])*rad*(2+Math.sin(a[0]*rad)+Math.sin(b[0]*rad)); } tot+=Math.abs(s*R*R/2); });
-  return tot/10000; }
+function limAreaHa(rings){ const R=6371008.8, rad=Math.PI/180, aa=r=>{ let s=0; for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; s+=(b[1]-a[1])*rad*(2+Math.sin(a[0]*rad)+Math.sin(b[0]*rad)); } return Math.abs(s*R*R/2); };
+  let tot=0; (rings||[]).forEach((r,i)=>{ if(!r||!r.length) return; const a=aa(r); tot+=(i>0&&limEhFuro(rings,i))?-a:a; }); return Math.max(0,tot)/10000; }
+// v391: um anel depois do primeiro que cai dentro do contorno externo é um FURO (ex.: pivô dentro do talhão de sequeiro) — desconta da área e não conta como "dentro"
+function limEhFuro(rings,i){ const r=rings&&rings[i], o=rings&&rings[0]; return !!(i>0&&r&&r.length&&o&&o.length&&pontoNoAnel(r[0][0],r[0][1],o)); }
+function limContem(lm,lat,lng){ const cs=(lm&&lm.coords)||[]; if(!cs[0]||!pontoNoAnel(lat,lng,cs[0])) return false; for(let i=1;i<cs.length;i++){ if(limEhFuro(cs,i)&&pontoNoAnel(lat,lng,cs[i])) return false; } return true; }
 const CULT_COR={soja:'#43a047',milho:'#fdd835',sorgo:'#fb8c00',braquiaria:'#26a69a',feijao:'#8d6e63',algodao:'#eceff1',trigo:'#d4a017',laranja:'#ff9800',arroz:'#9ccc65',girassol:'#ffca28'};
 function talSafraAtual(t){ const hj=_hojeISO(), pS=temSafrinha(t)&&plantioRealDe(t.id,'safrinha'); return (pS&&pS<=hj)?'safrinha':'principal'; }
 const _normNome=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toUpperCase().replace(/[^A-Z0-9]/g,'');
@@ -9764,7 +9766,7 @@ function mapaLocate(){ geoSeguir(!geoSeguirOn()); }
 // ponto dentro do limite do talhão (anel externo; raio-casting)
 function pontoNoAnel(lat,lng,anel){ let dentro=false; for(let i=0,j=anel.length-1;i<anel.length;j=i++){ const yi=anel[i][0], xi=anel[i][1], yj=anel[j][0], xj=anel[j][1];
   if(((yi>lat)!==(yj>lat)) && (lng < (xj-xi)*(lat-yi)/((yj-yi)||1e-12)+xi)) dentro=!dentro; } return dentro; }
-function talhaoNaPosicao(pos){ if(!pos) return null; const lims=limitesAll(); for(const tid in lims){ const lm=lims[tid]; if(lm&&lm.coords&&lm.coords[0]&&pontoNoAnel(pos.lat,pos.lng,lm.coords[0])){ return findTalhao(tid)||{id:tid,nome:tid}; } } return null; }
+function talhaoNaPosicao(pos){ if(!pos) return null; const lims=limitesAll(); let best=null, bha=1e12; for(const tid in lims){ const lm=lims[tid]; if(lm&&lm.coords&&lm.coords[0]&&limContem(lm,pos.lat,pos.lng)){ const ha=lm.ha||limAreaHa(lm.coords); if(ha<bha){ bha=ha; best=tid; } } } return best?(findTalhao(best)||{id:best,nome:best}):null; }   // v391: furos e sobreposição (fica o menor)
 function distKm(a,b){ const R=6371, r=Math.PI/180, dLat=(b[0]-a[0])*r, dLng=(b[1]-a[1])*r, x=Math.sin(dLat/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLng/2)**2; return 2*R*Math.asin(Math.sqrt(x)); }
 function limCentro(lm){ const an=lm.coords[0]||[]; if(!an.length) return null; let la=0,lo=0; an.forEach(p=>{ la+=p[0]; lo+=p[1]; }); return [la/an.length, lo/an.length]; }
 // botão flutuante ＋ do mapa: Nova Ação do talhão onde você está; sem posição (ou fora dos limites) escolhe o talhão
