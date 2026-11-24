@@ -3142,7 +3142,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-400';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-401';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11396,7 +11396,24 @@ window.addEventListener('hashchange', ()=>{ prTecFechar(); standTrenaFechar(); }
 const RECOM_KEY='planejamento_recomendacao';
 let RECOM=null;
 function loadRecom(){ try{ const d=JSON.parse(localStorage.getItem(RECOM_KEY)); if(d&&Array.isArray(d.registros)) return d; }catch(e){} return {registros:[]}; }
-function saveRecom(){ lsSet(RECOM_KEY, JSON.stringify(RECOM)); _cmCache=null; }
+// v401: recomendações COMPARTILHADAS pela planilha (aba RECOMENDAÇÕES APP, KEY|JSON como as máquinas). Cada registro tem o carimbo _u,
+// que só muda quando o conteúdo muda (hash _h); o lote manda o que mudou e o puxar traz o dos outros aparelhos (mais novo vence).
+// Apagadas viram marca em RECOM.lixo (id → _u) para não voltarem do outro celular.
+function recomHash(r){ const o={}; for(const k in r){ if(k!=='_u'&&k!=='_h') o[k]=r[k]; } return sigHash(JSON.stringify(o)); }
+function saveRecom(){ (RECOM.registros||[]).forEach(r=>{ if(!r||typeof r!=='object') return; const h=recomHash(r); if(r._h!==h){ r._h=h; r._u=tsAgora(); } });
+  const lx=RECOM.lixo||{}, corte=Date.now()-90*86400000; for(const id in lx){ if(+lx[id]<corte) delete lx[id]; }   // marcas de exclusão com mais de 90 dias saem
+  lsSet(RECOM_KEY, JSON.stringify(RECOM)); _cmCache=null; if(recomServerOk()) loteAgendar('__recom'); }
+let lastRecomSig='';
+function recomServerOk(){ return !!(DATA && DATA.recom_app && typeof DATA.recom_app==='object'); }
+function recomMap(){ const m={}; (RECOM.registros||[]).forEach(r=>{ if(r&&r.id) m[r.id]=r; }); const lx=RECOM.lixo||{}; for(const id in lx){ if(!m[id]) m[id]={id, del:true, _u:+lx[id]||0}; } return m; }
+function recomSig(){ return sigHash(JSON.stringify(recomMap())); }
+function recomApplyPulled(map){ if(!map||typeof map!=='object'||!RECOM) return false; RECOM.lixo=RECOM.lixo||{}; const regs=RECOM.registros; let changed=false;
+  for(const k in map){ const inc=map[k]; if(!inc||typeof inc!=='object') continue; const iu=+inc._u||0, i=regs.findIndex(r=>r&&r.id===k), loc=i>=0?regs[i]:null, lu=+(loc&&loc._u)||0, lx=+RECOM.lixo[k]||0;
+    if(inc.del){ if(loc&&iu>lu){ regs.splice(i,1); RECOM.lixo[k]=iu; changed=true; } else if(!loc&&iu>lx){ RECOM.lixo[k]=iu; changed=true; } continue; }
+    if(lx&&lx>=iu) continue;   // apagada neste aparelho depois da versão que chegou: não volta
+    if(!loc||iu>lu){ const r=Object.assign({}, inc); r._h=recomHash(r); r._u=iu; if(loc) regs[i]=r; else regs.push(r); if(lx) delete RECOM.lixo[k]; changed=true; } }
+  const pend=recomSig()!==lastRecomSig && !!lastRecomSig; if(changed){ saveRecom(); if(!pend) lastRecomSig=recomSig(); } if(pend) loteAgendar('__recom'); return changed; }
+function recomApagar(id){ RECOM.lixo=RECOM.lixo||{}; RECOM.lixo[id]=tsAgora(); RECOM.registros=RECOM.registros.filter(r=>r.id!==id); }
 const RECOM_ST={
   rascunho:{lbl:'Rascunho',cls:'rc-rasc',ico:'✏️'},
   enviada:{lbl:'Enviada ao operador',cls:'rc-env',ico:'📲'},
@@ -12440,7 +12457,7 @@ V.recomendacao=function(arg){
   <div class="rcv-busca"><span>🔍</span><input class="txt" id="recom-q" value="${esc(RECOM_UI.q||'')}" placeholder="Buscar recomendação… (talhão, operação, produto, alvo)" autocomplete="off"></div>
   <div class="recom-list rcv-list">${cards}</div>
   <div class="rcv-vazio" id="rcv-vazio"${regs.length?' hidden':''}><div class="rcv-vazio-ico">📋</div>Nenhuma recomendação encontrada<small>${base.length?'Mude o filtro ou a busca.':'Toque em ＋ para criar a partir do planejamento, direta ou replicando outra.'}</small></div>
-  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 70px">Pendentes: aguardam retorno ou aprovação · Atrasadas: data passou sem aprovar · Agendadas: data de hoje em diante. Salvo <b>no aparelho</b>; envie por WhatsApp, registre o retorno e aprove para gerar o histórico do talhão.</p>
+  <p class="mut" style="font-size:11px;text-align:center;margin:10px 0 70px">Pendentes: aguardam retorno ou aprovação · Atrasadas: data passou sem aprovar · Agendadas: data de hoje em diante. ${recomServerOk()?'Compartilhadas pela planilha (aba <b>RECOMENDAÇÕES APP</b>): todos os aparelhos veem as mesmas e recebem os retornos':'Salvo <b>no aparelho</b> (atualize o Code.gs para compartilhar entre aparelhos)'}; envie por WhatsApp, registre o retorno e aprove para gerar o histórico do talhão.</p>
   <div class="rcv-fabw" id="rcv-fabw"><div class="rcv-fab-menu">
       <button class="rcv-pill" data-act="recomNovaSub" data-sub="plan"${selId?` data-t="${esc(selId)}"`:''}><span class="rcv-pill-ico">📅</span>A partir do planejamento</button>
       <button class="rcv-pill" data-act="recomNovaSub" data-sub="direta"${selId?` data-t="${esc(selId)}"`:''}><span class="rcv-pill-ico">📝</span>Recomendação direta</button>
@@ -15242,7 +15259,7 @@ document.addEventListener('click',e=>{
       } } }
     else if(a.act==='recomReprovar'){ const r=recomById(a.id); if(r){ r.status='enviada'; r.aprov=null; try{ mistRemoverDeRecom(a.id); }catch(e){} clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Retorno reprovado — ajuste e reenvie'); } }
     else if(a.act==='recomReabrir'){ const r=recomById(a.id); if(r){ r.status='rascunho'; r.aprov=null; try{ mistRemoverDeRecom(a.id); }catch(e){} clearSaida(r); if(r.tipo==='ts') tsMarcaSalva(r,false); if(r.opKey){ clearOpSaida(r.opKey); const rl=realEnsure(r.opKey); rl.status='andamento'; delete rl.baixa; stampReal(r.opKey); } saveRecom(); route(); toast('Reaberta para edição'); } }
-    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); try{ mistRemoverDeRecom(a.id); }catch(e){} if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } RECOM.registros=RECOM.registros.filter(r=>r.id!==a.id); saveRecom(); route(); toast('Removido'); } }
+    else if(a.act==='recomDel'){ if(ask('Remover esta recomendação?')){ const r=recomById(a.id); if(r&&r.saidaPushed) clearSaida(r); try{ mistRemoverDeRecom(a.id); }catch(e){} if(r&&r.tipo==='ts'){ r.status='rascunho'; tsMarcaSalva(r,false); } recomApagar(a.id); saveRecom(); route(); toast('Removido'); } }
     else if(a.act==='prPublicar'){ publicarPlanejamento(); }
     else if(a.act==='relCsv'){ exportCampoCsv(); }
     else if(a.act==='mistAvaliar'){ mistAvalAbrir(a.id); }
@@ -15483,7 +15500,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='pdfModo'){ exportRecomPDF(a.id, a.modo); }   // v370: PDF simples ↔ completo
     else if(a.act==='estExtrato'){ estExtratoOpen(a.prod); return; }
     else if(a.act==='extFechar'){ const o=document.getElementById('ext-ov'); if(o) o.remove(); return; }
-    else if(a.act==='extRecomDel'){ const r=recomById(a.id); if(r&&ask(`Excluir a recomendação${r.opNome||r.nome?' "'+(r.opNome||r.nome)+'"':''} de ${fmtDataBR(r.data||'')}?\n\nEla sai deste aparelho; o estoque não muda.`)){ try{ mistRemoverDeRecom(a.id); }catch(e){} if(r.tipo==='ts'){ try{ tsMarcaSalva(r,false); }catch(e){} } RECOM.registros=RECOM.registros.filter(x=>x.id!==a.id); saveRecom(); const o=document.getElementById('ext-ov'); if(o) o.remove(); route({keepScroll:true}); estExtratoOpen(a.prod); toast('Recomendação excluída'); } return; }   // v387
+    else if(a.act==='extRecomDel'){ const r=recomById(a.id); if(r&&ask(`Excluir a recomendação${r.opNome||r.nome?' "'+(r.opNome||r.nome)+'"':''} de ${fmtDataBR(r.data||'')}?\n\nEla sai deste aparelho; o estoque não muda.`)){ try{ mistRemoverDeRecom(a.id); }catch(e){} if(r.tipo==='ts'){ try{ tsMarcaSalva(r,false); }catch(e){} } recomApagar(a.id); saveRecom(); const o=document.getElementById('ext-ov'); if(o) o.remove(); route({keepScroll:true}); estExtratoOpen(a.prod); toast('Recomendação excluída'); } return; }   // v387
     else if(a.act==='extIrRecom'){ const o=document.getElementById('ext-ov'); if(o) o.remove(); location.hash='#/recomendacao/'+encodeURIComponent(a.tal||''); return; }   // v386: do extrato para a recomendação do talhão
     else if(a.act==='pdfImprimir'){ if(_pdfPronto) printDoc(_pdfPronto.html); }
     else if(a.act==='pdfEnviar'){ if(_pdfPronto){ const P=_pdfPronto, d={files:[P.file], title:P.nome}; if(P.link) d.text=pdfLinkMsg(P);   // o link vai junto como texto (apps que aceitam legenda mostram)
@@ -15962,6 +15979,7 @@ const LOTE_TIPOS={
   __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
   __transferencia:{ lbl:'Transferências de estoque', ok:()=>transfServerOk(), dados:()=>(OV.transf||{}), sig:()=>transfSig(), last:()=>lastTransfSig, set:v=>{ lastTransfSig=v; } },   // v361
   __movAvulso:   { lbl:'Movimentos avulsos de estoque', ok:()=>movAvServerOk(), dados:()=>(OV.movAv||{}), sig:()=>movAvSig(), last:()=>lastMovAvSig, set:v=>{ lastMovAvSig=v; } },   // v384
+  __recom:       { lbl:'Recomendações', ok:()=>recomServerOk(),   dados:()=>recomMap(),          sig:()=>recomSig(),     last:()=>lastRecomSig,     set:v=>{ lastRecomSig=v; } },   // v401
   __contagem:    { lbl:'Contagens físicas', ok:()=>contServerOk(), dados:()=>(OV.contagem||{}), sig:()=>contSig(), last:()=>lastContSig, set:v=>{ lastContSig=v; } },   // v362
   __conjunto:    { lbl:'Conjuntos',     ok:()=>conjServerOk(),    dados:()=>(OV.conjApp||{}),    sig:()=>conjSig(),      last:()=>lastConjSig,      set:v=>{ lastConjSig=v; } },   // v302
   __abastecimento:{ lbl:'Abastecimentos', ok:()=>maqServerOk(),   dados:()=>(OV.abast||{}),      sig:()=>abastSig(),     last:()=>lastAbastSig,     set:v=>{ lastAbastSig=v; } },
@@ -16027,7 +16045,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__movAvulso:'Movimentos avulsos de estoque',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__movAvulso:'Movimentos avulsos de estoque',__recom:'Recomendações',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -16224,6 +16242,7 @@ function applyPulledData(d, raw){
   // (ou seja, que já foi salvo). O que ainda não foi salvo é PRESERVADO — evita "minhas edições somem".
   reconcileOverrides();
   saveOverrides();
+  try{ recomApplyPulled(d.recom_app); }catch(e){}   // v401: recomendações dos outros aparelhos (antes dos retornos, para casarem)
   try{ applyRetornos(d.retornos); }catch(e){}   // baixas dos operadores → recomendações
   // preços do módulo Preços também vêm no puxar principal (planilha = fonte da verdade),
   // para que a lista de preços sincronize entre aparelhos junto com o resto — não só pela aba Preços.

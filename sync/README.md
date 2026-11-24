@@ -979,3 +979,13 @@ Chamadas à planilha medidas no simulador (cada uma custa ~50–300 ms no Google
   sem cabeçalho "EM PEDIDO" cria coluna nova (antes usava W = SALDO e sobrescrevia a fórmula);
   produto novo (addprod) ganha as fórmulas de VALOR (S), CONSUMO (V) e SALDO (W).
 
+## Recomendações compartilhadas (v401)
+
+- Aba nova **`RECOMENDAÇÕES APP`** (KEY | JSON | ATUALIZADO), uma linha por recomendação (`id`), merge por `_u` pelo
+  `writeMapApp`; apagadas chegam como `{id, del:true, _u}` e ficam como lápide.
+- `doPost`: tipo **`__recom`** (mapa id → recomendação). `GRAVA_MOD.__recom = ['campo','planejamento','admin']`;
+  `APP_INVALIDA_.__recom = ['recom_app']`.
+- `doGet`: **`recom_app`** (`readMapApp(RECOM_APP_SHEET)`) nos pacotes `planejamento`, `campo` e `admin`
+  (`MOD_DADOS`) e em `APP_TODAS_`.
+- A aba entra na lista de abas KEY|JSON garantidas/renomeadas junto com MOVIMENTOS APP e RECOM LINKS.
+- O app aplica `recom_app` antes de `retornos`, para o retorno do operador casar com a recomendação em qualquer aparelho.

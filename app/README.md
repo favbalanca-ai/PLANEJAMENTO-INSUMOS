@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Recomendações compartilhadas entre aparelhos (v401)** — as recomendações de aplicação deixam de ficar só no aparelho
+  que as criou: sincronizam pela aba **RECOMENDAÇÕES APP** (KEY|JSON, como as máquinas). Cada registro ganha o
+  carimbo `_u`, que só muda quando o conteúdo muda (hash `_h` em `saveRecom`); o lote manda o tipo `__recom`
+  (`recomMap`/`recomSig`) e o puxar aplica `recom_app` (`recomApplyPulled`: mais novo vence) **antes** dos retornos,
+  para o retorno do operador casar com a recomendação em qualquer celular. Exclusão vira marca em `RECOM.lixo`
+  (`recomApagar`), que também sobe como `del` e impede a recomendação de voltar do outro aparelho; marcas com mais de
+  90 dias saem. O rodapé da lista avisa "Compartilhadas pela planilha" quando a aba existe (`recomServerOk`).
+  Precisa do `Code.gs` v401 (Nova versão).
 - **Botões da janelinha da operação no quadro (v400)** — o rodapé da janelinha que abre ao tocar numa operação
   (quadro/linha do tempo do Campo) tinha "Recuar/Avançar" e dois links soltos que quebravam linha. Agora: dois botões
   grandes lado a lado, **🧑‍🌾 Abrir aplicação** (principal) e **📋 Planejamento**, e abaixo a linha "Ordem no quadro" com
