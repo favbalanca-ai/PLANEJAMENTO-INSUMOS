@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-398';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-399';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8978,7 +8978,7 @@ function rastroFundoPrep(tid, lm){ lm=lm||limitesAll()[tid]; if(!tid||!lm||!lm.c
 function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, F=o.semFundo?null:rastroFundo(R.tid, lm), pad=F?0:(o.mini?14:26);
   // sem fundo: metros em volta do centro; com fundo: pixels do mapa (Web Mercator) no zoom da imagem, y para cima
   const P0=geoProj(R.c), P=F?{to:p=>{ const m=mercPx(p[0],p[1],F.z); return [m[0],-m[1]]; }}:P0, rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
-  let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; pts.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); });
+  let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; rings.forEach(rg=>rg.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); }));   // v399: todas as partes
   if(F){ minx=F.x0; maxx=F.x0+F.w; miny=-(F.y0+F.h); maxy=-F.y0; }
   const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
   const scM=F?sc/(156543.03392*Math.cos(R.c[0]*Math.PI/180)/Math.pow(2,F.z)):sc;   // px por metro (para a barra de escala)
@@ -9326,8 +9326,14 @@ const MONIT_CATCOLOR={praga:'#b7791f',doenca:'#b00020',daninha:'#2e7d32',outro:'
 // base publicada com o app (app/limites.json) + importados no app (OV.limites, sincroniza com a aba "LIMITES APP")
 let LIM_BASE={}, _limImport=null;
 function loadLimBase(){ return fetch('limites.json',{cache:'no-store'}).then(r=>r.json()).then(d=>{ LIM_BASE=(d&&typeof d==='object')?d:{}; return LIM_BASE; }).catch(()=>LIM_BASE); }
-function limitesAll(){ const out={}; Object.keys(LIM_BASE||{}).forEach(k=>out[k]=LIM_BASE[k]);
-  const o=(OV&&OV.limites)||{}; Object.keys(o).forEach(k=>{ if(o[k]&&o[k].del) delete out[k]; else if(o[k]&&o[k].coords) out[k]=o[k]; }); return out; }
+function limitesAll(){ const out={}; Object.keys(LIM_BASE||{}).forEach(k=>out[k]=limNorm(LIM_BASE[k]));
+  const o=(OV&&OV.limites)||{}; Object.keys(o).forEach(k=>{ if(o[k]&&o[k].del) delete out[k]; else if(o[k]&&o[k].coords) out[k]=limNorm(o[k]); }); return out; }
+// v399: contorno com várias partes — a parte MAIOR vai para o primeiro anel (área, centro, rumo e enquadramento olham o anel 0); memorizado por objeto
+const _limNormCache=new WeakMap();
+function limNorm(lm){ if(!lm||!Array.isArray(lm.coords)||lm.coords.length<2) return lm; const c=_limNormCache.get(lm); if(c) return c;
+  const R=6371008.8, rad=Math.PI/180, aa=r=>{ let s=0; for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; s+=(b[1]-a[1])*rad*(2+Math.sin(a[0]*rad)+Math.sin(b[0]*rad)); } return Math.abs(s*R*R/2); };
+  let bi=0, ba=-1; lm.coords.forEach((r,i)=>{ if(r&&r.length>2){ const a=aa(r); if(a>ba){ ba=a; bi=i; } } });
+  const out=bi===0?lm:Object.assign({}, lm, {coords:[lm.coords[bi]].concat(lm.coords.filter((r,i)=>i!==bi))}); _limNormCache.set(lm,out); return out; }
 // área (ha) de anéis [[lat,lng]…] — fórmula esférica com o raio médio da Terra
 function limAreaHa(rings){ const R=6371008.8, rad=Math.PI/180, aa=r=>{ let s=0; for(let i=0;i<r.length;i++){ const a=r[i], b=r[(i+1)%r.length]; s+=(b[1]-a[1])*rad*(2+Math.sin(a[0]*rad)+Math.sin(b[0]*rad)); } return Math.abs(s*R*R/2); };
   let tot=0; (rings||[]).forEach((r,i)=>{ if(!r||!r.length) return; const a=aa(r); tot+=(i>0&&limEhFuro(rings,i))?-a:a; }); return Math.max(0,tot)/10000; }
@@ -9871,7 +9877,7 @@ function ndviEvalFaixas(lo,hi){ const C=FOCO_CORES.map(h=>[1,3,5].map(i=>(parseI
 // Estatísticas sem o FIS (o Copernicus Data Space não tem esse serviço — responde 404): as DATAS das passagens vêm do
 // WFS da configuração; o NDVI de cada passagem vem como imagem crua (GetMap com evalscript que grava o valor no
 // vermelho e a máscara no alfa), recortada no limite, e o app lê os pixels e calcula os percentis no próprio aparelho.
-function limBbox(lm){ let a=90,b=180,c=-90,d=-180; (lm.coords[0]||[]).forEach(q=>{ a=Math.min(a,q[0]); b=Math.min(b,q[1]); c=Math.max(c,q[0]); d=Math.max(d,q[1]); }); return {minLat:a,minLng:b,maxLat:c,maxLng:d}; }
+function limBbox(lm){ let a=90,b=180,c=-90,d=-180; ((lm&&lm.coords)||[]).forEach(rg=>(rg||[]).forEach(q=>{ a=Math.min(a,q[0]); b=Math.min(b,q[1]); c=Math.max(c,q[0]); d=Math.max(d,q[1]); })); return {minLat:a,minLng:b,maxLat:c,maxLng:d}; }   // v399: todos os anéis (partes)
 function ndviEvalCru(){ return '//VERSION=3\nfunction setup(){return{input:[{bands:["B04","B08","dataMask"]}],output:{bands:4}}}\nfunction evaluatePixel(s){if(!s.dataMask)return[0,0,0,0];var v='+FOCO_FORMULA+';var r=Math.max(0,Math.min(1,(v+1)/2));return[r,0,0,1];}'; }
 async function ndviDatas(c, lm, ini, fim){ const bb=limBbox(lm), base='https://sh.dataspace.copernicus.eu/ogc/wfs/'+encodeURIComponent(c.inst.trim())+'?';
   let ultimoErro='';

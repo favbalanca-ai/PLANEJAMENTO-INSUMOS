@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Contorno em várias partes não é mais cortado (v399)** — quando o contorno tem mais de uma parte e a primeira era a
+  menor, o desenho do PDF enquadrava só ela e o resto saía cortado. Agora `limitesAll` passa a parte **maior** para o
+  primeiro anel (`limNorm`, memorizado), `limBbox` e o enquadramento de `rastroSvg` consideram todos os anéis, e a
+  bússola/centro ficam na parte maior.
 - **Botão "📐 Rumo" também na tela Campo (v398)** — o cartão da operação (ao lado de "📲 Enviar recomendação por
   WhatsApp" e "🖨 PDF") ganhou o botão 📐 Rumo, que abre a mesma janelinha ligada à recomendação daquela operação
   (`recomFromCampoOp` cria a recomendação se ainda não existir). O botão mostra o rumo atual (asterisco = sugerido).
