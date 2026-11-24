@@ -760,6 +760,12 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .rs-buss{text-align:center;margin-bottom:4px}
   #print-area .rs-buss svg{width:170px;height:170px}
   #print-area .rs-map,#print-area .rs-bussola{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #print-area .rx-cab{display:flex;gap:10px;align-items:flex-start}
+  #print-area .rx-cab .rx-kv{flex:1;min-width:0}
+  #print-area .rs-mini{flex:0 0 172px;border:1px solid #cfd8dc;border-radius:6px;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #print-area .rs-mini svg{display:block;width:170px;height:auto}
+  #print-area .rx-kv .rs-mono{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.01em}
+  #print-area .rx-kv .rs-sug{font-size:8.5px;color:#777;text-transform:none;display:inline}
 }
 
 /* ---- mobile / toque ---- */
