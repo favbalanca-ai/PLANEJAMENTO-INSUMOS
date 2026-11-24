@@ -212,11 +212,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   teste da jarra".
 - **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389)** — o PDF da recomendação (simples e
   completo) ganhou o bloco **Rastro de aplicação** com o desenho do talhão (contorno importado em Mapa → Limites),
-  norte para cima, escala, área e coordenadas do centro. **Terrestre (linha AB, padrão John Deere):** ponto A, ponto B,
-  rumo A→B em graus do norte verdadeiro, largura da barra e passadas estimadas; dá para informar A + B, A + rumo (o app
-  projeta o B na borda) ou só o rumo, e sem nada informado o app sugere o rumo pelo lado mais comprido do talhão.
-  **Aérea** (máquina do grupo Avião agrícola ou tipo escolhido à mão): bússola com N/E/S/W, graus a cada 30°, seta do
-  rumo e tracejada do rumo de volta, faixa do avião e passadas. Na recomendação em edição há a seção **Rastro de
+  norte para cima, escala e área. **Terrestre:** o ponto A e a seta do rumo sobre o desenho, e ao lado o ponto A
+  (lat, long) e o rumo em graus do norte verdadeiro, para digitar no monitor John Deere (Linha AB → A + direção).
+  Dá para informar A + B (o rumo é calculado), A + rumo ou só o rumo; sem nada informado o app sugere o rumo pelo lado
+  mais comprido do talhão. **Aérea** (máquina do grupo Avião agrícola ou tipo escolhido à mão): a bússola (N/E/S/W,
+  graus a cada 30°) desenhada dentro do talhão, com a seta cheia do rumo atravessando a área e a tracejada do rumo de
+  volta, e ao lado os graus de ida e de volta. Na recomendação em edição há a seção **Rastro de
   aplicação** (tipo, pontos, rumo, largura, botões 📍 Meu GPS → ponto A e 📐 Sugerir pelo talhão, prévia do desenho).
   A mensagem de WhatsApp leva A, B, rumo e o link do ponto A; uma recomendação nova herda o rastro da última do mesmo
   talhão. Funções `geoAz/geoDist/geoDest/geoProj`, `limRumoSugerido`, `rastroBorda`, `rastroModo`, `rastroCalc`,

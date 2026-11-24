@@ -8950,48 +8950,44 @@ function rastroCalc(r){ const lm=limitesAll()[r.talhao]||null, modo=rastroModo(r
   const c=lm?limCentro(lm):(a||null); let passadas=0, largura=0;
   if(lm&&rumo!=null){ const P=geoProj(c), rad=Math.PI*rumo/180, n=[Math.cos(rad),-Math.sin(rad)]; let mn=1e12, mx=-1e12; (lm.coords[0]||[]).forEach(p=>{ const q=P.to(p), v=q[0]*n[0]+q[1]*n[1]; mn=Math.min(mn,v); mx=Math.max(mx,v); }); largura=mx-mn; passadas=Math.ceil(largura/larg); }
   return {lm, modo, a, b, rumo, larg, fonte, c, largura, passadas, rec:rumo!=null?(rumo+180)%360:null}; }
-// desenho do talhão (norte para cima) com as passadas, a linha AB, a seta do norte e a escala
-function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||240, pad=26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
+// desenho do talhão (norte para cima): terrestre = ponto A e a seta do rumo; aérea = bússola dentro do talhão com a seta do rumo
+function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, pad=26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
   let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; pts.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); });
   const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
-  const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' ')), cid='rsclip'+(++_rsClipN);
-  let tracks='', ab='';
-  if(R.rumo!=null){ const rad=Math.PI*R.rumo/180, d=[Math.sin(rad),Math.cos(rad)], n=[Math.cos(rad),-Math.sin(rad)]; let pn=1e12,px=-1e12,dn=1e12,dx=-1e12;
-    pts.forEach(q=>{ const v=q[0]*n[0]+q[1]*n[1], w=q[0]*d[0]+q[1]*d[1]; pn=Math.min(pn,v); px=Math.max(px,v); dn=Math.min(dn,w); dx=Math.max(dx,w); });
-    const base=R.a?(()=>{ const q=P.to(R.a); return q[0]*n[0]+q[1]*n[1]; })():pn, k0=Math.floor((pn-base)/R.larg), k1=Math.ceil((px-base)/R.larg), step=Math.max(1,Math.ceil((k1-k0)/120));
-    for(let k=k0;k<=k1;k+=step){ const off=base+k*R.larg, p1=[n[0]*off+d[0]*(dn-60), n[1]*off+d[1]*(dn-60)], p2=[n[0]*off+d[0]*(dx+60), n[1]*off+d[1]*(dx+60)]; tracks+=`<line x1="${X(p1)}" y1="${Y(p1)}" x2="${X(p2)}" y2="${Y(p2)}"/>`; }
-    if(R.a&&R.b){ const qa=P.to(R.a), qb=P.to(R.b), ax=X(qa), ay=Y(qa), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*10, hy=by-uy*10;
-      ab=`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#c62828" stroke-width="2.4"/><polygon points="${bx},${by} ${(hx-uy*5).toFixed(1)},${(hy+ux*5).toFixed(1)} ${(hx+uy*5).toFixed(1)},${(hy-ux*5).toFixed(1)}" fill="#c62828"/>
-        <circle cx="${ax}" cy="${ay}" r="9" fill="#fff" stroke="#c62828" stroke-width="2"/><text x="${ax}" y="${ay+4}" font-size="11" font-weight="700" text-anchor="middle" fill="#c62828">A</text>
-        <circle cx="${bx}" cy="${by}" r="9" fill="#fff" stroke="#c62828" stroke-width="2"/><text x="${bx}" y="${by+4}" font-size="11" font-weight="700" text-anchor="middle" fill="#c62828">B</text>`; } }
+  const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' '));
+  let marca='';
+  if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*0.26; marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.46}); }
+  else if(R.rumo!=null&&R.a){ const qa=P.to(R.a), ax=X(qa), ay=Y(qa), qb=P.to(R.b||geoDest(R.a,R.rumo,300)), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*12, hy=by-uy*12;
+    marca=`<line x1="${ax}" y1="${ay}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#c62828" stroke-width="3"/><polygon points="${bx},${by} ${(hx-uy*6).toFixed(1)},${(hy+ux*6).toFixed(1)} ${(hx+uy*6).toFixed(1)},${(hy-ux*6).toFixed(1)}" fill="#c62828"/>
+      <circle cx="${ax}" cy="${ay}" r="10" fill="#fff" stroke="#c62828" stroke-width="2.2"/><text x="${ax}" y="${ay+4.5}" font-size="12" font-weight="800" text-anchor="middle" fill="#c62828">A</text>
+      <rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`; }
   const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
-  const ha=lm.ha||limAreaHa(lm.coords), t=findTalhao(lm.id||'')||null;
+  const ha=lm.ha||limAreaHa(lm.coords);
   return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
-    <defs><clipPath id="${cid}"><polygon points="${poly[0]}"/></clipPath></defs>
     <polygon points="${poly[0]}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round"/>${poly.slice(1).map(pp=>`<polygon points="${pp}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2"/>`).join('')}
-    <g clip-path="url(#${cid})" stroke="#9fb3a8" stroke-width=".7" opacity=".75">${tracks}</g>${ab}
+    ${marca}
     <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111">N</text></g>
     <line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
-    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha · centro ${esc(geoFmt(R.c))}</text>
+    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha</text>
   </svg>`; }
-// bússola (norte verdadeiro) com o rumo de aplicação e o rumo de volta (recíproco)
-function bussolaSvg(rumo, S){ S=S||170; const c=S/2, r=c-14, rad=g=>(g-90)*Math.PI/180; let t='';
-  for(let g=0;g<360;g+=10){ const big=g%30===0, r1=r-(big?10:5), x1=c+r1*Math.cos(rad(g)), y1=c+r1*Math.sin(rad(g)), x2=c+r*Math.cos(rad(g)), y2=c+r*Math.sin(rad(g));
-    t+=`<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#333" stroke-width="${big?1.5:.7}"/>`;
-    if(big&&g%90!==0) t+=`<text x="${(c+(r-18)*Math.cos(rad(g))).toFixed(1)}" y="${(c+(r-18)*Math.sin(rad(g))+2.5).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#444">${g}</text>`; }
-  const card=[['N',0,'#c62828'],['E',90,'#111'],['S',180,'#111'],['W',270,'#111']].map(([l,g,col])=>`<text x="${(c+(r+8)*Math.cos(rad(g))).toFixed(1)}" y="${(c+(r+8)*Math.sin(rad(g))+3.5).toFixed(1)}" font-size="10" font-weight="800" text-anchor="middle" fill="${col}">${l}</text>`).join('');
-  const seta=(az,dash)=>`<g transform="rotate(${az.toFixed(1)} ${c} ${c})"><line x1="${c}" y1="${c}" x2="${c}" y2="${c-(r-22)}" stroke="${dash?'#777':'#c62828'}" stroke-width="${dash?1.6:3.2}"${dash?' stroke-dasharray="4 3"':''}/><polygon points="${c},${c-(r-12)} ${c-5},${c-(r-24)} ${c+5},${c-(r-24)}" fill="${dash?'#777':'#c62828'}"/></g>`;
-  return `<svg class="rs-bussola" viewBox="0 0 ${S} ${S}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bússola com o rumo de aplicação"><circle cx="${c}" cy="${c}" r="${r}" fill="#fff" stroke="#333" stroke-width="1.5"/>${t}${card}${rumo!=null?seta((rumo+180)%360,true)+seta(rumo,false):''}<circle cx="${c}" cy="${c}" r="3" fill="#111"/>
-    ${rumo!=null?`<rect x="${c-22}" y="${c+8}" width="44" height="15" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${c+19}" font-size="10" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</svg>`; }
-// bloco do PDF (e prévia na tela): desenho do talhão + quadro do rastro (linha AB) ou bússola (aérea)
+// bússola (norte verdadeiro): marcas a cada 10°, números a cada 30°, N/E/S/W, seta do rumo (cheia) e do rumo de volta (tracejada)
+function bussolaInner(c, cy, r, rumo, o){ o=o||{}; const rad=g=>(g-90)*Math.PI/180, k=r/70; let t='';
+  for(let g=0;g<360;g+=10){ const big=g%30===0, r1=r-(big?9:4.5)*k; t+=`<line x1="${(c+r1*Math.cos(rad(g))).toFixed(1)}" y1="${(cy+r1*Math.sin(rad(g))).toFixed(1)}" x2="${(c+r*Math.cos(rad(g))).toFixed(1)}" y2="${(cy+r*Math.sin(rad(g))).toFixed(1)}" stroke="#333" stroke-width="${big?1.5:.7}"/>`;
+    if(big&&g%90!==0) t+=`<text x="${(c+(r-16*k)*Math.cos(rad(g))).toFixed(1)}" y="${(cy+(r-16*k)*Math.sin(rad(g))+2.5).toFixed(1)}" font-size="${(7.5*k).toFixed(1)}" text-anchor="middle" fill="#444">${g}</text>`; }
+  const card=[['N',0,'#c62828'],['E',90,'#111'],['S',180,'#111'],['W',270,'#111']].map(([l,g,col])=>`<text x="${(c+(r+8*k)*Math.cos(rad(g))).toFixed(1)}" y="${(cy+(r+8*k)*Math.sin(rad(g))+3.5*k).toFixed(1)}" font-size="${(10*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="${col}">${l}</text>`).join('');
+  const SL=o.setaLen||(r-10*k);   // comprimento da seta (na aérea atravessa o talhão)
+  const seta=(az,dash)=>`<g transform="rotate(${az.toFixed(1)} ${c} ${cy})"><line x1="${c}" y1="${cy}" x2="${c}" y2="${(cy-(SL-10*k)).toFixed(1)}" stroke="${dash?'#777':'#c62828'}" stroke-width="${dash?1.6:3.2}"${dash?' stroke-dasharray="4 3"':''}/><polygon points="${c},${(cy-SL).toFixed(1)} ${(c-5*k).toFixed(1)},${(cy-(SL-12*k)).toFixed(1)} ${(c+5*k).toFixed(1)},${(cy-(SL-12*k)).toFixed(1)}" fill="${dash?'#777':'#c62828'}"/></g>`;
+  return `<g class="rs-rosa"><circle cx="${c}" cy="${cy}" r="${r}" fill="${o.fundo||'#fff'}" stroke="#333" stroke-width="1.5"/>${t}${card}${rumo!=null?seta((rumo+180)%360,true)+seta(rumo,false):''}<circle cx="${c}" cy="${cy}" r="3" fill="#111"/>
+    ${rumo!=null?`<rect x="${(c-24*k).toFixed(1)}" y="${(cy+8*k).toFixed(1)}" width="${(48*k).toFixed(1)}" height="${(16*k).toFixed(1)}" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${(cy+20*k).toFixed(1)}" font-size="${(11*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</g>`; }
+function bussolaSvg(rumo, S){ S=S||170; return `<svg class="rs-bussola" viewBox="0 0 ${S} ${S}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bússola com o rumo de aplicação">${bussolaInner(S/2,S/2,S/2-14,rumo)}</svg>`; }
+// bloco do PDF (e prévia na tela): simples — terrestre = desenho + ponto A + rumo; aérea = bússola dentro do talhão + graus
 function rastroPdfHtml(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) return '';
   const t=findTalhao(r.talhao), aereo=R.modo==='aereo', kv=(l,v)=>v?`<div><small>${l}</small><b>${v}</b></div>`:'';
-  const map=R.lm?rastroSvg(R,{w:320,h:240,nome:t?tNome(t):r.talhao}):`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small></div>`;
-  const pass=R.passadas?`${R.passadas} <small style="font-size:10px;text-transform:none">(${Math.round(R.largura)} m de largura ÷ ${fmtM(R.larg)} m)</small>`:'';
-  let info;
-  if(aereo) info=`<div class="rs-buss">${bussolaSvg(R.rumo,170)}</div><div class="rs-kv">${kv('Rumo de aplicação · norte verdadeiro',R.rumo!=null?`${fmtGrau(R.rumo)} <span class="rs-rec">/ volta ${fmtGrau(R.rec)}</span>`:'')}${kv('Centro do talhão (lat, long)',geoFmt(R.c))}${kv('Entrada sugerida (ponto A)',geoFmt(R.a))}${kv('Faixa de aplicação',`${fmtM(R.larg)} m`)}${kv('Passadas (estimativa)',pass)}<div class="rs-dica">Graus a partir do norte verdadeiro (não magnético). A seta cheia é o rumo de aplicação e a tracejada o rumo de volta.</div></div>`;
-  else info=`<div class="rs-kv rs-jd">${kv('Ponto A (lat, long)',geoFmt(R.a))}${kv('Ponto B (lat, long)',geoFmt(R.b))}${kv('Rumo A → B · norte verdadeiro',fmtGrau(R.rumo))}${kv('Largura da barra',`${fmtM(R.larg)} m`)}${kv('Passadas (estimativa)',pass)}<div class="rs-dica">Monitor John Deere: Orientação → Linha AB → <b>A + B</b> (digitar os dois pontos) ou <b>A + direção</b> (ponto A e o rumo). Coordenadas em graus decimais, WGS 84.</div></div>`;
-  return `<div class="rx-sec rs-sec"><h2>${aereo?'✈️ Aplicação aérea — rumo para o piloto':'📐 Rastro de aplicação — linha AB (padrão John Deere)'}${R.fonte==='sug'?' <small>rumo sugerido pelo lado maior do talhão</small>':''}</h2><div class="rs-grid"><div class="rs-mapbox">${map}</div><div class="rs-info">${info}</div></div></div>`; }
+  const map=R.lm?rastroSvg(R,{w:320,h:260,nome:t?tNome(t):r.talhao}):(aereo&&R.rumo!=null?`<div class="rs-buss">${bussolaSvg(R.rumo,200)}</div>`:`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small></div>`);
+  const info=aereo
+    ? `<div class="rs-kv">${kv('Rumo de aplicação',R.rumo!=null?`${fmtGrau(R.rumo)}`:'')}${kv('Rumo de volta',R.rec!=null?fmtGrau(R.rec):'')}<div class="rs-dica">Graus do norte verdadeiro. Seta cheia = rumo de aplicação; tracejada = volta.</div></div>`
+    : `<div class="rs-kv rs-jd">${kv('Ponto A (lat, long)',geoFmt(R.a))}${kv('Rumo (norte verdadeiro)',fmtGrau(R.rumo))}<div class="rs-dica">Monitor John Deere: Linha AB → <b>A + direção</b>. Graus decimais, WGS 84.</div></div>`;
+  return `<div class="rx-sec rs-sec"><h2>${aereo?'✈️ Aplicação aérea — rumo':'📐 Rastro de aplicação — ponto A e rumo'}${R.fonte==='sug'?' <small>rumo sugerido pelo lado maior do talhão</small>':''}</h2><div class="rs-grid"><div class="rs-mapbox">${map}</div><div class="rs-info">${info}</div></div></div>`; }
 function rastroWaTxt(r){ const R=rastroCalc(r); if(R.rumo==null&&!R.a) return ''; return `${R.modo==='aereo'?'✈️ Rumo':'📐 Rastro'}: ${R.a?`A ${geoFmt(R.a)} · `:''}${R.b&&R.modo!=='aereo'?`B ${geoFmt(R.b)} · `:''}${fmtGrau(R.rumo)} NV${R.modo==='aereo'?` / volta ${fmtGrau(R.rec)}`:''} · ${fmtM(R.larg)} m${R.a?`\n📍 Ponto A: https://maps.google.com/?q=${R.a[0]},${R.a[1]}`:''}\n`; }
 // seção da recomendação (edição): tipo, pontos, rumo, largura, botões e a prévia do desenho
 function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', auto=rastroModo(Object.assign({},r,{rsModo:''}));
