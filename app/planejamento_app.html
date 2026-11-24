@@ -3134,7 +3134,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-394';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-395';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11322,7 +11322,8 @@ function limOrfaoOpen(tid){ const lm=limitesAll()[tid]; if(!lm) return false; no
   const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
   ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
     <div class="tf-h"><div><h3>⚪ Contorno sem talhão</h3><span class="mut">código <b>${esc(tid)}</b>${lm.nome?` · ${esc(lm.nome)}`:''} · ${nf2.format(lm.ha||limAreaHa(lm.coords))} ha${lm.arquivo?` · ${esc(lm.arquivo)}`:''}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
-    <p class="na-sub">Este contorno foi importado para um talhão que não está mais na planilha (foi apagado ou mudou de código). Ele não tem operações nem ficha. Se não serve, remova; se o talhão existe com outro código, remova e importe o arquivo de novo escolhendo o talhão certo.</p>
+    <p class="na-sub">Este contorno está ligado a um código de talhão que não existe na planilha (foi apagado ou mudou de código). Se o talhão existe com outro nome, escolha abaixo para <b>vincular</b> o contorno a ele; se não serve, remova.</p>
+    <div class="app-grid" style="padding:0 12px 8px"><label>Vincular ao talhão<select class="sel lim-vinc" data-id="${esc(tid)}"><option value="">— escolher —</option>${talhoesAll().filter(t=>t.nome).map(t=>`<option value="${esc(t.id)}">${esc(tNome(t))} (${num(areaDe(t))} ha)${limitesAll()[t.id]?' · já tem contorno':''}</option>`).join('')}</select></label></div>
     <div class="tf-btns"><button class="btn btn-outline btn-sm" data-act="tfZoom" data-id="${esc(tid)}">🔍 Centralizar</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(tid)}">🗑️ Remover limite</button></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); return true; }
 function talFichaOpen(tid){
@@ -12634,6 +12635,11 @@ function limSalvarImport(){
 function limRemover(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid], prev=(cur&&cur.coords)?Object.assign({},cur):null;
   OV.limites[tid]=Object.assign({del:true,_u:tsAgora()},prev?{prev}:{}); if(_map) _map.closePopup(); novaAcaoFechar();   // fecha a ficha do talhão, se foi por ela
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tNome(findTalhao(tid)||tid)} removido do mapa — para voltar, use ↩️ Restaurar na lista`); }
+// v395: passa um contorno de um código para outro talhão (o antigo some; o novo entra como importado e sincroniza pela LIMITES APP)
+function limVincular(deId, paraId){ const lm=limitesAll()[deId], t=findTalhao(paraId); if(!lm||!t){ toast('Contorno ou talhão não encontrado'); return false; }
+  if(limitesAll()[paraId] && !confirm(`${tNome(t)} já tem contorno. Trocar pelo contorno "${lm.nome||deId}"?`)) return false;
+  OV.limites=OV.limites||{}; OV.limites[paraId]={nome:lm.nome||tNome(t), arquivo:lm.arquivo||'', ha:+(lm.ha||limAreaHa(lm.coords)).toFixed(2), coords:lm.coords, _u:tsAgora()};
+  OV.limites[deId]={del:true,_u:tsAgora()}; novaAcaoFechar(); saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Contorno vinculado a ${tNome(t)}`); return true; }
 function limRestaurar(tid){ OV.limites=OV.limites||{}; const cur=OV.limites[tid]||{};
   OV.limites[tid]=cur.prev?Object.assign({},cur.prev,{_u:tsAgora()}):{restore:true,_u:tsAgora()};
   saveOverrides(); scheduleLimitesPush(); route({keepScroll:true}); toast(`Limite de ${tid} restaurado`); }
@@ -12817,7 +12823,12 @@ async function mapaInit(){
   const bounds=[], bPts=[];   // v394: limites mandam no enquadramento; pontos/anotações só entram se estiverem perto deles
   // contornos dos talhões, coloridos pela cultura da safra atual
   const lims=limitesAll();
+  // v395: caixa dos limites da fazenda escolhida (com 30% de folga) — contorno SEM talhão só entra se cair dentro dela (senão aparecia nas duas fazendas e puxava o zoom)
+  let fazBB=null; if(oqFaz){ let a=90,b=180,c=-90,d=-180,n=0; Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords||!lm.coords[0]||!t||!fazOk(t)) return; const q=limBbox(lm); a=Math.min(a,q.minLat); b=Math.min(b,q.minLng); c=Math.max(c,q.maxLat); d=Math.max(d,q.maxLng); n++; });
+    if(n){ const fa=(c-a)*0.3||0.01, fo=(d-b)*0.3||0.01; fazBB={minLat:a-fa,minLng:b-fo,maxLat:c+fa,maxLng:d+fo}; } }
+  const orfaoFora=lm=>{ if(!fazBB) return false; const c=limCentro(lm); return !c||c[0]<fazBB.minLat||c[0]>fazBB.maxLat||c[1]<fazBB.minLng||c[1]>fazBB.maxLng; };
   Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return; if(oqFaz && t && !fazOk(t)) return;   // só a fazenda escolhida
+    if(oqFaz && !t && orfaoFora(lm)) return;   // v395: sem talhão e longe da fazenda escolhida: fica para "Todas as fazendas"
     const seq=t?talSafraAtual(t):'principal', emp=t?(seq==='safrinha'?empSafDe(t):empDe(t)):'', ck=culturaKey(emp), cor=CULT_COR[ck]||'#90a4ae';
     const fe=t?estadiosDe(t,seq):null, st=estadioEm(fe,_hojeISO()), haLim=lm.ha||limAreaHa(lm.coords);
     const so=t?talStatusOps(t):{nivel:'none',late:[],soon:[],prox:null}, sc=OPST[so.nivel];
@@ -13685,7 +13696,7 @@ V.mapa=function(){
       <div class="lim-acts"><button class="btn btn-primary btn-sm" data-act="naOpen" data-id="${esc(t.id)}">➕ Ação</button><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(t.id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(t.id)}" title="Remover o limite deste talhão">🗑️ Remover</button></div></div>`; }).join('');
   // contornos cujo talhão sumiu da planilha: aparecem para poder remover (não entram na contagem nem no filtro de fazenda)
   const orfaos=Object.keys(lims).filter(id=>!findTalhao(id)).map(id=>{ const lm=lims[id]; return `<div class="lim-row lim-off"><div><b>⚪ Contorno sem talhão <small class="mut">${esc(id)}</small></b><div class="mut" style="font-size:12px">${nf2.format(lm.ha||limAreaHa(lm.coords))} ha${lm.nome?` · ${esc(lm.nome)}`:''}${lm.arquivo?` · ${esc(lm.arquivo)}`:''} · o talhão não está mais na planilha</div></div>
-      <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(id)}" title="Remover este contorno">🗑️ Remover</button></div></div>`; }).join('');
+      <div class="lim-acts"><select class="sel lim-vinc" data-id="${esc(id)}" title="Passar este contorno para um talhão da planilha"><option value="">↪ vincular a…</option>${talhoesAll().filter(t=>t.nome).map(t=>`<option value="${esc(t.id)}">${esc(tNome(t))} (${num(areaDe(t))} ha)${lims[t.id]?' · já tem':''}</option>`).join('')}</select><button class="btn btn-outline btn-sm" data-act="limZoom" data-id="${esc(id)}">🔍 Ver</button><button class="btn btn-outline btn-sm lim-del" data-act="limRemover" data-id="${esc(id)}" title="Remover este contorno">🗑️ Remover</button></div></div>`; }).join('');
   const remov=limRemovidos().map(id=>{ const t=findTalhao(id); return `<div class="lim-row lim-off"><div><b>${esc(tNome(t||id))}</b><div class="mut" style="font-size:12px">limite removido</div></div>
       <div class="lim-acts"><button class="btn btn-outline btn-sm" data-act="limRestaurar" data-id="${esc(id)}">↩️ Restaurar</button></div></div>`; }).join('');
   return `${imp}<div class="panel"><div class="panel-head"><h2>Mapa</h2><span class="sub">${comLim.length} talhão(ões) com limite · ${n} ponto(s) de monitoramento${nOc?` · ${nOc} anotação(ões)`:''}</span>
@@ -14854,6 +14865,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='compras-socomprar'){ comprasSoComprar=!!e.target.checked; route({keepScroll:true}); return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
+  if(e.target.classList&&e.target.classList.contains('lim-vinc')){ const v=e.target.value, de=e.target.dataset.id; if(v) limVincular(de, v); return; }   // v395
   if(e.target.classList&&e.target.classList.contains('rs-sat')){ try{ localStorage.setItem(RS_SAT_KEY, e.target.checked?'1':'0'); }catch(x){} route({keepScroll:true}); return; }   // v392
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
