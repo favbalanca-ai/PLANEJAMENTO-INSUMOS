@@ -3134,7 +3134,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-393';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-394';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -12814,7 +12814,7 @@ async function mapaInit(){
   if(ndviCfg().on) ndviAplicar();                       // camada NDVI (Sentinel-2) se estava ligada
   if(geoSeguirOn()) geoSeguir(true, true);               // acompanhar a posição se estava ligado — v393: só marca, sem puxar o mapa para o GPS (o enquadramento fica nos limites da fazenda)
   else if(MAPA_GEO.pos) geoDesenhar();
-  const bounds=[];
+  const bounds=[], bPts=[];   // v394: limites mandam no enquadramento; pontos/anotações só entram se estiverem perto deles
   // contornos dos talhões, coloridos pela cultura da safra atual
   const lims=limitesAll();
   Object.keys(lims).forEach(tid=>{ const lm=lims[tid], t=findTalhao(tid); if(!lm||!lm.coords) return; if(oqFaz && t && !fazOk(t)) return;   // só a fazenda escolhida
@@ -12836,14 +12836,16 @@ async function mapaInit(){
     const nv=_numc(r.nivel), lm=_numc(r.limiar), acima=(nv!=null&&lm!=null&&nv>=lm);
     const mk=L.circleMarker([r.lat,r.lng],{radius:8,color:'#fff',weight:2,fillColor:c,fillOpacity:.9}).addTo(_map)
       .bindPopup(`<b>${esc(r.alvo||'—')}</b>${acima?' <span style="color:#b00020">⚠️ acima do limiar</span>':''}<br>${esc((MONIT_CAT[r.categoria]||{}).lbl||'')} · ${esc(fmtData(r.data))}${r.quem?' · '+esc(r.quem):''}<br>Nível ${esc(r.nivel||'—')}${r.unidade?' '+esc(r.unidade):''} · limiar ${esc(r.limiar||'—')}${r.acao?`<br>Ação: ${esc(r.acao)}`:''}${r.obs?`<br><span class="mut">${esc(r.obs)}</span>`:''}<br><a class="link" data-go="#/monitoramento/${encodeURIComponent(r.talhao)}">Abrir o monitoramento${t?' de '+esc(tNome(t)):''} ›</a>`);
-    MAPA_CALOR.pontos.push(mk); bounds.push([r.lat,r.lng]);
+    MAPA_CALOR.pontos.push(mk); bPts.push([r.lat,r.lng]);
   });
   // v328: anotações/ocorrências com posição: ícone do tipo; tocar abre o registro (texto + fotos)
   ocorLista().filter(r=>r.lat!=null&&r.lng!=null).forEach(r=>{ const T=OC_TIPOS[r.tipo]||{}; if(oqFaz){ const t=findTalhao(r.talhao); if(t&&!fazOk(t)) return; }
     const mk=L.marker([r.lat,r.lng],{icon:L.divIcon({className:'mapa-pt-wrap',html:`<div class="mapa-pt" title="${esc(T.lbl||'')}">${T.ico||'📝'}</div>`,iconSize:[26,26],iconAnchor:[13,13]})}).addTo(_map);
-    mk.on('click', ()=>ocDetalheOpen(r.id)); MAPA_CALOR.pontos.push(mk); bounds.push([r.lat,r.lng]); });
-  if(bounds.length>1){ try{ _map.fitBounds(bounds,{padding:[30,30]}); }catch(e){} }
-  else if(bounds.length===1){ _map.setView(bounds[0],15); }
+    mk.on('click', ()=>ocDetalheOpen(r.id)); MAPA_CALOR.pontos.push(mk); bPts.push([r.lat,r.lng]); });
+  // v394: com limites na tela, o enquadramento é dos limites (+ pontos a até ~30% de folga deles); anotações feitas longe (cidade, estrada) não abrem o zoom
+  let fit=bounds; if(bounds.length>1){ try{ const bb=L.latLngBounds(bounds).pad(0.3); fit=bounds.concat(bPts.filter(p=>bb.contains(p))); }catch(e){} } else fit=bounds.concat(bPts);
+  if(fit.length>1){ try{ _map.fitBounds(fit,{padding:[30,30]}); }catch(e){} }
+  else if(fit.length===1){ _map.setView(fit[0],15); }
   setTimeout(()=>{ try{ _map.invalidateSize(); }catch(e){} }, 120);
 }
 // ===== v328: MAPA DE CALOR de pragas, doenças e daninhas — dentro do contorno de cada talhão =====
