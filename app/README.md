@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Contorno sem talhão por fazenda + vincular (v395)** — no Mapa, um contorno cujo código de talhão não existe na
+  planilha ("sem talhão") só aparece na fazenda escolhida se estiver dentro da área dos limites dela (30 % de folga);
+  antes aparecia nas duas fazendas e puxava o enquadramento. Em "Todas as fazendas" continuam todos. Na lista
+  Mapa → Limites e na ficha do contorno sem talhão há agora **"vincular a…"**: escolhe um talhão da planilha e o contorno
+  passa para ele (`limVincular`; o antigo é removido; sincroniza pela LIMITES APP).
 - **Mapa enquadra os limites da fazenda (v394)** — o enquadramento passou a ser feito pelos contornos dos talhões da
   fazenda escolhida; pontos de monitoramento e anotações só entram se estiverem a até ~30 % de folga desses contornos.
   Anotações feitas longe (cidade, estrada) não abrem mais o zoom até os talhões virarem pontinhos. Sem contorno na
