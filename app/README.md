@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Rumo visível em talhão redondo (v396)** — num pivô o "lado mais comprido" era um pedacinho de arco (≈90 m) e a
+  seta ficava escondida sob o A. Agora, quando o maior lado reto é menor que 30 % da diagonal do talhão, o rumo
+  sugerido passa a ser **000° (norte) pelo centro**, com A na borda sul (`limRumoSugerido` devolve `redondo:true`). E a
+  reta do rumo no desenho sempre **atravessa o talhão**: começa na borda atrás de A (rumo oposto) e vai até a borda da
+  frente, com a seta na ponta — vale também para A no meio do talhão.
 - **Contorno sem talhão por fazenda + vincular (v395)** — no Mapa, um contorno cujo código de talhão não existe na
   planilha ("sem talhão") só aparece na fazenda escolhida se estiver dentro da área dos limites dela (30 % de folga);
   antes aparecia nas duas fazendas e puxava o enquadramento. Em "Todas as fazendas" continuam todos. Na lista
