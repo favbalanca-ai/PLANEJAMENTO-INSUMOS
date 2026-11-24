@@ -2528,6 +2528,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rs-satlbl{display:flex;align-items:center;gap:6px;margin:0 12px 8px;font-size:12.5px;color:#345}
 .rs-satlbl input{width:16px;height:16px;margin:0}
 
+/* v397: janelinha do rumo */
+.rs-sheet .rs-prev{margin:0 12px 10px}
+.rs-sheet .app-grid{padding:6px 12px 6px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3134,7 +3138,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-396';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-397';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -11571,7 +11575,7 @@ function recomSetField(el){
   else if(f==='calda'||f==='tanque'){ r[f]=v; rerender=true;   // recalcula a calda por tanque
     if(r.opKey && r.status!=='aprovada'){ const rl=realEnsure(r.opKey); rl.app=rl.app||{};   // e leva para o Campo (os dois ficam iguais)
       rl.app[f==='calda'?'vazao':'tanque']=String(v).trim()===''?null:numBR(v); stampReal(r.opKey); } }
-  else if(/^rs(Modo|A|B|Rumo|Larg)$/.test(f)){ r[f]=v; rerender=true; }   // v389: rastro de aplicação (prévia do desenho)
+  else if(/^rs(Modo|A|B|Rumo|Larg)$/.test(f)){ r[f]=v; rerender=true; setTimeout(()=>rastroSheetRefresh(r.id),0); }   // v389: rastro de aplicação (prévia do desenho) · v397: janelinha
   else if(f==='resp'||f==='crea'){ r[f]=v; try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); d[f]=v; localStorage.setItem(RECOM_TEC_KEY, JSON.stringify(d)); }catch(e){} }
   else { r[f]=v; }
   saveRecom();
@@ -12022,8 +12026,10 @@ function recomCard(r,t){
       <button class="btn btn-ghost btn-sm" data-act="recomReabrir" data-id="${esc(r.id)}">↩️ Reabrir</button>`;
   }
   actions=`<button class="btn btn-outline btn-sm" data-act="recomPrint" data-id="${esc(r.id)}" title="Imprimir a recomendação técnica (receituário) em PDF">🖨 PDF</button> `+actions;
+  if(r.status!=='aprovada'&&r.tipo!=='ts'){ const RSm=rastroCalc(r); actions=`<button class="btn btn-outline btn-sm" data-act="rsAbrir" data-id="${esc(r.id)}" title="Rumo, ponto A e desenho do talhão que saem no PDF e no WhatsApp">📐 Rumo${RSm.rumo!=null?` ${fmtGrau(RSm.rumo)}${RSm.fonte==='sug'?'*':''}`:''}</button> `+actions; }   // v397: fácil de achar
   const sit=recomSit(r), aberto=recomAberto(r), nProd=its.filter(i=>i.produto).length;
-  const resumo=[nProd?`${nProd} produto(s)`:'sem produtos', area?`${num(area)} ha`:'', r.cultura||'', its.filter(i=>i.produto).slice(0,3).map(i=>i.produto).join(', ')+(nProd>3?'…':'')].filter(Boolean).join(' · ');
+  const RSr=(r.status!=='aprovada'&&r.tipo!=='ts')?rastroCalc(r):null;
+  const resumo=[nProd?`${nProd} produto(s)`:'sem produtos', area?`${num(area)} ha`:'', r.cultura||'', its.filter(i=>i.produto).slice(0,3).map(i=>i.produto).join(', ')+(nProd>3?'…':''), (RSr&&RSr.rumo!=null)?`📐 rumo ${fmtGrau(RSr.rumo)}${RSr.fonte==='sug'?' (sugerido)':''}`:''].filter(Boolean).join(' · ');
   return `<div class="recom-card ${st.cls}${aberto?'':' rc-fech'}" data-busca="${esc(recomBuscaTxt(r))}">
     <div class="rc-head" data-act="recomToggle" data-id="${esc(r.id)}" title="${aberto?'Encolher':'Expandir'}"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
       ${t&&!editable?`<span class="rc-tal">📍 ${esc(tNome(t))}</span>`:''}${(r.nome||r.opNome)?`<span class="rc-op">${esc(r.nome||r.opNome)}</span>`:''}<span class="spacer"></span>
@@ -12159,6 +12165,16 @@ function rastroCabPdf(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) r
     : kv('Ponto A (lat, long)',esc(geoFmt(R.a)))+kv('Rumo A + direção · NV',R.rumo!=null?`${fmtGrau(R.rumo)}${sug}`:'');
   const mini=R.lm?`<div class="rs-mini" title="Limite do talhão${R.modo==='aereo'?' e bússola com o rumo':' com o ponto A e o rumo'}">${rastroSvg(R,{w:170,h:128,mini:true})}</div>`:'';
   return {kv:kvs, mini}; }
+// v397: janelinha "📐 Rumo" — os mesmos campos da seção Rastro, aberta pelo botão do cartão (fácil de achar)
+function rastroSheetOpen(id){ const r=recomById(id); if(!r) return; const F=(f)=>`data-id="${esc(r.id)}" data-recf="${f}"`, t=findTalhao(r.talhao);
+  const html=`<div class="na-sheet tf-sheet rs-sheet" role="dialog" data-rs-sheet="${esc(r.id)}"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>📐 Rumo e ponto A</h3><span class="mut">${esc(t?tNome(t):r.talhao)}${r.opNome?` · ${esc(r.opNome)}`:''} · sai no PDF e no WhatsApp</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <p class="na-sub">Digite o <b>rumo</b> em graus (norte verdadeiro) ou os pontos A e B. Sem nada, o app sugere pelo formato do talhão (marcado *).</p>
+    ${rastroSecHtml(r, F)}
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="naFechar">Pronto</button></div></div>`;
+  let ov=document.getElementById('na-ov'); if(ov&&ov.querySelector('.rs-sheet')){ const sc=ov.querySelector('.na-sheet'); const top=sc?sc.scrollTop:0; ov.innerHTML=html; const sc2=ov.querySelector('.na-sheet'); if(sc2) sc2.scrollTop=top; return; }
+  novaAcaoFechar(); ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov'; ov.innerHTML=html; ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
+function rastroSheetRefresh(id){ const sh=document.querySelector('#na-ov .rs-sheet'); if(sh&&(!id||sh.dataset.rsSheet===id)) rastroSheetOpen(sh.dataset.rsSheet); }
 function rastroWaTxt(r){ const R=rastroCalc(r); if(R.rumo==null&&!R.a) return ''; return `${R.modo==='aereo'?'✈️ Rumo':'📐 Rastro'}: ${R.a?`A ${geoFmt(R.a)} · `:''}${R.b&&R.modo!=='aereo'?`B ${geoFmt(R.b)} · `:''}${fmtGrau(R.rumo)} NV${R.modo==='aereo'?` / volta ${fmtGrau(R.rec)}`:''} · ${fmtM(R.larg)} m${R.a?`\n📍 Ponto A: https://maps.google.com/?q=${R.a[0]},${R.a[1]}`:''}\n`; }
 // seção da recomendação (edição): tipo, pontos, rumo, largura, botões e a prévia do desenho
 function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', auto=rastroModo(Object.assign({},r,{rsModo:''}));
@@ -12170,7 +12186,7 @@ function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', aut
       <label>${aereo?'Faixa do avião (m)':'Largura da barra (m)'}<input class="cell" inputmode="decimal" ${F('rsLarg')} value="${esc(r.rsLarg||'')}" placeholder="${RASTRO_LARG[R.modo]}"></label></div>
     <div class="bulk-add" style="padding:0 12px 8px"><button class="btn btn-outline btn-sm" data-act="rsGps" data-id="${esc(r.id)}" title="Parado na cabeceira, grava a posição do celular como ponto A">📍 Meu GPS → ponto A</button><button class="btn btn-outline btn-sm" data-act="rsSugerir" data-id="${esc(r.id)}" title="Rumo e pontos pelo lado mais comprido do contorno">📐 Sugerir pelo talhão</button>${(r.rsA||r.rsB||String(r.rsRumo??'')!==''||r.rsModo)?`<button class="btn btn-ghost btn-sm" data-act="rsLimpar" data-id="${esc(r.id)}">Limpar</button>`:''}</div>
     ${R.lm?`<label class="rs-satlbl"><input type="checkbox" class="rs-sat"${rastroSatOn()?' checked':''}> fundo de satélite no desenho (PDF e prévia)</label>`:'<div class="rc-obs">🗺️ Este talhão ainda não tem contorno importado — o desenho sai no PDF quando o limite for importado em <b>Mapa → Limites</b>.</div>'}
-    ${(R.lm&&rastroSatOn()&&!rastroFundo(r.talhao,R.lm))?(rastroFundoPrep(r.talhao,R.lm).then(f=>{ if(f&&location.hash.startsWith('#/recomendacao')) route({keepScroll:true}); }),''):''}
+    ${(R.lm&&rastroSatOn()&&!rastroFundo(r.talhao,R.lm))?(rastroFundoPrep(r.talhao,R.lm).then(f=>{ if(f&&location.hash.startsWith('#/recomendacao')) route({keepScroll:true}); if(f) rastroSheetRefresh(r.id); }),''):''}
     <div class="rs-prev" data-rec="${esc(r.id)}">${rastroPdfHtml(r)||'<span class="mut">Informe o rumo ou os pontos A e B para ver o rastro.</span>'}</div>`; }
 function recomPdfLink(r){
   if(r.status==='aprovada') return `<div class="rx-link" style="border-color:#555;background:#f3f3f3"><span>✅ <b>Baixa já registrada</b>${r.retorno&&r.retorno.quem?' por '+esc(r.retorno.quem):''}${r.aprov&&r.aprov.ts?' · aprovada em '+fmtDataBR(_dISO(r.aprov.ts)):''} — esta cópia não tem link de baixa.</span></div>`;
@@ -14871,7 +14887,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
   if(e.target.classList&&e.target.classList.contains('lim-vinc')){ const v=e.target.value, de=e.target.dataset.id; if(v) limVincular(de, v); return; }   // v395
-  if(e.target.classList&&e.target.classList.contains('rs-sat')){ try{ localStorage.setItem(RS_SAT_KEY, e.target.checked?'1':'0'); }catch(x){} route({keepScroll:true}); return; }   // v392
+  if(e.target.classList&&e.target.classList.contains('rs-sat')){ try{ localStorage.setItem(RS_SAT_KEY, e.target.checked?'1':'0'); }catch(x){} route({keepScroll:true}); rastroSheetRefresh(); return; }   // v392
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.id==='pr-xlsx-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandleExcel(f); return; }
@@ -15440,10 +15456,11 @@ document.addEventListener('click',e=>{
       toast(`Vazão ${nf2.format(vazao)} L/ha: ${n} tanque(s) de ${num(tanque)} L cobrem ${num(area)} ha (${nf1.format(tanque/vazao)} ha por tanque)`);
     }
     else if(a.act==='rsSugerir'){ const r=recomById(a.id); if(!r) return; const lm=limitesAll()[r.talhao], sg=lm&&limRumoSugerido(lm); if(!sg){ toast('Talhão sem contorno importado (Mapa → Limites)'); return; }
-      r.rsA=geoFmt(sg.a); r.rsB=geoFmt(sg.b); r.rsRumo=String(sg.rumo).replace('.',','); saveRecom(); route({keepScroll:true}); toast(`Rumo ${fmtGrau(sg.rumo)} pelo lado maior do talhão (${sg.m} m)`); }
-    else if(a.act==='rsLimpar'){ const r=recomById(a.id); if(!r) return; ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>delete r[k]); saveRecom(); route({keepScroll:true}); }
+      r.rsA=geoFmt(sg.a); r.rsB=geoFmt(sg.b); r.rsRumo=String(sg.rumo).replace('.',','); saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); toast(sg.redondo?`Talhão redondo: rumo ${fmtGrau(sg.rumo)} (norte) pelo centro`:`Rumo ${fmtGrau(sg.rumo)} pelo lado maior do talhão (${sg.m} m)`); }
+    else if(a.act==='rsLimpar'){ const r=recomById(a.id); if(!r) return; ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>delete r[k]); saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); }
+    else if(a.act==='rsAbrir'){ rastroSheetOpen(a.id); }   // v397
     else if(a.act==='rsGps'){ const r=recomById(a.id); if(!r) return; if(!('geolocation' in navigator)){ toast('GPS não suportado neste aparelho'); return; } toast('📍 procurando o GPS…');
-      navigator.geolocation.getCurrentPosition(p=>{ r.rsA=`${(+p.coords.latitude).toFixed(6)}, ${(+p.coords.longitude).toFixed(6)}`; saveRecom(); route({keepScroll:true}); toast(`Ponto A gravado (±${Math.round(p.coords.accuracy||0)} m)`); }, e=>toast('Sem posição do GPS: '+(e&&e.message||'')), {enableHighAccuracy:true, timeout:15000, maximumAge:0}); }
+      navigator.geolocation.getCurrentPosition(p=>{ r.rsA=`${(+p.coords.latitude).toFixed(6)}, ${(+p.coords.longitude).toFixed(6)}`; saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); toast(`Ponto A gravado (±${Math.round(p.coords.accuracy||0)} m)`); }, e=>toast('Sem posição do GPS: '+(e&&e.message||'')), {enableHighAccuracy:true, timeout:15000, maximumAge:0}); }
     else if(a.act==='recomAjustVazao'){   // v372: mesma conta na recomendação (área da recomendação); leva para o Campo quando é de uma operação
       const r=recomById(a.id); if(!r) return; const wrap=act.closest('.app-adjust'), nEl=wrap&&wrap.querySelector('[data-adjust-n]'), n=numBR((nEl&&nEl.value)||''), tanque=_mmC(r.tanque)||0, area=+r.area||0;
       if(!n||n<=0){ toast('Informe o número de tanques'); return; } if(!tanque){ toast('Preencha o tanque (L) primeiro'); return; } if(!area){ toast('Recomendação sem área'); return; }
