@@ -210,7 +210,7 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
-- **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389)** — o PDF da recomendação (simples e
+- **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389, ajuste v390)** — o PDF da recomendação (simples e
   completo) traz, no cabeçalho de identificação, uma **miniatura do talhão** (contorno importado em Mapa → Limites,
   norte para cima) e, como texto junto dos outros dados, as coordenadas e o rumo. **Terrestre:** o ponto A e a seta do
   rumo na miniatura; nos dados, "Ponto A (lat, long)" e "Rumo A + direção · NV" em graus do norte verdadeiro, para
