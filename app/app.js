@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-391';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-392';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8949,11 +8949,33 @@ function rastroCalc(r){ const lm=limitesAll()[r.talhao]||null, modo=rastroModo(r
   else if(rumo==null&&lm){ const s=limRumoSugerido(lm); if(s){ rumo=s.rumo; a=s.a; b=s.b; fonte='sug'; } }
   const c=lm?limCentro(lm):(a||null); let passadas=0, largura=0;
   if(lm&&rumo!=null){ const P=geoProj(c), rad=Math.PI*rumo/180, n=[Math.cos(rad),-Math.sin(rad)]; let mn=1e12, mx=-1e12; (lm.coords[0]||[]).forEach(p=>{ const q=P.to(p), v=q[0]*n[0]+q[1]*n[1]; mn=Math.min(mn,v); mx=Math.max(mx,v); }); largura=mx-mn; passadas=Math.ceil(largura/larg); }
-  return {lm, modo, a, b, rumo, larg, fonte, c, largura, passadas, rec:rumo!=null?(rumo+180)%360:null}; }
+  return {lm, tid:r.talhao, modo, a, b, rumo, larg, fonte, c, largura, passadas, rec:rumo!=null?(rumo+180)%360:null}; }
 // desenho do talhão (norte para cima): terrestre = ponto A e a seta do rumo; aérea = bússola dentro do talhão com a seta do rumo
-function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, pad=o.mini?14:26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
+// ===== v392: FUNDO DE SATÉLITE no desenho do talhão — as mesmas imagens do Mapa (Esri World Imagery), montadas num canvas e embutidas no PDF =====
+let SAT_TILE_URL='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const RS_SAT_KEY='planejamento_rastro_sat', RS_FUNDO={};   // tid -> {key,url,z,x0,y0,w,h} ou {key,falhou} ou {key,pend}
+function rastroSatOn(){ try{ return localStorage.getItem(RS_SAT_KEY)!=='0'; }catch(e){ return true; } }
+function mercPx(lat,lng,z){ const n=Math.pow(2,z)*256, s=Math.sin(lat*Math.PI/180); return [(lng+180)/360*n, (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*n]; }
+function rastroFundoKey(lm){ const b=limBbox(lm); return [b.minLat,b.minLng,b.maxLat,b.maxLng,(lm.coords[0]||[]).length].join(','); }
+function rastroFundo(tid, lm){ const c=RS_FUNDO[tid]; return (rastroSatOn()&&c&&c.url&&lm&&c.key===rastroFundoKey(lm))?c:null; }
+// baixa os quadros (tiles) que cobrem o talhão com 8% de folga, no zoom em que a imagem fica com até ~1.400 px, e guarda como JPEG (data URL)
+function rastroFundoPrep(tid, lm){ lm=lm||limitesAll()[tid]; if(!tid||!lm||!lm.coords||!lm.coords[0]||!rastroSatOn()) return Promise.resolve(null);
+  const key=rastroFundoKey(lm), c=RS_FUNDO[tid]; if(c&&c.key===key){ if(c.pend) return c.pend; if(c.url) return Promise.resolve(c); if(c.falhou&&Date.now()-c.falhou<60000) return Promise.resolve(null); }
+  const bb=limBbox(lm), mLat=Math.max((bb.maxLat-bb.minLat)*0.08,0.0005), mLng=Math.max((bb.maxLng-bb.minLng)*0.08,0.0005), B={minLat:bb.minLat-mLat,maxLat:bb.maxLat+mLat,minLng:bb.minLng-mLng,maxLng:bb.maxLng+mLng};
+  let z=18, p0, p1; for(;z>10;z--){ p0=mercPx(B.maxLat,B.minLng,z); p1=mercPx(B.minLat,B.maxLng,z); if((p1[0]-p0[0])<=1400&&(p1[1]-p0[1])<=1400) break; }
+  const tx0=Math.floor(p0[0]/256), ty0=Math.floor(p0[1]/256), tx1=Math.floor(p1[0]/256), ty1=Math.floor(p1[1]/256), w=Math.max(1,Math.round(p1[0]-p0[0])), h=Math.max(1,Math.round(p1[1]-p0[1]));
+  const cv=document.createElement('canvas'); cv.width=w; cv.height=h; const ctx=cv.getContext('2d');
+  const carrega=(x,y)=>new Promise(res=>{ const im=new Image(); im.crossOrigin='anonymous'; const t=setTimeout(()=>res(null),8000); im.onload=()=>{ clearTimeout(t); res(im); }; im.onerror=()=>{ clearTimeout(t); res(null); }; im.src=SAT_TILE_URL.replace('{z}',z).replace('{x}',x).replace('{y}',y); });
+  const jobs=[]; for(let x=tx0;x<=tx1;x++) for(let y=ty0;y<=ty1;y++) jobs.push(carrega(x,y).then(im=>{ if(im){ try{ ctx.drawImage(im, x*256-p0[0], y*256-p0[1]); }catch(e){ return false; } } return !!im; }));
+  const pend=Promise.all(jobs).then(oks=>{ if(!oks.some(Boolean)) throw 0; const url=cv.toDataURL('image/jpeg',0.82); return RS_FUNDO[tid]={key, url, z, x0:p0[0], y0:p0[1], w, h}; }).catch(()=>{ RS_FUNDO[tid]={key, falhou:Date.now()}; return null; });
+  RS_FUNDO[tid]={key, pend}; return pend; }
+function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, F=o.semFundo?null:rastroFundo(R.tid, lm), pad=F?0:(o.mini?14:26);
+  // sem fundo: metros em volta do centro; com fundo: pixels do mapa (Web Mercator) no zoom da imagem, y para cima
+  const P0=geoProj(R.c), P=F?{to:p=>{ const m=mercPx(p[0],p[1],F.z); return [m[0],-m[1]]; }}:P0, rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
   let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; pts.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); });
+  if(F){ minx=F.x0; maxx=F.x0+F.w; miny=-(F.y0+F.h); maxy=-F.y0; }
   const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
+  const scM=F?sc/(156543.03392*Math.cos(R.c[0]*Math.PI/180)/Math.pow(2,F.z)):sc;   // px por metro (para a barra de escala)
   const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' '));
   let marca='';
   if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*(o.mini?0.26:0.19); marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.44, semNum:!!o.mini}); }
@@ -8964,14 +8986,17 @@ function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w
     // coordenadas do ponto A escritas dentro do talhão (no centro da área, que fica sempre dentro do contorno) — não na miniatura
     const qc=P.to(R.c), cx=X(qc), cy=Y(qc), txt=geoFmt(R.a), tw=txt.length*5.9+24, rx=Math.max(4,Math.min(W-tw-4,cx-tw/2)), ty=Math.max(ay+30,Math.min(H-40,cy+26));
     if(!o.mini) marca+=`<rect x="${rx.toFixed(1)}" y="${(ty-9).toFixed(1)}" width="${tw.toFixed(1)}" height="30" rx="4" fill="rgba(255,255,255,.92)" stroke="#c62828" stroke-width=".9"/><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+1).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#555" font-weight="700" letter-spacing=".04em">PONTO A (LAT, LONG)</text><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+14).toFixed(1)}" font-size="10.5" font-weight="800" font-family="ui-monospace,Menlo,Consolas,monospace" text-anchor="middle" fill="#b71c1c">${txt}</text>`; }
-  const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
-  const ha=lm.ha||limAreaHa(lm.coords);
+  const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*scM<=W/3).pop()||cand[0], wBar=+(mBar*scM).toFixed(1), bx0=F?10:pad-8, by0=H-9;
+  const ha=lm.ha||limAreaHa(lm.coords), d=poly.map(pp=>'M'+pp.replace(/ /g,' L')+' Z').join(' ');
+  const fundo=F?`<image href="${F.url}" x="${ox.toFixed(1)}" y="${oy.toFixed(1)}" width="${(F.w*sc).toFixed(1)}" height="${(F.h*sc).toFixed(1)}" preserveAspectRatio="none"/><path d="${d}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="4.5" stroke-linejoin="round"/>`:'';
+  const cont=F?`<path d="${d}" fill="rgba(255,255,255,.08)" stroke="#ffeb3b" stroke-width="2.2" stroke-linejoin="round" fill-rule="evenodd"/>`:`<path d="${d}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" fill-rule="evenodd"/>`;
+  const halo=F?' paint-order="stroke" stroke="#fff" stroke-width="3"':'';
   return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
-    <path d="${poly.map(pp=>'M'+pp.replace(/ /g,' L')+' Z').join(' ')}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round" fill-rule="evenodd"/>
+    ${fundo}${cont}
     ${marca}
-    <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111">N</text></g>
-    ${o.mini?'':`<line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
-    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha</text>`}
+    <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"${F?' stroke="#fff" stroke-width="1.2"':''}/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111"${halo}>N</text></g>${F&&!o.mini?`<text x="${W-4}" y="${H-3}" font-size="6.5" text-anchor="end" fill="#333"${halo}>Imagem: Esri World Imagery</text>`:''}
+    ${o.mini?'':`${F?`<rect x="${bx0-4}" y="${by0-16}" width="${wBar+8}" height="20" rx="3" fill="rgba(255,255,255,.75)"/>`:''}<line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
+    <text x="${W-6}" y="${H-(F?24:16)}" font-size="10" font-weight="700" text-anchor="end" fill="${F?'#fff':'#1b5e20'}"${F?' paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="2.5"':''}>${esc(o.nome||'')}</text><text x="${W-6}" y="${H-(F?13:5)}" font-size="8.5" text-anchor="end" fill="${F?'#fff':'#444'}"${F?' paint-order="stroke" stroke="rgba(0,0,0,.6)" stroke-width="2.5"':''}>${nf2.format(ha)} ha</text>`}
   </svg>`; }
 // bússola (norte verdadeiro): marcas a cada 10°, números a cada 30°, N/E/S/W, seta do rumo (cheia) e do rumo de volta (tracejada)
 function bussolaInner(c, cy, r, rumo, o){ o=o||{}; const rad=g=>(g-90)*Math.PI/180, k=r/70; let t='';
@@ -9006,8 +9031,9 @@ function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', aut
       <label>Rumo (° norte verdadeiro)<input class="cell" inputmode="decimal" ${F('rsRumo')} value="${esc(r.rsRumo??'')}" placeholder="${R.rumo!=null?fmtGrau(R.rumo):'ex.: 58,4'}"${R.fonte==='ab'?' title="calculado de A para B"':''}></label>
       <label>${aereo?'Faixa do avião (m)':'Largura da barra (m)'}<input class="cell" inputmode="decimal" ${F('rsLarg')} value="${esc(r.rsLarg||'')}" placeholder="${RASTRO_LARG[R.modo]}"></label></div>
     <div class="bulk-add" style="padding:0 12px 8px"><button class="btn btn-outline btn-sm" data-act="rsGps" data-id="${esc(r.id)}" title="Parado na cabeceira, grava a posição do celular como ponto A">📍 Meu GPS → ponto A</button><button class="btn btn-outline btn-sm" data-act="rsSugerir" data-id="${esc(r.id)}" title="Rumo e pontos pelo lado mais comprido do contorno">📐 Sugerir pelo talhão</button>${(r.rsA||r.rsB||String(r.rsRumo??'')!==''||r.rsModo)?`<button class="btn btn-ghost btn-sm" data-act="rsLimpar" data-id="${esc(r.id)}">Limpar</button>`:''}</div>
-    ${R.lm?'':'<div class="rc-obs">🗺️ Este talhão ainda não tem contorno importado — o desenho sai no PDF quando o limite for importado em <b>Mapa → Limites</b>.</div>'}
-    <div class="rs-prev">${rastroPdfHtml(r)||'<span class="mut">Informe o rumo ou os pontos A e B para ver o rastro.</span>'}</div>`; }
+    ${R.lm?`<label class="rs-satlbl"><input type="checkbox" class="rs-sat"${rastroSatOn()?' checked':''}> fundo de satélite no desenho (PDF e prévia)</label>`:'<div class="rc-obs">🗺️ Este talhão ainda não tem contorno importado — o desenho sai no PDF quando o limite for importado em <b>Mapa → Limites</b>.</div>'}
+    ${(R.lm&&rastroSatOn()&&!rastroFundo(r.talhao,R.lm))?(rastroFundoPrep(r.talhao,R.lm).then(f=>{ if(f&&location.hash.startsWith('#/recomendacao')) route({keepScroll:true}); }),''):''}
+    <div class="rs-prev" data-rec="${esc(r.id)}">${rastroPdfHtml(r)||'<span class="mut">Informe o rumo ou os pontos A e B para ver o rastro.</span>'}</div>`; }
 function recomPdfLink(r){
   if(r.status==='aprovada') return `<div class="rx-link" style="border-color:#555;background:#f3f3f3"><span>✅ <b>Baixa já registrada</b>${r.retorno&&r.retorno.quem?' por '+esc(r.retorno.quem):''}${r.aprov&&r.aprov.ts?' · aprovada em '+fmtDataBR(_dISO(r.aprov.ts)):''} — esta cópia não tem link de baixa.</span></div>`;
   const L=_PDFLINK||{link:recomLink(r), curto:false, qr:''};
@@ -9073,6 +9099,7 @@ function exportPlantioPDF(r){
 async function exportRecomPDF(id, modo){   // v370: modo 'simples' (padrão) ou 'completo' — só muda o PDF de aplicação
   const r=recomById(id); if(!r){ toast('Recomendação não encontrada'); return; } recomNorm(r); modo=modo==='completo'?'completo':'simples';
   _PDFLINK=await recomPdfPrep(r); const L=_PDFLINK;
+  try{ await Promise.race([rastroFundoPrep(r.talhao), new Promise(res=>setTimeout(res,7000))]); }catch(e){}   // v392: fundo de satélite da miniatura
   let h; try{ h=exportRecomPDF_(r, modo); } finally { _PDFLINK=null; }
   if(!h) return;
   const link=(r.status!=='aprovada'&&L)?L.link:'', curto=!!(L&&L.curto);
@@ -11693,6 +11720,7 @@ document.addEventListener('change',e=>{
   if(e.target.id==='compras-socomprar'){ comprasSoComprar=!!e.target.checked; route({keepScroll:true}); return; }
   if(e.target.id==='tl-talhao'){ location.hash='#/timeline'+(e.target.value?'/'+encodeURIComponent(e.target.value):''); return; }
   if(e.target.matches('[data-recf]')){ recomSetField(e.target); return; }
+  if(e.target.classList&&e.target.classList.contains('rs-sat')){ try{ localStorage.setItem(RS_SAT_KEY, e.target.checked?'1':'0'); }catch(x){} route({keepScroll:true}); return; }   // v392
   if(e.target.id==='pr-safra'){ PRECOS.atual=e.target.value; savePrecos(); route(); return; }
   if(e.target.id==='pr-pdf-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandlePdf(f); return; }
   if(e.target.id==='pr-xlsx-file'){ const f=e.target.files&&e.target.files[0]; e.target.value=''; if(f) prHandleExcel(f); return; }
