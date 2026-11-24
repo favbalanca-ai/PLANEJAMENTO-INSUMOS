@@ -211,13 +211,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
 - **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389)** — o PDF da recomendação (simples e
-  completo) ganhou o bloco **Rastro de aplicação** com o desenho do talhão (contorno importado em Mapa → Limites),
-  norte para cima, escala e área. **Terrestre:** o ponto A e a seta do rumo sobre o desenho, e ao lado o ponto A
-  (lat, long) e o rumo em graus do norte verdadeiro, para digitar no monitor John Deere (Linha AB → A + direção).
-  Dá para informar A + B (o rumo é calculado), A + rumo ou só o rumo; sem nada informado o app sugere o rumo pelo lado
-  mais comprido do talhão. **Aérea** (máquina do grupo Avião agrícola ou tipo escolhido à mão): a bússola (N/E/S/W,
-  graus a cada 30°) desenhada dentro do talhão, com a seta cheia do rumo atravessando a área e a tracejada do rumo de
-  volta, e ao lado os graus de ida e de volta. Na recomendação em edição há a seção **Rastro de
+  completo) traz, no cabeçalho de identificação, uma **miniatura do talhão** (contorno importado em Mapa → Limites,
+  norte para cima) e, como texto junto dos outros dados, as coordenadas e o rumo. **Terrestre:** o ponto A e a seta do
+  rumo na miniatura; nos dados, "Ponto A (lat, long)" e "Rumo A + direção · NV" em graus do norte verdadeiro, para
+  digitar no monitor John Deere. Dá para informar A + B (o rumo é calculado), A + rumo ou só o rumo; sem nada
+  informado o app sugere o rumo pelo lado mais comprido do talhão (marcado "sugerido"). **Aérea** (máquina do grupo
+  Avião agrícola ou tipo escolhido à mão): a bússola desenhada dentro do talhão com a seta cheia do rumo e a tracejada
+  da volta; nos dados, "Rumo aéreo · NV" e "Rumo de volta". Na recomendação em edição há a seção **Rastro de
   aplicação** (tipo, pontos, rumo, largura, botões 📍 Meu GPS → ponto A e 📐 Sugerir pelo talhão, prévia do desenho).
   A mensagem de WhatsApp leva A, B, rumo e o link do ponto A; uma recomendação nova herda o rastro da última do mesmo
   talhão. Funções `geoAz/geoDist/geoDest/geoProj`, `limRumoSugerido`, `rastroBorda`, `rastroModo`, `rastroCalc`,

@@ -8951,43 +8951,51 @@ function rastroCalc(r){ const lm=limitesAll()[r.talhao]||null, modo=rastroModo(r
   if(lm&&rumo!=null){ const P=geoProj(c), rad=Math.PI*rumo/180, n=[Math.cos(rad),-Math.sin(rad)]; let mn=1e12, mx=-1e12; (lm.coords[0]||[]).forEach(p=>{ const q=P.to(p), v=q[0]*n[0]+q[1]*n[1]; mn=Math.min(mn,v); mx=Math.max(mx,v); }); largura=mx-mn; passadas=Math.ceil(largura/larg); }
   return {lm, modo, a, b, rumo, larg, fonte, c, largura, passadas, rec:rumo!=null?(rumo+180)%360:null}; }
 // desenho do talhão (norte para cima): terrestre = ponto A e a seta do rumo; aérea = bússola dentro do talhão com a seta do rumo
-function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, pad=26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
+function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w||320, H=o.h||260, pad=o.mini?14:26, P=geoProj(R.c), rings=lm.coords.map(rg=>rg.map(P.to)), pts=rings[0];
   let minx=1e12,miny=1e12,maxx=-1e12,maxy=-1e12; pts.forEach(q=>{ minx=Math.min(minx,q[0]); miny=Math.min(miny,q[1]); maxx=Math.max(maxx,q[0]); maxy=Math.max(maxy,q[1]); });
   const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
   const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' '));
   let marca='';
-  if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*0.19; marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.44}); }
+  if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*(o.mini?0.26:0.19); marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.44, semNum:!!o.mini}); }
   else if(R.rumo!=null&&R.a){ const qa=P.to(R.a), ax=X(qa), ay=Y(qa), qb=P.to(R.b||geoDest(R.a,R.rumo,300)), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*12, hy=by-uy*12;
     marca=`<line x1="${ax}" y1="${ay}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#c62828" stroke-width="3"/><polygon points="${bx},${by} ${(hx-uy*6).toFixed(1)},${(hy+ux*6).toFixed(1)} ${(hx+uy*6).toFixed(1)},${(hy-ux*6).toFixed(1)}" fill="#c62828"/>
-      <circle cx="${ax}" cy="${ay}" r="10" fill="#fff" stroke="#c62828" stroke-width="2.2"/><text x="${ax}" y="${ay+4.5}" font-size="12" font-weight="800" text-anchor="middle" fill="#c62828">A</text>
-      <rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`;
-    // coordenadas do ponto A escritas dentro do talhão (no centro da área, que fica sempre dentro do contorno)
+      <circle cx="${ax}" cy="${ay}" r="${o.mini?8:10}" fill="#fff" stroke="#c62828" stroke-width="2.2"/><text x="${ax}" y="${ay+(o.mini?3.5:4.5)}" font-size="${o.mini?10:12}" font-weight="800" text-anchor="middle" fill="#c62828">A</text>
+      ${o.mini?'':`<rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`}`;
+    // coordenadas do ponto A escritas dentro do talhão (no centro da área, que fica sempre dentro do contorno) — não na miniatura
     const qc=P.to(R.c), cx=X(qc), cy=Y(qc), txt=geoFmt(R.a), tw=txt.length*5.9+24, rx=Math.max(4,Math.min(W-tw-4,cx-tw/2)), ty=Math.max(ay+30,Math.min(H-40,cy+26));
-    marca+=`<rect x="${rx.toFixed(1)}" y="${(ty-9).toFixed(1)}" width="${tw.toFixed(1)}" height="30" rx="4" fill="rgba(255,255,255,.92)" stroke="#c62828" stroke-width=".9"/><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+1).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#555" font-weight="700" letter-spacing=".04em">PONTO A (LAT, LONG)</text><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+14).toFixed(1)}" font-size="10.5" font-weight="800" font-family="ui-monospace,Menlo,Consolas,monospace" text-anchor="middle" fill="#b71c1c">${txt}</text>`; }
+    if(!o.mini) marca+=`<rect x="${rx.toFixed(1)}" y="${(ty-9).toFixed(1)}" width="${tw.toFixed(1)}" height="30" rx="4" fill="rgba(255,255,255,.92)" stroke="#c62828" stroke-width=".9"/><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+1).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#555" font-weight="700" letter-spacing=".04em">PONTO A (LAT, LONG)</text><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+14).toFixed(1)}" font-size="10.5" font-weight="800" font-family="ui-monospace,Menlo,Consolas,monospace" text-anchor="middle" fill="#b71c1c">${txt}</text>`; }
   const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
   const ha=lm.ha||limAreaHa(lm.coords);
   return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
     <polygon points="${poly[0]}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2" stroke-linejoin="round"/>${poly.slice(1).map(pp=>`<polygon points="${pp}" fill="#e6f2e4" stroke="#2e7d32" stroke-width="2"/>`).join('')}
     ${marca}
     <g transform="translate(${W-18},16)"><polygon points="0,-11 5,6 0,2 -5,6" fill="#111"/><text x="0" y="18" font-size="9" font-weight="700" text-anchor="middle" fill="#111">N</text></g>
-    <line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
-    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha</text>
+    ${o.mini?'':`<line x1="${bx0}" y1="${by0}" x2="${bx0+wBar}" y2="${by0}" stroke="#111" stroke-width="2.5"/><line x1="${bx0}" y1="${by0-4}" x2="${bx0}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><line x1="${bx0+wBar}" y1="${by0-4}" x2="${bx0+wBar}" y2="${by0+1}" stroke="#111" stroke-width="1.5"/><text x="${bx0+wBar/2}" y="${by0-6}" font-size="8.5" text-anchor="middle" fill="#111">${mBar>=1000?(mBar/1000)+' km':mBar+' m'}</text>
+    <text x="${W-6}" y="${H-16}" font-size="10" font-weight="700" text-anchor="end" fill="#1b5e20">${esc(o.nome||'')}</text><text x="${W-6}" y="${H-5}" font-size="8.5" text-anchor="end" fill="#444">${nf2.format(ha)} ha</text>`}
   </svg>`; }
 // bússola (norte verdadeiro): marcas a cada 10°, números a cada 30°, N/E/S/W, seta do rumo (cheia) e do rumo de volta (tracejada)
 function bussolaInner(c, cy, r, rumo, o){ o=o||{}; const rad=g=>(g-90)*Math.PI/180, k=r/70; let t='';
   for(let g=0;g<360;g+=10){ const big=g%30===0, r1=r-(big?9:4.5)*k; t+=`<line x1="${(c+r1*Math.cos(rad(g))).toFixed(1)}" y1="${(cy+r1*Math.sin(rad(g))).toFixed(1)}" x2="${(c+r*Math.cos(rad(g))).toFixed(1)}" y2="${(cy+r*Math.sin(rad(g))).toFixed(1)}" stroke="#333" stroke-width="${big?1.5:.7}"/>`;
-    if(big&&g%90!==0) t+=`<text x="${(c+(r-16*k)*Math.cos(rad(g))).toFixed(1)}" y="${(cy+(r-16*k)*Math.sin(rad(g))+2.5).toFixed(1)}" font-size="${(7.5*k).toFixed(1)}" text-anchor="middle" fill="#444">${g}</text>`; }
+    if(big&&g%90!==0&&!o.semNum) t+=`<text x="${(c+(r-16*k)*Math.cos(rad(g))).toFixed(1)}" y="${(cy+(r-16*k)*Math.sin(rad(g))+2.5).toFixed(1)}" font-size="${(7.5*k).toFixed(1)}" text-anchor="middle" fill="#444">${g}</text>`; }
   const card=[['N',0,'#c62828'],['E',90,'#111'],['S',180,'#111'],['W',270,'#111']].map(([l,g,col])=>`<text x="${(c+(r+8*k)*Math.cos(rad(g))).toFixed(1)}" y="${(cy+(r+8*k)*Math.sin(rad(g))+3.5*k).toFixed(1)}" font-size="${(10*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="${col}">${l}</text>`).join('');
   const SL=o.setaLen||(r-10*k);   // comprimento da seta (na aérea atravessa o talhão)
   const seta=(az,dash)=>`<g transform="rotate(${az.toFixed(1)} ${c} ${cy})"><line x1="${c}" y1="${cy}" x2="${c}" y2="${(cy-(SL-10*k)).toFixed(1)}" stroke="${dash?'#777':'#c62828'}" stroke-width="${dash?1.6:3.2}"${dash?' stroke-dasharray="4 3"':''}/><polygon points="${c},${(cy-SL).toFixed(1)} ${(c-5*k).toFixed(1)},${(cy-(SL-12*k)).toFixed(1)} ${(c+5*k).toFixed(1)},${(cy-(SL-12*k)).toFixed(1)}" fill="${dash?'#777':'#c62828'}"/></g>`;
   return `<g class="rs-rosa"><circle cx="${c}" cy="${cy}" r="${r}" fill="${o.fundo||'#fff'}" stroke="#333" stroke-width="1.5"/>${t}${card}${rumo!=null?seta((rumo+180)%360,true)+seta(rumo,false):''}<circle cx="${c}" cy="${cy}" r="3" fill="#111"/>
-    ${rumo!=null?`<rect x="${(c-24*k).toFixed(1)}" y="${(cy+8*k).toFixed(1)}" width="${(48*k).toFixed(1)}" height="${(16*k).toFixed(1)}" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${(cy+20*k).toFixed(1)}" font-size="${(11*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</g>`; }
+    ${rumo!=null&&!o.semNum?`<rect x="${(c-24*k).toFixed(1)}" y="${(cy+8*k).toFixed(1)}" width="${(48*k).toFixed(1)}" height="${(16*k).toFixed(1)}" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${(cy+20*k).toFixed(1)}" font-size="${(11*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</g>`; }
 function bussolaSvg(rumo, S){ S=S||170; return `<svg class="rs-bussola" viewBox="0 0 ${S} ${S}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bússola com o rumo de aplicação">${bussolaInner(S/2,S/2,S/2-14,rumo)}</svg>`; }
 // bloco do PDF (e prévia na tela): só o desenho — terrestre = limite + ponto A (coordenadas dentro) + seta do rumo; aérea = bússola dentro do talhão
 function rastroPdfHtml(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) return '';
   const t=findTalhao(r.talhao), aereo=R.modo==='aereo';
   const map=R.lm?rastroSvg(R,{w:420,h:300,nome:t?tNome(t):r.talhao}):(aereo&&R.rumo!=null?`<div class="rs-buss">${bussolaSvg(R.rumo,200)}</div>`:`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small>${R.a?`<br><b>Ponto A: ${esc(geoFmt(R.a))}</b>`:''}${R.rumo!=null?`<br><b>Rumo: ${fmtGrau(R.rumo)}</b>`:''}</div>`);
   return `<div class="rx-sec rs-sec"><h2>${aereo?`✈️ Aplicação aérea — rumo ${fmtGrau(R.rumo)}${R.rec!=null?` <small>volta ${fmtGrau(R.rec)} · graus do norte verdadeiro</small>`:''}`:`📐 Rastro de aplicação — ponto A e rumo${R.rumo!=null?` ${fmtGrau(R.rumo)}`:''} <small>norte verdadeiro · monitor John Deere: Linha AB → A + direção</small>`}${R.fonte==='sug'?' <small>(rumo sugerido pelo lado maior do talhão)</small>':''}</h2><div class="rs-mapbox">${map}</div></div>`; }
+// cabeçalho do PDF: coordenadas e rumo como texto (nos dados de identificação) + miniatura do talhão ao lado
+function rastroCabPdf(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) return {kv:'', mini:''};
+  const kv=(l,v)=>v?`<div><small>${l}</small><b class="rs-mono">${v}</b></div>`:'', sug=R.fonte==='sug'?' <small class="rs-sug">(sugerido)</small>':'';
+  const kvs=R.modo==='aereo'
+    ? kv('Rumo aéreo · NV',R.rumo!=null?`${fmtGrau(R.rumo)}${sug}`:'')+kv('Rumo de volta',R.rec!=null?fmtGrau(R.rec):'')
+    : kv('Ponto A (lat, long)',esc(geoFmt(R.a)))+kv('Rumo A + direção · NV',R.rumo!=null?`${fmtGrau(R.rumo)}${sug}`:'');
+  const mini=R.lm?`<div class="rs-mini" title="Limite do talhão${R.modo==='aereo'?' e bússola com o rumo':' com o ponto A e o rumo'}">${rastroSvg(R,{w:170,h:128,mini:true})}</div>`:'';
+  return {kv:kvs, mini}; }
 function rastroWaTxt(r){ const R=rastroCalc(r); if(R.rumo==null&&!R.a) return ''; return `${R.modo==='aereo'?'✈️ Rumo':'📐 Rastro'}: ${R.a?`A ${geoFmt(R.a)} · `:''}${R.b&&R.modo!=='aereo'?`B ${geoFmt(R.b)} · `:''}${fmtGrau(R.rumo)} NV${R.modo==='aereo'?` / volta ${fmtGrau(R.rec)}`:''} · ${fmtM(R.larg)} m${R.a?`\n📍 Ponto A: https://maps.google.com/?q=${R.a[0]},${R.a[1]}`:''}\n`; }
 // seção da recomendação (edição): tipo, pontos, rumo, largura, botões e a prévia do desenho
 function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', auto=rastroModo(Object.assign({},r,{rsModo:''}));
@@ -9151,12 +9159,12 @@ function pdfPronto(blob, nome, html, link, tal, alt){   // v370: alt = {rid, mod
 // v370: PDF SIMPLES (padrão) — só o que está preenchido: faixa de identificação, produtos (colunas que têm dado), calda e
 // condições em uma linha, compatibilidade em uma linha (bloco inteiro só com alerta), segurança curta, link de baixa, assinaturas
 function exportRecomPDFSimples_(r){
-  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
+  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto), RS=rastroCabPdf(r);   // v389: rastro no cabeçalho
   const kv=(l,v)=>v?`<div><small>${l}</small>${v}</div>`:'';
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
   const temAtivo=its.some(it=>it.ativo), temCar=its.some(it=>it.car), temReal=its.some(it=>it.real!=null), temTk=cd.haTk>0;
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))}</span></div>
-  <div class="rx-kv rx-kv-s">${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}${kv('Aplicação',esc(r.nome||''))}${kv('Estádio',esc(r.estadio||''))}${kv('Alvo',esc(r.alvo||''))}${kv('Máquina',esc(r.maquina||''))}</div>
+  <div class="rx-cab"><div class="rx-kv rx-kv-s">${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}${kv('Aplicação',esc(r.nome||''))}${kv('Estádio',esc(r.estadio||''))}${kv('Alvo',esc(r.alvo||''))}${kv('Máquina',esc(r.maquina||''))}${RS.kv}</div>${RS.mini}</div>
   <div class="rx-sec"><h2>Produtos — na ordem de mistura no tanque</h2>
     <table class="rx rx-s pdf-ops"><thead><tr><th style="width:5%">#</th><th>Produto</th><th class="num" style="width:13%">Dose/ha</th><th class="num" style="width:15%">Total (${num(area)} ha)</th>${temTk?'<th class="num" style="width:15%">Por tanque</th>':''}${temCar?'<th class="num" style="width:10%">Carência</th>':''}${temReal?'<th class="num" style="width:13%">Utilizado</th>':''}</tr></thead><tbody>`;
   its.forEach((it,i)=>{ const bR=bulaDoseRef(it), e=temTk?embDe(it.produto):null;
@@ -9178,7 +9186,6 @@ function exportRecomPDFSimples_(r){
   const cond=[]; if(r.ponta) cond.push(`ponta ${esc(r.ponta)}`); if(r.pressao) cond.push(`${esc(r.pressao)} bar`); if(r.velocidade) cond.push(`${esc(r.velocidade)} km/h`); if(r.horario) cond.push(`horário ${esc(r.horario)}`); if(+r.tmax) cond.push(`temperatura ≤ ${esc(String(r.tmax))} °C`); if(+r.urmin) cond.push(`umidade ≥ ${esc(String(r.urmin))} %`); if(+r.vmax) cond.push(`vento ≤ ${esc(String(r.vmax))} km/h`); if(r.cond) cond.push(esc(r.cond));
   const seg=[]; if(r.epi) seg.push(`EPI: ${esc(r.epi)}`); if(r.reentrada) seg.push(`reentrada ${esc(r.reentrada)} h`); if(temCar) seg.push('carência na tabela');
   if(calda.length||cond.length||seg.length) h+=`<div class="rx-sec rx-lines">${calda.length?`<div class="rx-line">💧 <b>Calda:</b> ${calda.join(' · ')}</div>`:''}${cond.length?`<div class="rx-line">🌤 <b>Condições:</b> ${cond.join(' · ')}</div>`:''}${seg.length?`<div class="rx-line">🦺 <b>Segurança:</b> ${seg.join(' · ')}</div>`:''}</div>`;
-  h+=rastroPdfHtml(r);   // v389: limite do talhão + linha AB / bússola
   if(r.obs) h+=`<div class="rx-sec"><h2>Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`;
   h+=recomPdfLink(r);
   h+=`<div class="rx-warn rx-warn-s">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Fazer o teste da jarra antes de misturar no tanque. Tríplice lavagem e devolução das embalagens vazias.</div>
@@ -9190,14 +9197,14 @@ function exportRecomPDF_(r, modo){
   if(r.tipo==='ts') return exportTsPDF(r);
   if(r.opKey && opTemSemente(r.opKey.split('|')[0], r.opKey.split('|')[1]||'') && plantioCalc(r.opKey)) return exportPlantioPDF(r);
   if(modo!=='completo') return exportRecomPDFSimples_(r);   // v370: simples é o padrão
-  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto);
+  const t=findTalhao(r.talhao), area=+r.area||0, cd=recomCalda(r), its=(r.itens||[]).filter(it=>it.produto), RS=rastroCabPdf(r);
   const kv=(l,v,w)=>`<div${w?` class="${w}"`:''}><small>${l}</small>${v||'<span class="mut2">—</span>'}</div>`;
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
-  <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-kv">
+  <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-cab"><div class="rx-kv">
     ${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
     ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}
-    ${r.nome?kv('Aplicação',esc(r.nome),'w2'):''}${r.tipoApl?kv('Tipo de aplicação',esc(r.tipoApl)):''}</div></div>
+    ${r.nome?kv('Aplicação',esc(r.nome),'w2'):''}${r.tipoApl?kv('Tipo de aplicação',esc(r.tipoApl)):''}${RS.kv}</div>${RS.mini}</div></div>
   <div class="rx-sec"><h2>2. Diagnóstico</h2><div class="rx-kv">
     ${kv('Alvo',esc(r.alvo||''),'w2')}${kv('Nível / infestação',esc(r.nivel||''),'w2')}${kv('Justificativa técnica',esc(r.justif||''),'w4')}</div></div>
   <div class="rx-sec"><h2>3. Produtos — na ordem de mistura no tanque</h2>
@@ -9218,7 +9225,6 @@ function exportRecomPDF_(r, modo){
   <div class="rx-sec"><h2>6. Segurança</h2><div class="rx-kv">
     ${kv('EPI obrigatório',esc(r.epi||''),'w2')}${kv('Intervalo de reentrada',r.reentrada?`${esc(r.reentrada)} h`:'')}${kv('Carência',its.some(it=>it.car)?'ver tabela':'')}</div>
     <div class="rx-warn">Respeitar a ordem de mistura, a carência e o intervalo de reentrada. Não aplicar fora das condições indicadas. Fazer a tríplice lavagem e destinar as embalagens vazias ao ponto de recebimento. Manter o receituário junto ao operador durante a aplicação.</div></div>
-  ${rastroPdfHtml(r)}
   ${r.obs?`<div class="rx-sec"><h2>7. Observações</h2><div class="rx-note">${esc(r.obs)}</div></div>`:''}
   ${recomPdfLink(r)}
   <div class="rx-sign"><div>Responsável técnico<br><b>${esc(r.resp||'')}</b>${r.crea?`<br>${esc(r.crea)}`:''}</div><div>Operador${(r.retorno&&r.retorno.quem)?`<br><b>${esc(r.retorno.quem)}</b>`:''}</div><div>Data / hora da execução${r.status==='aprovada'&&r.aprov&&r.aprov.ts?`<br><b>${esc(fmtData(new Date(r.aprov.ts).toISOString().slice(0,10)))}</b>`:''}</div></div>
