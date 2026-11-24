@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Mapa enquadra os limites da fazenda (v394)** — o enquadramento passou a ser feito pelos contornos dos talhões da
+  fazenda escolhida; pontos de monitoramento e anotações só entram se estiverem a até ~30 % de folga desses contornos.
+  Anotações feitas longe (cidade, estrada) não abrem mais o zoom até os talhões virarem pontinhos. Sem contorno na
+  fazenda, o enquadramento volta a usar os pontos.
 - **Rastro na recomendação enviada + Mapa sem puxar para o GPS (v393)** — a seção **Rastro de aplicação** (rumo, ponto A,
   largura, fundo de satélite) passou a aparecer também na recomendação já **enviada** ou em retorno (antes só no
   rascunho), sem liberar a edição dos produtos; na aprovada continua escondida. No **Mapa**, quando a tela é redesenhada
