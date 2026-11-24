@@ -765,7 +765,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area .rs-sec{break-inside:avoid;page-break-inside:avoid}
   #print-area .rs-sec h2 small{font-weight:400;font-size:9.5px;color:#555;text-transform:none;margin-left:6px}
   #print-area .rs-grid{display:grid;grid-template-columns:1.7fr 1fr;gap:12px;align-items:start}
-  #print-area .rs-mapbox{border:1px solid #cfd8dc;border-radius:6px;padding:4px;background:#fff}
+  #print-area .rs-mapbox{border:1px solid #cfd8dc;border-radius:6px;padding:4px;background:#fff;max-width:520px;margin:0 auto}
   #print-area .rs-map{display:block;width:100%;height:auto}
   #print-area .rs-sem{font-size:11px;color:#555;padding:40px 10px;text-align:center}
   #print-area .rs-kv div{border-bottom:1px dotted #bbb;padding:3px 0;font-size:12px}
@@ -2507,7 +2507,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rs-prev h2{font-size:13px;margin:0 0 6px;border:0;padding:0}
 .rs-prev h2 small{font-weight:400;font-size:11px;color:#667;margin-left:6px}
 .rs-prev .rs-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:10px;align-items:start}
-.rs-prev .rs-mapbox{border:1px solid #dfe5e8;border-radius:6px;padding:2px;background:#fff}
+.rs-prev .rs-mapbox{border:1px solid #dfe5e8;border-radius:6px;padding:2px;background:#fff;max-width:520px;margin:0 auto}
 .rs-prev .rs-map{width:100%;height:auto;display:block}
 .rs-prev .rs-sem{font-size:12px;color:#667;padding:30px 8px;text-align:center}
 .rs-prev .rs-kv div{font-size:12px;padding:3px 0;border-bottom:1px dotted #ccd}
@@ -12104,14 +12104,11 @@ function bussolaInner(c, cy, r, rumo, o){ o=o||{}; const rad=g=>(g-90)*Math.PI/1
   return `<g class="rs-rosa"><circle cx="${c}" cy="${cy}" r="${r}" fill="${o.fundo||'#fff'}" stroke="#333" stroke-width="1.5"/>${t}${card}${rumo!=null?seta((rumo+180)%360,true)+seta(rumo,false):''}<circle cx="${c}" cy="${cy}" r="3" fill="#111"/>
     ${rumo!=null?`<rect x="${(c-24*k).toFixed(1)}" y="${(cy+8*k).toFixed(1)}" width="${(48*k).toFixed(1)}" height="${(16*k).toFixed(1)}" rx="3" fill="#fff" stroke="#c62828"/><text x="${c}" y="${(cy+20*k).toFixed(1)}" font-size="${(11*k).toFixed(1)}" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(rumo)}</text>`:''}</g>`; }
 function bussolaSvg(rumo, S){ S=S||170; return `<svg class="rs-bussola" viewBox="0 0 ${S} ${S}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Bússola com o rumo de aplicação">${bussolaInner(S/2,S/2,S/2-14,rumo)}</svg>`; }
-// bloco do PDF (e prévia na tela): simples — terrestre = desenho + ponto A + rumo; aérea = bússola dentro do talhão + graus
+// bloco do PDF (e prévia na tela): só o desenho — terrestre = limite + ponto A (coordenadas dentro) + seta do rumo; aérea = bússola dentro do talhão
 function rastroPdfHtml(r){ const R=rastroCalc(r); if(!R.lm&&R.rumo==null&&!R.a) return '';
-  const t=findTalhao(r.talhao), aereo=R.modo==='aereo', kv=(l,v)=>v?`<div><small>${l}</small><b>${v}</b></div>`:'';
-  const map=R.lm?rastroSvg(R,{w:320,h:260,nome:t?tNome(t):r.talhao}):(aereo&&R.rumo!=null?`<div class="rs-buss">${bussolaSvg(R.rumo,200)}</div>`:`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small></div>`);
-  const info=aereo
-    ? `<div class="rs-kv">${kv('Rumo de aplicação',R.rumo!=null?`${fmtGrau(R.rumo)}`:'')}${kv('Rumo de volta',R.rec!=null?fmtGrau(R.rec):'')}<div class="rs-dica">Graus do norte verdadeiro. Seta cheia = rumo de aplicação; tracejada = volta.</div></div>`
-    : `<div class="rs-kv rs-jd">${kv('Ponto A (lat, long)',geoFmt(R.a))}${kv('Rumo (norte verdadeiro)',fmtGrau(R.rumo))}<div class="rs-dica">Monitor John Deere: Linha AB → <b>A + direção</b>. Graus decimais, WGS 84.</div></div>`;
-  return `<div class="rx-sec rs-sec"><h2>${aereo?'✈️ Aplicação aérea — rumo':'📐 Rastro de aplicação — ponto A e rumo'}${R.fonte==='sug'?' <small>rumo sugerido pelo lado maior do talhão</small>':''}</h2><div class="rs-grid"><div class="rs-mapbox">${map}</div><div class="rs-info">${info}</div></div></div>`; }
+  const t=findTalhao(r.talhao), aereo=R.modo==='aereo';
+  const map=R.lm?rastroSvg(R,{w:420,h:300,nome:t?tNome(t):r.talhao}):(aereo&&R.rumo!=null?`<div class="rs-buss">${bussolaSvg(R.rumo,200)}</div>`:`<div class="rs-sem">Contorno do talhão não importado.<br><small>Mapa → Limites → importar KML/KMZ/shapefile</small>${R.a?`<br><b>Ponto A: ${esc(geoFmt(R.a))}</b>`:''}${R.rumo!=null?`<br><b>Rumo: ${fmtGrau(R.rumo)}</b>`:''}</div>`);
+  return `<div class="rx-sec rs-sec"><h2>${aereo?`✈️ Aplicação aérea — rumo ${fmtGrau(R.rumo)}${R.rec!=null?` <small>volta ${fmtGrau(R.rec)} · graus do norte verdadeiro</small>`:''}`:`📐 Rastro de aplicação — ponto A e rumo${R.rumo!=null?` ${fmtGrau(R.rumo)}`:''} <small>norte verdadeiro · monitor John Deere: Linha AB → A + direção</small>`}${R.fonte==='sug'?' <small>(rumo sugerido pelo lado maior do talhão)</small>':''}</h2><div class="rs-mapbox">${map}</div></div>`; }
 function rastroWaTxt(r){ const R=rastroCalc(r); if(R.rumo==null&&!R.a) return ''; return `${R.modo==='aereo'?'✈️ Rumo':'📐 Rastro'}: ${R.a?`A ${geoFmt(R.a)} · `:''}${R.b&&R.modo!=='aereo'?`B ${geoFmt(R.b)} · `:''}${fmtGrau(R.rumo)} NV${R.modo==='aereo'?` / volta ${fmtGrau(R.rec)}`:''} · ${fmtM(R.larg)} m${R.a?`\n📍 Ponto A: https://maps.google.com/?q=${R.a[0]},${R.a[1]}`:''}\n`; }
 // seção da recomendação (edição): tipo, pontos, rumo, largura, botões e a prévia do desenho
 function rastroSecHtml(r, F){ const R=rastroCalc(r), aereo=R.modo==='aereo', auto=rastroModo(Object.assign({},r,{rsModo:''}));
