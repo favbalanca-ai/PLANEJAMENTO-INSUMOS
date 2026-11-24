@@ -2507,6 +2507,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rs-prev .rs-buss{text-align:center}.rs-prev .rs-buss svg{width:150px;height:150px}
 @media(max-width:640px){.rs-prev .rs-grid{grid-template-columns:1fr}}
 
+/* v392: opção do fundo de satélite na seção Rastro */
+.rs-satlbl{display:flex;align-items:center;gap:6px;margin:0 12px 8px;font-size:12.5px;color:#345}
+.rs-satlbl input{width:16px;height:16px;margin:0}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3001,4 +3005,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rs-prev .rs-sem{font-size:9.5px}
   .rs-prev .rs-kv div{font-size:9.5px}
   .rs-prev .rs-kv b{font-size:10.5px}
+  .rs-satlbl{font-size:10px}
 }

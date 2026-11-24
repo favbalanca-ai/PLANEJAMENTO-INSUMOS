@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Fundo de satélite no desenho do talhão (v392)** — a miniatura do PDF e a prévia da recomendação passam a vir com a
+  imagem de satélite por baixo do contorno (a mesma do Mapa: Esri World Imagery). O app baixa os quadros que cobrem o
+  talhão com 8 % de folga, monta num canvas (até ~1.400 px, JPEG) e embute no SVG (`rastroFundoPrep`, `rastroFundo`,
+  `mercPx`; cache em memória por talhão). Com fundo, o desenho usa a projeção do mapa (Web Mercator), contorno amarelo
+  com sombra, barra de escala corrigida e crédito da imagem. Sem internet ou se os quadros falharem, volta ao desenho
+  verde (a falha fica memorizada por 1 min). O PDF espera no máximo 7 s pelo fundo. Caixinha "fundo de satélite" na
+  seção Rastro de aplicação liga/desliga (`planejamento_rastro_sat`).
 - **Limites dos talhões importados + polígono com furo (v391)** — `app/limites.json` passou a trazer o contorno de 16
   talhões (antes só a ÁREA 1): ESTEVÃO, ÁREA 2, ÁREA 2 B, ÁREA 3, CAPOEIRINHA, RONCADOR, BARRO BRANCO, P200 e P120 vieram
   dos shapefiles do Drive (amostragem de solo 2022/2025) e os pivôs P 01 a P 06 da Espora vieram do KMZ do projeto de
