@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Botão "📐 Rumo" no cartão da recomendação (v397)** — a seção Rastro ficava escondida no fim do cartão expandido.
+  Agora o cartão traz o botão **📐 Rumo 000°** (com * quando é o rumo sugerido) ao lado de 🖨 PDF; ele abre uma
+  janelinha (`rastroSheetOpen`) só com tipo, ponto A, ponto B, rumo, largura, fundo de satélite e o desenho. Mudar
+  qualquer campo, usar GPS/Sugerir/Limpar ou o fundo chegar redesenha a janelinha (`rastroSheetRefresh`). O resumo do
+  cartão encolhido também mostra "📐 rumo 000° (sugerido)".
 - **Rumo visível em talhão redondo (v396)** — num pivô o "lado mais comprido" era um pedacinho de arco (≈90 m) e a
   seta ficava escondida sob o A. Agora, quando o maior lado reto é menor que 30 % da diagonal do talhão, o rumo
   sugerido passa a ser **000° (norte) pelo centro**, com A na borda sul (`limRumoSugerido` devolve `redondo:true`). E a
