@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-395';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-396';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8932,6 +8932,9 @@ function limRumoSugerido(lm){ const an=(lm&&lm.coords&&lm.coords[0])||[]; if(an.
   if(!segs.length) return null; let best=null;
   for(let i=0;i<segs.length;i++){ let d=segs[i].d, j=i, az0=segs[i].az; for(let k=1;k<segs.length;k++){ const s2=segs[(i+k)%segs.length]; let df=Math.abs(s2.az-az0); df=Math.min(df,360-df); if(df>6) break; d+=s2.d; j=(i+k)%segs.length; }
     if(!best||d>best.d) best={a:segs[i].a, b:segs[j].b, d}; }
+  // v396: talhão redondo (pivô) ou sem lado reto que valha: o maior "lado" é um pedacinho de arco — sugere norte→sul pelo centro
+  const bb=limBbox(lm), diag=geoDist([bb.minLat,bb.minLng],[bb.maxLat,bb.maxLng]);
+  if(best.d<0.3*diag){ const c=limCentro(lm), a=rastroBorda(lm,c,180), b=rastroBorda(lm,c,0); if(a&&b) return {a, b, rumo:0, m:Math.round(geoDist(a,b)), redondo:true}; }
   return {a:best.a, b:best.b, rumo:+geoAz(best.a,best.b).toFixed(1), m:Math.round(best.d)}; }
 // ponto B: onde a linha que sai de A no rumo dado cruza a borda do talhão (o cruzamento mais distante)
 function rastroBorda(lm,a,rumo){ const P=geoProj(limCentro(lm)), rad=Math.PI/180, d=[Math.sin(rumo*rad),Math.cos(rumo*rad)], o=P.to(a), rg=(lm.coords[0]||[]).map(P.to); let best=null;
@@ -8980,8 +8983,10 @@ function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w
   const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' '));
   let marca='';
   if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*(o.mini?0.26:0.19); marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.44, semNum:!!o.mini}); }
-  else if(R.rumo!=null&&R.a){ const qa=P.to(R.a), ax=X(qa), ay=Y(qa), qb=P.to(R.b||geoDest(R.a,R.rumo,300)), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*12, hy=by-uy*12;
-    marca=`<line x1="${ax}" y1="${ay}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#c62828" stroke-width="3"/><polygon points="${bx},${by} ${(hx-uy*6).toFixed(1)},${(hy+ux*6).toFixed(1)} ${(hx+uy*6).toFixed(1)},${(hy-ux*6).toFixed(1)}" fill="#c62828"/>
+  else if(R.rumo!=null&&R.a){ const qa=P.to(R.a), ax=X(qa), ay=Y(qa), pb=R.b||geoDest(R.a,R.rumo,300), qb=P.to(pb), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*12, hy=by-uy*12;
+    // v396: a reta do rumo atravessa o talhão: começa na borda atrás de A (rumo oposto) e vai até B/borda da frente
+    const tras=rastroBorda(lm,R.a,(R.rumo+180)%360), qt=tras?P.to(tras):qa, t0x=X(qt), t0y=Y(qt);
+    marca=`<line x1="${t0x}" y1="${t0y}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#c62828" stroke-width="3"/><polygon points="${bx},${by} ${(hx-uy*6).toFixed(1)},${(hy+ux*6).toFixed(1)} ${(hx+uy*6).toFixed(1)},${(hy-ux*6).toFixed(1)}" fill="#c62828"/>
       <circle cx="${ax}" cy="${ay}" r="${o.mini?8:10}" fill="#fff" stroke="#c62828" stroke-width="2.2"/><text x="${ax}" y="${ay+(o.mini?3.5:4.5)}" font-size="${o.mini?10:12}" font-weight="800" text-anchor="middle" fill="#c62828">A</text>
       ${o.mini?'':`<rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`}`;
     // coordenadas do ponto A escritas dentro do talhão (no centro da área, que fica sempre dentro do contorno) — não na miniatura
