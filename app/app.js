@@ -8956,11 +8956,14 @@ function rastroSvg(R, o){ const lm=R.lm; if(!lm) return ''; o=o||{}; const W=o.w
   const sc=Math.min((W-2*pad)/((maxx-minx)||1),(H-2*pad)/((maxy-miny)||1)), ox=(W-(maxx-minx)*sc)/2, oy=(H-(maxy-miny)*sc)/2;
   const X=q=>+(ox+(q[0]-minx)*sc).toFixed(1), Y=q=>+(oy+(maxy-q[1])*sc).toFixed(1), poly=rings.map(rg=>rg.map(q=>`${X(q)},${Y(q)}`).join(' '));
   let marca='';
-  if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*0.26; marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.46}); }
+  if(R.modo==='aereo'){ const qc=P.to(R.c), cx=X(qc), cy=Y(qc), r=Math.min(W,H)*0.19; marca=bussolaInner(cx,cy,r,R.rumo,{fundo:'none', setaLen:Math.min(W,H)*0.44}); }
   else if(R.rumo!=null&&R.a){ const qa=P.to(R.a), ax=X(qa), ay=Y(qa), qb=P.to(R.b||geoDest(R.a,R.rumo,300)), bx=X(qb), by=Y(qb), L=Math.hypot(bx-ax,by-ay)||1, ux=(bx-ax)/L, uy=(by-ay)/L, hx=bx-ux*12, hy=by-uy*12;
     marca=`<line x1="${ax}" y1="${ay}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="#c62828" stroke-width="3"/><polygon points="${bx},${by} ${(hx-uy*6).toFixed(1)},${(hy+ux*6).toFixed(1)} ${(hx+uy*6).toFixed(1)},${(hy-ux*6).toFixed(1)}" fill="#c62828"/>
       <circle cx="${ax}" cy="${ay}" r="10" fill="#fff" stroke="#c62828" stroke-width="2.2"/><text x="${ax}" y="${ay+4.5}" font-size="12" font-weight="800" text-anchor="middle" fill="#c62828">A</text>
-      <rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`; }
+      <rect x="${((ax+bx)/2-24).toFixed(1)}" y="${((ay+by)/2-9).toFixed(1)}" width="48" height="17" rx="3" fill="#fff" stroke="#c62828"/><text x="${((ax+bx)/2).toFixed(1)}" y="${((ay+by)/2+4).toFixed(1)}" font-size="11" font-weight="800" text-anchor="middle" fill="#c62828">${fmtGrau(R.rumo)}</text>`;
+    // coordenadas do ponto A escritas dentro do talhão (no centro da área, que fica sempre dentro do contorno)
+    const qc=P.to(R.c), cx=X(qc), cy=Y(qc), txt=geoFmt(R.a), tw=txt.length*5.9+24, rx=Math.max(4,Math.min(W-tw-4,cx-tw/2)), ty=Math.max(ay+30,Math.min(H-40,cy+26));
+    marca+=`<rect x="${rx.toFixed(1)}" y="${(ty-9).toFixed(1)}" width="${tw.toFixed(1)}" height="30" rx="4" fill="rgba(255,255,255,.92)" stroke="#c62828" stroke-width=".9"/><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+1).toFixed(1)}" font-size="7.5" text-anchor="middle" fill="#555" font-weight="700" letter-spacing=".04em">PONTO A (LAT, LONG)</text><text x="${(rx+tw/2).toFixed(1)}" y="${(ty+14).toFixed(1)}" font-size="10.5" font-weight="800" font-family="ui-monospace,Menlo,Consolas,monospace" text-anchor="middle" fill="#b71c1c">${txt}</text>`; }
   const cand=[50,100,200,250,500,1000,2000,5000], mBar=cand.filter(v=>v*sc<=W/3).pop()||cand[0], wBar=+(mBar*sc).toFixed(1), bx0=pad-8, by0=H-9;
   const ha=lm.ha||limAreaHa(lm.coords);
   return `<svg class="rs-map" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Contorno do talhão">
