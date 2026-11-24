@@ -744,6 +744,22 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   #print-area table.pop-t td.tot{font-weight:800}
   #print-area table.pop-t td.tot small{font-weight:400;color:#444}
   #print-area .pop-tot{display:flex;justify-content:space-between;gap:10px;margin:4px 0 8px;padding:6px 10px;border:1.5px solid #2f4a55;border-radius:6px;background:#dfe8ec;font-size:11.5px}
+  /* v389: rastro de aplicação (limite do talhão, linha AB, bússola) */
+  #print-area .rs-sec{break-inside:avoid;page-break-inside:avoid}
+  #print-area .rs-sec h2 small{font-weight:400;font-size:9.5px;color:#555;text-transform:none;margin-left:6px}
+  #print-area .rs-grid{display:grid;grid-template-columns:1.7fr 1fr;gap:12px;align-items:start}
+  #print-area .rs-mapbox{border:1px solid #cfd8dc;border-radius:6px;padding:4px;background:#fff;max-width:520px;margin:0 auto}
+  #print-area .rs-map{display:block;width:100%;height:auto}
+  #print-area .rs-sem{font-size:11px;color:#555;padding:40px 10px;text-align:center}
+  #print-area .rs-kv div{border-bottom:1px dotted #bbb;padding:3px 0;font-size:12px}
+  #print-area .rs-kv small{display:block;font-size:8.5px;color:#555;text-transform:uppercase;letter-spacing:.04em}
+  #print-area .rs-kv b{font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em}
+  #print-area .rs-jd b{font-size:15.5px}
+  #print-area .rs-rec{font-size:11px;color:#555;font-family:inherit}
+  #print-area .rs-dica{font-size:9.5px;color:#444;margin-top:6px;border:0!important;font-size:9.5px}
+  #print-area .rs-buss{text-align:center;margin-bottom:4px}
+  #print-area .rs-buss svg{width:170px;height:170px}
+  #print-area .rs-map,#print-area .rs-bussola{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* ---- mobile / toque ---- */
@@ -2469,6 +2485,22 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .fr-num small{font-size:10.5px;color:var(--muted);margin-top:1px}
 .fr-card.sem .fr-num b{color:var(--muted)}
 
+/* v389: prévia do rastro de aplicação na recomendação */
+.rs-prev{margin:0 12px 10px;padding:8px 10px;border:1px solid var(--line,#dfe5e8);border-radius:8px;background:#fff}
+.rs-prev h2{font-size:13px;margin:0 0 6px;border:0;padding:0}
+.rs-prev h2 small{font-weight:400;font-size:11px;color:#667;margin-left:6px}
+.rs-prev .rs-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:10px;align-items:start}
+.rs-prev .rs-mapbox{border:1px solid #dfe5e8;border-radius:6px;padding:2px;background:#fff;max-width:520px;margin:0 auto}
+.rs-prev .rs-map{width:100%;height:auto;display:block}
+.rs-prev .rs-sem{font-size:12px;color:#667;padding:30px 8px;text-align:center}
+.rs-prev .rs-kv div{font-size:12px;padding:3px 0;border-bottom:1px dotted #ccd}
+.rs-prev .rs-kv small{display:block;font-size:9px;color:#667;text-transform:uppercase;letter-spacing:.04em}
+.rs-prev .rs-kv b{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.rs-prev .rs-rec{font-size:11px;color:#667;font-family:inherit}
+.rs-prev .rs-dica{font-size:10.5px;color:#556;margin-top:6px;border:0!important}
+.rs-prev .rs-buss{text-align:center}.rs-prev .rs-buss svg{width:150px;height:150px}
+@media(max-width:640px){.rs-prev .rs-grid{grid-template-columns:1fr}}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -2959,4 +2991,8 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .fr-sub{font-size:9.5px}
   .fr-al{font-size:9.5px}
   .fr-num b{font-size:15.5px}
+  .rs-prev h2{font-size:10.5px}
+  .rs-prev .rs-sem{font-size:9.5px}
+  .rs-prev .rs-kv div{font-size:9.5px}
+  .rs-prev .rs-kv b{font-size:10.5px}
 }

@@ -210,6 +210,19 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Rastro de aplicação no PDF: limite do talhão, linha AB e bússola (v389)** — o PDF da recomendação (simples e
+  completo) ganhou o bloco **Rastro de aplicação** com o desenho do talhão (contorno importado em Mapa → Limites),
+  norte para cima, escala e área. **Terrestre:** o ponto A e a seta do rumo sobre o desenho, e ao lado o ponto A
+  (lat, long) e o rumo em graus do norte verdadeiro, para digitar no monitor John Deere (Linha AB → A + direção).
+  Dá para informar A + B (o rumo é calculado), A + rumo ou só o rumo; sem nada informado o app sugere o rumo pelo lado
+  mais comprido do talhão. **Aérea** (máquina do grupo Avião agrícola ou tipo escolhido à mão): a bússola (N/E/S/W,
+  graus a cada 30°) desenhada dentro do talhão, com a seta cheia do rumo atravessando a área e a tracejada do rumo de
+  volta, e ao lado os graus de ida e de volta. Na recomendação em edição há a seção **Rastro de
+  aplicação** (tipo, pontos, rumo, largura, botões 📍 Meu GPS → ponto A e 📐 Sugerir pelo talhão, prévia do desenho).
+  A mensagem de WhatsApp leva A, B, rumo e o link do ponto A; uma recomendação nova herda o rastro da última do mesmo
+  talhão. Funções `geoAz/geoDist/geoDest/geoProj`, `limRumoSugerido`, `rastroBorda`, `rastroModo`, `rastroCalc`,
+  `rastroSvg`, `bussolaSvg`, `rastroPdfHtml`, `rastroWaTxt`, `rastroSecHtml`; campos novos `rsModo/rsA/rsB/rsRumo/rsLarg`
+  na recomendação (sobem com ela, sem mudança no Code.gs).
 - **Frota no celular na mesma linha do Estoque (v388)** — em telas até 640 px os cartões grandes dão lugar a
   **cartões compactos** (`.fr-card`): nome, grupo, linha com uso na safra / litros / consumo / custo por hora ou km,
   a leitura do horímetro ou odômetro grande à direita e a borda na cor do estado (verde com registro, âmbar aviso,
