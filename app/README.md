@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Botões da janelinha da operação no quadro (v400)** — o rodapé da janelinha que abre ao tocar numa operação
+  (quadro/linha do tempo do Campo) tinha "Recuar/Avançar" e dois links soltos que quebravam linha. Agora: dois botões
+  grandes lado a lado, **🧑‍🌾 Abrir aplicação** (principal) e **📋 Planejamento**, e abaixo a linha "Ordem no quadro" com
+  ‹ Recuar / Avançar › (`.oq-pop-go`, `.oq-pop-ord`).
 - **Contorno em várias partes não é mais cortado (v399)** — quando o contorno tem mais de uma parte e a primeira era a
   menor, o desenho do PDF enquadrava só ela e o resto saía cortado. Agora `limitesAll` passa a parte **maior** para o
   primeiro anel (`limNorm`, memorizado), `limBbox` e o enquadramento de `rastroSvg` consideram todos os anéis, e a

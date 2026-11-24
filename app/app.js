@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-399';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-400';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -10875,9 +10875,8 @@ function oqPopOpen(card){
         ${pr.map(x=>`<tr><td>${esc(x.produto)}${x.extra?' <small class="mut">(extra)</small>':''}</td><td class="num">${esc(x.dose)}</td><td class="num">${esc(x.total)}</td></tr>`).join('')}</tbody></table>
         <div class="mut" style="font-size:11px">Total previsto para ${num(areaDe(t))} ha${Object.keys(f.r.doses||{}).length?' · doses realizadas quando informadas':''}.</div>`:'<div class="mut">Sem produtos nesta operação.</div>')}
       <div class="oq-pop-f">
-        <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="-1" data-key="${esc(key)}"${viz&&viz.i>0?'':' disabled'} title="Passar para antes da operação anterior">‹ Recuar</button>
-        <button class="btn btn-outline btn-sm" data-act="oqMover" data-dir="1" data-key="${esc(key)}"${viz&&viz.i<viz.lista.length-1?'':' disabled'} title="Passar para depois da próxima operação">Avançar ›</button>
-        <span class="spacer"></span>${podeTela('talhao')?`<a class="oq-pop-ver" data-act="oqPlan" data-key="${esc(key)}" title="Abrir esta operação no planejamento do talhão (insumos, doses, DAE)">Ver planejamento ›</a>`:''}<a class="oq-pop-ver" data-act="oqAbrir" data-key="${esc(key)}">Ver aplicação ›</a></div>
+        <div class="oq-pop-go"><button class="btn btn-primary" data-act="oqAbrir" data-key="${esc(key)}" title="Abrir a operação no Campo: registrar execução, recomendação, baixa">🧑‍🌾 Abrir aplicação</button>${podeTela('talhao')?`<button class="btn btn-outline" data-act="oqPlan" data-key="${esc(key)}" title="Abrir esta operação no planejamento do talhão (insumos, doses, DAE)">📋 Planejamento</button>`:''}</div>
+        <div class="oq-pop-ord"><span class="mut">Ordem no quadro</span><button class="btn btn-ghost btn-sm" data-act="oqMover" data-dir="-1" data-key="${esc(key)}"${viz&&viz.i>0?'':' disabled'} title="Passar para antes da operação anterior">‹ Recuar</button><button class="btn btn-ghost btn-sm" data-act="oqMover" data-dir="1" data-key="${esc(key)}"${viz&&viz.i<viz.lista.length-1?'':' disabled'} title="Passar para depois da próxima operação">Avançar ›</button></div></div>
     </div>`;
   document.body.appendChild(pop); card.classList.add('oq-sel');
   if(innerWidth>640){                                    // computador: embaixo do cartão (ou em cima, se não couber)
