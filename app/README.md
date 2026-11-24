@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Rastro na recomendação enviada + Mapa sem puxar para o GPS (v393)** — a seção **Rastro de aplicação** (rumo, ponto A,
+  largura, fundo de satélite) passou a aparecer também na recomendação já **enviada** ou em retorno (antes só no
+  rascunho), sem liberar a edição dos produtos; na aprovada continua escondida. No **Mapa**, quando a tela é redesenhada
+  (trocar de fazenda, voltar à tela) o acompanhamento do GPS só marca a posição (`geoSeguir(true, true)` →
+  `MAPA_GEO.soMarcar`), e o enquadramento fica nos limites da fazenda escolhida; centralizar no GPS só pelo botão 📍.
 - **Fundo de satélite no desenho do talhão (v392)** — a miniatura do PDF e a prévia da recomendação passam a vir com a
   imagem de satélite por baixo do contorno (a mesma do Mapa: Esri World Imagery). O app baixa os quadros que cobrem o
   talhão com 8 % de folga, monta num canvas (até ~1.400 px, JPEG) e embute no SVG (`rastroFundoPrep`, `rastroFundo`,

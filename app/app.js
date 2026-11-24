@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-392';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-393';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8855,7 +8855,7 @@ function recomCard(r,t){
       ${recomCondTxt(r)?`<span>🌤 ${esc(recomCondTxt(r))}</span>`:''}
       ${(r.epi||r.reentrada)?`<span>⚠️ ${esc(r.epi||'')}${r.reentrada?` · reentrada ${esc(r.reentrada)} h`:''}</span>`:''}
       ${r.resp?`<span>👤 ${esc(r.resp)}${r.crea?` · ${esc(r.crea)}`:''}</span>`:''}
-    </div>`;
+    </div>${r.status!=='aprovada'?sec('Rastro de aplicação <small class="mut" style="font-weight:400;text-transform:none">rumo, ponto A e fundo do desenho — pode ajustar mesmo depois de enviada</small>', rastroSecHtml(r, F)):''}`;
   let retBlock='';
   if(retEdit){
     retBlock=`<div class="rc-ret-in"><div class="app-grid" style="padding:8px 12px">
@@ -9680,7 +9680,7 @@ async function mapaInit(){
     {maxZoom:19, attribution:'Esri World Imagery'}).addTo(_map);
   MAPA_GEO.marker=null; MAPA_GEO.circle=null; MAPA_NDVI.layer=null; MAPA_NDVI.formas=[];
   if(ndviCfg().on) ndviAplicar();                       // camada NDVI (Sentinel-2) se estava ligada
-  if(geoSeguirOn()) geoSeguir(true);                     // acompanhar a posição se estava ligado
+  if(geoSeguirOn()) geoSeguir(true, true);               // acompanhar a posição se estava ligado — v393: só marca, sem puxar o mapa para o GPS (o enquadramento fica nos limites da fazenda)
   else if(MAPA_GEO.pos) geoDesenhar();
   const bounds=[];
   // contornos dos talhões, coloridos pela cultura da safra atual
@@ -9781,13 +9781,13 @@ function geoDesenhar(){ const L=window.L, q=MAPA_GEO.pos; if(!_map||!L||!q) retu
     MAPA_GEO.marker=L.circleMarker(ll,{radius:8,color:'#fff',weight:3,fillColor:'#1e88e5',fillOpacity:1,className:'mapa-eu'}).addTo(_map).bindTooltip('Você',{direction:'top',offset:[0,-8]}); }
   else { MAPA_GEO.marker.setLatLng(ll); MAPA_GEO.circle.setLatLng(ll).setRadius(q.acc||0); }
   try{ MAPA_GEO.marker.bringToFront(); }catch(e){}   // por cima dos limites e do rótulo do talhão
-  if(geoSeguirOn()){ if(!MAPA_GEO.centrou){ _map.setView(ll, Math.max(_map.getZoom(),16), {animate:false}); MAPA_GEO.centrou=true; } else if(!_map.getBounds().contains(ll)) _map.panTo(ll, {animate:false}); } }catch(e){} }   // sem animação: a tela pode trocar no meio
+  if(geoSeguirOn()&&!MAPA_GEO.soMarcar){ if(!MAPA_GEO.centrou){ _map.setView(ll, Math.max(_map.getZoom(),16), {animate:false}); MAPA_GEO.centrou=true; } else if(!_map.getBounds().contains(ll)) _map.panTo(ll, {animate:false}); } }catch(e){} }   // sem animação: a tela pode trocar no meio
 function geoAtualiza(p){ MAPA_GEO.pos={lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), ts:Date.now()}; geoDesenhar();
   const t=talhaoNaPosicao(MAPA_GEO.pos); geoStatus(`📍 ±${MAPA_GEO.pos.acc} m${t?' · em '+tNome(t):''}${navigator.onLine===false?' · sem internet (fundo indisponível)':''}`); }
-function geoSeguir(ligar){ if(!navigator.geolocation){ toast('Este aparelho não tem GPS disponível'); return; }
+function geoSeguir(ligar, soMarcar){ if(!navigator.geolocation){ toast('Este aparelho não tem GPS disponível'); return; }
   if(MAPA_GEO.watch!=null){ try{ navigator.geolocation.clearWatch(MAPA_GEO.watch); }catch(e){} MAPA_GEO.watch=null; }
-  if(!ligar){ lsSet(GEO_SEGUIR_KEY,'0'); MAPA_GEO.centrou=false; geoStatus(''); return; }
-  lsSet(GEO_SEGUIR_KEY,'1'); MAPA_GEO.centrou=false; geoStatus('📍 procurando o GPS…');
+  if(!ligar){ lsSet(GEO_SEGUIR_KEY,'0'); MAPA_GEO.centrou=false; MAPA_GEO.soMarcar=false; geoStatus(''); return; }
+  lsSet(GEO_SEGUIR_KEY,'1'); MAPA_GEO.centrou=false; MAPA_GEO.soMarcar=!!soMarcar; geoStatus('📍 procurando o GPS…');   // v393: soMarcar = mostra onde você está sem mexer no enquadramento
   MAPA_GEO.watch=navigator.geolocation.watchPosition(geoAtualiza, err=>{ geoStatus('✖ GPS indisponível ('+((err&&err.message)||'')+') — permita a localização', 'err'); }, {enableHighAccuracy:true, maximumAge:5000, timeout:20000}); }
 function mapaLocate(){ geoSeguir(!geoSeguirOn()); }
 // ponto dentro do limite do talhão (anel externo; raio-casting)
