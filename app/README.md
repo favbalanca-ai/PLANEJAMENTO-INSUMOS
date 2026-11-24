@@ -210,6 +210,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Botão "📐 Rumo" também na tela Campo (v398)** — o cartão da operação (ao lado de "📲 Enviar recomendação por
+  WhatsApp" e "🖨 PDF") ganhou o botão 📐 Rumo, que abre a mesma janelinha ligada à recomendação daquela operação
+  (`recomFromCampoOp` cria a recomendação se ainda não existir). O botão mostra o rumo atual (asterisco = sugerido).
 - **Botão "📐 Rumo" no cartão da recomendação (v397)** — a seção Rastro ficava escondida no fim do cartão expandido.
   Agora o cartão traz o botão **📐 Rumo 000°** (com * quando é o rumo sugerido) ao lado de 🖨 PDF; ele abre uma
   janelinha (`rastroSheetOpen`) só com tipo, ponto A, ponto B, rumo, largura, fundo de satélite e o desenho. Mudar

@@ -3138,7 +3138,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-397';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-398';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -14306,7 +14306,8 @@ V.campo = function(arg){
           <div class="camp-appout" data-appout="${esc(o.key)}">${campoAppOut(t.id,o.tagoi,o.op.itens,r)}</div>
           ${(()=>{ try{ const mr=mistAlvo('op:'+o.key); return mr?misturaHtml(mr, r.status!=='concluido'):''; }catch(e){ return ''; } })()}
           <div class="cp-btns"><button class="btn btn-wa btn-sm" data-act="waApp" data-key="${esc(o.key)}">📲 Enviar recomendação por WhatsApp</button>
-          <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${esc(o.key)}">🖨 PDF (com link de baixa)</button></div>
+          <button class="btn btn-outline btn-sm" data-act="pdfOp" data-key="${esc(o.key)}">🖨 PDF (com link de baixa)</button>
+          <button class="btn btn-outline btn-sm" data-act="rsAbrirOp" data-key="${esc(o.key)}" title="Rumo, ponto A e desenho do talhão que saem no PDF e no WhatsApp">📐 Rumo${(()=>{ const rr=recomDaOp(o.key).filter(x=>x.status!=='aprovada').sort((a,b)=>(b.ts||0)-(a.ts||0))[0]; if(!rr) return ''; const R=rastroCalc(rr); return R.rumo!=null?` ${fmtGrau(R.rumo)}${R.fonte==='sug'?'*':''}`:''; })()}</button></div>
         </div>
       </details>`}
       <div class="camp-obs"><label>Observações do campo</label><textarea data-edit="realObs" data-key="${esc(o.key)}" rows="2" placeholder="ex.: condições do tempo, ajustes, ocorrências">${esc(r.obs||'')}</textarea></div>
@@ -15459,6 +15460,7 @@ document.addEventListener('click',e=>{
       r.rsA=geoFmt(sg.a); r.rsB=geoFmt(sg.b); r.rsRumo=String(sg.rumo).replace('.',','); saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); toast(sg.redondo?`Talhão redondo: rumo ${fmtGrau(sg.rumo)} (norte) pelo centro`:`Rumo ${fmtGrau(sg.rumo)} pelo lado maior do talhão (${sg.m} m)`); }
     else if(a.act==='rsLimpar'){ const r=recomById(a.id); if(!r) return; ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>delete r[k]); saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); }
     else if(a.act==='rsAbrir'){ rastroSheetOpen(a.id); }   // v397
+    else if(a.act==='rsAbrirOp'){ const r=recomFromCampoOp(a.key); if(!r){ toast('Não foi possível abrir a recomendação desta operação'); return; } saveRecom(); rastroSheetOpen(r.id); }   // v398: pela tela Campo
     else if(a.act==='rsGps'){ const r=recomById(a.id); if(!r) return; if(!('geolocation' in navigator)){ toast('GPS não suportado neste aparelho'); return; } toast('📍 procurando o GPS…');
       navigator.geolocation.getCurrentPosition(p=>{ r.rsA=`${(+p.coords.latitude).toFixed(6)}, ${(+p.coords.longitude).toFixed(6)}`; saveRecom(); route({keepScroll:true}); rastroSheetRefresh(r.id); toast(`Ponto A gravado (±${Math.round(p.coords.accuracy||0)} m)`); }, e=>toast('Sem posição do GPS: '+(e&&e.message||'')), {enableHighAccuracy:true, timeout:15000, maximumAge:0}); }
     else if(a.act==='recomAjustVazao'){   // v372: mesma conta na recomendação (área da recomendação); leva para o Campo quando é de uma operação
