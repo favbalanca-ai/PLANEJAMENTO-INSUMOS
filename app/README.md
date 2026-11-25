@@ -210,6 +210,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Reta do rumo liga/desliga + marcar A e B no mapa (v402)** — na janelinha do rumo: caixinha **"mostrar a reta do
+  rumo no desenho (PDF e prévia)"** (`rsReta`, padrão ligada; desligada, o desenho sai só com o contorno); botão
+  **🗺️ Marcar A e B no mapa** abre o mapa do talhão com satélite (`rastroMapaOpen`, Leaflet como nos experimentos):
+  1º toque = A, 2º = B, 3º recomeça; mostra rumo A→B e distância; **Trocar A↔B**, **Limpar**, **Usar estes pontos**
+  (grava `rsA`/`rsB`, o rumo passa a ser calculado de A para B). Aviso quando o ponto A digitado está longe do
+  talhão (mais de 1,5× a diagonal). Só o A informado: o rumo é sugerido, mas o A continua o da pessoa.
 - **Recomendações compartilhadas entre aparelhos (v401)** — as recomendações de aplicação deixam de ficar só no aparelho
   que as criou: sincronizam pela aba **RECOMENDAÇÕES APP** (KEY|JSON, como as máquinas). Cada registro ganha o
   carimbo `_u`, que só muda quando o conteúdo muda (hash `_h` em `saveRecom`); o lote manda o tipo `__recom`
