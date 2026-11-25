@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-405';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-406';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -13535,8 +13535,11 @@ async function publicarPlanejamento(){
     // aparelhos puxarem a lista de preços junto com o resto (sincroniza entre celulares).
     try{ await syncPost(url, JSON.stringify({__precos:PRECOS})); lastPrecosPushSig=JSON.stringify(PRECOS); }catch(e){}
     syncBusy=false; setSyncStatus('ok'); markSynced();
-    addHist('push', !(r&&r.fail), 'Publicar preços: '+((r&&r.ok)||0)+' produtos');
-    toast('Publicado: '+((r&&r.ok)||0)+' preços (safra '+PRECOS.atual+'). O planejamento busca pela fórmula.');
+    const rel=+(r&&r.religados)||0;   // v406: células VALOR que estavam digitadas e voltaram a ser fórmula
+    addHist('push', !(r&&r.fail), 'Publicar preços: '+((r&&r.ok)||0)+' produtos'+(rel?' · '+rel+' fórmula(s) religada(s)':''));
+    toast('Publicado: '+((r&&r.ok)||0)+' preços (safra '+PRECOS.atual+')'+(rel?' · '+rel+' célula(s) VALOR religada(s)':'')+'. Puxando a planilha…');
+    // v406: puxa a planilha em seguida, para Cotação/Demanda/DRE mostrarem o preço novo sem precisar de Atualizar
+    try{ await syncPull({force:true, silentToast:true}); toast('Preços publicados e planilha atualizada'); }catch(e){}
   }catch(e){ syncBusy=false; setSyncStatus('err'); toast('Falha ao publicar os preços'); }
 }
 // Busca o preço da coluna VALOR (col S do PORTIFÓLIO) do planejamento e traz para
