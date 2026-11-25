@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Cotação avisa quando o módulo Preços tem outro valor (v405)** — o "Preço ref." da Cotação vem da planilha
+  (PORTIFÓLIO → aba PREÇOS, preenchida por **Publicar preços**), não direto do módulo Preços. Agora, quando o preço
+  à vista do módulo Preços é diferente do que veio da planilha (`precoModuloDe`/`precoDifere`), a célula mostra
+  "Preços: R$ x · publicar", a barra ganha o selo "⚠️ N preço(s) diferente(s) do módulo Preços" e um botão
+  **$ Abrir Preços**. O texto "edite o Preço ref. aqui" (não existia edição ali) foi trocado pela explicação certa.
 - **↩ Reabrir a contagem fechada ao alcance (v404)** — o botão existia só no rodapé da contagem, depois de todos os
   produtos. Agora aparece também no **cabeçalho** da contagem fechada, dentro da janelinha **Dados da contagem** e
   na **lista** (↩ nas fechadas). `contReabrir` fecha a janelinha se estiver aberta e leva para a contagem já reaberta.

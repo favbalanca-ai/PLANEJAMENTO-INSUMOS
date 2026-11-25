@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-404';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-405';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -55,6 +55,11 @@ function precoFinalIn(it, tipo, refs){
   return precoCompostoIn(it, tipo, refs);
 }
 function precoFinal(it, tipo){ return precoFinalIn(it, tipo, safraAtual().refs); }
+// v405: preço À VISTA que está no módulo Preços para este produto (0 se não existe lá). Serve para avisar quando
+// a planilha (PORTIFÓLIO → Cotação/Demanda) ainda está com outro valor: falta "Publicar preços" ou a fórmula foi sobrescrita.
+function precoModuloDe(prod){ try{ const s=safraAtual(); if(!s||!s.itens) return 0; const nm=String(prod||'').trim().toUpperCase();
+  const it=s.itens.find(x=>x&&!x.del&&String(x.produto||'').trim().toUpperCase()===nm); return it?(+precoFinalIn(it,'vista',s.refs)||0):0; }catch(e){ return 0; } }
+function precoDifere(prod, preco){ const m=precoModuloDe(prod); return (m>0&&Math.abs(m-(+preco||0))>0.005)?m:0; }
 function applyPrecoEdit(el){
   const k=el.dataset.pr, i=+el.dataset.i, s=safraAtual();
   const numv=v=>{ const n=parseFloat(String(v||'').replace(',','.')); return isFinite(n)?n:0; };
@@ -4756,6 +4761,7 @@ V.cotacao = function(){
   const order=Object.keys(groups).sort((a,b)=>(a==='(sem fornecedor)')-(b==='(sem fornecedor)')||a.localeCompare(b));
   const totalGeral=rows.reduce((a,r)=>a+r.valor,0);
   const filtroTxt=[cotaFornSel.size?`${cotaFornSel.size} fornecedor(es)`:'', cotaClasseSel.size?`${cotaClasseSel.size} classe(s)`:''].filter(Boolean).join(' · ');
+  const nDif=rows.filter(r=>precoDifere(r.produto,r.preco)).length;   // v405: itens cujo preço no módulo Preços é outro
   return `
   <div class="panel" style="margin-bottom:14px"><div class="panel-head"><h2>Fracionar por empreendimento</h2>
       <span class="sub">${sel.size?`${sel.size} cultura(s) selecionada(s)`:'todas as culturas'}</span></div>
@@ -4776,7 +4782,8 @@ V.cotacao = function(){
       ${classList.map(c=>`<button class="chip-f ${cotaClasseSel.has(c)?'on':''}" data-cotclsf="${esc(c)}">${esc(c==='—'?'(sem classe)':c)} <span style="opacity:.55">${clsCount[c]}</span></button>`).join('')}
     </div></div>
   <div class="toolbar"><div class="search"><input id="q-cot" placeholder="Buscar produto, classe ou fornecedor…"></div>
-    <span class="badge badge-muted">${order.length} fornecedor(es) · ${brl0(totalGeral)}${filtroTxt?` · filtro: ${filtroTxt}`:''} — edite o <b>Preço ref.</b> aqui</span>
+    <span class="badge badge-muted">${order.length} fornecedor(es) · ${brl0(totalGeral)}${filtroTxt?` · filtro: ${filtroTxt}`:''} · preço ref. = planilha (PORTIFÓLIO), vinda do módulo Preços após <b>Publicar preços</b></span>
+    ${nDif?`<span class="badge cot-dif-badge" title="O módulo Preços tem outro valor para estes produtos. Publique os preços e sincronize; se continuar diferente, a célula VALOR do PORTIFÓLIO foi digitada por cima da fórmula (rode ligarPrecos no Apps Script).">⚠️ ${nDif} preço(s) diferente(s) do módulo Preços</span>${podeModulo('precos')?`<button class="btn btn-outline btn-sm" data-act="pickmod" data-mod="precos">$ Abrir Preços</button>`:''}`:''}
     <div class="spacer"></div>
     <button class="btn btn-outline btn-sm" id="btn-cot-pdf">🖨 PDF (filtro)</button>
     <button class="btn btn-outline btn-sm" id="btn-cot-csv">⬇ CSV</button></div>
@@ -4790,7 +4797,7 @@ V.cotacao = function(){
       <td class="num">${dha>0?num(dha):'—'}</td>
       <td class="num">${num(r.comprar)}</td>
       <td>${esc(r.un)}</td>
-      <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
+      <td class="num">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}${(()=>{ const m=precoDifere(r.produto,r.preco); return m?`<br><small class="cot-dif" title="valor à vista no módulo Preços; a planilha ainda está com ${r.preco>0?brl(r.preco):'nada'}">Preços: ${brl(m)} · publicar</small>`:''; })()}</td>
       <td class="num">${cha>0?brl(cha):'—'}</td>
       <td class="num">${brl(r.valor)}</td></tr>`; }).join('')}</tbody>
     <tfoot class="tfoot"><tr><td colspan="7">Subtotal ${esc(forn)}</td><td class="num">${brl0(sub)}</td></tr></tfoot></table></div></div>`;

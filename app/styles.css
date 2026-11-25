@@ -2532,6 +2532,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ct-cell .ct-x:hover{opacity:1}
 .ct-cell .ct-x+.ct-in,.ct-cell .ct-in.ct-com-x{padding-left:28px}
 
+/* v405: Cotação — aviso quando o módulo Preços tem outro valor */
+.cot-dif{color:var(--amber);font-weight:600;white-space:nowrap}
+.cot-dif-badge{background:var(--amber-soft,#fff4d6);color:var(--amber);border-color:var(--amber)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
