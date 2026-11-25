@@ -2525,6 +2525,13 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rs-mk-wrap{background:none;border:0}
 .rs-mk{width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid #c62828;color:#c62828;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
 
+/* v403: contagem — ações na lista e ✕ no contado */
+.ct-acts{display:flex;gap:6px;align-items:center;margin-left:auto}
+.ct-cell{display:inline-flex;align-items:center;position:relative}
+.ct-cell .ct-x{position:absolute;left:3px;top:50%;transform:translateY(-50%);width:22px;height:22px;min-height:0;padding:0;font-size:11px;line-height:1;border-radius:6px;opacity:.75}
+.ct-cell .ct-x:hover{opacity:1}
+.ct-cell .ct-x+.ct-in,.ct-cell .ct-in.ct-com-x{padding-left:28px}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}

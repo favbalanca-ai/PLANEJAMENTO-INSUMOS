@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Contagem física: editar dados, excluir e apagar item (v403)** — na lista de contagens cada linha ganha
+  **Abrir · ✏️ · 🗑** (`.ct-acts`): o lápis abre a janelinha **Dados da contagem** (`contEditarOpen`) para corrigir
+  data, estoque, quem contou e observação (`contEditarSalvar`; o estoque só muda com a contagem aberta — fechada
+  mostra a dica de reabrir); a lixeira exclui direto da lista (`contExcluir` agora redesenha a lista quando já está
+  nela). Dentro da contagem, o mesmo botão **✏️ Editar dados** fica no cabeçalho e cada produto contado ganha um
+  **✕** dentro da caixa da quantidade (`contItemLimpar`): apaga o contado daquele produto, que volta a "não contado"
+  (o ✕ só aparece com a contagem aberta). Tudo marca `_u` e sobe pelo lote `__contagem`.
 - **Reta do rumo liga/desliga + marcar A e B no mapa (v402)** — na janelinha do rumo: caixinha **"mostrar a reta do
   rumo no desenho (PDF e prévia)"** (`rsReta`, padrão ligada; desligada, o desenho sai só com o contorno); botão
   **🗺️ Marcar A e B no mapa** abre o mapa do talhão com satélite (`rastroMapaOpen`, Leaflet como nos experimentos):
