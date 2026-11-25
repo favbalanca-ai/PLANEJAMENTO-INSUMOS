@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Transferências sem valores (v410)** — a ordem de transferência passa a mostrar só volume: caixa **Volume**
+  (soma, com a unidade quando é única; "unidades mistas" quando não), colunas Quantidade · Un · Conferido · Lote/validade
+  e total em volume; sem custo nem R$. No relatório em lista os valores (custo médio) só aparecem marcando a caixinha
+  **"mostrar valores"** na janelinha (desligada por padrão).
 - **Ordem de transferência (v409)** — um documento por transferência, no padrão da solicitação de cotação:
   nº `OT-aammdd-xxxx` (`transfNumero`), origem → destino, itens com princípio ativo, custo e valor, coluna "Conferido"
   em branco, campos Veículo/placa, Motorista, Saída, Chegada, Lotes/validade, Observações e assinaturas Entregue por /
