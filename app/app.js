@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-409';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-410';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -2747,11 +2747,12 @@ function transfPdfOpen(){ const L=transfLista(); if(!L.length){ toast('Nenhuma t
       <label style="grid-column:1/-1">Formato<select class="sel" id="tp-fmt"><option value="lista">Relatório em lista (todas numa tabela)</option><option value="ordem">Ordem de transferência (uma por página, com assinaturas)</option></select></label>
       <label class="chk" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="tp-pend" checked> incluir as ainda pendentes (não confirmadas na planilha)</label>
       <label class="chk" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="tp-ass" checked> linhas de assinatura (entregue / recebido)</label>
+      <label class="chk" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="tp-val"> mostrar valores (custo médio) no relatório em lista</label>
     </div>
     <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="transfPdfGerar">🖨 Gerar PDF</button><button class="btn btn-ghost btn-sm" data-act="naFechar">Cancelar</button></div></div>`;
   ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
 function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); return el?el:null; };
-  const ini=(g('tp-ini')||{}).value||'', fim=(g('tp-fim')||{}).value||'', sent=(g('tp-sent')||{}).value||'', prodQ=String((g('tp-prod')||{}).value||'').trim().toUpperCase(), pend=g('tp-pend')?g('tp-pend').checked:true, ass=g('tp-ass')?g('tp-ass').checked:true;
+  const ini=(g('tp-ini')||{}).value||'', fim=(g('tp-fim')||{}).value||'', sent=(g('tp-sent')||{}).value||'', prodQ=String((g('tp-prod')||{}).value||'').trim().toUpperCase(), pend=g('tp-pend')?g('tp-pend').checked:true, ass=g('tp-ass')?g('tp-ass').checked:true, val=g('tp-val')?g('tp-val').checked:false;   // v410: valores só se pedir
   const L=transfLista().filter(t=>(!ini||(t.data||'')>=ini)&&(!fim||(t.data||'')<=fim)&&(!sent||t.de===sent)&&(pend||!transfPendente(t))&&(!prodQ||(t.itens||[]).some(it=>String(it.produto||'').toUpperCase().includes(prodQ))))
     .sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))||((+a._u||0)-(+b._u||0)));   // no papel: mais antiga primeiro
   if(!L.length){ toast('Nenhuma transferência nesse filtro'); return; }
@@ -2762,7 +2763,7 @@ function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); r
   let body='', nIt=0, vTot=0; const porProd={}, porSent={};
   L.forEach((t,i)=>{ const its=(t.itens||[]).filter(it=>it.produto&&+it.qtd>0), st=transfPendente(t)?'<span class="tp-pend">pendente</span>':'✔ planilha', k=t.de+'>'+t.para; porSent[k]=(porSent[k]||0)+1;
     its.forEach((it,j)=>{ const q=+it.qtd||0, c=+it.custo||0, v=q*c; nIt++; vTot+=v; const P=porProd[it.produto]=porProd[it.produto]||{un:it.un||'', s:{}}; P.s[k]=(P.s[k]||0)+q;
-      body+=`<tr${j===0&&i>0?' class="tp-sep"':''}><td class="num">${j===0?i+1:''}</td><td>${j===0?esc(fmtDataBR(t.data)):''}</td><td>${j===0?`${esc(estoqueNome(t.de))} <b>→</b> ${esc(estoqueNome(t.para))}`:''}</td><td><b>${esc(it.produto)}</b></td><td class="num"><b>${fmtDose(q)}</b></td><td>${esc(it.un||'')}</td><td class="num">${c>0?brl(c):'—'}</td><td class="num">${v>0?brl0(v):'—'}</td><td>${j===0?esc([t.quem,t.obs].filter(Boolean).join(' · ')):''}</td><td>${j===0?st:''}</td></tr>`; }); });
+      body+=`<tr${j===0&&i>0?' class="tp-sep"':''}><td class="num">${j===0?i+1:''}</td><td>${j===0?esc(fmtDataBR(t.data)):''}</td><td>${j===0?`${esc(estoqueNome(t.de))} <b>→</b> ${esc(estoqueNome(t.para))}`:''}</td><td><b>${esc(it.produto)}</b></td><td class="num"><b>${fmtDose(q)}</b></td><td>${esc(it.un||'')}</td>${val?`<td class="num">${c>0?brl(c):'—'}</td><td class="num">${v>0?brl0(v):'—'}</td>`:''}<td>${j===0?esc([t.quem,t.obs].filter(Boolean).join(' · ')):''}</td><td>${j===0?st:''}</td></tr>`; }); });
   const sentTxt=Object.keys(porSent).map(k=>{ const [a,b]=k.split('>'); return `${estoqueNome(a).replace('Fazenda ','')} → ${estoqueNome(b).replace('Fazenda ','')}: ${porSent[k]}`; }).join(' · ');
   const chaves=Object.keys(FAZENDAS).map(k=>k+'>'+estoqueOutro(k));
   const resumo=Object.keys(porProd).sort((a,b)=>a.localeCompare(b,'pt')).map(p=>{ const P=porProd[p], a=P.s[chaves[0]]||0, b=P.s[chaves[1]]||0; return `<tr><td><b>${esc(p)}</b></td><td>${esc(P.un)}</td><td class="num">${a?fmtDose(a):'—'}</td><td class="num">${b?fmtDose(b):'—'}</td><td class="num"><b>${fmtDose(+(a-b).toFixed(4))}</b></td></tr>`; }).join('');
@@ -2770,35 +2771,35 @@ function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); r
   const h=`<div class="dm">
     <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027 · Estoque</div><h1>Transferências entre fazendas</h1><div class="dm-sub">gerado em ${hoje} · ${esc(per)}${sent?` · sentido ${esc(estoqueNome(sent))} → ${esc(estoqueNome(estoqueOutro(sent)))}`:''}${prodQ?` · produto "${esc(prodQ)}"`:''}${pend?'':' · só confirmadas na planilha'}</div></div>
       <div class="dm-filt"><span>${L.length} transferência(s)</span><span>${nIt} item(ns)</span></div></div>
-    <div class="dm-kpis"><div class="dm-kpi"><small>Transferências</small><b>${L.length}</b><i>${esc(sentTxt)}</i></div><div class="dm-kpi k3"><small>Itens</small><b>${nIt}</b><i>${Object.keys(porProd).length} produto(s)</i></div><div class="dm-kpi k2"><small>Valor movimentado</small><b>${brl0(vTot)}</b><i>pelo custo médio na data</i></div></div>
-    <table class="dm-t tp-t"><colgroup><col style="width:3%"><col style="width:8%"><col style="width:15%"><col style="width:22%"><col style="width:8%"><col style="width:4%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"></colgroup>
-      <thead><tr><th class="num">#</th><th>Data</th><th>Origem → destino</th><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Custo unit.</th><th class="num">Valor</th><th>Quem · obs</th><th>Situação</th></tr></thead>
-      <tbody>${body}</tbody><tfoot><tr><th colspan="7">Total</th><th class="num">${brl0(vTot)}</th><th colspan="2"></th></tr></tfoot></table>
+    <div class="dm-kpis"><div class="dm-kpi"><small>Transferências</small><b>${L.length}</b><i>${esc(sentTxt)}</i></div><div class="dm-kpi k3"><small>Itens</small><b>${nIt}</b><i>${Object.keys(porProd).length} produto(s)</i></div>${val?`<div class="dm-kpi k2"><small>Valor movimentado</small><b>${brl0(vTot)}</b><i>pelo custo médio na data</i></div>`:''}</div>
+    <table class="dm-t tp-t">${val?'<colgroup><col style="width:3%"><col style="width:8%"><col style="width:15%"><col style="width:22%"><col style="width:8%"><col style="width:4%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"></colgroup>':'<colgroup><col style="width:3%"><col style="width:9%"><col style="width:18%"><col style="width:28%"><col style="width:9%"><col style="width:5%"><col style="width:19%"><col style="width:9%"></colgroup>'}
+      <thead><tr><th class="num">#</th><th>Data</th><th>Origem → destino</th><th>Produto</th><th class="num">Qtd</th><th>Un</th>${val?'<th class="num">Custo unit.</th><th class="num">Valor</th>':''}<th>Quem · obs</th><th>Situação</th></tr></thead>
+      <tbody>${body}</tbody>${val?`<tfoot><tr><th colspan="7">Total</th><th class="num">${brl0(vTot)}</th><th colspan="2"></th></tr></tfoot>`:''}</table>
     <h2 class="dm-h2">Resumo por produto</h2>
     <table class="dm-t dm-sum"><thead><tr><th>Produto</th><th>Un</th><th class="num">${esc(lblA)}</th><th class="num">${esc(lblB)}</th><th class="num">Líquido (${esc(estoqueNome(kA[1]).replace('Fazenda ',''))} recebe)</th></tr></thead><tbody>${resumo}</tbody></table>
     ${ass?`<div class="dm-sign"><div>Entregue por (${esc(sent?estoqueNome(sent):'origem')})<br>_______________________</div><div>Recebido por (${esc(sent?estoqueNome(estoqueOutro(sent)):'destino')})<br>_______________________</div><div>Data<br>____/____/______</div></div>`:''}
-    <div class="dm-foot">Cada transferência vira duas linhas no razão da planilha (TRANSF. SAÍDA na origem e TRANSF. ENTRADA no destino), pelo custo médio do produto na data. O total das duas fazendas não muda. "pendente" = ainda não confirmada na planilha.</div>
+    <div class="dm-foot">Cada transferência vira duas linhas no razão da planilha (TRANSF. SAÍDA na origem e TRANSF. ENTRADA no destino)${val?', pelo custo médio do produto na data':''}. O total das duas fazendas não muda. "pendente" = ainda não confirmada na planilha.</div>
   </div>`;
   printDoc(h); toast('Gerando o PDF das transferências — escolha "Salvar como PDF"'); }
 // v409: ORDEM DE TRANSFERÊNCIA — um documento por transferência (nº, origem → destino, itens, veículo/motorista, assinaturas)
 function transfNumero(t){ const d=String(t.data||'').replace(/-/g,'').slice(2), id=String(t.id||'').replace(/^tf/,'').slice(-4).toUpperCase(); return `OT-${d||'000000'}-${id||'0000'}`; }
-function transfOrdemHtml(t, quebra, ass){ if(ass==null) ass=true; const its=(t.itens||[]).filter(it=>it.produto&&+it.qtd>0), pend=transfPendente(t), vTot=its.reduce((a,it)=>a+(+it.qtd||0)*(+it.custo||0),0);
-  const linhas=its.map((it,i)=>{ const q=+it.qtd||0, c=+it.custo||0; return `<tr><td class="num cq-n">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].ativos?`<div class="cq-at">${esc(PROD[it.produto].ativos)}</div>`:''}</td><td class="num"><b>${fmtDose(q)}</b></td><td>${esc(it.un||'')}</td><td class="num">${c>0?brl(c):'—'}</td><td class="num">${c>0?brl0(q*c):'—'}</td><td class="cq-fill"></td></tr>`; }).join('');
+function transfOrdemHtml(t, quebra, ass){ if(ass==null) ass=true; const its=(t.itens||[]).filter(it=>it.produto&&+it.qtd>0), pend=transfPendente(t), vol=its.reduce((a,it)=>a+(+it.qtd||0),0), uns=[...new Set(its.map(it=>String(it.un||'').trim()).filter(Boolean))];   // v410: só volume, sem valores
+  const linhas=its.map((it,i)=>{ const q=+it.qtd||0; return `<tr><td class="num cq-n">${i+1}</td><td><b>${esc(it.produto)}</b>${PROD[it.produto]&&PROD[it.produto].ativos?`<div class="cq-at">${esc(PROD[it.produto].ativos)}</div>`:''}</td><td class="num"><b>${fmtDose(q)}</b></td><td>${esc(it.un||'')}</td><td class="cq-fill"></td><td class="cq-fill"></td></tr>`; }).join('');
   return `<section class="cq ot${quebra?' cq-pb':''}">
     <div class="dm-head"><div><div class="dm-kicker">Ordem de transferência de estoque · Safra 2026/2027</div><h1>${esc(estoqueNome(t.de))} → ${esc(estoqueNome(t.para))}</h1><div class="dm-sub">${its.length} item(ns)${t.quem?` · lançada por ${esc(t.quem)}`:''}${pend?' · <span class="tp-pend">pendente na planilha</span>':' · ✔ confirmada na planilha'}</div></div>
       <div class="cq-id"><div><small>Nº</small><b>${esc(transfNumero(t))}</b></div><div><small>Data</small><b>${esc(fmtDataBR(t.data))}</b></div><div><small>Emissão</small><b>${esc(fmtDataBR(_hojeISO()))}</b></div></div></div>
     <div class="dm-kpis cq-kpis">
       <div class="dm-kpi k4"><small>Sai de</small><b>${esc(estoqueNome(t.de))}</b><i>estoque de origem</i></div>
       <div class="dm-kpi k2"><small>Entra em</small><b>${esc(estoqueNome(t.para))}</b><i>estoque de destino</i></div>
-      <div class="dm-kpi"><small>Valor</small><b>${brl0(vTot)}</b><i>pelo custo médio</i></div>
+      <div class="dm-kpi"><small>Volume</small><b>${fmtDose(+vol.toFixed(4))}${uns.length===1?' '+esc(uns[0]):''}</b><i>${its.length} item(ns)${uns.length>1?' · unidades mistas':''}</i></div>
       <div class="dm-kpi k3"><small>Veículo / placa</small><b class="cq-blank">&nbsp;</b><i>preencher</i></div></div>
-    <table class="dm-t cq-t"><colgroup><col style="width:4%"><col style="width:40%"><col style="width:11%"><col style="width:6%"><col style="width:12%"><col style="width:12%"><col style="width:15%"></colgroup>
-      <thead><tr><th class="num">#</th><th>Produto · princípio ativo</th><th class="num">Quantidade</th><th>Un</th><th class="num">Custo unit.</th><th class="num">Valor</th><th>Conferido (qtd)</th></tr></thead>
-      <tbody>${linhas}</tbody><tfoot><tr><th colspan="5">Total</th><th class="num">${brl0(vTot)}</th><th></th></tr></tfoot></table>
-    <div class="cq-cond"><div><small>Motorista</small><span></span></div><div><small>Saída (data/hora)</small><span></span></div><div><small>Chegada (data/hora)</small><span></span></div><div><small>Lotes / validade</small><span></span></div></div>
+    <table class="dm-t cq-t"><colgroup><col style="width:4%"><col style="width:46%"><col style="width:13%"><col style="width:7%"><col style="width:15%"><col style="width:15%"></colgroup>
+      <thead><tr><th class="num">#</th><th>Produto · princípio ativo</th><th class="num">Quantidade</th><th>Un</th><th>Conferido (qtd)</th><th>Lote / validade</th></tr></thead>
+      <tbody>${linhas}</tbody>${uns.length===1?`<tfoot><tr><th colspan="2">Total</th><th class="num">${fmtDose(+vol.toFixed(4))}</th><th>${esc(uns[0])}</th><th colspan="2"></th></tr></tfoot>`:''}</table>
+    <div class="cq-cond"><div><small>Motorista</small><span></span></div><div><small>Saída (data/hora)</small><span></span></div><div><small>Chegada (data/hora)</small><span></span></div><div><small>Conferido por</small><span></span></div></div>
     <div class="cq-obs"><small>Observações</small><span>${t.obs?esc(t.obs):''}</span><span></span></div>
     ${ass?`<div class="dm-sign"><div>Entregue por (${esc(estoqueNome(t.de))})<br>_______________________</div><div>Transportador<br>_______________________</div><div>Recebido por (${esc(estoqueNome(t.para))})<br>_______________________</div></div>`:''}
-    <div class="dm-foot">Esta ordem registra a saída do estoque de origem e a entrada no destino pelo custo médio (duas linhas no razão da planilha, etiqueta [#${esc(t.id||'')}]). O total das duas fazendas não muda. Confira as quantidades na chegada e anote divergências em Observações.</div>
+    <div class="dm-foot">Esta ordem registra a saída do estoque de origem e a entrada no destino (duas linhas no razão da planilha, etiqueta [#${esc(t.id||'')}]). O total das duas fazendas não muda. Confira as quantidades na chegada e anote divergências em Observações.</div>
   </section>`; }
 function transfOrdemPrint(id){ const t=OV.transf&&OV.transf[id]; if(!t||t.del){ toast('Transferência não encontrada'); return; } printDoc('<div class="dm">'+transfOrdemHtml(t,false,true)+'</div>'); toast('Gerando a ordem de transferência — escolha "Salvar como PDF"'); }
 // ===== v362: CONTAGEM FÍSICA (inventário) — digita o que foi contado, compara com o sistema e aplica os ajustes =====
