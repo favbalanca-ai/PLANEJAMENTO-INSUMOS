@@ -1205,6 +1205,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 /* ===== Cotação: solicitação por fornecedor ===== */
 @media print{
   #print-area .cq-pb{page-break-before:always}
+  #print-area .tp-t tbody tr.tp-sep td{border-top:2px solid #cfdcdf}   /* v408: separa as transferências */
+  #print-area .tp-pend{color:#b7791f;font-weight:700}
   #print-area .cq-id{display:grid;grid-template-columns:repeat(3,auto);gap:4px 12px;text-align:right}
   #print-area .cq-id small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#5c6f75;font-weight:700}
   #print-area .cq-id b{font-size:11.5px;color:#16323a;white-space:nowrap}
@@ -3166,7 +3168,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-407';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-408';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5895,8 +5897,53 @@ function transfDesfazer(id){ const t=OV.transf&&OV.transf[id]; if(!t||t.del) ret
   t.del=true; t._u=tsAgora(); saveOverrides(); loteAgendar('__transferencia'); route({keepScroll:true}); toast('Transferência desfeita'); }
 function transfListaHtml(lim){ const L=transfLista(); if(!L.length&&!syncUrl()) return ''; const rows=L.slice(0,lim||12).map(t=>{ const its=(t.itens||[]).map(it=>`<b>${esc(it.produto)}</b> ${fmtDose(it.qtd)} ${esc(it.un||'')}`).join(' · '), pend=transfPendente(t);
     return `<div class="transf-row"><span class="mut">${esc(fmtDataBR(t.data))}</span><span>${its} <span class="mut">${esc(estoqueNome(t.de))} → ${esc(estoqueNome(t.para))}</span>${t.quem?` <small class="mut">· ${esc(t.quem)}</small>`:''}${t.obs?` <small class="mut">· ${esc(t.obs)}</small>`:''}</span><span class="transf-st">${pend?'<span class="cr-st pend" title="ainda não foi para a planilha">pendente</span>':'<span class="cr-st ok" title="já está no razão da planilha">✔</span>'}</span><button class="icon-btn del" data-act="transfDesfazer" data-id="${esc(t.id)}" title="Desfazer (apaga as duas linhas do razão)">↩</button></div>`; }).join('');
-  return `<div class="panel"><div class="panel-head"><h2>🔁 Transferências entre fazendas</h2><span class="sub">${L.length?`${L.length} registrada(s)`:'nenhuma ainda'} · cada uma vira saída na origem e entrada no destino, pelo custo médio</span><div class="spacer"></div><button class="btn btn-primary btn-sm" data-act="transfAbrir">🔁 Transferir</button></div>
+  return `<div class="panel"><div class="panel-head"><h2>🔁 Transferências entre fazendas</h2><span class="sub">${L.length?`${L.length} registrada(s)`:'nenhuma ainda'} · cada uma vira saída na origem e entrada no destino, pelo custo médio</span><div class="spacer"></div>${L.length?`<button class="btn btn-outline btn-sm" data-act="transfPdf" title="Relatório das transferências (período, resumo por produto e assinaturas)">🖨 PDF</button>`:''}<button class="btn btn-primary btn-sm" data-act="transfAbrir">🔁 Transferir</button></div>
     <div class="transf-list">${rows||'<p class="mut" style="padding:8px 14px">Use quando um produto comprado para uma fazenda for usado na outra: o saldo sai de uma e entra na outra.</p>'}${L.length>(lim||12)?`<p class="mut" style="padding:4px 14px;font-size:12px">+${L.length-(lim||12)} mais antiga(s)</p>`:''}</div></div>`; }
+// ===== v408: PDF DAS TRANSFERÊNCIAS — janelinha de período/sentido e relatório imprimível =====
+function transfPdfOpen(){ const L=transfLista(); if(!L.length){ toast('Nenhuma transferência registrada'); return; } novaAcaoFechar();
+  const datas=L.map(t=>t.data||'').filter(Boolean).sort(), ini=datas[0]||_hojeISO(), fim=datas[datas.length-1]||_hojeISO();
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>🖨 PDF das transferências</h3><span class="mut">${L.length} registrada(s) · ${esc(fmtDataBR(ini))} a ${esc(fmtDataBR(fim))}</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <div class="app-grid" style="padding:6px 12px 8px">
+      <label>De<input type="date" class="cell" id="tp-ini" style="width:100%;min-width:150px" value="${esc(ini)}"></label>
+      <label>Até<input type="date" class="cell" id="tp-fim" style="width:100%;min-width:150px" value="${esc(fim)}"></label>
+      <label>Sentido<select class="sel" id="tp-sent"><option value="">Todos</option>${Object.keys(FAZENDAS).map(k=>`<option value="${k}">${esc(estoqueNome(k))} → ${esc(estoqueNome(estoqueOutro(k)))}</option>`).join('')}</select></label>
+      <label>Produto<input class="cell" id="tp-prod" list="prod-list" placeholder="todos" style="width:100%;text-align:left"></label>
+      <label class="chk" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="tp-pend" checked> incluir as ainda pendentes (não confirmadas na planilha)</label>
+      <label class="chk" style="grid-column:1/-1;display:flex;align-items:center;gap:8px;flex-direction:row"><input type="checkbox" id="tp-ass" checked> linhas de assinatura (entregue / recebido)</label>
+    </div>
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="transfPdfGerar">🖨 Gerar PDF</button><button class="btn btn-ghost btn-sm" data-act="naFechar">Cancelar</button></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov) novaAcaoFechar(); }); document.body.appendChild(ov); }
+function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); return el?el:null; };
+  const ini=(g('tp-ini')||{}).value||'', fim=(g('tp-fim')||{}).value||'', sent=(g('tp-sent')||{}).value||'', prodQ=String((g('tp-prod')||{}).value||'').trim().toUpperCase(), pend=g('tp-pend')?g('tp-pend').checked:true, ass=g('tp-ass')?g('tp-ass').checked:true;
+  const L=transfLista().filter(t=>(!ini||(t.data||'')>=ini)&&(!fim||(t.data||'')<=fim)&&(!sent||t.de===sent)&&(pend||!transfPendente(t))&&(!prodQ||(t.itens||[]).some(it=>String(it.produto||'').toUpperCase().includes(prodQ))))
+    .sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))||((+a._u||0)-(+b._u||0)));   // no papel: mais antiga primeiro
+  if(!L.length){ toast('Nenhuma transferência nesse filtro'); return; }
+  novaAcaoFechar();
+  const hoje=fmtDataBR(_hojeISO()), per=(ini||fim)?`${ini?fmtDataBR(ini):'início'} a ${fim?fmtDataBR(fim):'hoje'}`:'todo o período';
+  const row=(c,cls)=>`<tr${cls?` class="${cls}"`:''}>${c.map(x=>`<td${/^<td/.test(x)?'':''}>${x}</td>`).join('')}</tr>`;
+  let body='', nIt=0, vTot=0; const porProd={}, porSent={};
+  L.forEach((t,i)=>{ const its=(t.itens||[]).filter(it=>it.produto&&+it.qtd>0), st=transfPendente(t)?'<span class="tp-pend">pendente</span>':'✔ planilha', k=t.de+'>'+t.para; porSent[k]=(porSent[k]||0)+1;
+    its.forEach((it,j)=>{ const q=+it.qtd||0, c=+it.custo||0, v=q*c; nIt++; vTot+=v; const P=porProd[it.produto]=porProd[it.produto]||{un:it.un||'', s:{}}; P.s[k]=(P.s[k]||0)+q;
+      body+=`<tr${j===0&&i>0?' class="tp-sep"':''}><td class="num">${j===0?i+1:''}</td><td>${j===0?esc(fmtDataBR(t.data)):''}</td><td>${j===0?`${esc(estoqueNome(t.de))} <b>→</b> ${esc(estoqueNome(t.para))}`:''}</td><td><b>${esc(it.produto)}</b></td><td class="num"><b>${fmtDose(q)}</b></td><td>${esc(it.un||'')}</td><td class="num">${c>0?brl(c):'—'}</td><td class="num">${v>0?brl0(v):'—'}</td><td>${j===0?esc([t.quem,t.obs].filter(Boolean).join(' · ')):''}</td><td>${j===0?st:''}</td></tr>`; }); });
+  const sentTxt=Object.keys(porSent).map(k=>{ const [a,b]=k.split('>'); return `${estoqueNome(a).replace('Fazenda ','')} → ${estoqueNome(b).replace('Fazenda ','')}: ${porSent[k]}`; }).join(' · ');
+  const chaves=Object.keys(FAZENDAS).map(k=>k+'>'+estoqueOutro(k));
+  const resumo=Object.keys(porProd).sort((a,b)=>a.localeCompare(b,'pt')).map(p=>{ const P=porProd[p], a=P.s[chaves[0]]||0, b=P.s[chaves[1]]||0; return `<tr><td><b>${esc(p)}</b></td><td>${esc(P.un)}</td><td class="num">${a?fmtDose(a):'—'}</td><td class="num">${b?fmtDose(b):'—'}</td><td class="num"><b>${fmtDose(+(a-b).toFixed(4))}</b></td></tr>`; }).join('');
+  const [kA,kB]=chaves.map(k=>k.split('>')), lblA=`${estoqueNome(kA[0]).replace('Fazenda ','')} → ${estoqueNome(kA[1]).replace('Fazenda ','')}`, lblB=`${estoqueNome(kB[0]).replace('Fazenda ','')} → ${estoqueNome(kB[1]).replace('Fazenda ','')}`;
+  const h=`<div class="dm">
+    <div class="dm-head"><div><div class="dm-kicker">Planejamento de Safra 2026/2027 · Estoque</div><h1>Transferências entre fazendas</h1><div class="dm-sub">gerado em ${hoje} · ${esc(per)}${sent?` · sentido ${esc(estoqueNome(sent))} → ${esc(estoqueNome(estoqueOutro(sent)))}`:''}${prodQ?` · produto "${esc(prodQ)}"`:''}${pend?'':' · só confirmadas na planilha'}</div></div>
+      <div class="dm-filt"><span>${L.length} transferência(s)</span><span>${nIt} item(ns)</span></div></div>
+    <div class="dm-kpis"><div class="dm-kpi"><small>Transferências</small><b>${L.length}</b><i>${esc(sentTxt)}</i></div><div class="dm-kpi k3"><small>Itens</small><b>${nIt}</b><i>${Object.keys(porProd).length} produto(s)</i></div><div class="dm-kpi k2"><small>Valor movimentado</small><b>${brl0(vTot)}</b><i>pelo custo médio na data</i></div></div>
+    <table class="dm-t tp-t"><colgroup><col style="width:3%"><col style="width:8%"><col style="width:15%"><col style="width:22%"><col style="width:8%"><col style="width:4%"><col style="width:9%"><col style="width:9%"><col style="width:14%"><col style="width:8%"></colgroup>
+      <thead><tr><th class="num">#</th><th>Data</th><th>Origem → destino</th><th>Produto</th><th class="num">Qtd</th><th>Un</th><th class="num">Custo unit.</th><th class="num">Valor</th><th>Quem · obs</th><th>Situação</th></tr></thead>
+      <tbody>${body}</tbody><tfoot><tr><th colspan="7">Total</th><th class="num">${brl0(vTot)}</th><th colspan="2"></th></tr></tfoot></table>
+    <h2 class="dm-h2">Resumo por produto</h2>
+    <table class="dm-t dm-sum"><thead><tr><th>Produto</th><th>Un</th><th class="num">${esc(lblA)}</th><th class="num">${esc(lblB)}</th><th class="num">Líquido (${esc(estoqueNome(kA[1]).replace('Fazenda ',''))} recebe)</th></tr></thead><tbody>${resumo}</tbody></table>
+    ${ass?`<div class="dm-sign"><div>Entregue por (${esc(sent?estoqueNome(sent):'origem')})<br>_______________________</div><div>Recebido por (${esc(sent?estoqueNome(estoqueOutro(sent)):'destino')})<br>_______________________</div><div>Data<br>____/____/______</div></div>`:''}
+    <div class="dm-foot">Cada transferência vira duas linhas no razão da planilha (TRANSF. SAÍDA na origem e TRANSF. ENTRADA no destino), pelo custo médio do produto na data. O total das duas fazendas não muda. "pendente" = ainda não confirmada na planilha.</div>
+  </div>`;
+  printDoc(h); toast('Gerando o PDF das transferências — escolha "Salvar como PDF"'); }
 // ===== v362: CONTAGEM FÍSICA (inventário) — digita o que foi contado, compara com o sistema e aplica os ajustes =====
 // Uma contagem: {id, data, local ('' = unificado, 'FA'/'FE'), status aberta|fechada, quem, obs, itens:{produto:{qtd}}, ajustes:[{produto, un, qtd(±), custo, sist, cont}]}.
 // Fechar = calcula contado − sistema para cada produto CONTADO (em branco = não contado, não mexe) e manda os ajustes à planilha
@@ -15298,7 +15345,7 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomSimil'){ const k=`${a.id}|${a.i}`; RECOM_UI.sim=(RECOM_UI.sim===k)?'':k; route({keepScroll:true}); }   // v349: similares com estoque
     else if(a.act==='recomTrocarIns'){ recomTrocarIns(a.id, a.i, a.novo); }
     else if(a.act==='transfAbrir'){ transfAbrir({produto:a.prod||'', de:a.de||'', para:a.para||'', qtd:+a.qtd||0}); }   // v361: transferência entre fazendas
-    else if(a.act==='transfFechar'){ transfFechar(); } else if(a.act==='transfGravar'){ transfGravar(); } else if(a.act==='transfDesfazer'){ transfDesfazer(a.id); }
+    else if(a.act==='transfFechar'){ transfFechar(); } else if(a.act==='transfGravar'){ transfGravar(); } else if(a.act==='transfDesfazer'){ transfDesfazer(a.id); } else if(a.act==='transfPdf'){ transfPdfOpen(); } else if(a.act==='transfPdfGerar'){ transfPdfGerar(); }
     else if(a.act==='movAvAbrir'){ movAvAbrir({tipo:a.tipo||'', ref:a.ref||'', produto:a.prod||'', qtd:+a.qtd||0, pessoa:a.pessoa||'', local:a.local||''}); }   // v384
     else if(a.act==='movAvFechar'){ movAvFechar(); } else if(a.act==='movAvGravar'){ movAvGravar(); } else if(a.act==='movAvDesfazer'){ movAvDesfazer(a.id); }
     else if(a.act==='renAbrir'){ renAbrir({de:a.prod||''}); } else if(a.act==='renFechar'){ renFechar(); } else if(a.act==='renGravar'){ renGravar(); }   // v366: renomear/mesclar produto

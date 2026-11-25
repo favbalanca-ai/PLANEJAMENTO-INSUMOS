@@ -1188,6 +1188,8 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
 /* ===== Cotação: solicitação por fornecedor ===== */
 @media print{
   #print-area .cq-pb{page-break-before:always}
+  #print-area .tp-t tbody tr.tp-sep td{border-top:2px solid #cfdcdf}   /* v408: separa as transferências */
+  #print-area .tp-pend{color:#b7791f;font-weight:700}
   #print-area .cq-id{display:grid;grid-template-columns:repeat(3,auto);gap:4px 12px;text-align:right}
   #print-area .cq-id small{display:block;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;color:#5c6f75;font-weight:700}
   #print-area .cq-id b{font-size:11.5px;color:#16323a;white-space:nowrap}
