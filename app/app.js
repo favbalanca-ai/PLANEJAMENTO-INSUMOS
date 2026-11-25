@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-406';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-407';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -4684,6 +4684,7 @@ V.compras = function(){
     <td class="c-full"><b>${esc(r.produto)}</b></td>
     <td class="num c-more" data-th="Demanda">${num(r.demanda)}</td>
     <td class="num c-more" data-th="Estoque" title="${r.saida>0?('Estoque '+num(r.estoque)+' − aplicado '+num(r.saida)+' = saldo '+num(r.saldo)):'saldo '+num(r.saldo)}">${num(r.saldo)}</td>
+    ${r.saida>0?`<td class="num c-more sm-only" data-th="Já aplicado" title="baixas já feitas: saem da demanda e do estoque">${num(r.saida)}</td><td class="num c-more sm-only" data-th="Falta aplicar">${num(Math.max(0,r.demanda-r.saida))}</td>`:''}
     <td class="num c-more" data-th="Em pedido">${r.pedido>0?num(r.pedido):'—'}</td>
     <td class="num c-more" data-th="A caminho" title="${r.caminho>0?`a entregar ${num(r.aEntregar)} · em trânsito ${num(r.emTransito)} · pendências ${num(r.pendencias)}`:'NF-e: contratos a entregar + notas em trânsito + pendências de recebimento'}">${r.caminho>0?num(r.caminho):'—'}</td>
     <td class="num" data-th="A comprar"><b>${num(r.comprar)}</b></td>
@@ -4691,7 +4692,8 @@ V.compras = function(){
     <td class="num c-more" data-th="Preço">${r.preco>0?brl(r.preco):'<span class="pill pill-noprice">s/ preço</span>'}</td>
     <td class="num c-more" data-th="Valor">${r.valor>0?brl(r.valor):'—'}</td>
     <td class="c-more" data-th="Fornecedor">${esc(r.empresa||'—')}</td>
-    <td class="c-more" data-th="Status">${pill(r.status)}</td></tr>`;
+    <td class="c-more" data-th="Status">${pill(r.status)}</td>
+    <td class="c-more sm-only cp-conta" data-th="Conta">${r.saida>0?`(${num(r.demanda)} − ${num(r.saida)} aplicado)`:num(r.demanda)} − ${num(r.saldo)} estoque${r.pedido>0?` − ${num(r.pedido)} pedido`:''}${r.caminho>0?` − ${num(r.caminho)} a caminho`:''} = <b>${num(r.comprar)}</b></td></tr>`;
   const groupsHtml=classes.map(cl=>{
     const g=groups[cl].slice().sort((a,b)=>b.valor-a.valor||(a.produto||'').localeCompare(b.produto||''));
     const sub=g.reduce((a,r)=>a+r.valor,0), n=g.length, key=`cg|${cl}`, collapsed=collapsedOps.has(key);
