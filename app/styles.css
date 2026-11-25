@@ -2519,6 +2519,12 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rs-sheet .rs-prev{margin:0 12px 10px}
 .rs-sheet .app-grid{padding:6px 12px 6px}
 
+/* v402: marcar A e B no mapa */
+.rs-mapsheet #rs-map{height:58vh;min-height:300px;border-radius:10px;overflow:hidden;margin:0 12px;background:#e9eef1}
+.rs-mapinfo{margin:8px 12px 0;font-size:13px;color:#234;min-height:20px}
+.rs-mk-wrap{background:none;border:0}
+.rs-mk{width:26px;height:26px;border-radius:50%;background:#fff;border:2.5px solid #c62828;color:#c62828;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3014,4 +3020,6 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rs-prev .rs-kv div{font-size:9.5px}
   .rs-prev .rs-kv b{font-size:10.5px}
   .rs-satlbl{font-size:10px}
+  .rs-mapinfo{font-size:10.5px}
+  .rs-mk{font-size:10.5px}
 }
