@@ -210,6 +210,10 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Publicar preços puxa a planilha e religa a fórmula VALOR (v406)** — depois de `publicarPlanejamento` o app chama
+  `syncPull({force:true})`, então Cotação/Demanda/DRE mostram o preço novo sem passar por Sincronizar → Atualizar. O
+  Code.gs devolve `religados`: quantas células VALOR do PORTIFÓLIO estavam digitadas à mão (produtos publicados) e
+  voltaram a ser fórmula de busca na aba PREÇOS; o toast informa. Precisa do Code.gs v406 publicado.
 - **Cotação avisa quando o módulo Preços tem outro valor (v405)** — o "Preço ref." da Cotação vem da planilha
   (PORTIFÓLIO → aba PREÇOS, preenchida por **Publicar preços**), não direto do módulo Preços. Agora, quando o preço
   à vista do módulo Preços é diferente do que veio da planilha (`precoModuloDe`/`precoDifere`), a célula mostra

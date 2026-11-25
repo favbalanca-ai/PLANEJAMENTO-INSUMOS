@@ -979,6 +979,18 @@ Chamadas à planilha medidas no simulador (cada uma custa ~50–300 ms no Google
   sem cabeçalho "EM PEDIDO" cria coluna nova (antes usava W = SALDO e sobrescrevia a fórmula);
   produto novo (addprod) ganha as fórmulas de VALOR (S), CONSUMO (V) e SALDO (W).
 
+## Publicar preços religa a fórmula VALOR (v406)
+
+Problema real: produto incluído à mão no PORTIFÓLIO com o preço **digitado** na coluna VALOR (S). Como a célula não
+tinha a fórmula de busca na aba PREÇOS, "Publicar preços" nunca mudava o número que o app mostra na Cotação/Demanda.
+
+- `writeFlatPrecos` passa a chamar `religarPrecosDe_(list)`: percorre o PORTIFÓLIO e, **só nas linhas dos produtos
+  publicados** cuja célula VALOR não tem fórmula, escreve `precoFormula(L)` (o mesmo VLOOKUP do `ligarPrecos`).
+  Produto fora da lista publicada não é tocado, então nenhum preço vira 0 por falta de cadastro.
+- O `doPost` devolve `religados` (quantas células) e o app mostra isso no toast; em seguida o app puxa a planilha
+  (`syncPull({force:true})`), para a Cotação já aparecer com o preço novo.
+- `ligarPrecos` (rodar à mão) continua existindo para refazer a coluna inteira.
+
 ## Recomendações compartilhadas (v401)
 
 - Aba nova **`RECOMENDAÇÕES APP`** (KEY | JSON | ATUALIZADO), uma linha por recomendação (`id`), merge por `_u` pelo

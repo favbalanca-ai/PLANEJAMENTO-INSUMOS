@@ -2600,7 +2600,21 @@ function writeFlatPrecos(list, safra){
   writeFlatPrecosEm(ss(), list, safra);                       // local (planejamento) — é a que o PORTIFÓLIO usa
   if (_precosDbId_()){ try { writeFlatPrecosEm(precosSS(), list, safra); } catch(e){} }   // cópia no Banco (histórico)
   try { escreveUnPortifolio(list); } catch(e){}               // a unidade do módulo Preços acompanha na planilha (PORTIFÓLIO UN)
-  return { rows: (list||[]).length };
+  var rel = 0; try { rel = religarPrecosDe_(list); } catch(e){}   // v406: VALOR digitado à mão nos produtos publicados volta a ser fórmula
+  return { rows: (list||[]).length, religados: rel };
+}
+// v406: nas linhas do PORTIFÓLIO cujo produto está na lista publicada, se a célula VALOR (col S) NÃO tem fórmula
+// (foi digitada à mão — ex.: produto incluído direto na planilha), escreve a fórmula de busca na aba PREÇOS.
+// Só mexe nos produtos publicados: nenhum preço vira 0 por falta de cadastro. Devolve quantas células religou.
+function religarPrecosDe_(list){
+  var P = ss().getSheetByName('PORTIFÓLIO'); if (!P) return 0;
+  var pub = {}; (list || []).forEach(function(it){ var k = S(it.p).toUpperCase(); if (k) pub[k] = 1; });
+  var last = P.getLastRow(); if (last < 4) return 0;
+  var nn = last - 3, nomes = P.getRange(4, 3, nn, 1).getValues(), forms = P.getRange(4, 19, nn, 1).getFormulas(), n = 0;
+  for (var i = 0; i < nn; i++){ var nm = S(nomes[i][0]).toUpperCase(); if (!nm || !pub[nm] || S(forms[i][0])) continue;
+    P.getRange(4 + i, 19).setFormula(precoFormula(4 + i)); n++; }
+  if (n) try { SpreadsheetApp.flush(); } catch(e){}
+  return n;
 }
 function writeFlatPrecosEm(b, list, safra){
   var s = b.getSheetByName('PREÇOS'); if (!s) s = b.insertSheet('PREÇOS');
@@ -3444,7 +3458,7 @@ function gravaUm_(payload, acc, cfg, out){
     } else if (payload && payload.__precos){         // módulo Preços: regrava a aba de histórico inteira
       var pr = writePrecosSheet(payload.__precos); out.ok = pr.rows; base = true;
     } else if (payload && payload.__flatPrecos){   // publica a lista plana produto->preço (p/ o planejamento buscar)
-      var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows; base = true;
+      var fr = writeFlatPrecos(payload.__flatPrecos, payload.safra); out.ok = fr.rows; out.religados = fr.religados || 0; base = true;
     } else if (payload && payload.__recomLink){     // link curto da recomendação (PDF / QR Code)
       var rk = writeRecomLink_(payload.__recomLink); out.ok = rk.rows; semCache = true; if (rk.erro){ out.fail = 1; out.msgs.push(rk.erro); }
     } else if (payload && payload.__retorno){       // baixa do operador (página retorno.html)
