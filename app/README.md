@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Ordem de transferência (v409)** — um documento por transferência, no padrão da solicitação de cotação:
+  nº `OT-aammdd-xxxx` (`transfNumero`), origem → destino, itens com princípio ativo, custo e valor, coluna "Conferido"
+  em branco, campos Veículo/placa, Motorista, Saída, Chegada, Lotes/validade, Observações e assinaturas Entregue por /
+  Transportador / Recebido por (`transfOrdemHtml`). Sai pelo botão **🧾** de cada transferência na lista
+  (`transfOrdemPrint`) ou pela janelinha do 🖨 PDF escolhendo **Formato: Ordem de transferência (uma por página)**.
 - **PDF das transferências entre fazendas (v408)** — no painel "🔁 Transferências entre fazendas" (tela Estoque) o
   botão **🖨 PDF** abre uma janelinha (`transfPdfOpen`) com período (já vem da 1ª à última), sentido, produto,
   "incluir pendentes" e "linhas de assinatura". `transfPdfGerar` monta o relatório com `printDoc`: cabeçalho,
