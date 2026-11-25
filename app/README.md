@@ -210,6 +210,12 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **PDF das transferências entre fazendas (v408)** — no painel "🔁 Transferências entre fazendas" (tela Estoque) o
+  botão **🖨 PDF** abre uma janelinha (`transfPdfOpen`) com período (já vem da 1ª à última), sentido, produto,
+  "incluir pendentes" e "linhas de assinatura". `transfPdfGerar` monta o relatório com `printDoc`: cabeçalho,
+  indicadores (transferências, itens, valor pelo custo médio), tabela # · data · origem → destino · produto · qtd ·
+  custo · valor · quem/obs · situação (mais antiga primeiro, linha divisória entre transferências), **resumo por
+  produto** (Água Viva → Espora, Espora → Água Viva, líquido) e assinaturas Entregue por / Recebido por.
 - **Demanda no celular: rótulo certo e conta explicada (v407)** — o cabeçalho dos cartões dizia "Demanda" em cima
   de um número que é o **A comprar** (CSS pegava o 2º `th`; agora pega o 6º). Com o cartão aberto aparecem as linhas
   **Já aplicado** (baixas já feitas), **Falta aplicar** (demanda − aplicado) e **Conta**: "(demanda − aplicado) −
