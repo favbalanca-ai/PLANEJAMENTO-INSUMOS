@@ -914,7 +914,7 @@ code{background:#eef2f4;padding:1px 5px;border-radius:4px;font-size:.92em}
   .compra-cards thead tr{display:flex;align-items:center;gap:10px;padding:2px 12px 6px;box-shadow:none}
   .compra-cards thead th{display:none;position:static;background:none;border:none;padding:0}
   .compra-cards thead th:nth-child(1){display:block;flex:1}                        /* Produto */
-  .compra-cards thead th:nth-child(2){display:block;flex:0 0 96px;text-align:left}  /* A comprar */
+  .compra-cards thead th:nth-child(6){display:block;flex:0 0 96px;text-align:left}  /* A comprar (v407: era o 2º = Demanda, rótulo errado) */
   .compra-cards tbody tr{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px}
   .compra-cards td.c-full{order:1;flex:1 1 52%;min-width:140px;padding:0}
   .compra-cards td.c-full b{font-size:15px;color:var(--ink)}
@@ -2536,6 +2536,10 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .cot-dif{color:var(--amber);font-weight:600;white-space:nowrap}
 .cot-dif-badge{background:var(--amber-soft,#fff4d6);color:var(--amber);border-color:var(--amber)}
 
+/* v407: Demanda no celular — linhas só do cartão (Já aplicado, Falta aplicar, Conta) */
+.sm-only{display:none}
+@media (max-width:640px){ .cards-sm tbody tr.open td.c-more.sm-only{display:flex} .cards-sm tbody td.cp-conta{font-size:12px;color:var(--muted);flex-wrap:wrap} .cards-sm tbody td.cp-conta b{color:var(--ink)} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3033,4 +3037,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rs-satlbl{font-size:10px}
   .rs-mapinfo{font-size:10.5px}
   .rs-mk{font-size:10.5px}
+  .cards-sm tbody td.cp-conta{font-size:9.5px}
 }

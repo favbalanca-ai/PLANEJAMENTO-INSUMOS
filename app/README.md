@@ -210,6 +210,11 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Demanda no celular: rótulo certo e conta explicada (v407)** — o cabeçalho dos cartões dizia "Demanda" em cima
+  de um número que é o **A comprar** (CSS pegava o 2º `th`; agora pega o 6º). Com o cartão aberto aparecem as linhas
+  **Já aplicado** (baixas já feitas), **Falta aplicar** (demanda − aplicado) e **Conta**: "(demanda − aplicado) −
+  estoque − pedido − a caminho = a comprar" (`td.sm-only`, só no celular; no computador o título da célula Estoque
+  já explicava).
 - **Publicar preços puxa a planilha e religa a fórmula VALOR (v406)** — depois de `publicarPlanejamento` o app chama
   `syncPull({force:true})`, então Cotação/Demanda/DRE mostram o preço novo sem passar por Sincronizar → Atualizar. O
   Code.gs devolve `religados`: quantas células VALOR do PORTIFÓLIO estavam digitadas à mão (produtos publicados) e
