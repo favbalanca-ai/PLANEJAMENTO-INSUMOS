@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-411';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-412';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -8376,6 +8376,33 @@ const RECOM_ST={
   aprovada:{lbl:'Aplicação aprovada',cls:'rc-apr',ico:'✅'}
 };
 function recomById(id){ return RECOM.registros.find(x=>x.id===id)||null; }
+// v412: ORIGEM da recomendação — de onde ela nasceu (muda a leitura do custo: dentro ou fora do plano)
+const RECOM_ORIG={
+  plan:{lbl:'Planejamento',ico:'📋',cls:'ro-plan',dica:'veio de uma operação planejada do talhão'},
+  compl:{lbl:'Complementar',ico:'➕',cls:'ro-compl',dica:'adiciona produto ou dose a uma aplicação já recomendada desta operação'},
+  repasse:{lbl:'Repasse',ico:'🔁',cls:'ro-rep',dica:'refazer uma aplicação (chuva lavou, falha de faixa)'},
+  corretiva:{lbl:'Corretiva',ico:'🐛',cls:'ro-corr',dica:'fora do plano: praga, doença ou daninha que apareceu'},
+  avulsa:{lbl:'Avulsa',ico:'✍️',cls:'ro-avul',dica:'manual, sem ligação com o planejamento'} };
+function recomOrigem(r){ if(r.tipo==='ts') return 'ts'; return RECOM_ORIG[r.origem]?r.origem:(r.opKey?'plan':'avulsa'); }
+function recomOrigemInfo(r){ const k=recomOrigem(r); if(k==='ts') return {k, ico:'🌱', lbl:'Tratamento de sementes', cls:'ro-ts', txt:'Tratamento de sementes', dica:'TS: semente tratada antes do plantio'};
+  const O=RECOM_ORIG[k], ref=r.origemRef?recomById(r.origemRef):null; let txt=O.lbl; if(ref) txt+=` à de ${fmtDataBR(ref.data)}`; if(r.origemObs) txt+=` · ${r.origemObs}`;
+  return {k, ico:O.ico, lbl:O.lbl, cls:O.cls, ref, txt, dica:O.dica}; }
+function recomOrigemTag(r){ const I=recomOrigemInfo(r); return `<span class="rc-orig ${I.cls}" title="${esc(I.dica)}">${I.ico} ${esc(I.txt)}</span>`; }
+// linha de edição da origem (chips + relacionada + motivo); `edit` = pode mexer (tudo que não está aprovada)
+function recomOrigemEdHtml(r, edit){ if(r.tipo==='ts') return ''; const k=recomOrigem(r), F=f=>`data-id="${esc(r.id)}" data-recf="${f}"`;
+  if(!edit) return '';
+  const chips=Object.keys(RECOM_ORIG).map(x=>`<button type="button" class="ro-chip ${RECOM_ORIG[x].cls}${x===k?' on':''}" data-act="recomOrigem" data-id="${esc(r.id)}" data-k="${x}" title="${esc(RECOM_ORIG[x].dica)}">${RECOM_ORIG[x].ico} ${RECOM_ORIG[x].lbl}</button>`).join('');
+  const rel=(k==='compl'||k==='repasse'), mot=(k!=='plan'&&k!=='avulsa');
+  const outras=rel?RECOM.registros.filter(x=>x.id!==r.id&&x.talhao===r.talhao&&x.tipo!=='ts').map(recomNorm).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))):[];
+  return `<div class="rc-orig-ed"><span class="rc-orig-lbl">Origem</span><div class="rc-orig-chips">${chips}</div>
+    ${rel?`<label class="rc-orig-f">${k==='compl'?'Complementa a recomendação':'Repasse da recomendação'}<select class="sel" ${F('origemRef')}><option value="">— escolher —</option>${outras.map(x=>`<option value="${esc(x.id)}"${x.id===r.origemRef?' selected':''}>${esc(fmtDataBR(x.data))} · ${esc(x.nome||x.opNome||x.alvo||'recomendação')} · ${(RECOM_ST[x.status]||{}).lbl||x.status}</option>`).join('')}</select></label>`:''}
+    ${mot?`<label class="rc-orig-f">Motivo<input class="txt" ${F('origemObs')} value="${esc(r.origemObs||'')}" placeholder="${k==='corretiva'?'ex.: lagarta acima do nível de controle':k==='repasse'?'ex.: chuva 2 h após a aplicação':'ex.: faltou adjuvante na primeira'}"></label>`:''}
+    <small class="mut rc-orig-dica">${esc(RECOM_ORIG[k].dica)}</small></div>`; }
+function recomOrigemSet(id, k){ const r=recomById(id); if(!r||!RECOM_ORIG[k]) return; r.origem=k; if(k!=='compl'&&k!=='repasse') r.origemRef=''; if(k==='plan'||k==='avulsa') r.origemObs='';
+  if((k==='compl'||k==='repasse')&&!r.origemRef){ const ant=recomOrigemAnterior(r); if(ant) r.origemRef=ant.id; }
+  saveRecom(); route({keepScroll:true}); }
+// recomendação anterior da MESMA operação (ou do talhão, se não há operação), já enviada/aprovada: candidata a "original"
+function recomOrigemAnterior(r){ return RECOM.registros.filter(x=>x.id!==r.id&&x.talhao===r.talhao&&x.tipo!=='ts'&&x.status!=='rascunho'&&(r.opKey?x.opKey===r.opKey:true)).sort((a,b)=>String(b.data||'').localeCompare(String(a.data||''))||(b.ts||0)-(a.ts||0))[0]||null; }
 function recomTipoConj(r){ return conjTipoDeClasses((r.itens||[]).map(it=>(PROD[it.produto]||{}).classe)); }   // v302
 function recomNovoId(){ return 'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 // normaliza registros legados (texto livre, sem status/itens) para o novo modelo estruturado
@@ -8393,6 +8420,8 @@ function recomNorm(r){
   // modelo agronômico (registros antigos ganham os campos com padrão)
   if(r.cultura==null){ const t=findTalhao(r.talhao); r.cultura=(t?empDe(t):'')||''; }
   ['estadio','cultivar','nivel','justif','crea','maquina','ponta','pressao','velocidade','horario','reentrada','nome','tipoApl'].forEach(k=>{ if(r[k]==null) r[k]=''; });
+  if(r.tipo!=='ts'&&!RECOM_ORIG[r.origem]) r.origem=r.opKey?'plan':'avulsa';   // v412: antigas ganham a origem pela operação
+  if(r.origemRef==null) r.origemRef=''; if(r.origemObs==null) r.origemObs='';
   if(r.tmax==null) r.tmax=30; if(r.urmin==null) r.urmin=55; if(r.vmax==null) r.vmax=10;   // limites climáticos usuais
   if(r.epi==null) r.epi=RECOM_EPI_PADRAO;
   if(!r.resp){ try{ const d=JSON.parse(localStorage.getItem(RECOM_TEC_KEY)||'{}'); if(d.resp) r.resp=d.resp; if(d.crea&&!r.crea) r.crea=d.crea; }catch(e){} }
@@ -8407,12 +8436,12 @@ const RECOM_TIPOS=['Terrestre','Drone','Avião','Pivô Central','Gotejo','Fertir
 // situação da recomendação para os contadores da visão geral: pendente (aguarda retorno/aprovação), atrasada (data passou e não aprovada), agendada (data de hoje em diante)
 function recomSit(r){ const hj=_hojeISO(), d=String(r.data||'').slice(0,10), s=r.status||'rascunho';
   return { aprovada:s==='aprovada', pendente:(s==='enviada'||s==='retorno'), atrasada:(s!=='aprovada' && !!d && d<hj), agendada:(s!=='aprovada' && (!d || d>=hj)) }; }
-let RECOM_UI={f:'total', q:'', aberto:{}, sim:'', mist:{}};   // filtro (chip), busca e cartões expandidos da visão geral — só na memória · v349: sim = "id|i" do item com a lista de similares aberta · v357: mist = análise de mistura aberta por recomendação
+let RECOM_UI={f:'total', o:'', q:'', aberto:{}, sim:'', mist:{}};   // v412: o = filtro por origem ('' = todas)   // filtro (chip), busca e cartões expandidos da visão geral — só na memória · v349: sim = "id|i" do item com a lista de similares aberta · v357: mist = análise de mistura aberta por recomendação
 // cartão aberto? rascunho (em edição) e retorno recebido (pede aprovação) sempre; os outros só depois de tocar no cabeçalho
 function recomAberto(r){ return r.status==='rascunho' || r.status==='retorno' || !!RECOM_UI.aberto[r.id]; }
-function recomFiltra(regs){ const f=RECOM_UI.f; if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
+function recomFiltra(regs){ const f=RECOM_UI.f, o=RECOM_UI.o; if(o) regs=regs.filter(r=>recomOrigem(r)===o); if(f==='total') return regs; return regs.filter(r=>{ const st=recomSit(r); return f==='aprovada'?st.aprovada:f==='pendente'?st.pendente:f==='atrasada'?st.atrasada:f==='agendada'?st.agendada:true; }); }
 // texto de busca do cartão (talhão, operação, nome, alvo, cultura, produtos, status)
-function recomBuscaTxt(r){ const t=findTalhao(r.talhao); return _agNorm([t?tNome(t):r.talhao, r.opNome, r.nome, r.alvo, r.cultura, r.tipoApl, (RECOM_ST[r.status]||{}).lbl, ...(r.itens||[]).map(i=>i.produto)].filter(Boolean).join(' ')); }
+function recomBuscaTxt(r){ const t=findTalhao(r.talhao); return _agNorm([t?tNome(t):r.talhao, r.opNome, r.nome, r.alvo, r.cultura, r.tipoApl, (RECOM_ST[r.status]||{}).lbl, recomOrigemInfo(r).txt, ...(r.itens||[]).map(i=>i.produto)].filter(Boolean).join(' ')); }
 function recomAplicaBusca(){ const q=_agNorm(RECOM_UI.q||'').trim().split(/\s+/).filter(Boolean); let n=0;
   document.querySelectorAll('.recom-card[data-busca]').forEach(c=>{ const ok=q.every(t=>c.dataset.busca.indexOf(t)>=0); c.hidden=!ok; if(ok) n++; });
   const v=document.getElementById('rcv-vazio'); if(v) v.hidden=n>0; const k=document.getElementById('rcv-n'); if(k) k.textContent=n; }
@@ -8490,6 +8519,8 @@ function recomCreate(talId, opKey){
     tmax:30, urmin:55, vmax:10, reentrada:'', epi:RECOM_EPI_PADRAO, crea:'',
     produtos:'', status:'rascunho', enviadaTs:0, retorno:null, aprov:null, ts:Date.now() };
   recomNorm(r);
+  // v412: origem — da operação planejada; se a operação JÁ tem recomendação enviada/aprovada, esta nasce como complementar a ela
+  if(opKey){ const ant=recomOrigemAnterior(r); if(ant){ r.origem='compl'; r.origemRef=ant.id; } else r.origem='plan'; } else r.origem='avulsa';
   { const m=bulaReentradaMax(r.itens); if(m&&!r.reentrada) r.reentrada=String(m); }   // reentrada sugerida pela bula (a maior entre os produtos)
   const ant=RECOM.registros.filter(x=>x.talhao===talId&&(x.rsA||x.rsB||String(x.rsRumo??'')!=='')).sort((x,y)=>String(y.data||'').localeCompare(String(x.data||''))||String(y.id).localeCompare(String(x.id)))[0];   // v389: rastro do talhão
   if(ant) ['rsModo','rsA','rsB','rsRumo','rsLarg'].forEach(k=>{ if(ant[k]!=null&&ant[k]!=='') r[k]=ant[k]; });
@@ -9007,12 +9038,13 @@ function recomCard(r,t){
   const RSr=(r.status!=='aprovada'&&r.tipo!=='ts')?rastroCalc(r):null;
   const resumo=[nProd?`${nProd} produto(s)`:'sem produtos', area?`${num(area)} ha`:'', r.cultura||'', its.filter(i=>i.produto).slice(0,3).map(i=>i.produto).join(', ')+(nProd>3?'…':''), (RSr&&RSr.rumo!=null)?`📐 rumo ${fmtGrau(RSr.rumo)}${RSr.fonte==='sug'?' (sugerido)':''}`:''].filter(Boolean).join(' · ');
   return `<div class="recom-card ${st.cls}${aberto?'':' rc-fech'}" data-busca="${esc(recomBuscaTxt(r))}">
-    <div class="rc-head" data-act="recomToggle" data-id="${esc(r.id)}" title="${aberto?'Encolher':'Expandir'}"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>
+    <div class="rc-head" data-act="recomToggle" data-id="${esc(r.id)}" title="${aberto?'Encolher':'Expandir'}"><span class="rc-badge ${st.cls}">${st.ico} ${st.lbl}</span>${recomOrigemTag(r)}
       ${t&&!editable?`<span class="rc-tal">📍 ${esc(tNome(t))}</span>`:''}${(r.nome||r.opNome)?`<span class="rc-op">${esc(r.nome||r.opNome)}</span>`:''}<span class="spacer"></span>
       <span class="mut rc-data${sit.atrasada?' rc-atras':''}" style="font-size:11px">${sit.atrasada?'⚠️ ':''}${esc(fmtData(r.data))}</span><span class="rc-chev">▾</span></div>
     <div class="rc-resumo mut" data-act="recomToggle" data-id="${esc(r.id)}">${esc(resumo)}</div>
     <div class="rc-body">
     ${editable&&t?`<div class="rc-tal-ed">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha${r.opNome?` · ${esc(r.opNome)}`:''}</div>`:''}
+    ${recomOrigemEdHtml(r, r.status!=='aprovada')}
     ${head}
     ${editable?'<div class="rc-sec-t" style="padding:8px 12px 0">Produtos — na ordem de mistura no tanque</div>':''}
     <div class="table-wrap"><table class="camp-ins rc-tbl">
@@ -9380,7 +9412,7 @@ function exportRecomPDFSimples_(r){
   const dp=(r.opKey)?(()=>{ const o=opsDoTalhao(t).find(x=>x.key===r.opKey); return o?opDataPlan(t.id,o.tagoi,o.op&&o.op.dap):''; })():'';
   const temAtivo=its.some(it=>it.ativo), temCar=its.some(it=>it.car), temReal=its.some(it=>it.real!=null), temTk=cd.haTk>0;
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))}</span></div>
-  <div class="rx-cab"><div class="rx-kv rx-kv-s">${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}${kv('Aplicação',esc(r.nome||''))}${kv('Estádio',esc(r.estadio||''))}${kv('Alvo',esc(r.alvo||''))}${kv('Máquina',esc(r.maquina||''))}${RS.kv}</div>${RS.mini}</div>
+  <div class="rx-cab"><div class="rx-kv rx-kv-s">${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Operação',esc(r.opNome||''))}${r.tipo!=='ts'?kv('Origem',esc(recomOrigemInfo(r).txt)):''}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}${kv('Aplicação',esc(r.nome||''))}${kv('Estádio',esc(r.estadio||''))}${kv('Alvo',esc(r.alvo||''))}${kv('Máquina',esc(r.maquina||''))}${RS.kv}</div>${RS.mini}</div>
   <div class="rx-sec"><h2>Produtos — na ordem de mistura no tanque</h2>
     <table class="rx rx-s pdf-ops"><thead><tr><th style="width:5%">#</th><th>Produto</th><th class="num" style="width:13%">Dose/ha</th><th class="num" style="width:15%">Total (${num(area)} ha)</th>${temTk?'<th class="num" style="width:15%">Por tanque</th>':''}${temCar?'<th class="num" style="width:10%">Carência</th>':''}${temReal?'<th class="num" style="width:13%">Utilizado</th>':''}</tr></thead><tbody>`;
   its.forEach((it,i)=>{ const bR=bulaDoseRef(it), e=temTk?embDe(it.produto):null;
@@ -9419,7 +9451,7 @@ function exportRecomPDF_(r, modo){
   let h=`<div class="rx-title"><h1>RECOMENDAÇÃO TÉCNICA DE APLICAÇÃO</h1><span class="n">Nº ${esc(r.id)} · ${esc(fmtData(r.data))} · Safra 2026/2027</span></div>
   <div class="rx-sec"><h2>1. Identificação</h2><div class="rx-cab"><div class="rx-kv">
     ${kv('Talhão',`<b>${esc(t?tNome(t):r.talhao)}</b>`)}${kv('Área',area?`${num(area)} ha`:'')}${kv('Cultura',esc(r.cultura||''))}${kv('Estádio fenológico',esc(r.estadio||''))}
-    ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}
+    ${kv('Cultivar',esc(r.cultivar||''))}${kv('Operação',esc(r.opNome||''))}${r.tipo!=='ts'?kv('Origem',esc(recomOrigemInfo(r).txt)):''}${kv('Data prevista',dp?fmtDataBR(dp):(r.data?fmtData(r.data):''))}${kv('Janela',esc(r.janela||''))}
     ${r.nome?kv('Aplicação',esc(r.nome),'w2'):''}${r.tipoApl?kv('Tipo de aplicação',esc(r.tipoApl)):''}${RS.kv}</div>${RS.mini}</div></div>
   <div class="rx-sec"><h2>2. Diagnóstico</h2><div class="rx-kv">
     ${kv('Alvo',esc(r.alvo||''),'w2')}${kv('Nível / infestação',esc(r.nivel||''),'w2')}${kv('Justificativa técnica',esc(r.justif||''),'w4')}</div></div>
@@ -9468,6 +9500,9 @@ V.recomendacao=function(arg){
     ${syncUrl()?`<button class="btn btn-outline btn-sm" data-act="recomBuscar" title="Buscar as baixas enviadas pelos operadores">🔄 Buscar retornos</button>`:''}</div>
   ${t?`<div class="camp-tinfo">📍 <b>${esc(tNome(t))}</b> · ${esc(empDe(t)||'—')} · ${num(areaDe(t))} ha</div>`:''}
   <div class="rcv-chips">${chip('total','Total','c-tot')}${chip('pendente','Pendentes','c-pen')}${chip('atrasada','Atrasadas','c-atr')}${chip('agendada','Agendadas','c-age')}${chip('aprovada','Aprovadas','c-apr')}</div>
+  ${(()=>{ const co={}; base.forEach(r=>{ const k=recomOrigem(r); co[k]=(co[k]||0)+1; }); const ks=Object.keys(RECOM_ORIG).concat(['ts']).filter(k=>co[k]); if(ks.length<2&&!RECOM_UI.o) return '';   // v412: só quando há mais de uma origem
+    const och=(k,ico,lbl)=>`<button class="rcv-chip rcv-ochip${RECOM_UI.o===k?' on':''}" data-act="recomOrigF" data-k="${k}">${ico} ${lbl} <b>${k?co[k]||0:base.length}</b></button>`;
+    return `<div class="rcv-chips rcv-orig">${och('','🗂️','Todas as origens')}${ks.map(k=>k==='ts'?och('ts','🌱','TS'):och(k,RECOM_ORIG[k].ico,RECOM_ORIG[k].lbl)).join('')}</div>`; })()}
   <div class="rcv-busca"><span>🔍</span><input class="txt" id="recom-q" value="${esc(RECOM_UI.q||'')}" placeholder="Buscar recomendação… (talhão, operação, produto, alvo)" autocomplete="off"></div>
   <div class="recom-list rcv-list">${cards}</div>
   <div class="rcv-vazio" id="rcv-vazio"${regs.length?' hidden':''}><div class="rcv-vazio-ico">📋</div>Nenhuma recomendação encontrada<small>${base.length?'Mude o filtro ou a busca.':'Toque em ＋ para criar a partir do planejamento, direta ou replicando outra.'}</small></div>
@@ -12210,13 +12245,15 @@ document.addEventListener('click',e=>{
     else if(a.act==='stTrFechar'){ standTrenaFechar(); }
     else if(a.act==='stTrOk'){ standTrenaOk(); }
     else if(a.act==='stTrDel'){ if(standTrena){ standTrena.pos.splice(+a.k,1); standTrenaRender(); } }
-    else if(a.act==='recomFromOp'){ novaAcaoFechar(); if(recomCreate(a.t,a.op)){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação criada do planejamento'); } }
-    else if(a.act==='recomNova'){ novaAcaoFechar(); if(recomCreate(a.t,'')){ RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast('Recomendação em branco criada'); } }
+    else if(a.act==='recomFromOp'){ novaAcaoFechar(); const nr=recomCreate(a.t,a.op); if(nr){ RECOM_UI.f='total'; RECOM_UI.o=''; RECOM_UI.q=''; route(); toast(nr.origem==='compl'?'Esta operação já tem recomendação enviada: a nova nasce como ➕ complementar (troque a origem no cartão se for outro caso)':'Recomendação criada do planejamento'); } }
+    else if(a.act==='recomNova'){ novaAcaoFechar(); if(recomCreate(a.t,'')){ RECOM_UI.f='total'; RECOM_UI.o=''; RECOM_UI.q=''; route(); toast('Recomendação avulsa criada — marque a origem no cartão se for corretiva ou repasse'); } }
     else if(a.act==='recomNovaFab'){ const w=document.getElementById('rcv-fabw'); if(w) w.classList.toggle('open'); return; }   // ＋ abre as 3 opções em pílulas; vira ✕
     else if(a.act==='recomNovaSub'){ const w=document.getElementById('rcv-fabw'); if(w) w.classList.remove('open'); recomNovaOpen(a.sub||'', a.t||'', a.src||''); return; }
     else if(a.act==='recomReplicarOk'){ const ids=[...document.querySelectorAll('.rcv-rep-t input:checked')].map(i=>i.value), d=(document.getElementById('rcv-rep-data')||{}).value||'';
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
+    else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
     else if(a.act==='driveSel'){ driveSel(a.id, act.checked); return; }
     else if(a.act==='plSemAdd'){ const r=realEnsure(a.key), c=plantioCalc(a.key); if(!c) return; r.sems=(r.sems&&r.sems.length)?r.sems:c.sems.map(m=>({produto:m.produto, ha:m.ha}));

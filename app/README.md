@@ -210,6 +210,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Origem da recomendação (v412)** — cada recomendação diz de onde nasceu: `origem` ∈ 📋 **plan** (de uma operação
+  do planejamento), ➕ **compl** (complementar a outra já enviada/aprovada da mesma operação), 🔁 **repasse**, 🐛
+  **corretiva**, ✍️ **avulsa**; TS continua tipo próprio. Campos `origemRef` (id da recomendação relacionada) e
+  `origemObs` (motivo). `recomCreate` marca sozinho: da operação → plan, ou **compl** se a operação já tem recomendação
+  não-rascunho (`recomOrigemAnterior`); em branco → avulsa. Antigas ganham a origem em `recomNorm` pela operação.
+  No cartão: etiqueta ao lado do status (`recomOrigemTag`) e, até aprovar, a linha **Origem** com chips, seletor da
+  recomendação relacionada (compl/repasse) e Motivo (`recomOrigemEdHtml`/`recomOrigemSet`). Na lista: chips de filtro
+  por origem com contagem (`RECOM_UI.o`), quando há mais de uma. No PDF (simples e completo): campo Origem no
+  cabeçalho. Viaja na aba RECOMENDAÇÕES APP sem mudança no Code.gs.
 - **PDF das transferências sai no celular (v411)** — o relatório e as ordens usavam a impressão do navegador
   (`printDoc`), que no app instalado no celular não abre. Agora passam pelo gerador do próprio app, como o PDF da
   recomendação: `pdfArquivoPaginas(paginas)` (html2canvas + jsPDF, **uma página por ordem**) e `pdfDocumento(paginas,
