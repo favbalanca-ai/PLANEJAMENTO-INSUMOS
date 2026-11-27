@@ -2542,6 +2542,20 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .sm-only{display:none}
 @media (max-width:640px){ .cards-sm tbody tr.open td.c-more.sm-only{display:flex} .cards-sm tbody td.cp-conta{font-size:12px;color:var(--muted);flex-wrap:wrap} .cards-sm tbody td.cp-conta b{color:var(--ink)} }
 
+/* v412: origem da recomendação — etiqueta, chips de edição e filtro */
+.rc-orig{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis;border:1px solid transparent}
+.rc-orig.ro-plan{background:#e6f1f3;color:#1f4a55}.rc-orig.ro-compl{background:#fff2cc;color:#8a5a00}.rc-orig.ro-rep{background:#ede7f6;color:#4a2d8a}
+.rc-orig.ro-corr{background:#fde8e8;color:#9b2222}.rc-orig.ro-avul{background:#eef1f2;color:#4b5b61}.rc-orig.ro-ts{background:#e3f3e0;color:#2e7d32}
+.rc-orig-ed{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:8px 12px 2px}
+.rc-orig-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.rc-orig-chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1 1 auto;min-width:0}.rc-orig-chips::-webkit-scrollbar{display:none}
+.ro-chip{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink2);border-radius:20px;padding:5px 10px;font-size:12px;cursor:pointer;font-family:inherit;opacity:.75}
+.ro-chip.on{opacity:1;font-weight:700;border-color:currentColor}
+.ro-chip.on.ro-plan{background:#e6f1f3;color:#1f4a55}.ro-chip.on.ro-compl{background:#fff2cc;color:#8a5a00}.ro-chip.on.ro-rep{background:#ede7f6;color:#4a2d8a}.ro-chip.on.ro-corr{background:#fde8e8;color:#9b2222}.ro-chip.on.ro-avul{background:#eef1f2;color:#4b5b61}
+.rc-orig-f{flex:1 1 220px;display:flex;flex-direction:column;gap:3px;font-size:11px;font-weight:700;color:var(--muted)}.rc-orig-f .sel,.rc-orig-f .txt{width:100%;font-weight:500}
+.rc-orig-dica{flex:1 0 100%;font-size:11px}
+.rcv-orig{margin-top:-4px}.rcv-ochip{font-size:12.5px;padding:5px 11px}.rcv-ochip b{font-weight:800}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3040,4 +3054,6 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .rs-mapinfo{font-size:10.5px}
   .rs-mk{font-size:10.5px}
   .cards-sm tbody td.cp-conta{font-size:9.5px}
+  .ro-chip{font-size:9.5px}
+  .rcv-ochip{font-size:10px}
 }
