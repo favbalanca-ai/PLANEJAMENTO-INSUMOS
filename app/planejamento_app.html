@@ -3168,7 +3168,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-410';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-411';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5923,7 +5923,8 @@ function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); r
     .sort((a,b)=>String(a.data||'').localeCompare(String(b.data||''))||((+a._u||0)-(+b._u||0)));   // no papel: mais antiga primeiro
   if(!L.length){ toast('Nenhuma transferência nesse filtro'); return; }
   const fmt=(g('tp-fmt')||{}).value||'lista'; novaAcaoFechar();
-  if(fmt==='ordem'){ printDoc('<div class="dm">'+L.map((t,i)=>transfOrdemHtml(t, i>0, ass)).join('')+'</div>'); toast(`Gerando ${L.length} ordem(ns) de transferência — escolha "Salvar como PDF"`); return; }   // v409
+  const tag=(ini||fim)?`${(ini||'').replace(/-/g,'')}-${(fim||'').replace(/-/g,'')}`:_hojeISO().replace(/-/g,'');
+  if(fmt==='ordem'){ pdfDocumento(L.map(t=>'<div class="dm">'+transfOrdemHtml(t, false, ass)+'</div>'), `Ordens_transferencia_${tag}.pdf`, 'Ordens de transferência'); return; }   // v409 · v411: uma página por ordem, arquivo montado no app
   const hoje=fmtDataBR(_hojeISO()), per=(ini||fim)?`${ini?fmtDataBR(ini):'início'} a ${fim?fmtDataBR(fim):'hoje'}`:'todo o período';
   const row=(c,cls)=>`<tr${cls?` class="${cls}"`:''}>${c.map(x=>`<td${/^<td/.test(x)?'':''}>${x}</td>`).join('')}</tr>`;
   let body='', nIt=0, vTot=0; const porProd={}, porSent={};
@@ -5946,7 +5947,7 @@ function transfPdfGerar(){ const g=id=>{ const el=document.getElementById(id); r
     ${ass?`<div class="dm-sign"><div>Entregue por (${esc(sent?estoqueNome(sent):'origem')})<br>_______________________</div><div>Recebido por (${esc(sent?estoqueNome(estoqueOutro(sent)):'destino')})<br>_______________________</div><div>Data<br>____/____/______</div></div>`:''}
     <div class="dm-foot">Cada transferência vira duas linhas no razão da planilha (TRANSF. SAÍDA na origem e TRANSF. ENTRADA no destino)${val?', pelo custo médio do produto na data':''}. O total das duas fazendas não muda. "pendente" = ainda não confirmada na planilha.</div>
   </div>`;
-  printDoc(h); toast('Gerando o PDF das transferências — escolha "Salvar como PDF"'); }
+  pdfDocumento([h], `Transferencias_${tag}.pdf`, 'Transferências entre fazendas'); }
 // v409: ORDEM DE TRANSFERÊNCIA — um documento por transferência (nº, origem → destino, itens, veículo/motorista, assinaturas)
 function transfNumero(t){ const d=String(t.data||'').replace(/-/g,'').slice(2), id=String(t.id||'').replace(/^tf/,'').slice(-4).toUpperCase(); return `OT-${d||'000000'}-${id||'0000'}`; }
 function transfOrdemHtml(t, quebra, ass){ if(ass==null) ass=true; const its=(t.itens||[]).filter(it=>it.produto&&+it.qtd>0), pend=transfPendente(t), vol=its.reduce((a,it)=>a+(+it.qtd||0),0), uns=[...new Set(its.map(it=>String(it.un||'').trim()).filter(Boolean))];   // v410: só volume, sem valores
@@ -5967,7 +5968,7 @@ function transfOrdemHtml(t, quebra, ass){ if(ass==null) ass=true; const its=(t.i
     ${ass?`<div class="dm-sign"><div>Entregue por (${esc(estoqueNome(t.de))})<br>_______________________</div><div>Transportador<br>_______________________</div><div>Recebido por (${esc(estoqueNome(t.para))})<br>_______________________</div></div>`:''}
     <div class="dm-foot">Esta ordem registra a saída do estoque de origem e a entrada no destino (duas linhas no razão da planilha, etiqueta [#${esc(t.id||'')}]). O total das duas fazendas não muda. Confira as quantidades na chegada e anote divergências em Observações.</div>
   </section>`; }
-function transfOrdemPrint(id){ const t=OV.transf&&OV.transf[id]; if(!t||t.del){ toast('Transferência não encontrada'); return; } printDoc('<div class="dm">'+transfOrdemHtml(t,false,true)+'</div>'); toast('Gerando a ordem de transferência — escolha "Salvar como PDF"'); }
+function transfOrdemPrint(id){ const t=OV.transf&&OV.transf[id]; if(!t||t.del){ toast('Transferência não encontrada'); return; } pdfDocumento(['<div class="dm">'+transfOrdemHtml(t,false,true)+'</div>'], `Ordem_transferencia_${transfNumero(t)}.pdf`, 'Ordem de transferência'); }
 // ===== v362: CONTAGEM FÍSICA (inventário) — digita o que foi contado, compara com o sistema e aplica os ajustes =====
 // Uma contagem: {id, data, local ('' = unificado, 'FA'/'FE'), status aberta|fechada, quem, obs, itens:{produto:{qtd}}, ajustes:[{produto, un, qtd(±), custo, sist, cont}]}.
 // Fechar = calcula contado − sistema para cada produto CONTADO (em branco = não contado, não mexe) e manda os ajustes à planilha
@@ -12481,15 +12482,43 @@ async function pdfArquivo(html, linkTxt){
     return doc.output('blob');
   } finally { box.remove(); }
 }
+// v411: PDF de documento comum (transferências, ordens…) montado no app — uma página por item de `paginas` (HTML),
+// sem links. No celular instalado (PWA) o "Imprimir → Salvar como PDF" não abre; este caminho gera o arquivo e
+// oferece Enviar / Baixar / Abrir como no PDF da recomendação. Se não der (sem internet para o gerador), cai na impressão.
+async function pdfArquivoPaginas(paginas){
+  await Promise.all([loadScriptOnce(H2C_URL), loadScriptOnce(JSPDF_URL)]);
+  pdfRenderCss();
+  const {jsPDF}=window.jspdf, M=12, ESC=2; let doc=null;
+  for(const html of paginas){
+    const box=document.createElement('div'); box.id='pdf-render'; box.innerHTML=html; document.body.appendChild(box);
+    try{
+      await new Promise(r=>setTimeout(r,40));
+      const W=box.offsetWidth, canvas=await window.html2canvas(box,{scale:ESC, backgroundColor:'#ffffff', logging:false});
+      const totH=canvas.height/ESC, mmA4=(210-2*M)/W, hA4=297-2*M; let mm=mmA4, pageH=297;
+      if(totH*mmA4>hA4){ const f=hA4/(totH*mmA4); if(f>=0.62) mm=mmA4*f; else pageH=Math.ceil(totH*mmA4+2*M); }
+      const fmt=pageH===297?'a4':[210,pageH];
+      if(!doc) doc=new jsPDF({unit:'mm', format:fmt}); else doc.addPage(fmt);
+      const pw=W*mm; doc.addImage(canvas.toDataURL('image/png'), 'PNG', (210-pw)/2, M, pw, totH*mm, undefined, 'FAST');
+    } finally { box.remove(); }
+  }
+  return doc.output('blob');
+}
+async function pdfDocumento(paginas, nome, titulo){
+  paginas=Array.isArray(paginas)?paginas:[paginas]; if(!paginas.length) return;
+  pdfAguarde(true, paginas.length>1?`Montando ${paginas.length} páginas…`:'Montando o arquivo…');
+  try{ const blob=await pdfArquivoPaginas(paginas); pdfPronto(blob, nome, paginas.join(''), '', titulo||'', null, {doc:true}); }
+  catch(e){ pdfAguarde(false); toast('Não consegui montar o arquivo ('+(e&&e.message||e)+') — abrindo a impressão'); printDoc(paginas.join('')); }
+}
 // mensagem curta com o link de baixa (vai junto do PDF ou sozinha): o Android nem sempre abre o link de dentro do PDF
 function pdfLinkMsg(P){ return `Recomendação${P.tal?' · '+P.tal:''}\n👉 Abrir para dosar e dar baixa:\n${P.link}`; }
 // janelinha "gerando…" e depois "PDF pronto" com Enviar (WhatsApp…) / Baixar / Abrir / Imprimir
 let _pdfPronto=null;
-function pdfAguarde(on){ const old=document.getElementById('pdf-ov'); if(old) old.remove(); if(!on) return;
+function pdfAguarde(on, msg){ const old=document.getElementById('pdf-ov'); if(old) old.remove(); if(!on) return;
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
-  ov.innerHTML=`<div class="modal-box" style="width:min(420px,100%)"><div class="modal-head"><h3>📄 Gerando o PDF…</h3></div><p class="mut" style="font-size:13px;margin:0">Montando o arquivo com o link de baixa e o QR Code.</p></div>`;
+  ov.innerHTML=`<div class="modal-box" style="width:min(420px,100%)"><div class="modal-head"><h3>📄 Gerando o PDF…</h3></div><p class="mut" style="font-size:13px;margin:0">${esc(msg||'Montando o arquivo com o link de baixa e o QR Code.')}</p></div>`;
   document.body.appendChild(ov); }
-function pdfPronto(blob, nome, html, link, tal, alt){   // v370: alt = {rid, modo} → botão para trocar entre PDF simples e completo
+function pdfPronto(blob, nome, html, link, tal, alt, opts){   // v370: alt = {rid, modo} → botão para trocar entre PDF simples e completo · v411: opts.doc = documento comum (sem link de baixa)
+  opts=opts||{};
   if(_pdfPronto && _pdfPronto.url) URL.revokeObjectURL(_pdfPronto.url);
   const file=new File([blob], nome, {type:'application/pdf'}), url=URL.createObjectURL(blob);
   let podeEnviar=false; try{ podeEnviar=!!(navigator.canShare && navigator.canShare({files:[file]})); }catch(e){}
@@ -12499,7 +12528,7 @@ function pdfPronto(blob, nome, html, link, tal, alt){   // v370: alt = {rid, mod
   pdfAguarde(false);
   const ov=document.createElement('div'); ov.id='pdf-ov'; ov.className='modal-ov';
   ov.innerHTML=`<div class="modal-box" style="width:min(440px,100%)"><div class="modal-head"><h3>📄 PDF pronto</h3><button class="icon-btn" data-act="pdfFechar" title="Fechar">✕</button></div>
-    <p class="mut" style="font-size:13px;margin:0 0 12px">${esc(nome)} · ${Math.max(1,Math.round(blob.size/1024))} KB<br>No PDF, o botão <b>ABRIR PARA DAR BAIXA</b> e o <b>QR Code</b> abrem a página do operador.</p>
+    <p class="mut" style="font-size:13px;margin:0 0 12px">${esc(nome)} · ${Math.max(1,Math.round(blob.size/1024))} KB<br>${opts.doc?'Envie pelo WhatsApp, baixe para guardar ou abra para imprimir.':'No PDF, o botão <b>ABRIR PARA DAR BAIXA</b> e o <b>QR Code</b> abrem a página do operador.'}</p>
     ${link?`<div class="nfe-aviso ${android?'warn':'info'}" style="margin:0 0 12px;font-size:12.5px">📱 <b>Android:</b> o leitor de PDF do WhatsApp e de alguns celulares <b>não abre links dentro do PDF</b>. Envie também o <b>link de baixa</b> pelo botão abaixo (ele vai como mensagem) ou peça para abrir o PDF no <b>Google Drive</b> ou no <b>Chrome</b>.</div>`:''}
     <div class="pdf-acts">${podeEnviar?'<button class="btn btn-wa" data-act="pdfEnviar">📲 Enviar o PDF (WhatsApp…)</button>':''}
       ${link?'<button class="btn btn-wa" data-act="pdfEnviarLink">🔗 Enviar o link de baixa (WhatsApp)</button>':''}
