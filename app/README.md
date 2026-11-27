@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **PDF das transferências sai no celular (v411)** — o relatório e as ordens usavam a impressão do navegador
+  (`printDoc`), que no app instalado no celular não abre. Agora passam pelo gerador do próprio app, como o PDF da
+  recomendação: `pdfArquivoPaginas(paginas)` (html2canvas + jsPDF, **uma página por ordem**) e `pdfDocumento(paginas,
+  nome, titulo)`, que mostra a janelinha "PDF pronto" com Enviar (WhatsApp) / Baixar / Abrir / Imprimir
+  (`pdfPronto` com `opts.doc`: texto genérico, sem falar em link de baixa). Sem internet para baixar o gerador, cai
+  na impressão como antes. Nomes: `Transferencias_<período>.pdf`, `Ordens_transferencia_<período>.pdf`,
+  `Ordem_transferencia_OT-….pdf`.
 - **Transferências sem valores (v410)** — a ordem de transferência passa a mostrar só volume: caixa **Volume**
   (soma, com a unidade quando é única; "unidades mistas" quando não), colunas Quantidade · Un · Conferido · Lote/validade
   e total em volume; sem custo nem R$. No relatório em lista os valores (custo médio) só aparecem marcando a caixinha
