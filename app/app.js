@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-418';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-419';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3706,7 +3706,7 @@ V.financeiro=function(){
     return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`; }
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento','fluxo'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='fluxo'?' on':''}" data-finview="fluxo">📈 Fluxo de caixa</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento','fluxo','cal'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='fluxo'?' on':''}" data-finview="fluxo">📈 Fluxo de caixa</button><button class="chip-f${FIN_UI.view==='cal'?' on':''}" data-finview="cal">📅 Calendário</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
   finRascunhoRestaurar();
   const kpis=finPorProdutorHtml(prods)+`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
@@ -3715,6 +3715,7 @@ V.financeiro=function(){
     <div class="kpi"><div class="k-label">Vencem em 30 dias</div><div class="k-value">${brl0(R.d30)}</div><div class="k-sub">${R.n30} título(s), com os vencidos</div></div>
   </div>`;
   if(FIN_UI.view==='fluxo') return finPorProdutorHtml(prods)+seg+finFluxoHtml();   // v416: fluxo de caixa (cartões próprios)
+  if(FIN_UI.view==='cal') return finPorProdutorHtml(prods)+seg+finCalHtml();   // v419: calendário de pagamentos e recebimentos
   if(FIN_UI.view==='extrato') return kpis+seg+finExtratoHtml();
   if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
   if(FIN_UI.view==='vendas') return kpis+seg+finVendasHtml();   // v279: contratos e cargas da balança
@@ -3834,6 +3835,47 @@ async function finBxDel(id){ const b=FIN().baixas.find(x=>x.id===id); if(!b||!as
 function finMovimentos(){ const F=FIN(), tit={}; F.titulos.forEach(t=>tit[t.id]=t);
   return F.baixas.filter(b=>b.compensacao!=='S').map(b=>{ /* compensação de adiantamento não é dinheiro (v277) */ const t=tit[b.titulo]||{}, receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER'; return {b, t, receber, data:String(b.data||'').slice(0,10), valor:+b.valorPago||0, ent:receber?(+b.valorPago||0):0, sai:receber?0:(+b.valorPago||0)}; })
     .sort((a,b)=>a.data.localeCompare(b.data)||String(a.b.atualizado||'').localeCompare(String(b.b.atualizado||''))); }
+// ===== v419: CALENDÁRIO FINANCEIRO — mês em grade (a pagar em vermelho, a receber em verde), semana, dia com os títulos,
+// saldo das contas e resumo do mês. Em aberto entra pelo vencimento; pago/recebido entra pela data da baixa. =====
+function _diaAdd(iso, n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); }
+function finCalDados(mes){ const F=FIN(), prod=FIN_UI.prod||'', hoje=_hojeISO(), dias={}, D=k=>dias[k]||(dias[k]={pagar:0, receber:0, pago:0, recebido:0, venc:0, itens:[]});
+  F.titulos.forEach(t=>{ if(prod&&t.produtor!==prod) return; const sit=finSit(t); if(!_finAberto(sit)) return; const v=finSaldo(t); if(!(v>0)) return; const rec=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER', venc=String(t.vencimento||'').slice(0,10)||hoje, x=D(venc);
+    if(rec) x.receber+=v; else x.pagar+=v; if(venc<hoje) x.venc+=v; x.itens.push({t, v, rec, aberto:true, sit}); });
+  finMovimentos().forEach(m=>{ if(prod&&m.t.produtor!==prod) return; if(!m.data) return; const x=D(m.data); if(m.receber) x.recebido+=m.ent; else x.pago+=m.sai; x.itens.push({t:m.t, v:m.valor, rec:m.receber, aberto:false, sit:'pago', b:m.b}); });
+  const R={pago:0, recebido:0, pagar:0, receber:0, venc:0, n:0}; Object.keys(dias).forEach(k=>{ if(k.slice(0,7)!==mes) return; const x=dias[k]; R.pago+=x.pago; R.recebido+=x.recebido; R.pagar+=x.pagar; R.receber+=x.receber; R.venc+=x.venc; R.n+=x.itens.length; });
+  return {dias, R, hoje}; }
+function finContasSaldo(){ const F=FIN(), prod=FIN_UI.prod||'', movs=finMovimentos(); return F.contas.filter(c=>_finAtivo(c.ativa)&&(!prod||!c.produtor||c.produtor===prod)).map(c=>{ const d0=String(c.dataSaldo||'').slice(0,10); let sld=+c.saldoInicial||0; movs.forEach(m=>{ if(m.b.conta!==c.codigo) return; if(d0&&m.data<d0) return; sld+=m.ent-m.sai; }); return {c, saldo:sld}; }); }
+function finCalHtml(){ const U=FIN_UI, hoje=_hojeISO(); if(!U.calMes) U.calMes=hoje.slice(0,7); if(!U.calDia) U.calDia=hoje; const mes=U.calMes, X=finCalDados(mes), dias=X.dias;
+  const [Y,M]=mes.split('-').map(Number), prim=new Date(Y,M-1,1), nDias=new Date(Y,M,0).getDate(), dow0=prim.getDay(), MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const estreito=(()=>{ try{ return window.innerWidth<=640; }catch(e){ return false; } })();   // celular: formato curto, sem 'R$', para caber na célula
+  const k=v=>estreito?(Math.abs(v)>=1e6?nf1.format(v/1e6)+'M':Math.abs(v)>=1e3?(Math.abs(v)>=1e4?nf0.format(v/1e3):nf1.format(v/1e3).replace(',0',''))+'k':nf0.format(v)):('R$ '+(Math.abs(v)>=1e6?nf1.format(v/1e6)+'M':Math.abs(v)>=1e4?nf0.format(v/1e3)+'k':nf0.format(v)));
+  const iso=d=>`${mes}-${String(d).padStart(2,'0')}`;
+  // grade do mês (domingo primeiro, como no calendário)
+  let cells=''; const mAnt=_mesAdd(mes,-1), nAnt=new Date(Y,M-1,0).getDate();
+  for(let i=0;i<dow0;i++){ const d=nAnt-dow0+1+i; cells+=`<div class="fc-cell fc-off"><span class="fc-n">${d}</span></div>`; }
+  for(let d=1; d<=nDias; d++){ const key=iso(d), x=dias[key], sai=x?x.pagar+x.pago:0, ent=x?x.receber+x.recebido:0, cls=(key===hoje?' fc-hoje':'')+(key===U.calDia?' fc-sel':'')+(x&&x.venc>0?' fc-venc':'')+((x&&x.itens.length)?' fc-tem':'');
+    cells+=`<div class="fc-cell${cls}" data-act="finCalDia" data-dia="${key}" title="${x?`${x.itens.length} lançamento(s)`:''}"><span class="fc-n">${d}</span>${sai>0?`<span class="fc-v fc-sai">${x.pagar>0?'':'✓ '}${k(sai)}</span>`:''}${ent>0?`<span class="fc-v fc-ent">${x.receber>0?'':'✓ '}${k(ent)}</span>`:''}</div>`; }
+  const resto=(7-((dow0+nDias)%7))%7; for(let i=1;i<=resto;i++) cells+=`<div class="fc-cell fc-off"><span class="fc-n">${i}</span></div>`;
+  // semana do dia escolhido
+  const sel=U.calDia, dSel=new Date(sel+'T12:00:00'), domingo=_diaAdd(sel,-dSel.getDay()), DOW=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const semana=Array.from({length:7},(_,i)=>{ const key=_diaAdd(domingo,i), x=dias[key], sai=x?x.pagar+x.pago:0, ent=x?x.receber+x.recebido:0; return `<div class="fc-wrow${key===sel?' on':''}${key===hoje?' hoje':''}" data-act="finCalDia" data-dia="${key}"><span class="fc-wd">${DOW[i]}</span><b class="fc-wn">${+key.slice(8)}</b><span class="fc-wv">${sai>0?`<i class="fc-sai">− ${brl0(sai)}</i>`:''}${ent>0?`<i class="fc-ent">+ ${brl0(ent)}</i>`:''}${!sai&&!ent?'<i class="mut">·</i>':''}</span></div>`; }).join('');
+  const nSem=Math.ceil((dSel.getDate()+new Date(dSel.getFullYear(),dSel.getMonth(),1).getDay())/7);
+  // dia escolhido: títulos
+  const xd=dias[sel], itens=(xd?xd.itens:[]).slice().sort((a,b)=>(a.aberto===b.aberto?0:(a.aberto?-1:1))||b.v-a.v);
+  const rows=itens.map(it=>{ const t=it.t, st=it.aberto?(it.sit==='vencido'?'<span class="pill pill-noprice">vencido</span>':'<span class="pill">em aberto</span>'):'<span class="pill" style="background:#e3f3e0;color:#2e7d32">✓ baixado</span>';
+    return `<div class="fc-it"><span class="fc-it-tipo ${it.rec?'fc-ent':'fc-sai'}">${it.rec?'+':'−'}</span><div class="fc-it-b"><b>${esc(t.participanteNome||'—')}</b> <small class="mut">${esc(t.categoria||'')}${t.docNum?' · '+esc(t.docNum):''}${it.b&&it.b.conta?' · '+esc(finContaNome(it.b.conta)):''}</small><div>${st}</div></div><div class="fc-it-v ${it.rec?'fc-ent':'fc-sai'}">${brl0(it.v)}</div>${it.aberto?`<div class="fc-it-a"><button class="btn btn-outline btn-sm" data-act="finBaixar" data-id="${esc(t.id)}">Baixar</button><button class="icon-btn" data-act="finEditar" data-id="${esc(t.id)}" title="Editar">✎</button></div>`:''}</div>`; }).join('');
+  const contas=finContasSaldo(), totC=contas.reduce((s,x)=>s+x.saldo,0);
+  const R=X.R, resumo=`<div class="fc-res"><span><small>Pago</small><b class="fc-sai">${brl0(R.pago)}</b></span><span><small>Recebido</small><b class="fc-ent">${brl0(R.recebido)}</b></span><span><small>A pagar</small><b>${brl0(R.pagar)}</b></span><span><small>A receber</small><b>${brl0(R.receber)}</b></span><span><small>Vencido</small><b style="color:${R.venc>0?'var(--red)':'inherit'}">${brl0(R.venc)}</b></span><span><small>Lançamentos</small><b>${R.n}</b></span></div>`;
+  return `<div class="fc-top">
+    <div class="panel fc-contas"><div class="panel-head"><h2>Saldo das contas</h2><span class="sub">saldo inicial + baixas</span><div class="spacer"></div><b class="${totC<0?'fc-sai':''}">${brl0(totC)}</b></div>
+      ${contas.length?`<div class="fc-contas-l">${contas.map(x=>`<div><span>${esc(finContaNome(x.c.codigo))}</span><b class="${x.saldo<0?'fc-sai':''}">${brl0(x.saldo)}</b></div>`).join('')}</div>`:'<p class="mut" style="padding:8px 14px;font-size:12px">Nenhuma conta ativa. Cadastre as contas bancárias (com saldo inicial) em Cadastros.</p>'}</div>
+    <div class="panel fc-resumo"><div class="panel-head"><h2>Resumo de ${MESES[M-1]}</h2><span class="sub">realizado e pendente no mês</span></div>${resumo}</div></div>
+  <div class="fc-grid">
+    <div class="panel fc-sem"><div class="panel-head"><h2>Semana ${nSem}</h2><span class="sub">${fmtDataBR(domingo)} a ${fmtDataBR(_diaAdd(domingo,6))}</span><div class="spacer"></div><button class="icon-btn" data-act="finCalDia" data-dia="${_diaAdd(sel,-7)}" title="Semana anterior">‹</button><button class="icon-btn" data-act="finCalDia" data-dia="${_diaAdd(sel,7)}" title="Próxima semana">›</button></div><div class="fc-week">${semana}</div></div>
+    <div class="panel fc-mes"><div class="panel-head"><button class="icon-btn" data-act="finCalNav" data-d="-1" title="Mês anterior">‹</button><h2 style="margin:0 8px">${MESES[M-1]} de ${Y}</h2><button class="icon-btn" data-act="finCalNav" data-d="1" title="Próximo mês">›</button><div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="finCalNav" data-d="0">Hoje</button></div>
+      <div class="fc-dow">${DOW.map(d=>`<span>${d[0]}</span>`).join('')}</div><div class="fc-cells">${cells}</div>
+      <div class="ps-leg"><span><i style="background:#c62828"></i>a pagar / pago (✓)</span><span><i style="background:#2e7d32"></i>a receber / recebido (✓)</span><span><i style="background:#fde8e8;border:1px solid #c62828"></i>com vencido</span></div></div></div>
+  <div class="panel fc-dia"><div class="panel-head"><h2>📅 ${fmtDataBR(sel)}${sel===hoje?' <span class="pill">hoje</span>':''}</h2><span class="sub">${itens.length?`${itens.length} lançamento(s)`:'nada neste dia'}</span></div>${rows?`<div class="fc-itens">${rows}</div>`:''}</div>`; }
 // ===== v416: FLUXO DE CAIXA — realizado (baixas) + previsto (títulos em aberto por vencimento), 13 meses, saldo acumulado =====
 // Saldo inicial = saldo inicial das contas (na data do saldo) + baixas até o começo da janela. Vencidos entram no mês atual.
 function _mesAdd(ym, n){ const [y,m]=ym.split('-').map(Number); const d=new Date(y, m-1+n, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
@@ -12507,6 +12549,8 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='finCalNav'){ const d=+a.d||0; FIN_UI.calMes=d?_mesAdd(FIN_UI.calMes||_hojeISO().slice(0,7),d):_hojeISO().slice(0,7); if(!d) FIN_UI.calDia=_hojeISO(); else { const nd=new Date(FIN_UI.calMes+'-01T12:00:00'); FIN_UI.calDia=FIN_UI.calMes===_hojeISO().slice(0,7)?_hojeISO():nd.toISOString().slice(0,10); } route({keepScroll:true}); return; }   // v419
+    else if(a.act==='finCalDia'){ if(e.target.closest('button[data-act="finBaixar"],button[data-act="finEditar"]')) return; FIN_UI.calDia=a.dia; FIN_UI.calMes=String(a.dia).slice(0,7); route({keepScroll:true}); return; }
     else if(a.act==='finFluxoMais'){ FIN_UI.fluxoMais=!FIN_UI.fluxoMais; route({keepScroll:true}); return; }   // v416
     else if(a.act==='safraFechar'){ safraFechar(); return; } else if(a.act==='safraManual'){ safraManualOpen(a.id||''); return; } else if(a.act==='safraExcluir'){ safraExcluir(a.id); return; }   // v418
     else if(a.act==='safraManAdd'){ const M=safraManualLer(); if(M){ M.porCult.push({emp:'',area:'',prodHa:'',receita:'',custo:''}); safraManualRender(); } return; }
