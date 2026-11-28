@@ -210,6 +210,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Fluxo de caixa (v416)** — aba nova **📈 Fluxo de caixa** no Financeiro (`FIN_UI.view='fluxo'`, `finFluxoHtml`).
+  `finFluxoCalc`: 13 meses a partir de 2 meses antes do atual; **realizado** = baixas (`finMovimentos`, entradas dos
+  títulos a receber e saídas dos a pagar); **previsto** = saldo dos títulos em aberto no mês do vencimento (vencidos e
+  sem data caem no mês atual; além da janela, no último mês); **saldo inicial** = saldo inicial das contas ativas mais
+  as baixas até o começo da janela; saldo acumulado mês a mês. Cartões Saldo inicial, Entradas, Saídas, Saldo final,
+  Vencidos a receber, Vencidos a pagar e Saldo de vencidos. Gráfico `svgFluxo` (barras de entradas e saídas, cheias =
+  realizado e claras = previsto, mês atual destacado, linha do saldo). Tabela mensal escondida atrás de "Ver mais"
+  (`finFluxoMais`). Contratos de venda com saldo a entregar aparecem como "a receber sem data". Respeita o filtro
+  por produtor da tela.
 - **Custos e despesas por categoria (v415)** — bloco novo dentro do Painel da safra, com rosca de várias fatias
   (`svgDonutMulti`) e legenda (R$, % e R$/ha; até 9 categorias + "Outros"). Chave **Orçado / Realizado**
   (`RES_UI.cat`, `resCatModo`). `custosCategoriaCalc`: orçado = itens do plano por classe (classe MÁQUINAS vira

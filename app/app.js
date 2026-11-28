@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-415';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-416';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -3701,7 +3701,7 @@ V.financeiro=function(){
     return `<div class="empty">💵 Financeiro ainda não disponível: a planilha está com o <b>Code.gs antigo</b> (implante a versão nova e puxe de novo) ou este usuário não tem o módulo Administrativo.</div>`; }
   const F=FIN(), prods=finProdutores(), R=finResumo(FIN_UI.prod);
   if(FIN_UI.prod&&!prods.some(p=>p.cpf===FIN_UI.prod)) FIN_UI.prod='';
-  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
+  const seg=`<div class="classe-filter fin-seg"><button class="chip-f${!['extrato','livro','vendas','banco','fechamento','fluxo'].includes(FIN_UI.view)?' on':''}" data-finview="titulos">📋 Títulos</button><button class="chip-f${FIN_UI.view==='fluxo'?' on':''}" data-finview="fluxo">📈 Fluxo de caixa</button><button class="chip-f${FIN_UI.view==='extrato'?' on':''}" data-finview="extrato">🏦 Extrato por conta</button><button class="chip-f${FIN_UI.view==='livro'?' on':''}" data-finview="livro">📒 Livro Caixa</button><button class="chip-f${FIN_UI.view==='vendas'?' on':''}" data-finview="vendas">🌾 Vendas</button><button class="chip-f${FIN_UI.view==='banco'?' on':''}" data-finview="banco">🔁 Banco</button><button class="chip-f${FIN_UI.view==='fechamento'?' on':''}" data-finview="fechamento">📅 Fechamento</button></div>`;
   finRascunhoRestaurar();
   const kpis=finPorProdutorHtml(prods)+`<div class="kpi-grid">
     <div class="kpi accent"><div class="k-label">A pagar em aberto</div><div class="k-value">${brl0(R.aberto)}</div><div class="k-sub">${R.nA} título(s)${R.receber?` · a receber ${brl0(R.receber)}`:''}</div></div>
@@ -3709,6 +3709,7 @@ V.financeiro=function(){
     <div class="kpi"><div class="k-label">Vencem em 7 dias</div><div class="k-value" style="color:var(--amber)">${brl0(R.d7)}</div><div class="k-sub">${R.n7} título(s), com os vencidos</div></div>
     <div class="kpi"><div class="k-label">Vencem em 30 dias</div><div class="k-value">${brl0(R.d30)}</div><div class="k-sub">${R.n30} título(s), com os vencidos</div></div>
   </div>`;
+  if(FIN_UI.view==='fluxo') return finPorProdutorHtml(prods)+seg+finFluxoHtml();   // v416: fluxo de caixa (cartões próprios)
   if(FIN_UI.view==='extrato') return kpis+seg+finExtratoHtml();
   if(FIN_UI.view==='livro') return kpis+seg+finLivroHtml();
   if(FIN_UI.view==='vendas') return kpis+seg+finVendasHtml();   // v279: contratos e cargas da balança
@@ -3828,6 +3829,52 @@ async function finBxDel(id){ const b=FIN().baixas.find(x=>x.id===id); if(!b||!as
 function finMovimentos(){ const F=FIN(), tit={}; F.titulos.forEach(t=>tit[t.id]=t);
   return F.baixas.filter(b=>b.compensacao!=='S').map(b=>{ /* compensação de adiantamento não é dinheiro (v277) */ const t=tit[b.titulo]||{}, receber=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER'; return {b, t, receber, data:String(b.data||'').slice(0,10), valor:+b.valorPago||0, ent:receber?(+b.valorPago||0):0, sai:receber?0:(+b.valorPago||0)}; })
     .sort((a,b)=>a.data.localeCompare(b.data)||String(a.b.atualizado||'').localeCompare(String(b.b.atualizado||''))); }
+// ===== v416: FLUXO DE CAIXA — realizado (baixas) + previsto (títulos em aberto por vencimento), 13 meses, saldo acumulado =====
+// Saldo inicial = saldo inicial das contas (na data do saldo) + baixas até o começo da janela. Vencidos entram no mês atual.
+function _mesAdd(ym, n){ const [y,m]=ym.split('-').map(Number); const d=new Date(y, m-1+n, 1); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function _mesLbl(ym){ const M=['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ']; const [y,m]=ym.split('-'); return M[+m-1]+'/'+y.slice(2); }
+function finFluxoCalc(){ const F=FIN(), prod=FIN_UI.prod||'', hoje=_hojeISO(), mesHoje=hoje.slice(0,7), ini=_mesAdd(mesHoje,-2), meses=[]; for(let i=0;i<13;i++) meses.push(_mesAdd(ini,i));
+  const M={}; meses.forEach(m=>M[m]={m, entR:0, saiR:0, entP:0, saiP:0, nEntP:0, nSaiP:0});
+  const contas=F.contas.filter(c=>_finAtivo(c.ativa)&&(!prod||!c.produtor||c.produtor===prod));
+  const movs=finMovimentos().filter(m=>!prod||m.t.produtor===prod);
+  // saldo no começo da janela: saldo inicial de cada conta + movimentos dessa conta entre a data do saldo e o início
+  let saldoIni=0, temConta=false; contas.forEach(c=>{ temConta=true; const d0=String(c.dataSaldo||'').slice(0,10); let s=+c.saldoInicial||0; movs.forEach(m=>{ if(m.b.conta!==c.codigo) return; if(d0&&m.data<d0) return; if(m.data<ini+'-01') s+=m.ent-m.sai; }); saldoIni+=s; });
+  movs.forEach(m=>{ const k=m.data.slice(0,7); if(!M[k]) return; M[k].entR+=m.ent; M[k].saiR+=m.sai; });
+  let vencR=0, vencP=0, nVR=0, nVP=0;
+  F.titulos.forEach(t=>{ if(prod&&t.produtor!==prod) return; const sit=finSit(t); if(!_finAberto(sit)) return; const v=finSaldo(t); if(!(v>0)) return; const rec=String(t.tipo||'PAGAR').toUpperCase()==='RECEBER';
+    let venc=String(t.vencimento||'').slice(0,10); if(!venc||venc<hoje){ if(venc&&venc<hoje){ if(rec){ vencR+=v; nVR++; } else { vencP+=v; nVP++; } } venc=hoje; }   // vencido ou sem data: mês atual
+    const k=venc.slice(0,7), X=M[k]||(k>meses[meses.length-1]?M[meses[meses.length-1]]:null); if(!X) return;   // além da janela: cai no último mês
+    if(rec){ X.entP+=v; X.nEntP++; } else { X.saiP+=v; X.nSaiP++; } });
+  let acc=saldoIni; const lista=meses.map(m=>{ const x=M[m]; x.ent=x.entR+x.entP; x.sai=x.saiR+x.saiP; acc+=x.ent-x.sai; x.saldo=acc; x.real=m<mesHoje; x.atual=m===mesHoje; return x; });
+  const tEnt=lista.reduce((s,x)=>s+x.ent,0), tSai=lista.reduce((s,x)=>s+x.sai,0);
+  let semData=0; try{ semData=pesResumo().reduce((s,x)=>s+(+x.vSaldo||0),0); }catch(e){}   // contratos de venda com saldo a entregar (sem vencimento): fora dos meses
+  return {meses:lista, saldoIni, temConta, tEnt, tSai, saldoFim:saldoIni+tEnt-tSai, vencR, vencP, nVR, nVP, semData, mesHoje}; }
+function svgFluxo(L){ const n=L.length, W=Math.max(360, n*52+56), H=220, padL=48, padT=14, padB=30, cw=52, bw=14;
+  let max=0; L.forEach(x=>{ max=Math.max(max, x.ent, x.sai, Math.abs(x.saldo)); }); if(!max) max=1;
+  const minS=Math.min(0, ...L.map(x=>x.saldo), ...L.map(x=>-x.sai)), maxS=Math.max(0, ...L.map(x=>x.saldo), ...L.map(x=>x.ent)), span=(maxS-minS)||1, y=v=>padT+(maxS-v)/span*(H-padT-padB), y0=y(0);
+  const fmtK=v=>Math.abs(v)>=1e6?nf1.format(v/1e6)+'M':Math.abs(v)>=1e3?nf0.format(v/1e3)+'k':nf0.format(v);
+  let grade=''; for(let i=0;i<=4;i++){ const v=minS+span*i/4; grade+=`<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#e6eef0"/><text x="${padL-4}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="#5c6f75">${fmtK(v)}</text>`; }
+  let bars='', labs='', pts=[];
+  L.forEach((x,i)=>{ const cx=padL+10+i*cw+cw/2; if(x.atual) bars+=`<rect x="${cx-cw/2+2}" y="${padT}" width="${cw-4}" height="${H-padT-padB}" fill="#eaf4e6" rx="6"/>`;
+    const op=x.real?1:0.55;
+    if(x.ent>0) bars+=`<rect x="${cx-bw-2}" y="${y(x.ent)}" width="${bw}" height="${Math.max(1,y0-y(x.ent))}" rx="3" fill="#2f6f7e" opacity="${op}"><title>${_mesLbl(x.m)} · entradas ${brl0(x.ent)}${x.entP?` (previstas ${brl0(x.entP)})`:''}</title></rect>`;
+    if(x.sai>0) bars+=`<rect x="${cx+2}" y="${y0}" width="${bw}" height="${Math.max(1,y(-x.sai)-y0)}" rx="3" fill="#c62828" opacity="${op}"><title>${_mesLbl(x.m)} · saídas ${brl0(x.sai)}${x.saiP?` (previstas ${brl0(x.saiP)})`:''}</title></rect>`;
+    pts.push([cx, y(x.saldo), x]); labs+=`<text x="${cx}" y="${H-padB+13}" text-anchor="middle" font-size="9" fill="${x.atual?'#16323a':'#5c6f75'}" font-weight="${x.atual?700:400}">${_mesLbl(x.m)}</text>`; });
+  const linha=`<polyline fill="none" stroke="#5c6f75" stroke-width="1.5" points="${pts.map(p=>p[0]+','+p[1]).join(' ')}"/>`+pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="#fff" stroke="${p[2].saldo<0?'#c62828':'#5c6f75'}" stroke-width="1.5"><title>${_mesLbl(p[2].m)} · saldo ${brl0(p[2].saldo)}</title></circle>`).join('');
+  return `<div class="ps-bars-wrap"><svg class="ps-bars fx-svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${grade}<line x1="${padL}" x2="${W}" y1="${y0}" y2="${y0}" stroke="#9fb3b8"/>${bars}${linha}${labs}</svg></div>`; }
+function finFluxoHtml(){ const X=finFluxoCalc(), L=X.meses, mais=!!FIN_UI.fluxoMais;
+  const cor=v=>v<0?'var(--red)':'var(--ink)', sv=X.vencR-X.vencP;
+  const card=(l,v,sub,cls)=>`<div class="kpi ${cls||''}"><div class="k-label">${l}</div><div class="k-value" style="color:${cls==='accent'?(v<0?'#ffb4b4':'#fff'):cor(v)}">${v<0?'− ':''}${brl0(Math.abs(v))}</div>${sub?`<div class="k-sub">${sub}</div>`:''}</div>`;
+  const kpis=`<div class="kpi-grid">${card('Saldo inicial',X.saldoIni,X.temConta?`contas em ${_mesLbl(L[0].m)}`:'cadastre o saldo inicial das contas','accent')}${card('Entradas',X.tEnt,'recebidas + a receber no período')}${card('Saídas',-X.tSai,'pagas + a pagar no período')}${card('Saldo final',X.saldoFim,`em ${_mesLbl(L[L.length-1].m)}`)}</div>
+    <div class="kpi-grid fx-venc">${card('Vencidos a receber',X.vencR,`${X.nVR} título(s)`)}${card('Vencidos a pagar',X.vencP?-X.vencP:0,`${X.nVP} título(s)`)}${card('Saldo de vencidos',sv,'a receber − a pagar')}</div>`;
+  const rows=L.map(x=>`<tr class="${x.atual?'fx-atual':''}${x.real?' fx-real':''}"><td class="c-full"><b>${_mesLbl(x.m)}</b>${x.atual?' <span class="pill">atual</span>':''}</td><td class="num" data-th="Entradas">${x.ent?brl0(x.ent):'·'}${x.entP?`<br><small class="mut">${brl0(x.entP)} prev. · ${x.nEntP}</small>`:''}</td><td class="num" data-th="Saídas">${x.sai?`<span style="color:var(--red)">${brl0(x.sai)}</span>`:'·'}${x.saiP?`<br><small class="mut">${brl0(x.saiP)} prev. · ${x.nSaiP}</small>`:''}</td><td class="num" data-th="Resultado"><b style="color:${x.ent-x.sai>=0?'var(--green)':'var(--red)'}">${x.ent-x.sai>=0?'+':'−'}${brl0(Math.abs(x.ent-x.sai))}</b></td><td class="num" data-th="Saldo"><b style="color:${cor(x.saldo)}">${brl0(x.saldo)}</b></td></tr>`).join('');
+  return kpis+`<div class="panel"><div class="panel-head"><h2>Fluxo de caixa</h2><span class="sub">${_mesLbl(L[0].m)} a ${_mesLbl(L[L.length-1].m)} · barras cheias = realizado (baixas) · claras = previsto (títulos em aberto pelo vencimento) · linha = saldo acumulado</span></div>
+    <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Entradas</span><span><i style="background:#c62828"></i>Saídas</span><span><i style="background:#5c6f75;border-radius:50%"></i>Saldo acumulado</span><span><i style="background:#eaf4e6"></i>mês atual</span></div>
+    ${svgFluxo(L)}
+    ${X.semData>0?`<p class="mut" style="font-size:11.5px;padding:0 14px 6px">🌾 Contratos de venda com saldo a entregar: <b>${brl0(X.semData)}</b> a receber sem data definida (fora dos meses acima).</p>`:''}
+    <div class="table-wrap"${mais?'':' hidden'}><table class="cards-sm fx-t"><thead><tr><th>Mês</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Resultado</th><th class="num">Saldo</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div style="padding:6px 14px 12px;text-align:right"><button class="btn btn-ghost btn-sm" data-act="finFluxoMais">${mais?'Ver menos ▴':'Ver mais ▾'}</button></div>
+    <p class="mut" style="font-size:11px;padding:0 14px 12px;margin:0">Realizado = baixas registradas (entradas de títulos a receber, saídas de títulos a pagar). Previsto = saldo dos títulos em aberto, no mês do vencimento; vencidos e sem data entram no mês atual; além da janela, no último mês. Saldo inicial = saldo inicial das contas bancárias ativas mais as baixas até o começo da janela.</p></div>`; }
 function finExtratoHtml(){ const F=FIN(), contas=F.contas.filter(c=>_finAtivo(c.ativa)), U=FIN_UI;
   if(U.conta&&!contas.some(c=>c.codigo===U.conta)) U.conta='';
   const c=contas.find(x=>x.codigo===U.conta)||null, movs=finMovimentos().filter(m=>(!U.conta||m.b.conta===U.conta)&&(!U.prod||m.t.produtor===U.prod)&&(!U.de||m.data>=U.de)&&(!U.ate||m.data<=U.ate));
@@ -12376,6 +12423,7 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='finFluxoMais'){ FIN_UI.fluxoMais=!FIN_UI.fluxoMais; route({keepScroll:true}); return; }   // v416
     else if(a.act==='resCatModo'){ RES_UI.cat=a.k||'orc'; route({keepScroll:true}); return; }   // v415
     else if(a.act==='relOrigToggle'){ if(e.target.closest('a')) return; REL_ORIG_ABERTO[a.id]=!REL_ORIG_ABERTO[a.id]; route({keepScroll:true}); return; }   // v413
     else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }
