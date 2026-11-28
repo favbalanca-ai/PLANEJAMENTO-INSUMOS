@@ -2565,6 +2565,27 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ro-det-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px}.ro-det-row>span:nth-child(2){flex:1 1 220px;min-width:0}.ro-det-row .num{white-space:nowrap}
 @media (max-width:640px){ .cards-sm tbody tr.ro-det{display:block;padding:0;border:none;box-shadow:none;background:none} .cards-sm tbody tr.ro-det::after{display:none} .cards-sm tbody tr.ro-det td{display:block;padding:0 0 10px!important;background:none} .cards-sm tbody tr.ro-det td::before{display:none} }
 
+/* v414: Painel da safra (Resultados) */
+.ps-panel{margin-bottom:16px}
+.ps-grid4{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:12px 14px 4px}
+.ps-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px;min-width:0}
+.ps-card small{font-size:12px;color:var(--muted);font-weight:700}
+.ps-main{display:flex;align-items:baseline;gap:6px}.ps-main .ps-rs{font-size:12px;color:var(--muted);font-weight:700}.ps-main b{font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.3px}
+.ps-lin{display:flex;justify-content:space-between;font-size:12.5px;color:var(--muted)}.ps-lin b{color:var(--ink);font-weight:700}
+.ps-pos .ps-main b{color:var(--green)}.ps-neg .ps-main b{color:var(--red)}
+.ps-marg{align-items:center;text-align:center}.ps-marg small{align-self:flex-start}.ps-donut{width:92px;height:92px}
+.ps-grid6{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:8px 14px 4px}@media (min-width:1000px){.ps-grid6{grid-template-columns:repeat(6,1fr)}}
+.ps-orc{border-top:1px dashed var(--line);padding-top:4px;margin-top:2px}.ps-orc i{font-style:normal;font-size:11px;font-weight:700}.ps-orc i.up{color:var(--green)}.ps-orc i.down{color:var(--red)}
+.ps-mini{background:#f6f9fa;border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.ps-mini small{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}.ps-mini b{font-size:16px;color:var(--ink)}.ps-mini b small{font-size:11px;text-transform:none;letter-spacing:0}.ps-mini span.mut{font-size:11px}
+.ps-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:8px 14px 4px}
+.ps-res{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 14px}.ps-res small{font-size:12px;color:var(--muted);font-weight:700}
+.ps-res>div{display:flex;align-items:center;gap:10px;margin-top:4px}.ps-seta{font-size:26px;font-weight:800;line-height:1}.ps-res.up .ps-seta{color:var(--green)}.ps-res.down .ps-seta{color:var(--red)}
+.ps-res-v{font-size:15px;font-weight:800;color:var(--ink)}.ps-res-v small{font-weight:600;color:var(--muted)}.ps-res-v .mut{font-size:11.5px;font-weight:600;margin-left:4px}
+.ps-leg{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 14px 4px;font-size:11.5px;color:var(--muted)}.ps-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.ps-bars-wrap{overflow-x:auto;padding:0 14px 6px;scrollbar-width:thin}.ps-bars{display:block;max-width:100%;height:auto}
+.ps-nota{font-size:11px;padding:4px 14px 12px;margin:0}
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3066,4 +3087,14 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ro-chip{font-size:9.5px}
   .rcv-ochip{font-size:10px}
   .ro-det-row{font-size:10px}
+  .ps-card small{font-size:9.5px}
+  .ps-main .ps-rs{font-size:9.5px}
+  .ps-main b{font-size:19.5px}
+  .ps-lin{font-size:10px}
+  .ps-mini b{font-size:13px}
+  .ps-res small{font-size:9.5px}
+  .ps-seta{font-size:21px}
+  .ps-res-v{font-size:12px}
+  .ps-res-v .mut{font-size:9.5px}
+  .ps-leg{font-size:9.5px}
 }
