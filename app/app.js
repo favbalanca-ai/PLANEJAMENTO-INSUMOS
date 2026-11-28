@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-417';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-418';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1727,6 +1727,7 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });
+document.addEventListener('change',e=>{ if(e.target.id!=='ps-cmp-sel') return; RES_UI.cmp=e.target.value; route({keepScroll:true}); });   // v418: safra de referência do comparativo
 // v417: controles do simulador — atualiza o valor, sincroniza o par (barra ↔ caixa) e redesenha só o corpo do painel (sem perder o foco)
 document.addEventListener('input',e=>{ const el=e.target, k=el.dataset&&el.dataset.sim; if(!k) return; const S=RES_UI.sim; let v=parseFloat(String(el.value).replace(',','.')); if(!isFinite(v)) return; S[k]=v;
   document.querySelectorAll(`[data-sim="${k}"]`).forEach(o=>{ if(o===el) return; o.value=o.dataset.simtxt?String(v).replace('.',','):v; });
@@ -5097,6 +5098,11 @@ function movAvServerOk(){ return !!(DATA && DATA.movimentos_app && typeof DATA.m
 function movAvApplyPulled(m){ return _mapApplyPulled('movAv', m, movAvSig, ()=>lastMovAvSig, v=>{ lastMovAvSig=v; }, '__movAvulso'); }
 let lastTransfSig='';
 function transfSig(){ return sigHash(JSON.stringify((OV&&OV.transf)||{})); }
+// v418: fechamentos de safra (aba FECHAMENTOS SAFRA) — mesmo padrão
+let lastSafraSig='';
+function safraSig(){ return sigHash(JSON.stringify((OV&&OV.safraFecho)||{})); }
+function safraServerOk(){ return !!(DATA && DATA.safras_app && typeof DATA.safras_app==='object'); }
+function safraApplyPulled(m){ return _mapApplyPulled('safraFecho', m, safraSig, ()=>lastSafraSig, v=>{ lastSafraSig=v; }, '__safraFecho'); }
 function transfServerOk(){ return !!(DATA && DATA.transferencias_app && typeof DATA.transferencias_app==='object'); }
 function transfApplyPulled(m){ return _mapApplyPulled('transf', m, transfSig, ()=>lastTransfSig, v=>{ lastTransfSig=v; }, '__transferencia'); }
 // v362: contagens físicas (aba CONTAGENS APP)
@@ -5773,6 +5779,66 @@ function simBarHtml(RC){ const S=RES_UI.sim; if(!S.on) return ''; const B=simBas
   const ctl=(k,lbl,v,min,max,step,un,base)=>`<div class="ps-sim-c"><label>${lbl} <small class="mut">${base}</small></label><div class="ps-sim-row"><input type="range" data-sim="${k}" min="${min}" max="${max}" step="${step}" value="${v}"><input class="cell" inputmode="decimal" data-sim="${k}" data-simtxt="1" value="${String(v).replace('.',',')}"><span class="mut">${un}</span></div></div>`;
   return `<div class="ps-sim">${ctl('preco','Preço de venda',S.preco,+(B.preco*0.5).toFixed(2),+(B.preco*1.5).toFixed(2),0.5,'R$/sc',`atual ${nf2.format(B.preco)}`)}${ctl('prod','Produtividade',S.prod,+(B.prod*0.5).toFixed(1),+(B.prod*1.5).toFixed(1),0.5,'sc/ha',`atual ${nf1.format(B.prod)}`)}${ctl('custo','Custos e despesas',S.custo,-30,30,1,'%',`variação sobre o atual`)}
     <div class="ps-sim-f"><button class="btn btn-outline btn-sm" data-act="resSimReset">↺ Voltar ao atual</button><small class="mut">Só nesta tela: nada é gravado. Preço e produtividade escalam todas as culturas na mesma proporção; impostos e financeiro acompanham a receita.</small></div></div>`; }
+// ===== v418: COMPARATIVO ENTRE SAFRAS — "fechamento" = foto dos números da safra (totais e por cultura), guardada na aba
+// FECHAMENTOS SAFRA; safras anteriores sem dados no app podem ser registradas à mão. =====
+RES_UI.cmp='';
+function safraLista(){ return Object.values((OV&&OV.safraFecho)||{}).filter(x=>x&&!x.del).sort((a,b)=>String(a.nome||'').localeCompare(String(b.nome||''),'pt',{numeric:true})); }
+function safraNomeAtual(){ return String((PRECOS&&PRECOS.atual)||'').trim()||'Safra atual'; }
+// foto da safra atual a partir das linhas do Resultados (sem simulação)
+function safraFoto(RC){ const rows=RC.rows, T=f=>rows.reduce((s,r)=>s+f(r),0), sc=rows.filter(r=>r.unit==='sc'), por={};
+  rows.forEach(r=>{ const k=culturaKey(r.emp)||r.emp, x=por[k]||(por[k]={emp:r.emp, unit:r.unit, area:0, prod:0, receita:0, custo:0, lucro:0}); x.area+=r.area; x.prod+=r.prodHaReal*r.area; x.receita+=r.receitaReal; x.custo+=r.custoReal; x.lucro+=r.margReal; });
+  return {area:T(r=>r.area), prodSc:sc.reduce((s,r)=>s+r.prodHaReal*r.area,0), areaSc:sc.reduce((s,r)=>s+r.area,0), receita:T(r=>r.receitaReal), custo:T(r=>r.custoReal), lucro:T(r=>r.margReal),
+    porCult:Object.values(por).map(x=>({emp:x.emp, unit:x.unit, area:+x.area.toFixed(2), prodHa:x.area?+(x.prod/x.area).toFixed(2):0, receita:Math.round(x.receita), custo:Math.round(x.custo), lucro:Math.round(x.lucro)}))}; }
+function safraFechar(){ const RC=resultadosCalc(); if(!RC.rows.length){ toast('Sem talhões para fechar'); return; } const nome=safraNomeAtual();
+  const ja=safraLista().find(x=>String(x.nome||'')===nome);
+  if(!ask(`Guardar a foto da safra ${nome} com os números de agora (receita, custos, lucro, produção por cultura)?${ja?'\n\nJá existe um fechamento desta safra: ele será substituído.':''}`)) return;
+  const F=safraFoto(RC), id=ja?ja.id:('sf'+Date.now().toString(36)), nReal=RC.rows.filter(r=>r.temReal).length;
+  OV.safraFecho=OV.safraFecho||{}; OV.safraFecho[id]={id, nome, data:_hojeISO(), origem:'app', quem:(sessUsuario()||{}).nome||'', obs:nReal<RC.rows.length?`${nReal}/${RC.rows.length} talhões com colhido informado`:'', area:+F.area.toFixed(2), prodSc:Math.round(F.prodSc), areaSc:+F.areaSc.toFixed(2), receita:Math.round(F.receita), custo:Math.round(F.custo), lucro:Math.round(F.lucro), porCult:F.porCult, _u:tsAgora()};
+  saveOverrides(); loteAgendar('__safraFecho'); RES_UI.cmp=''; route({keepScroll:true}); toast(`Safra ${nome} fechada${ja?' (substituída)':''}`); }
+function safraExcluir(id){ const x=OV.safraFecho&&OV.safraFecho[id]; if(!x||x.del) return; if(!ask(`Apagar o fechamento da safra ${x.nome}?`)) return; x.del=true; x._u=tsAgora(); saveOverrides(); loteAgendar('__safraFecho'); if(RES_UI.cmp===id) RES_UI.cmp=''; route({keepScroll:true}); toast('Fechamento apagado'); }
+// registro à mão de uma safra anterior (totais + culturas opcionais)
+let SAFRA_MAN=null;
+function safraManualOpen(id){ const x=id&&OV.safraFecho&&OV.safraFecho[id]; SAFRA_MAN=x?JSON.parse(JSON.stringify(x)):{id:'', nome:'', area:'', prodSc:'', receita:'', custo:'', obs:'', porCult:[]}; if(!SAFRA_MAN.porCult) SAFRA_MAN.porCult=[]; safraManualRender(); }
+function safraManualLer(){ const M=SAFRA_MAN, ov=document.getElementById('na-ov'); if(!M||!ov) return M; const g=k=>{ const el=ov.querySelector(`[data-sm="${k}"]`); return el?el.value:''; };
+  ['nome','area','prodSc','receita','custo','obs'].forEach(k=>M[k]=g(k)); M.porCult=[...ov.querySelectorAll('.sm-row')].map(row=>{ const v=k=>{ const el=row.querySelector(`[data-smc="${k}"]`); return el?el.value:''; }; return {emp:v('emp'), area:v('area'), prodHa:v('prodHa'), receita:v('receita'), custo:v('custo')}; }); return M; }
+function safraManualRender(){ const M=SAFRA_MAN; if(!M) return; novaAcaoFechar(); const num_=v=>v===''||v==null?'':String(v).replace('.',',');
+  const ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov';
+  const rows=(M.porCult||[]).map((c,i)=>`<div class="sm-row"><input class="txt" data-smc="emp" value="${esc(c.emp||'')}" placeholder="cultura (ex.: Soja)"><input class="cell" inputmode="decimal" data-smc="area" value="${num_(c.area)}" placeholder="ha"><input class="cell" inputmode="decimal" data-smc="prodHa" value="${num_(c.prodHa)}" placeholder="sc/ha"><input class="cell" inputmode="decimal" data-smc="receita" value="${num_(c.receita)}" placeholder="receita R$"><input class="cell" inputmode="decimal" data-smc="custo" value="${num_(c.custo)}" placeholder="custos R$"><button type="button" class="icon-btn del" data-act="safraManDel" data-i="${i}" title="Tirar esta cultura">✕</button></div>`).join('');
+  ov.innerHTML=`<div class="na-sheet tf-sheet" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>📚 ${M.id?'Editar':'Registrar'} safra anterior</h3><span class="mut">totais da safra; por cultura é opcional</span></div><button class="icon-btn" data-act="naFechar" title="Fechar">✕</button></div>
+    <div class="app-grid" style="padding:6px 12px 8px">
+      <label>Safra<input class="txt" data-sm="nome" value="${esc(M.nome||'')}" placeholder="ex.: 2025/2026"></label>
+      <label>Área (ha)<input class="cell" inputmode="decimal" data-sm="area" value="${num_(M.area)}" style="width:100%"></label>
+      <label>Produção (sc60)<input class="cell" inputmode="decimal" data-sm="prodSc" value="${num_(M.prodSc)}" style="width:100%"></label>
+      <label>Receita (R$)<input class="cell" inputmode="decimal" data-sm="receita" value="${num_(M.receita)}" style="width:100%"></label>
+      <label>Custos e despesas (R$)<input class="cell" inputmode="decimal" data-sm="custo" value="${num_(M.custo)}" style="width:100%"></label>
+      <label style="grid-column:1/-1">Observação<input class="txt" data-sm="obs" value="${esc(M.obs||'')}" placeholder="de onde vieram os números"></label></div>
+    <div style="padding:0 12px 6px"><div class="mut" style="font-size:12px;font-weight:700;margin-bottom:4px">Por cultura (opcional) <small style="font-weight:500">· cultura · ha · sc/ha · receita · custos</small></div><div class="sm-rows">${rows}</div><button type="button" class="btn btn-outline btn-sm" data-act="safraManAdd">＋ cultura</button></div>
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="safraManSalvar">Salvar</button><button class="btn btn-ghost btn-sm" data-act="naFechar">Cancelar</button></div></div>`;
+  ov.addEventListener('click', e=>{ if(e.target===ov){ SAFRA_MAN=null; novaAcaoFechar(); } }); document.body.appendChild(ov); }
+function safraManualSalvar(){ const M=safraManualLer(); if(!M) return; const n=v=>_mmC(v)||0; const nome=String(M.nome||'').trim(); if(!nome){ toast('Informe a safra (ex.: 2025/2026)'); return; } if(!(n(M.area)>0)){ toast('Informe a área'); return; }
+  const porCult=(M.porCult||[]).filter(c=>String(c.emp||'').trim()).map(c=>({emp:String(c.emp).trim(), unit:'sc', area:n(c.area), prodHa:n(c.prodHa), receita:n(c.receita), custo:n(c.custo), lucro:n(c.receita)-n(c.custo)}));
+  const id=M.id||('sf'+Date.now().toString(36)), ant=(OV.safraFecho&&OV.safraFecho[id])||{};
+  OV.safraFecho=OV.safraFecho||{}; OV.safraFecho[id]=Object.assign({}, ant, {id, nome, data:ant.data||_hojeISO(), origem:'manual', quem:(sessUsuario()||{}).nome||ant.quem||'', obs:String(M.obs||'').trim(), area:n(M.area), prodSc:n(M.prodSc), areaSc:n(M.prodSc)>0?n(M.area):0, receita:n(M.receita), custo:n(M.custo), lucro:n(M.receita)-n(M.custo), porCult, _u:tsAgora()});
+  saveOverrides(); loteAgendar('__safraFecho'); SAFRA_MAN=null; novaAcaoFechar(); route({keepScroll:true}); toast(`Safra ${nome} registrada`); }
+// bloco do comparativo (dentro do corpo do painel): escolhe a safra de referência e compara com a atual (linhas já simuladas, se for o caso)
+function safraComparativoHtml(RC, rows){ const L=safraLista(), atualNome=safraNomeAtual(), F=safraFoto({rows});
+  const outras=L.filter(x=>String(x.nome||'')!==atualNome); let ref=outras.find(x=>x.id===RES_UI.cmp)||outras[outras.length-1]||null;
+  const btns=`<button class="btn btn-outline btn-sm" data-act="safraFechar" title="Guarda a foto dos números da safra atual para comparar depois">📸 Fechar safra ${esc(atualNome)}</button><button class="btn btn-outline btn-sm" data-act="safraManual">➕ Registrar safra anterior</button>`;
+  const lista=L.length?`<div class="ps-sf-list">${L.map(x=>`<span class="ps-sf-chip${ref&&x.id===ref.id?' on':''}" title="${esc(x.origem==='manual'?'registrada à mão':'foto do app')} · ${esc(fmtDataBR(x.data))}${x.obs?' · '+esc(x.obs):''}">${x.origem==='manual'?'📚':'📸'} ${esc(x.nome)}${x.origem==='manual'?`<button class="icon-btn" data-act="safraManual" data-id="${esc(x.id)}" title="Editar">✎</button>`:''}<button class="icon-btn del" data-act="safraExcluir" data-id="${esc(x.id)}" title="Apagar">🗑</button></span>`).join('')}</div>`:'';
+  if(!ref) return `<h3 class="rel-uso-h">Comparativo entre safras</h3><div class="ps-sf-top">${btns}</div>${lista}<p class="mut" style="padding:0 14px 10px;font-size:12px">Nenhuma safra anterior ainda. Feche a safra atual ao final dela (a foto fica guardada) e, para comparar já, registre a safra passada à mão com área, produção, receita e custos.</p>`;
+  const ha=(v,a)=>a>0?v/a:0, mA=ha(F.prodSc,F.areaSc), mR=ha(ref.prodSc||0, ref.areaSc||ref.area||0);
+  const item=(lbl,vRef,vAt,fmt,melhorMaior)=>{ const d=vAt-vRef, pct=vRef?d/Math.abs(vRef)*100:0, bom=melhorMaior?d>=0:d<=0; return `<div class="ps-cmp"><small>${lbl}</small><div class="ps-cmp-v"><span><i>${esc(ref.nome)}</i><b>${fmt(vRef)}</b></span><span class="ps-cmp-seta ${bom?'up':'down'}">${d>=0?'↑':'↓'}</span><span><i>${esc(atualNome)}</i><b>${fmt(vAt)}</b></span></div><div class="ps-cmp-d ${bom?'up':'down'}">${d>=0?'+':'−'}${fmt(Math.abs(d))}${vRef?` · ${pct>=0?'+':'−'}${nf1.format(Math.abs(pct))}%`:''}</div></div>`; };
+  const brlHa=v=>brl0(v)+'/ha', sel=outras.length>1?`<select class="sel" id="ps-cmp-sel">${outras.map(x=>`<option value="${esc(x.id)}"${x.id===ref.id?' selected':''}>${esc(x.nome)}</option>`).join('')}</select>`:'';
+  const cards=`<div class="ps-cmp-grid">${item('Produtividade',mR,mA,v=>nf1.format(v)+' sc/ha',true)}${item('Receita por ha',ha(ref.receita,ref.area),ha(F.receita,F.area),brlHa,true)}${item('Custos por ha',ha(ref.custo,ref.area),ha(F.custo,F.area),brlHa,false)}${item('Lucro por ha',ha(ref.lucro,ref.area),ha(F.lucro,F.area),brlHa,true)}${item('Margem',ref.receita?ref.lucro/ref.receita*100:0,F.receita?F.lucro/F.receita*100:0,v=>nf1.format(v)+'%',true)}${item('Área',+ref.area||0,F.area,v=>num(v)+' ha',true)}</div>`;
+  const todas=outras.concat([{nome:atualNome, area:F.area, receita:F.receita, custo:F.custo, lucro:F.lucro}]);
+  const bars=svgBarrasTal(todas.map(x=>x.nome), [{lbl:'Receita',cor:'#2f6f7e',vals:todas.map(x=>ha(x.receita,x.area))},{lbl:'Custos',cor:'#e0a23a',vals:todas.map(x=>ha(x.custo,x.area))},{lbl:'Lucro',cor:'#2e7d32',vals:todas.map(x=>ha(x.lucro,x.area))}]);
+  // por cultura: casa pela chave da cultura
+  const pcRef=(ref.porCult||[]), pcAt=F.porCult||[]; const pares=pcAt.map(a=>({a, r:pcRef.find(r=>culturaKey(r.emp)===culturaKey(a.emp))})).filter(x=>x.r);
+  const tab=pares.length?`<div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Área (ha)</th><th class="num">sc/ha</th><th class="num">Custos/ha</th><th class="num">Lucro/ha</th></tr></thead><tbody>${pares.map(({a,r})=>{ const c=(vr,va,fmt)=>`${fmt(vr)} → <b>${fmt(va)}</b>`; return `<tr><td class="c-full"><b>${esc(a.emp)}</b></td><td class="num" data-th="Área">${c(+r.area||0,a.area,num)}</td><td class="num" data-th="sc/ha">${a.unit==='sc'?c(+r.prodHa||0,a.prodHa,v=>nf1.format(v)):'—'}</td><td class="num" data-th="Custos/ha">${c(ha(r.custo,r.area),ha(a.custo,a.area),brl0)}</td><td class="num" data-th="Lucro/ha">${c(ha(r.lucro,r.area),ha(a.lucro,a.area),brl0)}</td></tr>`; }).join('')}</tbody></table></div>`:'';
+  return `<h3 class="rel-uso-h">Comparativo entre safras <span>· ${esc(ref.nome)} → ${esc(atualNome)}${ref.origem==='manual'?' · registrada à mão':''}</span></h3>
+    <div class="ps-sf-top">${sel}${btns}</div>${lista}${cards}
+    <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Receita/ha</span><span><i style="background:#e0a23a"></i>Custos/ha</span><span><i style="background:#2e7d32"></i>Lucro/ha</span></div>${bars}${tab}`; }
 function painelSafraHtml(RC){ if(!RC.rows.length) return ''; const S=RES_UI.sim, nReal=RC.rows.filter(r=>r.temReal).length, vendido=RC.rows.some(r=>r.precoVenda>0);
   return `<div class="panel ps-panel${S.on?' ps-simon':''}"><div class="panel-head"><h2>Painel da safra${S.on?' <span class="pill ps-sim-pill">🧪 simulação</span>':''}</h2><span class="sub">${nReal?`${nReal}/${RC.rows.length} talhões com colhido informado`:'ainda sem colhido informado: números orçados'}${vendido?' · preço das vendas registradas':''}</span><div class="spacer"></div><button class="btn ${S.on?'btn-primary':'btn-outline'} btn-sm" data-act="resSimToggle" title="Testar outros números de preço, produtividade e custo sem gravar nada">🧪 ${S.on?'Sair da simulação':'Simular'}</button> <a class="link" data-go="#/dre">premissas na DRE ›</a></div>
     ${simBarHtml(RC)}<div class="ps-body">${painelSafraBody(RC)}</div></div>`; }
@@ -5814,6 +5880,7 @@ function painelSafraBody(RC){ const rows=simRows(RC), S=RES_UI.sim; if(!rows.len
     <h3 class="rel-uso-h">Rentabilidade por talhão <span>· R$/ha${porHa.length>14?' · 14 melhores':''}</span></h3>
     <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Receita</span><span><i style="background:#e0a23a"></i>Custos e despesas</span><span><i style="background:#2e7d32"></i>Lucro</span></div>
     ${bars}
+    ${safraComparativoHtml(RC, rows)}
     <p class="mut ps-nota">Receita = colhido × preço (informados na tabela abaixo; sem informação, o orçado). Custos = insumos + máquinas + arrendamento + estrutura + impostos e financeiro (premissas da DRE). R$/sc e ponto de equilíbrio só para culturas em sacas de 60 kg.</p>`; }
 // v414: conta de Resultados em função própria (tabela e Painel da safra usam a mesma)
 function resultadosCalc(){
@@ -12441,6 +12508,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
     else if(a.act==='finFluxoMais'){ FIN_UI.fluxoMais=!FIN_UI.fluxoMais; route({keepScroll:true}); return; }   // v416
+    else if(a.act==='safraFechar'){ safraFechar(); return; } else if(a.act==='safraManual'){ safraManualOpen(a.id||''); return; } else if(a.act==='safraExcluir'){ safraExcluir(a.id); return; }   // v418
+    else if(a.act==='safraManAdd'){ const M=safraManualLer(); if(M){ M.porCult.push({emp:'',area:'',prodHa:'',receita:'',custo:''}); safraManualRender(); } return; }
+    else if(a.act==='safraManDel'){ const M=safraManualLer(); if(M){ M.porCult.splice(+a.i,1); safraManualRender(); } return; }
+    else if(a.act==='safraManSalvar'){ safraManualSalvar(); return; }
     else if(a.act==='resSimToggle'){ const S=RES_UI.sim; S.on=!S.on; if(S.on){ S.preco=null; S.prod=null; S.custo=0; } route({keepScroll:true}); return; }   // v417
     else if(a.act==='resSimReset'){ const S=RES_UI.sim; S.preco=null; S.prod=null; S.custo=0; route({keepScroll:true}); return; }
     else if(a.act==='resCatModo'){ RES_UI.cat=a.k||'orc'; route({keepScroll:true}); return; }   // v415
@@ -13228,6 +13299,7 @@ const LOTE_TIPOS={
   __experimentos:{ lbl:'Experimentos',  ok:()=>expServerOk(),     dados:()=>(OV.experimentos||{}), sig:()=>expSig(),     last:()=>lastExpSig,       set:v=>{ lastExpSig=v; } },
   __maqCad:      { lbl:'Máquinas',      ok:()=>maqServerOk(),     dados:()=>(OV.maqApp||{}),     sig:()=>maqSig(),       last:()=>lastMaqSig,       set:v=>{ lastMaqSig=v; } },   // v295
   __transferencia:{ lbl:'Transferências de estoque', ok:()=>transfServerOk(), dados:()=>(OV.transf||{}), sig:()=>transfSig(), last:()=>lastTransfSig, set:v=>{ lastTransfSig=v; } },   // v361
+  __safraFecho:{ lbl:'Fechamentos de safra', ok:()=>safraServerOk(), dados:()=>(OV.safraFecho||{}), sig:()=>safraSig(), last:()=>lastSafraSig, set:v=>{ lastSafraSig=v; } },   // v418
   __movAvulso:   { lbl:'Movimentos avulsos de estoque', ok:()=>movAvServerOk(), dados:()=>(OV.movAv||{}), sig:()=>movAvSig(), last:()=>lastMovAvSig, set:v=>{ lastMovAvSig=v; } },   // v384
   __recom:       { lbl:'Recomendações', ok:()=>recomServerOk(),   dados:()=>recomMap(),          sig:()=>recomSig(),     last:()=>lastRecomSig,     set:v=>{ lastRecomSig=v; } },   // v401
   __contagem:    { lbl:'Contagens físicas', ok:()=>contServerOk(), dados:()=>(OV.contagem||{}), sig:()=>contSig(), last:()=>lastContSig, set:v=>{ lastContSig=v; } },   // v362
@@ -13295,7 +13367,7 @@ function syncLog(msg){ const el=$('#sync-log'); if(el){ const d=document.createE
    Guarda as últimas 300 no aparelho. Tela Sincronizar → "Log detalhado" (filtro "só problemas" e botão Copiar). ---- */
 const SYNC_LOG_KEY='planejamento_sync_log';
 const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoque',__tarefas:'Tarefas',__realizado:'Execução das operações',
-  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__movAvulso:'Movimentos avulsos de estoque',__recom:'Recomendações',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
+  __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__safraFecho:'Fechamentos de safra',__movAvulso:'Movimentos avulsos de estoque',__recom:'Recomendações',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
   __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
@@ -13505,6 +13577,7 @@ function applyPulledData(d, raw){
   try{ expApplyPulled(d.experimentos_app); }catch(e){}      // experimentos (áreas de referência, v278)
   try{ maqApplyPulled(d.maquinas_app); abastApplyPulled(d.abast_app); osApplyPulled(d.os_app); }catch(e){}   // v295: módulo Máquinas
   try{ transfApplyPulled(d.transferencias_app); }catch(e){}   // v361: transferências entre fazendas
+  try{ safraApplyPulled(d.safras_app); }catch(e){}   // v418: fechamentos de safra
   try{ movAvApplyPulled(d.movimentos_app); }catch(e){}   // v384: movimentos avulsos
   try{ contApplyPulled(d.contagens_app); }catch(e){}   // v362: contagens físicas
   try{ checkApplyPulled(d.checklist_app); }catch(e){}       // v340: checklist pré-uso

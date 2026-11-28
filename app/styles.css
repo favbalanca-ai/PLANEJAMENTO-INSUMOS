@@ -2609,6 +2609,19 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ps-sim-f{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:11.5px}
 .ps-base span{color:#8a5a00}
 
+/* v418: comparativo entre safras */
+.ps-sf-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 14px 6px}
+.ps-sf-list{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 8px}
+.ps-sf-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:20px;padding:3px 6px 3px 10px;font-size:12px;background:var(--card)}.ps-sf-chip.on{border-color:var(--teal);background:#e6f1f3}
+.ps-sf-chip .icon-btn{width:24px;height:24px;font-size:12px}
+.ps-cmp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:4px 14px 8px}
+.ps-cmp{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px}.ps-cmp small{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+.ps-cmp-v{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-top:4px}.ps-cmp-v span{display:flex;flex-direction:column;min-width:0}.ps-cmp-v i{font-style:normal;font-size:10.5px;color:var(--muted)}.ps-cmp-v b{font-size:14px;color:var(--ink);white-space:nowrap}
+.ps-cmp-seta{font-size:22px;font-weight:800;flex:none}.ps-cmp-seta.up,.ps-cmp-d.up{color:var(--green)}.ps-cmp-seta.down,.ps-cmp-d.down{color:var(--red)}
+.ps-cmp-d{font-size:12px;font-weight:700;margin-top:2px}
+.sm-rows{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}.sm-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr auto;gap:6px}.sm-row .cell{width:100%;min-width:0}
+@media (max-width:640px){ .sm-row{grid-template-columns:1fr 1fr 1fr} .sm-row .txt{grid-column:1/3} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3125,4 +3138,9 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .fx-venc .kpi .k-value{font-size:16px}
   .ps-sim-c label{font-size:9.5px}
   .ps-sim-f{font-size:9.5px}
+  .ps-sf-chip{font-size:9.5px}
+  .ps-sf-chip .icon-btn{font-size:9.5px}
+  .ps-cmp-v b{font-size:11.5px}
+  .ps-cmp-seta{font-size:18px}
+  .ps-cmp-d{font-size:9.5px}
 }

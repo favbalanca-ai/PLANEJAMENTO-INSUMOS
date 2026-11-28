@@ -210,6 +210,15 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Comparativo entre safras (v418)** — bloco no Painel da safra. **📸 Fechar safra** guarda a foto dos números de
+  agora (`safraFoto`: área, produção em sc, receita, custos, lucro e o mesmo por cultura); fechar de novo substitui.
+  **➕ Registrar safra anterior** abre uma janelinha para digitar totais (e culturas, opcional) de safras que não
+  estavam no app (`safraManualOpen/Salvar`, origem `manual`, editável pelo ✎). Os fechamentos ficam em `OV.safraFecho`
+  e sincronizam pela aba **FECHAMENTOS SAFRA** (tipo `__safraFecho`, chave `safras_app`, merge por `_u`, `del` = apagado;
+  pacotes planejamento e admin). Comparativo: seletor da safra de referência (`RES_UI.cmp`; padrão a última que não é a
+  atual), 6 cartões passada → atual com seta e diferença (produtividade, receita/ha, custos/ha, lucro/ha, margem,
+  área), barras receita/custos/lucro por ha de todas as safras e tabela por cultura casando pela chave da cultura.
+  A atual usa as linhas do painel (entra na simulação, se ligada). **Precisa do Code.gs v418 publicado.**
 - **Modo simulador no Painel da safra (v417)** — botão **🧪 Simular** no cabeçalho do painel abre uma barra com três
   controles (barra deslizante + caixa, sincronizadas): preço de venda (R$/sc), produtividade (sc/ha) e variação de
   custos (%). `simRows(RC)` recalcula as linhas: preço e produtividade escalam todas as culturas na mesma proporção
