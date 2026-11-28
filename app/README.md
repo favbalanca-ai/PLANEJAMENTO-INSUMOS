@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Custos e despesas por categoria (v415)** — bloco novo dentro do Painel da safra, com rosca de várias fatias
+  (`svgDonutMulti`) e legenda (R$, % e R$/ha; até 9 categorias + "Outros"). Chave **Orçado / Realizado**
+  (`RES_UI.cat`, `resCatModo`). `custosCategoriaCalc`: orçado = itens do plano por classe (classe MÁQUINAS vira
+  "Máquinas (itens do plano)") + máquinas (custo-hora) + arrendamento + estrutura + impostos e financeiro da DRE
+  (fecha com os custos orçados do painel); realizado = baixas a custo médio por classe + combustível (abastecimentos)
+  e manutenção (peças e OS) das máquinas + títulos **pagos** do Financeiro por categoria, excluindo categorias de
+  insumo, combustível, manutenção, venda de grãos e adiantamento (já contados ou não são custo) e cancelados.
+  O gráfico de rentabilidade passou a rolar de lado no celular em vez de encolher.
 - **Painel da safra (v414)** — topo de **Resultados**, inspirado nos painéis de gestão agrícola: cartões Receita
   estimada, Custos e despesas e Lucro com **R$ · R$/ha · R$/sc** e a linha "orçado" com o desvio em %; **Margem** em
   rosca (`svgDonut`, SVG puro) com a orçada; mini-cartões Área, Produção (sc60), Produtividade, Ponto de equilíbrio

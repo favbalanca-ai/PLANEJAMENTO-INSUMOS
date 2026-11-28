@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-414';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-415';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5682,6 +5682,35 @@ function svgBarrasTal(rotulos, series){ const n=rotulos.length; if(!n) return ''
       bars+=`<rect x="${x}" y="${yy}" width="${bw}" height="${Math.max(hh,v?1:0)}" rx="2" fill="${sr.cor}"><title>${esc(rt)} · ${esc(sr.lbl)}: ${brl0(v)}/ha</title></rect>`; });
     labs+=`<text x="${x0+(series.length*(bw+gap)-gap)/2}" y="${H-padB+13}" text-anchor="middle" font-size="9" fill="#16323a">${esc(rt.length>9?rt.slice(0,8)+'…':rt)}</text>`; });
   return `<div class="ps-bars-wrap"><svg class="ps-bars" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${grade}<line x1="${padL}" x2="${W}" y1="${y0}" y2="${y0}" stroke="#9fb3b8"/>${bars}${labs}</svg></div>`; }
+// ===== v415: CUSTOS E DESPESAS POR CATEGORIA (rosca) — orçado (plano + premissas da DRE) ou realizado até agora
+// (insumos baixados a custo médio + combustível e manutenção das máquinas + títulos pagos do Financeiro por categoria) =====
+let RES_UI={cat:'orc'};
+const CAT_CORES=['#2f6f7e','#2e7d32','#e0a23a','#7b5ea7','#c62828','#1f9aa8','#8d6e63','#5c6f75','#b88a00','#3b7dd8','#d05a9a','#5aa04a'];
+const FIN_CAT_FORA=/insumo|semente|fertiliz|defensiv|combust|manuten|venda de gr|adiantamento/i;   // já contados (estoque/máquinas) ou não são custo
+function custosCategoriaCalc(RC, modo){ const rows=RC.rows, cats={}, add=(k,v)=>{ if(!(v>0)) return; cats[k]=(cats[k]||0)+v; };
+  const lblCl=c=>{ const k=String(c||'').trim(); return !k?'Sem classe':(k.length<=3?k.toUpperCase():k.charAt(0)+k.slice(1).toLowerCase()); }, catIns=c=>/^M[ÁA]QUINA/i.test(String(c||''))?'Máquinas (itens do plano)':'Insumos · '+lblCl(c);   // a planilha lista máquina como item com R$/ha
+  if(modo==='orc'){
+    rows.forEach(r=>{ const t=r.t, tag=r.cv.seq==='safrinha'?'S':'P';
+      opsOf(t.id,r.cv.seq).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{ if(!it.produto) return; add(catIns((PROD[it.produto]||{}).classe), (+it.dose||0)*r.area*precoDe(it.produto)); }));
+      add('Máquinas (custo-hora)', r.maq); add('Arrendamento', r.arr); add('Estrutura', r.estr); add('Impostos e financeiro', r.receitaOrc*(RC.impostoPct+RC.financeiroPct)/100); });
+  } else {
+    rows.forEach(r=>{ usoProdutosDe(r.t).forEach(l=>{ if(l.seq&&l.seq!==r.cv.seq) return; add(catIns(l.classe), +l.valorReal||0); }); });
+    let comb=0, manut=0; try{ maquinasAll().forEach(m=>{ const c=maqCustos(m); comb+=+c.comb||0; manut+=(+c.pecas||0)+(+c.os||0); }); }catch(e){}
+    add('Combustível (abastecimentos)', comb); add('Manutenção (peças e OS)', manut);
+    try{ FIN().titulos.forEach(t=>{ if(String(t.tipo||'PAGAR').toUpperCase()!=='PAGAR') return; const sit=finSit(t); if(sit==='cancelado') return; const cat=String(t.categoria||'Outros'); if(FIN_CAT_FORA.test(cat)) return; const pago=sit==='pago'?(+t.valor||0):Math.max(0,(+t.valor||0)-(+finSaldo(t)||0)); add(cat, pago); }); }catch(e){}
+  }
+  const L=Object.keys(cats).map(k=>({k, v:cats[k]})).sort((a,b)=>b.v-a.v), tot=L.reduce((s,x)=>s+x.v,0);
+  return {L, tot}; }
+function svgDonutMulti(segs, S){ S=S||150; const r=(S-20)/2, c=S/2, C=2*Math.PI*r, tot=segs.reduce((s,x)=>s+x.v,0)||1; let off=0;
+  const arcs=segs.map(x=>{ const len=x.v/tot*C, a=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${x.cor}" stroke-width="16" stroke-dasharray="${Math.max(0,len-1.5)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 ${c} ${c})"><title>${esc(x.k)}: ${brl0(x.v)} (${nf1.format(x.v/tot*100)}%)</title></circle>`; off+=len; return a; }).join('');
+  return `<svg class="ps-donut ps-donut-m" viewBox="0 0 ${S} ${S}" role="img"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#e6eef0" stroke-width="16"/>${arcs}<text x="${c}" y="${c-2}" text-anchor="middle" font-size="11" fill="#5c6f75">total</text><text x="${c}" y="${c+14}" text-anchor="middle" font-size="12" font-weight="700" fill="#16323a">${brl0(tot).replace('R$ ','R$ ')}</text></svg>`; }
+function custosCategoriaHtml(RC){ const modo=RES_UI.cat==='real'?'real':'orc', R=custosCategoriaCalc(RC, modo); if(!R.L.length&&modo==='orc') return '';
+  const area=RC.rows.reduce((s,r)=>s+r.area,0), top=R.L.slice(0,9), resto=R.L.slice(9), segs=top.map((x,i)=>Object.assign({cor:CAT_CORES[i%CAT_CORES.length]},x)); if(resto.length) segs.push({k:'Outros', v:resto.reduce((s,x)=>s+x.v,0), cor:'#c9d6da'});
+  const chip=(k,l)=>`<button class="chip-f${modo===k?' on':''}" data-act="resCatModo" data-k="${k}">${l}</button>`;
+  const leg=segs.map(x=>`<div class="ps-cat-row"><i style="background:${x.cor}"></i><span>${esc(x.k)}</span><b>${brl0(x.v)}</b><small>${R.tot?nf1.format(x.v/R.tot*100):'0'}%${area?` · ${brl0(x.v/area)}/ha`:''}</small></div>`).join('');
+  return `<h3 class="rel-uso-h">Custos e despesas por categoria <span>· ${modo==='orc'?'orçado para a safra':'realizado até agora'}</span></h3>
+    <div class="ps-cat-top"><div class="classe-filter">${chip('orc','Orçado')}${chip('real','Realizado')}</div><span class="mut">${modo==='orc'?'plano dos talhões a preço de referência + premissas da DRE':'baixas a custo médio + combustível/manutenção das máquinas + títulos pagos do Financeiro'}</span></div>
+    ${R.L.length?`<div class="ps-cat">${svgDonutMulti(segs)}<div class="ps-cat-leg">${leg}</div></div>`:'<p class="mut" style="padding:4px 14px 10px">Nada realizado ainda: nenhuma baixa de insumo, abastecimento, manutenção ou título pago.</p>'}`; }
 function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
   const T=f=>rows.reduce((s,r)=>s+f(r),0), area=T(r=>r.area), rec=T(r=>r.receitaReal), cus=T(r=>r.custoReal), luc=T(r=>r.margReal), margPct=rec>0?luc/rec*100:0;
   const sc=rows.filter(r=>r.unit==='sc'), prodSc=sc.reduce((s,r)=>s+r.prodHaReal*r.area,0), areaSc=sc.reduce((s,r)=>s+r.area,0), recSc=sc.reduce((s,r)=>s+r.receitaReal,0), cusSc=sc.reduce((s,r)=>s+r.custoReal,0), lucSc=recSc-cusSc;
@@ -5717,6 +5746,7 @@ function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
       <div class="ps-res up"><small>Maior resultado</small><div><span class="ps-seta">↑</span><div><b>${esc(tNome(melhor.r.t))}</b> <span class="mut">${esc(melhor.r.emp)}</span><div class="ps-res-v">${brl0(melhor.v)}<small>/ha</small> <span class="mut">${pctMed(melhor.v)}</span></div></div></div></div>
       <div class="ps-res down"><small>Menor resultado</small><div><span class="ps-seta">↓</span><div><b>${esc(tNome(pior.r.t))}</b> <span class="mut">${esc(pior.r.emp)}</span><div class="ps-res-v">${brl0(pior.v)}<small>/ha</small> <span class="mut">${pctMed(pior.v)}</span></div></div></div></div>
     </div>`:''}
+    ${custosCategoriaHtml(RC)}
     <h3 class="rel-uso-h">Rentabilidade por talhão <span>· R$/ha${porHa.length>14?' · 14 melhores':''}</span></h3>
     <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Receita</span><span><i style="background:#e0a23a"></i>Custos e despesas</span><span><i style="background:#2e7d32"></i>Lucro</span></div>
     ${bars}
@@ -12346,6 +12376,7 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='resCatModo'){ RES_UI.cat=a.k||'orc'; route({keepScroll:true}); return; }   // v415
     else if(a.act==='relOrigToggle'){ if(e.target.closest('a')) return; REL_ORIG_ABERTO[a.id]=!REL_ORIG_ABERTO[a.id]; route({keepScroll:true}); return; }   // v413
     else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
