@@ -979,6 +979,19 @@ Chamadas à planilha medidas no simulador (cada uma custa ~50–300 ms no Google
   sem cabeçalho "EM PEDIDO" cria coluna nova (antes usava W = SALDO e sobrescrevia a fórmula);
   produto novo (addprod) ganha as fórmulas de VALOR (S), CONSUMO (V) e SALDO (W).
 
+## Lançamento por voz com a IA (v421)
+
+O app entende sozinho a maior parte das frases faladas na Frota ("abasteci o Magnum 340 com 180 litros, horímetro
+3520"). Quando não consegue identificar a máquina ou o tipo (abastecimento × quebra), ele manda a frase para o
+Apps Script completar com a IA — usa a mesma `ANTHROPIC_KEY` (Propriedades do script) das misturas.
+
+- `doPost`: payload `__vozIa: {texto, maquinas:[{id, nome, grupo}]}` → `vozIa_(p)` chama o modelo (`IA_MODELO`) com
+  a lista de máquinas e devolve `out.campos = {tipo, maq, hor, litros, comb, origem, valor, desc, confianca}`.
+  O `maq` só pode ser um id da lista enviada; o que a IA não achar vem `null`. Sem chave ou com erro, `out.fail = 1`
+  e o app segue só com a leitura local.
+- `GRAVA_MOD.__vozIa = ['maquinas','campo','planejamento']` (operador de campo também pode usar);
+  `APP_INVALIDA_.__vozIa = []` (não grava nada na planilha — a gravação de fato é o `__abastecimento`/`__osMaq` normal).
+
 ## Fechamentos de safra (v418)
 
 Aba nova **FECHAMENTOS SAFRA** (KEY|JSON, como as transferências): cada registro é a foto dos números de uma safra
