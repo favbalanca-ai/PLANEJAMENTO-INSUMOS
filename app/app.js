@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-416';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-417';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1727,6 +1727,10 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });
+// v417: controles do simulador — atualiza o valor, sincroniza o par (barra ↔ caixa) e redesenha só o corpo do painel (sem perder o foco)
+document.addEventListener('input',e=>{ const el=e.target, k=el.dataset&&el.dataset.sim; if(!k) return; const S=RES_UI.sim; let v=parseFloat(String(el.value).replace(',','.')); if(!isFinite(v)) return; S[k]=v;
+  document.querySelectorAll(`[data-sim="${k}"]`).forEach(o=>{ if(o===el) return; o.value=o.dataset.simtxt?String(v).replace('.',','):v; });
+  const body=document.querySelector('.ps-body'); if(body){ try{ body.innerHTML=painelSafraBody(resultadosCalc()); }catch(err){} } });
 document.addEventListener('input',e=>{ if(!(e.target.dataset&&e.target.dataset.finmeta==='area')) return; const i=document.getElementById('fin-area-info'), enc=document.getElementById('fin-encerra'); if(!i) return;
   const a=_mmC(e.target.value)||0, tal=+i.dataset.tal||0, feita=+i.dataset.feita||0; i.innerHTML=finAreaInfo(a,tal,feita); if(enc) enc.hidden=!((feita+a)<tal-0.005); });
 document.addEventListener('click',e=>{ const w=document.getElementById('rcv-fabw'); if(w && w.classList.contains('open') && !w.contains(e.target)) w.classList.remove('open'); }, true);   // busca da Recomendação: filtra os cartões sem redesenhar
@@ -5758,12 +5762,26 @@ function custosCategoriaHtml(RC){ const modo=RES_UI.cat==='real'?'real':'orc', R
   return `<h3 class="rel-uso-h">Custos e despesas por categoria <span>· ${modo==='orc'?'orçado para a safra':'realizado até agora'}</span></h3>
     <div class="ps-cat-top"><div class="classe-filter">${chip('orc','Orçado')}${chip('real','Realizado')}</div><span class="mut">${modo==='orc'?'plano dos talhões a preço de referência + premissas da DRE':'baixas a custo médio + combustível/manutenção das máquinas + títulos pagos do Financeiro'}</span></div>
     ${R.L.length?`<div class="ps-cat">${svgDonutMulti(segs)}<div class="ps-cat-leg">${leg}</div></div>`:'<p class="mut" style="padding:4px 14px 10px">Nada realizado ainda: nenhuma baixa de insumo, abastecimento, manutenção ou título pago.</p>'}`; }
-function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
+// ===== v417: MODO SIMULADOR — muda preço de venda, produtividade e custos só nesta tela (nada é gravado) =====
+RES_UI.sim={on:false, preco:null, prod:null, custo:0};
+function simBase(rows){ const sc=rows.filter(r=>r.unit==='sc'), prodSc=sc.reduce((s,r)=>s+r.prodHaReal*r.area,0), areaSc=sc.reduce((s,r)=>s+r.area,0), recSc=sc.reduce((s,r)=>s+r.receitaReal,0);
+  return {preco:prodSc>0?recSc/prodSc:0, prod:areaSc>0?prodSc/areaSc:0}; }
+// linhas simuladas: produtividade e preço escalam proporcionalmente (todas as culturas); custos variam em %, impostos e financeiro seguem a receita
+function simRows(RC){ const S=RES_UI.sim, rows=RC.rows; if(!S.on) return rows; const B=simBase(rows), fProd=(B.prod>0&&S.prod>0&&S.prod!==+B.prod.toFixed(1))?S.prod/B.prod:1, fPreco=(B.preco>0&&S.preco>0&&S.preco!==+B.preco.toFixed(2))?S.preco/B.preco:1, fCus=1+(+S.custo||0)/100, pIF=(RC.impostoPct+RC.financeiroPct)/100;   // igual ao atual (arredondado) = fator 1
+  return rows.map(r=>{ const prodHa=r.prodHaReal*fProd, preco=r.precoReal*fPreco, rec=prodHa*r.area*preco, outros=r.custoReal-r.receitaReal*pIF, cus=outros*fCus+rec*pIF; return Object.assign({}, r, {prodHaReal:prodHa, precoReal:preco, receitaReal:rec, custoReal:cus, margReal:rec-cus, _base:r}); }); }
+function simBarHtml(RC){ const S=RES_UI.sim; if(!S.on) return ''; const B=simBase(RC.rows); if(S.preco==null) S.preco=+B.preco.toFixed(2); if(S.prod==null) S.prod=+B.prod.toFixed(1);
+  const ctl=(k,lbl,v,min,max,step,un,base)=>`<div class="ps-sim-c"><label>${lbl} <small class="mut">${base}</small></label><div class="ps-sim-row"><input type="range" data-sim="${k}" min="${min}" max="${max}" step="${step}" value="${v}"><input class="cell" inputmode="decimal" data-sim="${k}" data-simtxt="1" value="${String(v).replace('.',',')}"><span class="mut">${un}</span></div></div>`;
+  return `<div class="ps-sim">${ctl('preco','Preço de venda',S.preco,+(B.preco*0.5).toFixed(2),+(B.preco*1.5).toFixed(2),0.5,'R$/sc',`atual ${nf2.format(B.preco)}`)}${ctl('prod','Produtividade',S.prod,+(B.prod*0.5).toFixed(1),+(B.prod*1.5).toFixed(1),0.5,'sc/ha',`atual ${nf1.format(B.prod)}`)}${ctl('custo','Custos e despesas',S.custo,-30,30,1,'%',`variação sobre o atual`)}
+    <div class="ps-sim-f"><button class="btn btn-outline btn-sm" data-act="resSimReset">↺ Voltar ao atual</button><small class="mut">Só nesta tela: nada é gravado. Preço e produtividade escalam todas as culturas na mesma proporção; impostos e financeiro acompanham a receita.</small></div></div>`; }
+function painelSafraHtml(RC){ if(!RC.rows.length) return ''; const S=RES_UI.sim, nReal=RC.rows.filter(r=>r.temReal).length, vendido=RC.rows.some(r=>r.precoVenda>0);
+  return `<div class="panel ps-panel${S.on?' ps-simon':''}"><div class="panel-head"><h2>Painel da safra${S.on?' <span class="pill ps-sim-pill">🧪 simulação</span>':''}</h2><span class="sub">${nReal?`${nReal}/${RC.rows.length} talhões com colhido informado`:'ainda sem colhido informado: números orçados'}${vendido?' · preço das vendas registradas':''}</span><div class="spacer"></div><button class="btn ${S.on?'btn-primary':'btn-outline'} btn-sm" data-act="resSimToggle" title="Testar outros números de preço, produtividade e custo sem gravar nada">🧪 ${S.on?'Sair da simulação':'Simular'}</button> <a class="link" data-go="#/dre">premissas na DRE ›</a></div>
+    ${simBarHtml(RC)}<div class="ps-body">${painelSafraBody(RC)}</div></div>`; }
+function painelSafraBody(RC){ const rows=simRows(RC), S=RES_UI.sim; if(!rows.length) return '';
   const T=f=>rows.reduce((s,r)=>s+f(r),0), area=T(r=>r.area), rec=T(r=>r.receitaReal), cus=T(r=>r.custoReal), luc=T(r=>r.margReal), margPct=rec>0?luc/rec*100:0;
+  const TB=f=>RC.rows.reduce((s,r)=>s+f(r),0), recB=TB(r=>r.receitaReal), cusB=TB(r=>r.custoReal), lucB=TB(r=>r.margReal);
   const sc=rows.filter(r=>r.unit==='sc'), prodSc=sc.reduce((s,r)=>s+r.prodHaReal*r.area,0), areaSc=sc.reduce((s,r)=>s+r.area,0), recSc=sc.reduce((s,r)=>s+r.receitaReal,0), cusSc=sc.reduce((s,r)=>s+r.custoReal,0), lucSc=recSc-cusSc;
   const precoMed=prodSc>0?recSc/prodSc:0, peSc=(precoMed>0&&areaSc>0)?cusSc/precoMed/areaSc:0;   // ponto de equilíbrio (sc/ha): custo ÷ preço ÷ área
   const outras={}; rows.filter(r=>r.unit!=='sc'&&r.unit!=='%'&&r.unit).forEach(r=>{ outras[r.unit]=(outras[r.unit]||0)+r.prodHaReal*r.area; });   // '%' (braquiária) não é produção
-  const nReal=rows.filter(r=>r.temReal).length, vendido=rows.some(r=>r.precoVenda>0);
   // datas de plantio e colheita (todos os cultivos): início = menor, fim = maior; "previsto" quando falta data real
   let pIni='', pFim='', pReal=0, pTot=0, cIni='', cFim=''; rows.forEach(r=>{ const pr=plantioRealDe(r.t.id,r.cv.seq), pp=pr||plantioPrevDe(r.t.id,r.cv.seq), co=colheitaPrevDe(r.t.id,r.cv.seq); if(pp){ pTot++; if(pr) pReal++; if(!pIni||pp<pIni) pIni=pp; if(!pFim||pp>pFim) pFim=pp; } if(co){ if(!cIni||co<cIni) cIni=co; if(!cFim||co>cFim) cFim=co; } });
   const dias=(a,b)=>(a&&b)?Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000)+1:0;
@@ -5771,14 +5789,13 @@ function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
   const porHa=rows.filter(r=>r.area>0).map(r=>({r, v:r.margReal/r.area})).sort((a,b)=>b.v-a.v), media=area>0?luc/area:0, melhor=porHa[0], pior=porHa[porHa.length-1];
   const pctMed=v=>media?`${v-media>=0?'+':''}${nf1.format((v-media)/Math.abs(media)*100)}% vs média`:'';
   const recO=T(r=>r.receitaOrc), cusO=T(r=>r.custoOrc), lucO=T(r=>r.margOrc), margPctO=recO>0?lucO/recO*100:0;
-  const card=(lbl,v,ha,scv,cls,orc)=>`<div class="ps-card ${cls||''}"><small>${lbl}</small><div class="ps-main"><span class="ps-rs">R$</span><b>${nf0.format(v)}</b></div><div class="ps-lin"><span>R$/ha</span><b>${nf0.format(ha)}</b></div>${scv!=null?`<div class="ps-lin"><span>R$/sc</span><b>${nf2.format(scv)}</b></div>`:''}${orc!=null?`<div class="ps-lin ps-orc" title="pelo planejamento (produtividade e preço orçados)"><span>orçado</span><b>${brl0(orc)}${orc?` <i class="${v-orc>=0?'up':'down'}">${v-orc>=0?'+':'−'}${nf0.format(Math.abs(v-orc)/orc*100)}%</i>`:''}</b></div>`:''}</div>`;
+  const card=(lbl,v,ha,scv,cls,orc,base)=>`<div class="ps-card ${cls||''}"><small>${lbl}</small><div class="ps-main"><span class="ps-rs">R$</span><b>${nf0.format(v)}</b></div><div class="ps-lin"><span>R$/ha</span><b>${nf0.format(ha)}</b></div>${scv!=null?`<div class="ps-lin"><span>R$/sc</span><b>${nf2.format(scv)}</b></div>`:''}${S.on&&base!=null?`<div class="ps-lin ps-orc ps-base"><span>sem simulação</span><b>${brl0(base)}${base?` <i class="${v-base>=0?'up':'down'}">${v-base>=0?'+':'−'}${nf0.format(Math.abs(v-base)/Math.abs(base)*100)}%</i>`:''}</b></div>`:''}${orc!=null?`<div class="ps-lin ps-orc" title="pelo planejamento (produtividade e preço orçados)"><span>orçado</span><b>${brl0(orc)}${orc?` <i class="${v-orc>=0?'up':'down'}">${v-orc>=0?'+':'−'}${nf0.format(Math.abs(v-orc)/orc*100)}%</i>`:''}</b></div>`:''}</div>`;
   const mini=(lbl,v,sub)=>`<div class="ps-mini"><small>${lbl}</small><b>${v}</b>${sub?`<span class="mut">${sub}</span>`:''}</div>`;
   const top=porHa.slice(0,14), rot=top.map(x=>tNome(x.r.t)), bars=svgBarrasTal(rot,[{lbl:'Receita',cor:'#2f6f7e',vals:top.map(x=>x.r.receitaReal/x.r.area)},{lbl:'Custos',cor:'#e0a23a',vals:top.map(x=>x.r.custoReal/x.r.area)},{lbl:'Lucro',cor:'#2e7d32',vals:top.map(x=>x.v)}]);
-  return `<div class="panel ps-panel"><div class="panel-head"><h2>Painel da safra</h2><span class="sub">${nReal?`${nReal}/${rows.length} talhões com colhido informado`:'ainda sem colhido informado: números orçados'}${vendido?' · preço das vendas registradas':''}</span><div class="spacer"></div><a class="link" data-go="#/dre">premissas na DRE ›</a></div>
-    <div class="ps-grid4">
-      ${card('Receita estimada',rec,area?rec/area:0,prodSc>0?recSc/prodSc:null,'',recO)}
-      ${card('Custos e despesas',cus,area?cus/area:0,prodSc>0?cusSc/prodSc:null,'',cusO)}
-      ${card(luc>=0?'Lucro':'Prejuízo',luc,area?luc/area:0,prodSc>0?lucSc/prodSc:null,luc>=0?'ps-pos':'ps-neg',lucO)}
+  return `<div class="ps-grid4">
+      ${card('Receita estimada',rec,area?rec/area:0,prodSc>0?recSc/prodSc:null,'',recO,recB)}
+      ${card('Custos e despesas',cus,area?cus/area:0,prodSc>0?cusSc/prodSc:null,'',cusO,cusB)}
+      ${card(luc>=0?'Lucro':'Prejuízo',luc,area?luc/area:0,prodSc>0?lucSc/prodSc:null,luc>=0?'ps-pos':'ps-neg',lucO,lucB)}
       <div class="ps-card ps-marg"><small>Margem</small>${svgDonut(margPct, '#2e7d32')}<span class="mut">lucro ÷ receita · orçada ${nf1.format(margPctO)}%</span></div>
     </div>
     <div class="ps-grid6">
@@ -5797,7 +5814,7 @@ function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
     <h3 class="rel-uso-h">Rentabilidade por talhão <span>· R$/ha${porHa.length>14?' · 14 melhores':''}</span></h3>
     <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Receita</span><span><i style="background:#e0a23a"></i>Custos e despesas</span><span><i style="background:#2e7d32"></i>Lucro</span></div>
     ${bars}
-    <p class="mut ps-nota">Receita = colhido × preço (informados na tabela abaixo; sem informação, o orçado). Custos = insumos + máquinas + arrendamento + estrutura + impostos e financeiro (premissas da DRE). R$/sc e ponto de equilíbrio só para culturas em sacas de 60 kg.</p></div>`; }
+    <p class="mut ps-nota">Receita = colhido × preço (informados na tabela abaixo; sem informação, o orçado). Custos = insumos + máquinas + arrendamento + estrutura + impostos e financeiro (premissas da DRE). R$/sc e ponto de equilíbrio só para culturas em sacas de 60 kg.</p>`; }
 // v414: conta de Resultados em função própria (tabela e Painel da safra usam a mesma)
 function resultadosCalc(){
   const cfg=OV.dreCfg||{};
@@ -12424,6 +12441,8 @@ document.addEventListener('click',e=>{
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
     else if(a.act==='finFluxoMais'){ FIN_UI.fluxoMais=!FIN_UI.fluxoMais; route({keepScroll:true}); return; }   // v416
+    else if(a.act==='resSimToggle'){ const S=RES_UI.sim; S.on=!S.on; if(S.on){ S.preco=null; S.prod=null; S.custo=0; } route({keepScroll:true}); return; }   // v417
+    else if(a.act==='resSimReset'){ const S=RES_UI.sim; S.preco=null; S.prod=null; S.custo=0; route({keepScroll:true}); return; }
     else if(a.act==='resCatModo'){ RES_UI.cat=a.k||'orc'; route({keepScroll:true}); return; }   // v415
     else if(a.act==='relOrigToggle'){ if(e.target.closest('a')) return; REL_ORIG_ABERTO[a.id]=!REL_ORIG_ABERTO[a.id]; route({keepScroll:true}); return; }   // v413
     else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }

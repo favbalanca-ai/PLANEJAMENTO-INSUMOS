@@ -210,6 +210,14 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Modo simulador no Painel da safra (v417)** — botão **🧪 Simular** no cabeçalho do painel abre uma barra com três
+  controles (barra deslizante + caixa, sincronizadas): preço de venda (R$/sc), produtividade (sc/ha) e variação de
+  custos (%). `simRows(RC)` recalcula as linhas: preço e produtividade escalam todas as culturas na mesma proporção
+  (fator = valor escolhido ÷ atual; igual ao atual arredondado = fator 1), custos variam em % e impostos/financeiro
+  seguem a nova receita. Os cartões ganham a linha **"sem simulação"** com o desvio; painel com borda âmbar e selo.
+  Redesenho ao vivo só do corpo (`.ps-body`, `painelSafraBody`) para a barra não perder o foco; "Voltar ao atual"
+  e "Sair da simulação". Nada é gravado (`RES_UI.sim`, só na memória). A rosca de categorias continua pelo valor
+  real/orçado.
 - **Fluxo de caixa (v416)** — aba nova **📈 Fluxo de caixa** no Financeiro (`FIN_UI.view='fluxo'`, `finFluxoHtml`).
   `finFluxoCalc`: 13 meses a partir de 2 meses antes do atual; **realizado** = baixas (`finMovimentos`, entradas dos
   títulos a receber e saídas dos a pagar); **previsto** = saldo dos títulos em aberto no mês do vencimento (vencidos e
