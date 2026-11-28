@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Calendário financeiro (v419)** — aba **📅 Calendário** no Financeiro (`FIN_UI.view='cal'`, `finCalHtml`).
+  `finCalDados(mes)`: por dia, a pagar / a receber (títulos em aberto pelo vencimento, saldo), pago / recebido
+  (baixas pela data) e vencido. Grade do mês (domingo primeiro) com saída em vermelho e entrada em verde (✓ quando é
+  só realizado; célula rosa quando há vencido; hoje e dia escolhido destacados; formato curto no celular), semana do
+  dia escolhido com setas, lista dos lançamentos do dia com **Baixar** e ✎ (ações já existentes), **saldo das contas**
+  (`finContasSaldo`: saldo inicial + baixas desde a data do saldo) e **resumo do mês** (pago, recebido, a pagar,
+  a receber, vencido, lançamentos). Navegação `finCalNav` (‹ › Hoje) e `finCalDia`. Respeita o filtro por produtor.
 - **Comparativo entre safras (v418)** — bloco no Painel da safra. **📸 Fechar safra** guarda a foto dos números de
   agora (`safraFoto`: área, produção em sc, receita, custos, lucro e o mesmo por cultura); fechar de novo substitui.
   **➕ Registrar safra anterior** abre uma janelinha para digitar totais (e culturas, opcional) de safras que não
