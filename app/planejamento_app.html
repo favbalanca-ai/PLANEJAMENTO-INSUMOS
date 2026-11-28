@@ -2573,6 +2573,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rc-orig-dica{flex:1 0 100%;font-size:11px}
 .rcv-orig{margin-top:-4px}.rcv-ochip{font-size:12.5px;padding:5px 11px}.rcv-ochip b{font-weight:800}
 
+/* v413: Relatórios — custo dentro e fora do plano */
+.ro-t tbody tr.ro-row{cursor:pointer}.ro-t tbody tr.ro-row.ro-alto td.c-full b{color:var(--red)}.ro-t tbody tr.ro-row.ro-medio td.c-full b{color:var(--amber)}
+.ro-fora{color:var(--red)}.ro-fora-k{color:var(--red)}
+.ro-barras{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 8px}
+.ro-det td{padding:0 10px 10px!important;background:#f7fafb}
+.ro-det-box{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;background:#fff}
+.ro-det-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px}.ro-det-row>span:nth-child(2){flex:1 1 220px;min-width:0}.ro-det-row .num{white-space:nowrap}
+@media (max-width:640px){ .cards-sm tbody tr.ro-det{display:block;padding:0;border:none;box-shadow:none;background:none} .cards-sm tbody tr.ro-det::after{display:none} .cards-sm tbody tr.ro-det td{display:block;padding:0 0 10px!important;background:none} .cards-sm tbody tr.ro-det td::before{display:none} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3073,6 +3082,7 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .cards-sm tbody td.cp-conta{font-size:9.5px}
   .ro-chip{font-size:9.5px}
   .rcv-ochip{font-size:10px}
+  .ro-det-row{font-size:10px}
 }
 
 </style>
@@ -3184,7 +3194,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-412';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-413';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -13927,6 +13937,43 @@ function exportAplicacoesPDF(){
   html+=`<div class="pdf-foot">${R.lista.length} aplicações · ${nf2.format(R.lista.reduce((s,f)=>s+f.area,0))} ha · quantidades = baixas aprovadas (operação concluída, TS feito ou recomendação avulsa aprovada). Dose/ha = total ÷ área aplicada.</div>`;
   printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
 }
+// ===== v413: CUSTO DENTRO E FORA DO PLANO (fase 2 da origem) =====
+// Valor de uma recomendação: aprovada → quantidade do retorno (ou dose × área) a CUSTO MÉDIO; demais → dose × área a preço de referência.
+function recomCustoDe(r){ recomNorm(r); const area=+r.area||0, apr=r.status==='aprovada'; let v=0;
+  (r.itens||[]).forEach(it=>{ if(!it.produto) return; const a=(+it.ha>0)?+it.ha:area; const q=apr&&it.real!=null?+it.real:(+it.dose||0)*a; v+=q*(apr?custoMedioDe(it.produto):precoDe(it.produto)); });
+  return v; }
+const ORIG_FORA=['compl','repasse','corretiva','avulsa'];
+// por talhão: orçado (plano) e valor das recomendações por origem (separando aprovadas = realizado e abertas = comprometido)
+function origemCustoPorTalhao(tals){ const out=[]; const regs=((RECOM&&RECOM.registros)||[]).filter(r=>r&&!r.del&&r.tipo!=='ts');
+  tals.forEach(t=>{ const rs=regs.filter(r=>r.talhao===t.id); const o={t, area:areaDe(t)||0, orc:custoTalhao(t).total||0, n:rs.length, por:{}, fora:0, foraApr:0, dentro:0, lista:[]};
+    Object.keys(RECOM_ORIG).forEach(k=>{ o.por[k]={n:0, v:0, apr:0}; });
+    rs.forEach(r=>{ const k=recomOrigem(r), v=recomCustoDe(r), apr=r.status==='aprovada'; if(!o.por[k]) return; o.por[k].n++; o.por[k].v+=v; if(apr) o.por[k].apr+=v;
+      if(ORIG_FORA.includes(k)){ o.fora+=v; if(apr) o.foraApr+=v; o.lista.push({r, k, v, apr}); } else o.dentro+=v; });
+    o.lista.sort((a,b)=>String(b.r.data||'').localeCompare(String(a.r.data||'')));
+    if(o.n||o.orc) out.push(o); });
+  return out; }
+let REL_ORIG_ABERTO={};   // talhões com o detalhe aberto (só na memória)
+function origemCustoHtml(){
+  const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true})), L=origemCustoPorTalhao(tals);
+  const tot={orc:0, dentro:0, fora:0, foraApr:0, n:0}; Object.keys(RECOM_ORIG).forEach(k=>tot[k]=0);
+  L.forEach(o=>{ tot.orc+=o.orc; tot.dentro+=o.dentro; tot.fora+=o.fora; tot.foraApr+=o.foraApr; tot.n+=o.n; Object.keys(RECOM_ORIG).forEach(k=>{ tot[k]+=o.por[k].v; }); });
+  const pc=(v,b)=>b>0?`${nf1.format(v/b*100)}%`:'—';
+  const cell=(x,k)=>{ const p=x.por[k]; return p&&p.v>0?`<b>${brl0(p.v)}</b><small class="mut"> ${p.n}×${p.apr>0&&p.apr<p.v?` · ${brl0(p.apr)} aprov.`:''}</small>`:'<span class="mut">·</span>'; };
+  const rows=L.map(o=>{ const ab=!!REL_ORIG_ABERTO[o.t.id], cls=o.orc>0&&o.fora/o.orc>=0.1?' ro-alto':(o.fora>0?' ro-medio':'');
+    const det=ab&&o.lista.length?`<tr class="ro-det"><td colspan="9"><div class="ro-det-box">${o.lista.map(x=>{ const I=recomOrigemInfo(x.r), st=RECOM_ST[x.r.status]||{}; return `<div class="ro-det-row"><span class="rc-orig ${I.cls}">${I.ico} ${esc(I.lbl)}</span><span><b>${esc(fmtDataBR(x.r.data))}</b> · ${esc(x.r.nome||x.r.opNome||x.r.alvo||'recomendação')}${x.r.origemObs?` <small class="mut">· ${esc(x.r.origemObs)}</small>`:''} <small class="mut">· ${st.ico||''} ${esc(st.lbl||x.r.status)}</small></span><span class="num"><b>${brl0(x.v)}</b>${x.apr?'':' <small class="mut">ref.</small>'}</span><a class="link" data-go="#/recomendacao/${esc(o.t.id)}">abrir ›</a></div>`; }).join('')}</div></td></tr>`:'';
+    return `<tr class="ro-row${cls}" data-act="relOrigToggle" data-id="${esc(o.t.id)}"><td class="c-full"><b>${esc(tNome(o.t))}</b> <small class="mut">${num(o.area)} ha${o.lista.length?` · ${o.lista.length} fora do plano ${ab?'▴':'▾'}`:''}</small></td>
+      <td class="num" data-th="Orçado (plano)">${o.orc>0?brl0(o.orc):'<span class="mut">—</span>'}</td>
+      <td class="num" data-th="📋 Planejamento">${cell(o,'plan')}</td>
+      <td class="num c-more" data-th="➕ Complementar">${cell(o,'compl')}</td><td class="num c-more" data-th="🔁 Repasse">${cell(o,'repasse')}</td><td class="num c-more" data-th="🐛 Corretiva">${cell(o,'corretiva')}</td><td class="num c-more" data-th="✍️ Avulsa">${cell(o,'avulsa')}</td>
+      <td class="num" data-th="Fora do plano">${o.fora>0?`<b class="ro-fora">${brl0(o.fora)}</b>`:'<span class="mut">·</span>'}</td>
+      <td class="num" data-th="% do orçado">${o.fora>0?`<b>${pc(o.fora,o.orc)}</b>`:'<span class="mut">·</span>'}</td></tr>${det}`; }).join('');
+  return `<div class="panel" id="rel-orig"><div class="panel-head"><h2>Custo dentro e fora do plano</h2><span class="sub">pela origem das recomendações · fora do plano = complementar + repasse + corretiva + avulsa</span></div>
+    <div class="rel-uso-kpis"><span><small>Orçado (plano)</small>${brl0(tot.orc)}</span><span title="recomendações de operações do planejamento"><small>📋 Planejamento</small>${brl0(tot.dentro)}</span><span class="ro-fora-k" title="complementar + repasse + corretiva + avulsa"><small>Fora do plano</small>${brl0(tot.fora)}${tot.orc>0?` <small>(${pc(tot.fora,tot.orc)} do orçado)</small>`:''}</span><span title="fora do plano já aprovado (aplicado)"><small>Fora do plano aplicado</small>${brl0(tot.foraApr)}</span><span><small>Recomendações</small>${tot.n}</span></div>
+    ${tot.fora>0?`<div class="ro-barras">${ORIG_FORA.map(k=>tot[k]>0?`<span class="rc-orig ${RECOM_ORIG[k].cls}">${RECOM_ORIG[k].ico} ${RECOM_ORIG[k].lbl} <b>${brl0(tot[k])}</b></span>`:'').join('')}</div>`:''}
+    <div class="table-wrap"><table class="cards-sm rel-uso-t ro-t"><thead><tr><th>Talhão</th><th class="num">Orçado (plano)</th><th class="num">📋 Planejamento</th><th class="num">➕ Compl.</th><th class="num">🔁 Repasse</th><th class="num">🐛 Corretiva</th><th class="num">✍️ Avulsa</th><th class="num">Fora do plano</th><th class="num">% do orçado</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="9" class="mut" style="padding:14px">Nenhuma recomendação ainda.</td></tr>'}</tbody>
+      ${L.length?`<tfoot><tr><td>Total</td><td class="num">${brl0(tot.orc)}</td><td class="num">${brl0(tot.plan)}</td><td class="num c-more">${brl0(tot.compl)}</td><td class="num c-more">${brl0(tot.repasse)}</td><td class="num c-more">${brl0(tot.corretiva)}</td><td class="num c-more">${brl0(tot.avulsa)}</td><td class="num"><b class="ro-fora">${brl0(tot.fora)}</b></td><td class="num"><b>${pc(tot.fora,tot.orc)}</b></td></tr></tfoot>`:''}</table></div>
+    <p class="mut" style="font-size:11.5px;padding:6px 14px 12px;margin:0">Orçado = doses planejadas × área × preço de referência (as operações do talhão). Recomendação aprovada vale pela quantidade do retorno a custo médio; enviada ou em rascunho vale pela dose × área a preço de referência (comprometido). TS não entra. Toque no talhão para ver as recomendações fora do plano; linha em vermelho = fora do plano acima de 10% do orçado.</p></div>`; }
 V.relatorios = function(){
   const tals=talhoesAll(), ev=camposEventos();
   const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,apl:0,oper:0,ult:0});
@@ -13944,6 +13991,7 @@ V.relatorios = function(){
   <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
   ${aplicacoesPeriodoHtml()}
+  ${origemCustoHtml()}
   ${usoProdutosHtml()}
   <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
     <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Aplic.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
@@ -15435,6 +15483,7 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='relOrigToggle'){ if(e.target.closest('a')) return; REL_ORIG_ABERTO[a.id]=!REL_ORIG_ABERTO[a.id]; route({keepScroll:true}); return; }   // v413
     else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
     else if(a.act==='driveSel'){ driveSel(a.id, act.checked); return; }

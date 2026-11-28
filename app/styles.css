@@ -2556,6 +2556,15 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .rc-orig-dica{flex:1 0 100%;font-size:11px}
 .rcv-orig{margin-top:-4px}.rcv-ochip{font-size:12.5px;padding:5px 11px}.rcv-ochip b{font-weight:800}
 
+/* v413: Relatórios — custo dentro e fora do plano */
+.ro-t tbody tr.ro-row{cursor:pointer}.ro-t tbody tr.ro-row.ro-alto td.c-full b{color:var(--red)}.ro-t tbody tr.ro-row.ro-medio td.c-full b{color:var(--amber)}
+.ro-fora{color:var(--red)}.ro-fora-k{color:var(--red)}
+.ro-barras{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 8px}
+.ro-det td{padding:0 10px 10px!important;background:#f7fafb}
+.ro-det-box{display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;background:#fff}
+.ro-det-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:12.5px}.ro-det-row>span:nth-child(2){flex:1 1 220px;min-width:0}.ro-det-row .num{white-space:nowrap}
+@media (max-width:640px){ .cards-sm tbody tr.ro-det{display:block;padding:0;border:none;box-shadow:none;background:none} .cards-sm tbody tr.ro-det::after{display:none} .cards-sm tbody tr.ro-det td{display:block;padding:0 0 10px!important;background:none} .cards-sm tbody tr.ro-det td::before{display:none} }
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3056,4 +3065,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .cards-sm tbody td.cp-conta{font-size:9.5px}
   .ro-chip{font-size:9.5px}
   .rcv-ochip{font-size:10px}
+  .ro-det-row{font-size:10px}
 }

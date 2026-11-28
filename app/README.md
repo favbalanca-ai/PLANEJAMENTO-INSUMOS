@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Custo dentro e fora do plano (v413, fase 2 da origem)** — painel novo em **Relatórios** (`origemCustoHtml`):
+  por talhão, **Orçado** (`custoTalhao`: doses planejadas × área × preço de referência), valor das recomendações
+  por origem e **Fora do plano** = complementar + repasse + corretiva + avulsa, com % do orçado (linha vermelha acima
+  de 10%). `recomCustoDe(r)`: aprovada vale pela quantidade do retorno a custo médio; enviada/rascunho pela dose × área
+  a preço de referência (comprometido). TS não entra. Indicadores no topo, selos com o total de cada origem fora do
+  plano, toque no talhão abre a lista das recomendações fora do plano com link para a tela Recomendação
+  (`REL_ORIG_ABERTO`, `relOrigToggle`).
 - **Origem da recomendação (v412)** — cada recomendação diz de onde nasceu: `origem` ∈ 📋 **plan** (de uma operação
   do planejamento), ➕ **compl** (complementar a outra já enviada/aprovada da mesma operação), 🔁 **repasse**, 🐛
   **corretiva**, ✍️ **avulsa**; TS continua tipo próprio. Campos `origemRef` (id da recomendação relacionada) e
