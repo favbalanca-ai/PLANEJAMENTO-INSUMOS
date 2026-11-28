@@ -210,6 +210,21 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Painel da safra (v414)** — topo de **Resultados**, inspirado nos painéis de gestão agrícola: cartões Receita
+  estimada, Custos e despesas e Lucro com **R$ · R$/ha · R$/sc** e a linha "orçado" com o desvio em %; **Margem** em
+  rosca (`svgDonut`, SVG puro) com a orçada; mini-cartões Área, Produção (sc60), Produtividade, Ponto de equilíbrio
+  (custo ÷ preço ÷ área, com margem de segurança), Plantio e Colheita (início → fim e duração, pelas datas do Campo);
+  **Maior e menor resultado** por talhão (R$/ha e % vs média) e gráfico de barras **Rentabilidade por talhão**
+  (`svgBarrasTal`: receita, custos e lucro por ha, 14 melhores). A conta saiu para `resultadosCalc()` (tabela e
+  painel usam a mesma); os 4 KPIs antigos foram absorvidos pelos cartões. R$/sc e ponto de equilíbrio só para
+  culturas em sacas; a unidade "%" (braquiária) não entra na produção.
+- **Custo dentro e fora do plano (v413, fase 2 da origem)** — painel novo em **Relatórios** (`origemCustoHtml`):
+  por talhão, **Orçado** (`custoTalhao`: doses planejadas × área × preço de referência), valor das recomendações
+  por origem e **Fora do plano** = complementar + repasse + corretiva + avulsa, com % do orçado (linha vermelha acima
+  de 10%). `recomCustoDe(r)`: aprovada vale pela quantidade do retorno a custo médio; enviada/rascunho pela dose × área
+  a preço de referência (comprometido). TS não entra. Indicadores no topo, selos com o total de cada origem fora do
+  plano, toque no talhão abre a lista das recomendações fora do plano com link para a tela Recomendação
+  (`REL_ORIG_ABERTO`, `relOrigToggle`).
 - **Origem da recomendação (v412)** — cada recomendação diz de onde nasceu: `origem` ∈ 📋 **plan** (de uma operação
   do planejamento), ➕ **compl** (complementar a outra já enviada/aprovada da mesma operação), 🔁 **repasse**, 🐛
   **corretiva**, ✍️ **avulsa**; TS continua tipo próprio. Campos `origemRef` (id da recomendação relacionada) e

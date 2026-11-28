@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-412';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-414';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -5667,11 +5667,65 @@ function vendasPainelHtml(){ const L=(DATA&&DATA.vendas)||[], RC=pesOk()?pesResu
     ${L.length?`<div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Notas</th><th class="num">kg</th><th class="num">Sacas 60 kg</th><th class="num c-more">Toneladas</th><th class="num">R$/sc</th><th class="num">Valor</th></tr></thead><tbody>${rows}</tbody></table></div>`:'<p class="mut" style="padding:0 14px 8px">Nenhuma nota de venda conferida ainda.</p>'}
     ${RC.length?`<div class="panel-head" style="padding-top:6px"><h2 style="font-size:15px">⚖️ Contratos de venda (balança)</h2><span class="sub">preço contratado é só referência; o preço real continua vindo das notas conferidas</span></div>
     <div class="table-wrap"><table class="cards-sm rel-uso-t"><thead><tr><th>Cultura</th><th class="num">Contratos</th><th class="num">Contratado sc</th><th class="num">Entregue sc</th><th class="num">Saldo sc</th><th class="num">R$/sc contratado</th><th class="num">Valor</th></tr></thead><tbody>${RC.sort((a,b)=>b.valor-a.valor).map(x=>`<tr><td class="c-full"><b>${esc(cultNome(x.emp))}</b></td><td class="num" data-th="Contratos">${x.n}</td><td class="num" data-th="Contratado sc">${nf0.format(x.kg/60)}</td><td class="num" data-th="Entregue sc">${nf0.format(x.entregue/60)}</td><td class="num" data-th="Saldo sc">${nf0.format(x.saldo/60)}</td><td class="num" data-th="R$/sc contratado">${x.precoSc?brl(x.precoSc):'—'}</td><td class="num" data-th="Valor"><b>${brl0(x.valor)}</b></td></tr>`).join('')}</tbody></table></div>`:''}${EG}</div>`; }
-V.resultados = function(){
+// ===== v414: PAINEL DA SAFRA (topo de Resultados) — cartões R$ · R$/ha · R$/sc, rosca de margem, área/produção/produtividade/
+// ponto de equilíbrio, plantio e colheita, maior e menor resultado e barras de rentabilidade por talhão. SVG puro. =====
+function svgDonut(pct, cor, S){ S=S||88; const r=(S-12)/2, c=S/2, L=2*Math.PI*r, v=Math.max(0,Math.min(100,+pct||0)), neg=(+pct||0)<0;
+  return `<svg class="ps-donut" viewBox="0 0 ${S} ${S}" role="img" aria-label="${nf1.format(+pct||0)}%"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#e6eef0" stroke-width="10"/><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${neg?'#c62828':(cor||'#2e7d32')}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${(neg?Math.min(100,Math.abs(+pct||0)):v)/100*L} ${L}" transform="rotate(-90 ${c} ${c})"/><text x="${c}" y="${c+5}" text-anchor="middle" font-size="${S>=88?15:12}" font-weight="700" fill="${neg?'#c62828':'#16323a'}">${nf1.format(+pct||0)}%</text></svg>`; }
+// barras agrupadas por talhão: séries [{lbl,cor,vals[]}], rótulos; valores em R$/ha
+function svgBarrasTal(rotulos, series){ const n=rotulos.length; if(!n) return ''; const bw=9, gap=4, grp=series.length*(bw+gap)+14, W=Math.max(320, n*grp+44), H=190, padT=12, padB=34, padL=40, h0=H-padB;
+  let max=0, min=0; series.forEach(sr=>sr.vals.forEach(v=>{ if(v>max) max=v; if(v<min) min=v; })); if(max===min){ max=max||1; }
+  const esc_=(H-padT-padB)/(max-min), y=v=>h0-(v-min)*esc_, y0=y(0);
+  const tick=(v)=>`<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" stroke="#e6eef0"/><text x="${padL-4}" y="${y(v)+3}" text-anchor="end" font-size="9" fill="#5c6f75">${v>=1000||v<=-1000?nf0.format(v/1000)+'k':nf0.format(v)}</text>`;
+  const passos=4, st=(max-min)/passos; let grade=''; for(let i=0;i<=passos;i++) grade+=tick(min+st*i);
+  let bars='', labs='';
+  rotulos.forEach((rt,i)=>{ const x0=padL+8+i*grp; series.forEach((sr,j)=>{ const v=sr.vals[i]||0, x=x0+j*(bw+gap), yy=Math.min(y(v),y0), hh=Math.abs(y(v)-y0);
+      bars+=`<rect x="${x}" y="${yy}" width="${bw}" height="${Math.max(hh,v?1:0)}" rx="2" fill="${sr.cor}"><title>${esc(rt)} · ${esc(sr.lbl)}: ${brl0(v)}/ha</title></rect>`; });
+    labs+=`<text x="${x0+(series.length*(bw+gap)-gap)/2}" y="${H-padB+13}" text-anchor="middle" font-size="9" fill="#16323a">${esc(rt.length>9?rt.slice(0,8)+'…':rt)}</text>`; });
+  return `<div class="ps-bars-wrap"><svg class="ps-bars" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img">${grade}<line x1="${padL}" x2="${W}" y1="${y0}" y2="${y0}" stroke="#9fb3b8"/>${bars}${labs}</svg></div>`; }
+function painelSafraHtml(RC){ const rows=RC.rows; if(!rows.length) return '';
+  const T=f=>rows.reduce((s,r)=>s+f(r),0), area=T(r=>r.area), rec=T(r=>r.receitaReal), cus=T(r=>r.custoReal), luc=T(r=>r.margReal), margPct=rec>0?luc/rec*100:0;
+  const sc=rows.filter(r=>r.unit==='sc'), prodSc=sc.reduce((s,r)=>s+r.prodHaReal*r.area,0), areaSc=sc.reduce((s,r)=>s+r.area,0), recSc=sc.reduce((s,r)=>s+r.receitaReal,0), cusSc=sc.reduce((s,r)=>s+r.custoReal,0), lucSc=recSc-cusSc;
+  const precoMed=prodSc>0?recSc/prodSc:0, peSc=(precoMed>0&&areaSc>0)?cusSc/precoMed/areaSc:0;   // ponto de equilíbrio (sc/ha): custo ÷ preço ÷ área
+  const outras={}; rows.filter(r=>r.unit!=='sc'&&r.unit!=='%'&&r.unit).forEach(r=>{ outras[r.unit]=(outras[r.unit]||0)+r.prodHaReal*r.area; });   // '%' (braquiária) não é produção
+  const nReal=rows.filter(r=>r.temReal).length, vendido=rows.some(r=>r.precoVenda>0);
+  // datas de plantio e colheita (todos os cultivos): início = menor, fim = maior; "previsto" quando falta data real
+  let pIni='', pFim='', pReal=0, pTot=0, cIni='', cFim=''; rows.forEach(r=>{ const pr=plantioRealDe(r.t.id,r.cv.seq), pp=pr||plantioPrevDe(r.t.id,r.cv.seq), co=colheitaPrevDe(r.t.id,r.cv.seq); if(pp){ pTot++; if(pr) pReal++; if(!pIni||pp<pIni) pIni=pp; if(!pFim||pp>pFim) pFim=pp; } if(co){ if(!cIni||co<cIni) cIni=co; if(!cFim||co>cFim) cFim=co; } });
+  const dias=(a,b)=>(a&&b)?Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000)+1:0;
+  // maior e menor resultado (R$/ha)
+  const porHa=rows.filter(r=>r.area>0).map(r=>({r, v:r.margReal/r.area})).sort((a,b)=>b.v-a.v), media=area>0?luc/area:0, melhor=porHa[0], pior=porHa[porHa.length-1];
+  const pctMed=v=>media?`${v-media>=0?'+':''}${nf1.format((v-media)/Math.abs(media)*100)}% vs média`:'';
+  const recO=T(r=>r.receitaOrc), cusO=T(r=>r.custoOrc), lucO=T(r=>r.margOrc), margPctO=recO>0?lucO/recO*100:0;
+  const card=(lbl,v,ha,scv,cls,orc)=>`<div class="ps-card ${cls||''}"><small>${lbl}</small><div class="ps-main"><span class="ps-rs">R$</span><b>${nf0.format(v)}</b></div><div class="ps-lin"><span>R$/ha</span><b>${nf0.format(ha)}</b></div>${scv!=null?`<div class="ps-lin"><span>R$/sc</span><b>${nf2.format(scv)}</b></div>`:''}${orc!=null?`<div class="ps-lin ps-orc" title="pelo planejamento (produtividade e preço orçados)"><span>orçado</span><b>${brl0(orc)}${orc?` <i class="${v-orc>=0?'up':'down'}">${v-orc>=0?'+':'−'}${nf0.format(Math.abs(v-orc)/orc*100)}%</i>`:''}</b></div>`:''}</div>`;
+  const mini=(lbl,v,sub)=>`<div class="ps-mini"><small>${lbl}</small><b>${v}</b>${sub?`<span class="mut">${sub}</span>`:''}</div>`;
+  const top=porHa.slice(0,14), rot=top.map(x=>tNome(x.r.t)), bars=svgBarrasTal(rot,[{lbl:'Receita',cor:'#2f6f7e',vals:top.map(x=>x.r.receitaReal/x.r.area)},{lbl:'Custos',cor:'#e0a23a',vals:top.map(x=>x.r.custoReal/x.r.area)},{lbl:'Lucro',cor:'#2e7d32',vals:top.map(x=>x.v)}]);
+  return `<div class="panel ps-panel"><div class="panel-head"><h2>Painel da safra</h2><span class="sub">${nReal?`${nReal}/${rows.length} talhões com colhido informado`:'ainda sem colhido informado: números orçados'}${vendido?' · preço das vendas registradas':''}</span><div class="spacer"></div><a class="link" data-go="#/dre">premissas na DRE ›</a></div>
+    <div class="ps-grid4">
+      ${card('Receita estimada',rec,area?rec/area:0,prodSc>0?recSc/prodSc:null,'',recO)}
+      ${card('Custos e despesas',cus,area?cus/area:0,prodSc>0?cusSc/prodSc:null,'',cusO)}
+      ${card(luc>=0?'Lucro':'Prejuízo',luc,area?luc/area:0,prodSc>0?lucSc/prodSc:null,luc>=0?'ps-pos':'ps-neg',lucO)}
+      <div class="ps-card ps-marg"><small>Margem</small>${svgDonut(margPct, '#2e7d32')}<span class="mut">lucro ÷ receita · orçada ${nf1.format(margPctO)}%</span></div>
+    </div>
+    <div class="ps-grid6">
+      ${mini('Área',`${num(area)} <small>ha</small>`)}
+      ${mini('Produção',prodSc>0?`${nf0.format(prodSc)} <small>sc60</small>`:'—',Object.keys(outras).filter(u=>outras[u]>0).map(u=>`${nf0.format(outras[u])} ${esc(u)}`).join(' · '))}
+      ${mini('Produtividade',areaSc>0?`${nf1.format(prodSc/areaSc)} <small>sc/ha</small>`:'—')}
+      ${mini('Ponto de equilíbrio',peSc>0?`${nf1.format(peSc)} <small>sc/ha</small>`:'—',peSc>0&&areaSc>0?`margem de segurança ${nf0.format((1-peSc/(prodSc/areaSc))*100)}%`:'')}
+      ${mini('Plantio',pIni?`${fmtDataBR(pIni)}${pFim&&pFim!==pIni?` → ${fmtDataBR(pFim)}`:''}`:'—',pIni?`${dias(pIni,pFim)} dia(s)${pReal<pTot?` · ${pTot-pReal} previsto(s)`:' · realizado'}`:'')}
+      ${mini('Colheita',cIni?`${fmtDataBR(cIni)}${cFim&&cFim!==cIni?` → ${fmtDataBR(cFim)}`:''}`:'—',cIni?`estimada · ${dias(cIni,cFim)} dia(s)`:'')}
+    </div>
+    ${melhor&&pior&&melhor!==pior?`<div class="ps-grid2">
+      <div class="ps-res up"><small>Maior resultado</small><div><span class="ps-seta">↑</span><div><b>${esc(tNome(melhor.r.t))}</b> <span class="mut">${esc(melhor.r.emp)}</span><div class="ps-res-v">${brl0(melhor.v)}<small>/ha</small> <span class="mut">${pctMed(melhor.v)}</span></div></div></div></div>
+      <div class="ps-res down"><small>Menor resultado</small><div><span class="ps-seta">↓</span><div><b>${esc(tNome(pior.r.t))}</b> <span class="mut">${esc(pior.r.emp)}</span><div class="ps-res-v">${brl0(pior.v)}<small>/ha</small> <span class="mut">${pctMed(pior.v)}</span></div></div></div></div>
+    </div>`:''}
+    <h3 class="rel-uso-h">Rentabilidade por talhão <span>· R$/ha${porHa.length>14?' · 14 melhores':''}</span></h3>
+    <div class="ps-leg"><span><i style="background:#2f6f7e"></i>Receita</span><span><i style="background:#e0a23a"></i>Custos e despesas</span><span><i style="background:#2e7d32"></i>Lucro</span></div>
+    ${bars}
+    <p class="mut ps-nota">Receita = colhido × preço (informados na tabela abaixo; sem informação, o orçado). Custos = insumos + máquinas + arrendamento + estrutura + impostos e financeiro (premissas da DRE). R$/sc e ponto de equilíbrio só para culturas em sacas de 60 kg.</p></div>`; }
+// v414: conta de Resultados em função própria (tabela e Painel da safra usam a mesma)
+function resultadosCalc(){
   const cfg=OV.dreCfg||{};
   const impostoPct=+cfg.impostoPct||0, estruturaHa=+cfg.estruturaHa||0, financeiroPct=+cfg.financeiroPct||0;
   const cvs=cultivos();
-  if(!cvs.length) return `<div class="empty">Sem talhões para analisar.</div>`;
   const rows=cvs.map(cv=>{
     const t=cv.t, area=cv.area, emp=cv.emp, key=`${t.id}|${cv.seq}`;
     const unit=unidadeCultura(emp);
@@ -5689,8 +5743,14 @@ V.resultados = function(){
     const margOrc=receitaOrc-impOrc-insOrc-maq-arr-estr-finOrc;
     const margReal=receitaReal-impReal-insReal-maqR-arr-estr-finReal;
     const temReal=(res.prodHa!=null&&res.prodHa!=='');
-    return {t,cv,emp,area,unit,key,prodHaReal,precoReal,precoVenda,receitaOrc,receitaReal,insOrc,insReal,maq,maqR,maqRS,arr,estr,margOrc,margReal,desvio:margReal-margOrc,temReal};
+    const custoReal=insReal+maqR+arr+estr+receitaReal*(impostoPct+financeiroPct)/100, custoOrc=insOrc+maq+arr+estr+receitaOrc*(impostoPct+financeiroPct)/100;
+    return {t,cv,emp,area,unit,key,prodHaOrc,prodHaReal,precoOrc,precoReal,precoVenda,receitaOrc,receitaReal,insOrc,insReal,maq,maqR,maqRS,arr,estr,custoReal,custoOrc,margOrc,margReal,desvio:margReal-margOrc,temReal};
   });
+  return {rows, impostoPct, estruturaHa, financeiroPct};
+}
+V.resultados = function(){
+  const RC=resultadosCalc(), rows=RC.rows, impostoPct=RC.impostoPct, financeiroPct=RC.financeiroPct;
+  if(!rows.length) return `<div class="empty">Sem talhões para analisar.</div>`;
   const T=f=>rows.reduce((s,r)=>s+f(r),0);
   const tArea=T(r=>r.area), tRecR=T(r=>r.receitaReal), tRecO=T(r=>r.receitaOrc);
   const tInsR=T(r=>r.insReal), tMargR=T(r=>r.margReal), tMargO=T(r=>r.margOrc);
@@ -5709,12 +5769,7 @@ V.resultados = function(){
       <td class="num" data-th="Margem real">${sgn(r.margReal)}</td>
       <td class="num c-more" data-th="Desvio"><b style="color:${r.desvio>=0?'var(--green)':'var(--red)'}">${r.desvio>=0?'+':''}${brl0(r.desvio)}</b></td></tr>`).join('');
   return `
-  <div class="kpi-grid">
-    <div class="kpi accent"><div class="k-label">Margem realizada</div><div class="k-value" style="color:${tMargR>=0?'var(--green)':'var(--red)'}">${brl0(tMargR)}</div><div class="k-sub">orçada ${brl0(tMargO)} · desvio ${tMargR-tMargO>=0?'+':''}${brl0(tMargR-tMargO)}</div></div>
-    <div class="kpi"><div class="k-label">Receita realizada</div><div class="k-value">${brl0(tRecR)}</div><div class="k-sub">orçada ${brl0(tRecO)}</div></div>
-    <div class="kpi"><div class="k-label">Custo realizado</div><div class="k-value">${brl0(tCustoR)}</div><div class="k-sub">insumos ${brl0(tInsR)} · máquinas ${brl0(tMaqR)}${nOpsReal?` (${nOpsReal} op. com custo-hora real)`:''}</div></div>
-    <div class="kpi"><div class="k-label">Margem / receita</div><div class="k-value">${tRecR>0?nf1.format(tMargR/tRecR*100)+'%':'—'}</div><div class="k-sub">${nColhidos}/${rows.length} talhões colhidos</div></div>
-  </div>
+  ${painelSafraHtml(RC)}
   <div class="toolbar"><div class="search"><input id="q-res" placeholder="Buscar talhão ou cultura…" autocomplete="off"></div>
     <div class="spacer"></div><span class="badge badge-muted">Informe <b>Colhido/ha</b> e <b>Preço</b> de cada talhão. Impostos, estrutura, financeiro e máquina usam as premissas da <a class="link" data-go="#/dre">DRE</a>.</span></div>
   ${vendasPainelHtml()}
@@ -10745,6 +10800,43 @@ function exportAplicacoesPDF(){
   html+=`<div class="pdf-foot">${R.lista.length} aplicações · ${nf2.format(R.lista.reduce((s,f)=>s+f.area,0))} ha · quantidades = baixas aprovadas (operação concluída, TS feito ou recomendação avulsa aprovada). Dose/ha = total ÷ área aplicada.</div>`;
   printDoc(html); toast('Gerando relatório — escolha "Salvar como PDF"');
 }
+// ===== v413: CUSTO DENTRO E FORA DO PLANO (fase 2 da origem) =====
+// Valor de uma recomendação: aprovada → quantidade do retorno (ou dose × área) a CUSTO MÉDIO; demais → dose × área a preço de referência.
+function recomCustoDe(r){ recomNorm(r); const area=+r.area||0, apr=r.status==='aprovada'; let v=0;
+  (r.itens||[]).forEach(it=>{ if(!it.produto) return; const a=(+it.ha>0)?+it.ha:area; const q=apr&&it.real!=null?+it.real:(+it.dose||0)*a; v+=q*(apr?custoMedioDe(it.produto):precoDe(it.produto)); });
+  return v; }
+const ORIG_FORA=['compl','repasse','corretiva','avulsa'];
+// por talhão: orçado (plano) e valor das recomendações por origem (separando aprovadas = realizado e abertas = comprometido)
+function origemCustoPorTalhao(tals){ const out=[]; const regs=((RECOM&&RECOM.registros)||[]).filter(r=>r&&!r.del&&r.tipo!=='ts');
+  tals.forEach(t=>{ const rs=regs.filter(r=>r.talhao===t.id); const o={t, area:areaDe(t)||0, orc:custoTalhao(t).total||0, n:rs.length, por:{}, fora:0, foraApr:0, dentro:0, lista:[]};
+    Object.keys(RECOM_ORIG).forEach(k=>{ o.por[k]={n:0, v:0, apr:0}; });
+    rs.forEach(r=>{ const k=recomOrigem(r), v=recomCustoDe(r), apr=r.status==='aprovada'; if(!o.por[k]) return; o.por[k].n++; o.por[k].v+=v; if(apr) o.por[k].apr+=v;
+      if(ORIG_FORA.includes(k)){ o.fora+=v; if(apr) o.foraApr+=v; o.lista.push({r, k, v, apr}); } else o.dentro+=v; });
+    o.lista.sort((a,b)=>String(b.r.data||'').localeCompare(String(a.r.data||'')));
+    if(o.n||o.orc) out.push(o); });
+  return out; }
+let REL_ORIG_ABERTO={};   // talhões com o detalhe aberto (só na memória)
+function origemCustoHtml(){
+  const tals=talhoesAll().slice().sort((a,b)=>String(a.id).localeCompare(String(b.id),'pt',{numeric:true})), L=origemCustoPorTalhao(tals);
+  const tot={orc:0, dentro:0, fora:0, foraApr:0, n:0}; Object.keys(RECOM_ORIG).forEach(k=>tot[k]=0);
+  L.forEach(o=>{ tot.orc+=o.orc; tot.dentro+=o.dentro; tot.fora+=o.fora; tot.foraApr+=o.foraApr; tot.n+=o.n; Object.keys(RECOM_ORIG).forEach(k=>{ tot[k]+=o.por[k].v; }); });
+  const pc=(v,b)=>b>0?`${nf1.format(v/b*100)}%`:'—';
+  const cell=(x,k)=>{ const p=x.por[k]; return p&&p.v>0?`<b>${brl0(p.v)}</b><small class="mut"> ${p.n}×${p.apr>0&&p.apr<p.v?` · ${brl0(p.apr)} aprov.`:''}</small>`:'<span class="mut">·</span>'; };
+  const rows=L.map(o=>{ const ab=!!REL_ORIG_ABERTO[o.t.id], cls=o.orc>0&&o.fora/o.orc>=0.1?' ro-alto':(o.fora>0?' ro-medio':'');
+    const det=ab&&o.lista.length?`<tr class="ro-det"><td colspan="9"><div class="ro-det-box">${o.lista.map(x=>{ const I=recomOrigemInfo(x.r), st=RECOM_ST[x.r.status]||{}; return `<div class="ro-det-row"><span class="rc-orig ${I.cls}">${I.ico} ${esc(I.lbl)}</span><span><b>${esc(fmtDataBR(x.r.data))}</b> · ${esc(x.r.nome||x.r.opNome||x.r.alvo||'recomendação')}${x.r.origemObs?` <small class="mut">· ${esc(x.r.origemObs)}</small>`:''} <small class="mut">· ${st.ico||''} ${esc(st.lbl||x.r.status)}</small></span><span class="num"><b>${brl0(x.v)}</b>${x.apr?'':' <small class="mut">ref.</small>'}</span><a class="link" data-go="#/recomendacao/${esc(o.t.id)}">abrir ›</a></div>`; }).join('')}</div></td></tr>`:'';
+    return `<tr class="ro-row${cls}" data-act="relOrigToggle" data-id="${esc(o.t.id)}"><td class="c-full"><b>${esc(tNome(o.t))}</b> <small class="mut">${num(o.area)} ha${o.lista.length?` · ${o.lista.length} fora do plano ${ab?'▴':'▾'}`:''}</small></td>
+      <td class="num" data-th="Orçado (plano)">${o.orc>0?brl0(o.orc):'<span class="mut">—</span>'}</td>
+      <td class="num" data-th="📋 Planejamento">${cell(o,'plan')}</td>
+      <td class="num c-more" data-th="➕ Complementar">${cell(o,'compl')}</td><td class="num c-more" data-th="🔁 Repasse">${cell(o,'repasse')}</td><td class="num c-more" data-th="🐛 Corretiva">${cell(o,'corretiva')}</td><td class="num c-more" data-th="✍️ Avulsa">${cell(o,'avulsa')}</td>
+      <td class="num" data-th="Fora do plano">${o.fora>0?`<b class="ro-fora">${brl0(o.fora)}</b>`:'<span class="mut">·</span>'}</td>
+      <td class="num" data-th="% do orçado">${o.fora>0?`<b>${pc(o.fora,o.orc)}</b>`:'<span class="mut">·</span>'}</td></tr>${det}`; }).join('');
+  return `<div class="panel" id="rel-orig"><div class="panel-head"><h2>Custo dentro e fora do plano</h2><span class="sub">pela origem das recomendações · fora do plano = complementar + repasse + corretiva + avulsa</span></div>
+    <div class="rel-uso-kpis"><span><small>Orçado (plano)</small>${brl0(tot.orc)}</span><span title="recomendações de operações do planejamento"><small>📋 Planejamento</small>${brl0(tot.dentro)}</span><span class="ro-fora-k" title="complementar + repasse + corretiva + avulsa"><small>Fora do plano</small>${brl0(tot.fora)}${tot.orc>0?` <small>(${pc(tot.fora,tot.orc)} do orçado)</small>`:''}</span><span title="fora do plano já aprovado (aplicado)"><small>Fora do plano aplicado</small>${brl0(tot.foraApr)}</span><span><small>Recomendações</small>${tot.n}</span></div>
+    ${tot.fora>0?`<div class="ro-barras">${ORIG_FORA.map(k=>tot[k]>0?`<span class="rc-orig ${RECOM_ORIG[k].cls}">${RECOM_ORIG[k].ico} ${RECOM_ORIG[k].lbl} <b>${brl0(tot[k])}</b></span>`:'').join('')}</div>`:''}
+    <div class="table-wrap"><table class="cards-sm rel-uso-t ro-t"><thead><tr><th>Talhão</th><th class="num">Orçado (plano)</th><th class="num">📋 Planejamento</th><th class="num">➕ Compl.</th><th class="num">🔁 Repasse</th><th class="num">🐛 Corretiva</th><th class="num">✍️ Avulsa</th><th class="num">Fora do plano</th><th class="num">% do orçado</th></tr></thead>
+      <tbody>${rows||'<tr><td colspan="9" class="mut" style="padding:14px">Nenhuma recomendação ainda.</td></tr>'}</tbody>
+      ${L.length?`<tfoot><tr><td>Total</td><td class="num">${brl0(tot.orc)}</td><td class="num">${brl0(tot.plan)}</td><td class="num c-more">${brl0(tot.compl)}</td><td class="num c-more">${brl0(tot.repasse)}</td><td class="num c-more">${brl0(tot.corretiva)}</td><td class="num c-more">${brl0(tot.avulsa)}</td><td class="num"><b class="ro-fora">${brl0(tot.fora)}</b></td><td class="num"><b>${pc(tot.fora,tot.orc)}</b></td></tr></tfoot>`:''}</table></div>
+    <p class="mut" style="font-size:11.5px;padding:6px 14px 12px;margin:0">Orçado = doses planejadas × área × preço de referência (as operações do talhão). Recomendação aprovada vale pela quantidade do retorno a custo médio; enviada ou em rascunho vale pela dose × área a preço de referência (comprometido). TS não entra. Toque no talhão para ver as recomendações fora do plano; linha em vermelho = fora do plano acima de 10% do orçado.</p></div>`; }
 V.relatorios = function(){
   const tals=talhoesAll(), ev=camposEventos();
   const byTal={}; tals.forEach(t=>byTal[t.id]={monit:0,stand:0,recom:0,apl:0,oper:0,ult:0});
@@ -10762,6 +10854,7 @@ V.relatorios = function(){
   <div class="toolbar"><span class="badge badge-muted">${tals.length} talhões · ${ev.length} eventos · ${nf0.format(chuvaTot)} mm de chuva registrada</span>
     <div class="spacer"></div><button class="btn btn-outline btn-sm" data-act="relCsv">⬇ Exportar CSV</button></div>
   ${aplicacoesPeriodoHtml()}
+  ${origemCustoHtml()}
   ${usoProdutosHtml()}
   <div class="panel"><div class="panel-head"><h2>Resumo por talhão</h2><span class="sub">atividade de campo na safra</span></div>
     <div class="table-wrap"><table class="cards-sm"><thead><tr><th>Talhão</th><th class="num">Monit.</th><th class="num">Stand</th><th class="num">Recom.</th><th class="num">Aplic.</th><th class="num">Operações</th><th class="num">Última atividade</th></tr></thead>
@@ -12253,6 +12346,7 @@ document.addEventListener('click',e=>{
       if(!ids.length){ toast('Marque ao menos um talhão'); return; } const out=recomReplicar(a.src, ids, d); novaAcaoFechar(); RECOM_UI.f='total'; RECOM_UI.q=''; route(); toast(`${out.length} recomendação(ões) replicada(s)`); return; }
     else if(a.act==='recomFiltro'){ RECOM_UI.f=a.f||'total'; route({keepScroll:true}); return; }
     else if(a.act==='recomOrigF'){ RECOM_UI.o=a.k||''; route({keepScroll:true}); return; }   // v412
+    else if(a.act==='relOrigToggle'){ if(e.target.closest('a')) return; REL_ORIG_ABERTO[a.id]=!REL_ORIG_ABERTO[a.id]; route({keepScroll:true}); return; }   // v413
     else if(a.act==='recomOrigem'){ recomOrigemSet(a.id, a.k); return; }
     else if(a.act==='notifAbrir'){ notifOpen(); return; }
     else if(a.act==='driveSel'){ driveSel(a.id, act.checked); return; }
