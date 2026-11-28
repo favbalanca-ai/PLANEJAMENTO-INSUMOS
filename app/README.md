@@ -210,6 +210,9 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Fatia única de máquinas na rosca (v420)** — em `custosCategoriaCalc` as partes viram detalhe dentro da fatia
+  (`det`): no orçado, **Máquinas** = itens do plano (classe MÁQUINAS) + custo-hora; no realizado, **Máquinas** =
+  itens baixados + combustível (abastecimentos) + manutenção (peças e OS). A legenda mostra as partes ao lado do %.
 - **Calendário financeiro (v419)** — aba **📅 Calendário** no Financeiro (`FIN_UI.view='cal'`, `finCalHtml`).
   `finCalDados(mes)`: por dia, a pagar / a receber (títulos em aberto pelo vencimento, saldo), pago / recebido
   (baixas pela data) e vencido. Grade do mês (domingo primeiro) com saída em vermelho e entrada em verde (✓ quando é

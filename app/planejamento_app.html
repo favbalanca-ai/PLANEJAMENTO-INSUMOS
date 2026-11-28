@@ -3297,7 +3297,7 @@ window.__DATA__={"safra": "2026/2027", "produtos": [{"empresa": "ADAMA", "classe
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-419';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-420';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -9081,27 +9081,27 @@ function svgBarrasTal(rotulos, series){ const n=rotulos.length; if(!n) return ''
 let RES_UI={cat:'orc'};
 const CAT_CORES=['#2f6f7e','#2e7d32','#e0a23a','#7b5ea7','#c62828','#1f9aa8','#8d6e63','#5c6f75','#b88a00','#3b7dd8','#d05a9a','#5aa04a'];
 const FIN_CAT_FORA=/insumo|semente|fertiliz|defensiv|combust|manuten|venda de gr|adiantamento/i;   // já contados (estoque/máquinas) ou não são custo
-function custosCategoriaCalc(RC, modo){ const rows=RC.rows, cats={}, add=(k,v)=>{ if(!(v>0)) return; cats[k]=(cats[k]||0)+v; };
-  const lblCl=c=>{ const k=String(c||'').trim(); return !k?'Sem classe':(k.length<=3?k.toUpperCase():k.charAt(0)+k.slice(1).toLowerCase()); }, catIns=c=>/^M[ÁA]QUINA/i.test(String(c||''))?'Máquinas (itens do plano)':'Insumos · '+lblCl(c);   // a planilha lista máquina como item com R$/ha
+function custosCategoriaCalc(RC, modo){ const rows=RC.rows, cats={}, det={}, add=(k,v,parte)=>{ if(!(v>0)) return; cats[k]=(cats[k]||0)+v; if(parte){ const d=det[k]||(det[k]={}); d[parte]=(d[parte]||0)+v; } };   // v420: parte = detalhe dentro da fatia
+  const lblCl=c=>{ const k=String(c||'').trim(); return !k?'Sem classe':(k.length<=3?k.toUpperCase():k.charAt(0)+k.slice(1).toLowerCase()); }, ehMaq=c=>/^M[ÁA]QUINA/i.test(String(c||'')), catIns=c=>ehMaq(c)?'Máquinas':'Insumos · '+lblCl(c);   // v420: máquina (item do plano) e custo-hora numa fatia só
   if(modo==='orc'){
     rows.forEach(r=>{ const t=r.t, tag=r.cv.seq==='safrinha'?'S':'P';
-      opsOf(t.id,r.cv.seq).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{ if(!it.produto) return; add(catIns((PROD[it.produto]||{}).classe), (+it.dose||0)*r.area*precoDe(it.produto)); }));
-      add('Máquinas (custo-hora)', r.maq); add('Arrendamento', r.arr); add('Estrutura', r.estr); add('Impostos e financeiro', r.receitaOrc*(RC.impostoPct+RC.financeiroPct)/100); });
+      opsOf(t.id,r.cv.seq).forEach((op,oi)=>effItems(t.id,`${tag}${oi}`,op.itens).forEach(it=>{ if(!it.produto) return; const cl=(PROD[it.produto]||{}).classe; add(catIns(cl), (+it.dose||0)*r.area*precoDe(it.produto), ehMaq(cl)?'itens do plano':''); }));
+      add('Máquinas', r.maq, 'custo-hora'); add('Arrendamento', r.arr); add('Estrutura', r.estr); add('Impostos e financeiro', r.receitaOrc*(RC.impostoPct+RC.financeiroPct)/100); });
   } else {
-    rows.forEach(r=>{ usoProdutosDe(r.t).forEach(l=>{ if(l.seq&&l.seq!==r.cv.seq) return; add(catIns(l.classe), +l.valorReal||0); }); });
+    rows.forEach(r=>{ usoProdutosDe(r.t).forEach(l=>{ if(l.seq&&l.seq!==r.cv.seq) return; add(catIns(l.classe), +l.valorReal||0, ehMaq(l.classe)?'itens baixados':''); }); });
     let comb=0, manut=0; try{ maquinasAll().forEach(m=>{ const c=maqCustos(m); comb+=+c.comb||0; manut+=(+c.pecas||0)+(+c.os||0); }); }catch(e){}
-    add('Combustível (abastecimentos)', comb); add('Manutenção (peças e OS)', manut);
+    add('Máquinas', comb, 'combustível'); add('Máquinas', manut, 'manutenção');
     try{ FIN().titulos.forEach(t=>{ if(String(t.tipo||'PAGAR').toUpperCase()!=='PAGAR') return; const sit=finSit(t); if(sit==='cancelado') return; const cat=String(t.categoria||'Outros'); if(FIN_CAT_FORA.test(cat)) return; const pago=sit==='pago'?(+t.valor||0):Math.max(0,(+t.valor||0)-(+finSaldo(t)||0)); add(cat, pago); }); }catch(e){}
   }
-  const L=Object.keys(cats).map(k=>({k, v:cats[k]})).sort((a,b)=>b.v-a.v), tot=L.reduce((s,x)=>s+x.v,0);
+  const L=Object.keys(cats).map(k=>({k, v:cats[k], det:det[k]||null})).sort((a,b)=>b.v-a.v), tot=L.reduce((s,x)=>s+x.v,0);
   return {L, tot}; }
 function svgDonutMulti(segs, S){ S=S||150; const r=(S-20)/2, c=S/2, C=2*Math.PI*r, tot=segs.reduce((s,x)=>s+x.v,0)||1; let off=0;
   const arcs=segs.map(x=>{ const len=x.v/tot*C, a=`<circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="${x.cor}" stroke-width="16" stroke-dasharray="${Math.max(0,len-1.5)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 ${c} ${c})"><title>${esc(x.k)}: ${brl0(x.v)} (${nf1.format(x.v/tot*100)}%)</title></circle>`; off+=len; return a; }).join('');
   return `<svg class="ps-donut ps-donut-m" viewBox="0 0 ${S} ${S}" role="img"><circle cx="${c}" cy="${c}" r="${r}" fill="none" stroke="#e6eef0" stroke-width="16"/>${arcs}<text x="${c}" y="${c-2}" text-anchor="middle" font-size="11" fill="#5c6f75">total</text><text x="${c}" y="${c+14}" text-anchor="middle" font-size="12" font-weight="700" fill="#16323a">${brl0(tot).replace('R$ ','R$ ')}</text></svg>`; }
 function custosCategoriaHtml(RC){ const modo=RES_UI.cat==='real'?'real':'orc', R=custosCategoriaCalc(RC, modo); if(!R.L.length&&modo==='orc') return '';
-  const area=RC.rows.reduce((s,r)=>s+r.area,0), top=R.L.slice(0,9), resto=R.L.slice(9), segs=top.map((x,i)=>Object.assign({cor:CAT_CORES[i%CAT_CORES.length]},x)); if(resto.length) segs.push({k:'Outros', v:resto.reduce((s,x)=>s+x.v,0), cor:'#c9d6da'});
+  const area=RC.rows.reduce((s,r)=>s+r.area,0), top=R.L.slice(0,9), resto=R.L.slice(9), segs=top.map((x,i)=>Object.assign({cor:CAT_CORES[i%CAT_CORES.length]},x)); if(resto.length) segs.push({k:'Outros', v:resto.reduce((s,x)=>s+x.v,0), cor:'#c9d6da', det:null});
   const chip=(k,l)=>`<button class="chip-f${modo===k?' on':''}" data-act="resCatModo" data-k="${k}">${l}</button>`;
-  const leg=segs.map(x=>`<div class="ps-cat-row"><i style="background:${x.cor}"></i><span>${esc(x.k)}</span><b>${brl0(x.v)}</b><small>${R.tot?nf1.format(x.v/R.tot*100):'0'}%${area?` · ${brl0(x.v/area)}/ha`:''}</small></div>`).join('');
+  const leg=segs.map(x=>{ const partes=x.det?Object.keys(x.det).filter(p=>x.det[p]>0).map(p=>`${p} ${brl0(x.det[p])}`).join(' · '):''; return `<div class="ps-cat-row"><i style="background:${x.cor}"></i><span>${esc(x.k)}</span><b>${brl0(x.v)}</b><small>${R.tot?nf1.format(x.v/R.tot*100):'0'}%${area?` · ${brl0(x.v/area)}/ha`:''}${partes?` · ${esc(partes)}`:''}</small></div>`; }).join('');
   return `<h3 class="rel-uso-h">Custos e despesas por categoria <span>· ${modo==='orc'?'orçado para a safra':'realizado até agora'}</span></h3>
     <div class="ps-cat-top"><div class="classe-filter">${chip('orc','Orçado')}${chip('real','Realizado')}</div><span class="mut">${modo==='orc'?'plano dos talhões a preço de referência + premissas da DRE':'baixas a custo médio + combustível/manutenção das máquinas + títulos pagos do Financeiro'}</span></div>
     ${R.L.length?`<div class="ps-cat">${svgDonutMulti(segs)}<div class="ps-cat-leg">${leg}</div></div>`:'<p class="mut" style="padding:4px 14px 10px">Nada realizado ainda: nenhuma baixa de insumo, abastecimento, manutenção ou título pago.</p>'}`; }
