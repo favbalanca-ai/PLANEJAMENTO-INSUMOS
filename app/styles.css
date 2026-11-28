@@ -2583,8 +2583,17 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ps-res>div{display:flex;align-items:center;gap:10px;margin-top:4px}.ps-seta{font-size:26px;font-weight:800;line-height:1}.ps-res.up .ps-seta{color:var(--green)}.ps-res.down .ps-seta{color:var(--red)}
 .ps-res-v{font-size:15px;font-weight:800;color:var(--ink)}.ps-res-v small{font-weight:600;color:var(--muted)}.ps-res-v .mut{font-size:11.5px;font-weight:600;margin-left:4px}
 .ps-leg{display:flex;flex-wrap:wrap;gap:6px 14px;padding:0 14px 4px;font-size:11.5px;color:var(--muted)}.ps-leg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
-.ps-bars-wrap{overflow-x:auto;padding:0 14px 6px;scrollbar-width:thin}.ps-bars{display:block;max-width:100%;height:auto}
+.ps-bars-wrap{overflow-x:auto;padding:0 14px 6px;scrollbar-width:thin}.ps-bars{display:block;height:auto}   /* largura fixa: no celular rola de lado em vez de encolher */
 .ps-nota{font-size:11px;padding:4px 14px 12px;margin:0}
+
+/* v415: custos por categoria (rosca) */
+.ps-cat-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:0 14px 6px;font-size:11.5px}.ps-cat-top .classe-filter{margin:0}
+.ps-cat{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:4px 14px 10px}
+.ps-donut-m{width:150px;height:150px;flex:none}
+.ps-cat-leg{flex:1 1 260px;max-width:560px;display:flex;flex-direction:column;gap:5px;min-width:0}
+.ps-cat-row{display:grid;grid-template-columns:12px 1fr auto;column-gap:8px;align-items:center;font-size:12.5px}
+.ps-cat-row i{width:12px;height:12px;border-radius:3px;display:inline-block}.ps-cat-row span{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ps-cat-row b{color:var(--ink);white-space:nowrap}
+.ps-cat-row small{grid-column:2/4;color:var(--muted);font-size:11px;margin-top:-2px}
 
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
@@ -3097,4 +3106,6 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ps-res-v{font-size:12px}
   .ps-res-v .mut{font-size:9.5px}
   .ps-leg{font-size:9.5px}
+  .ps-cat-top{font-size:9.5px}
+  .ps-cat-row{font-size:10px}
 }
