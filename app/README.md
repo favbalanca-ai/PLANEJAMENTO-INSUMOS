@@ -210,6 +210,13 @@ arquivo único `planejamento_app.html` para abrir localmente.
   ATIVOS/CLASSE. O bloco "Compatibilidade da calda" vai no WhatsApp (até 3 avisos) e no PDF (seção 3). Ao aprovar,
   o risco (regras e IA) vai junto para a aba MISTURAS APP (`compat`). **Nada bloqueia**: sempre termina com "faça o
   teste da jarra".
+- **Lançar por voz (v421)** — botão **🎤 Falar** na barra da Frota (`vozAbrir`). O operador fala (Web Speech API,
+  `vozOuvir`, pt-BR) ou digita a frase ("abasteci o Magnum 340 com 180 litros, horímetro 3520"). `vozEntender`
+  interpreta no aparelho (`vozLocal`: tipo abastecimento/quebra, máquina por `vozMaqMatch`, horímetro, litros,
+  combustível, origem, valor, defeito; números por extenso via `vozNumeros`). Se faltar máquina ou tipo e houver
+  Web App configurado, manda `__vozIa` para a IA completar (`vozIa`). O cartão mostra os campos para conferir e um
+  texto padronizado (`vozTextoPadrao`, com `_[m:id]_`); **Gravar** salva pelo `abastGravar`/`osGravar` normais
+  (obs "lançado por voz") e **Gravar e compartilhar** manda o texto pelo WhatsApp/compartilhar do celular.
 - **Fatia única de máquinas na rosca (v420)** — em `custosCategoriaCalc` as partes viram detalhe dentro da fatia
   (`det`): no orçado, **Máquinas** = itens do plano (classe MÁQUINAS) + custo-hora; no realizado, **Máquinas** =
   itens baixados + combustível (abastecimentos) + manutenção (peças e OS). A legenda mostra as partes ao lado do %.

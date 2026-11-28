@@ -2,7 +2,7 @@
    Dados base em data.json; edições do usuário ficam no localStorage. */
 'use strict';
 
-const APP_VERSION = '2026.07.28-420';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
+const APP_VERSION = '2026.07.28-421';   // mostrado no rodapé; ajude a confirmar se a atualização chegou
 const LS_KEY = 'planejamento_safra_2627_v1';
 /* ---- Preços: composição por safra (referência por classe + % por produto) ---- */
 const PRECOS_KEY = 'planejamento_precos';
@@ -1727,6 +1727,7 @@ document.addEventListener('change',e=>{ const t=e.target; if(!USU_EDIT) return;
 document.addEventListener('keydown',e=>{ if(e.key==='Enter' && (e.target.id==='lg-pin'||e.target.id==='lg-login')){ e.preventDefault(); lgEntrar(); } });
 document.addEventListener('input',e=>{ if(e.target.id!=='cr-busca') return; cmpBusca=e.target.value; filterComprasReg(); });
 document.addEventListener('input',e=>{ if(e.target.id!=='recom-q') return; RECOM_UI.q=e.target.value; recomAplicaBusca(); });
+document.addEventListener('input',e=>{ const k=e.target.dataset&&e.target.dataset.voz; if(!k||!VOZ) return; if(k==='texto'){ VOZ.texto=e.target.value; const b=document.querySelector('[data-act="vozEntender"]'); if(b) b.disabled=!VOZ.texto.trim(); return; } vozLer(); const pv=document.querySelector('.voz-prev'); if(pv) pv.textContent=vozTextoPadrao(VOZ.c); if(k==='origem'||k==='maq') vozRender(); });   // v421
 document.addEventListener('change',e=>{ if(e.target.id!=='ps-cmp-sel') return; RES_UI.cmp=e.target.value; route({keepScroll:true}); });   // v418: safra de referência do comparativo
 // v417: controles do simulador — atualiza o valor, sincroniza o par (barra ↔ caixa) e redesenha só o corpo do painel (sem perder o foco)
 document.addEventListener('input',e=>{ const el=e.target, k=el.dataset&&el.dataset.sim; if(!k) return; const S=RES_UI.sim; let v=parseFloat(String(el.value).replace(',','.')); if(!isFinite(v)) return; S[k]=v;
@@ -5424,6 +5425,93 @@ function maqFichaOpen(id){ const m=maqDe(id); if(!m){ toast('Máquina não encon
 let FROTA_UI={q:'', grupo:'', soAl:false};   // v388: busca, grupo e "só com alerta" da Frota (só na memória)
 function filterFrota(){ const q=(FROTA_UI.q||'').toLowerCase().trim(); document.querySelectorAll('.fr-card, .mq-list .mq-card').forEach(c=>{ const s=c.getAttribute('data-search')||'', g=c.getAttribute('data-grupo')||'', al=c.getAttribute('data-al')==='1';
   c.style.display=((!q||s.includes(q)) && (!FROTA_UI.grupo||g===FROTA_UI.grupo) && (!FROTA_UI.soAl||al))?'':'none'; }); }
+// ===== v421: LANÇAR POR VOZ — o operador fala (ou digita) "trator 7, horímetro 3520, abasteci 180 litros de diesel";
+// o app entende sozinho (máquina, horímetro, litros, combustível, origem, valor; ou quebra → OS) e, se faltar algo,
+// pede ajuda à IA da planilha (__vozIa). Mostra o cartão padronizado para confirmar, grava pelo mesmo caminho do
+// abastecimento/OS e pode mandar o texto no WhatsApp. Reconhecimento de voz = do próprio navegador (sem enviar áudio). =====
+let VOZ=null, _vozRec=null;
+const VOZ_UN={zero:0,um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9,dez:10,onze:11,doze:12,treze:13,quatorze:14,catorze:14,quinze:15,dezesseis:16,dezessete:17,dezoito:18,dezenove:19,vinte:20,trinta:30,quarenta:40,cinquenta:50,sessenta:60,setenta:70,oitenta:80,noventa:90,cem:100,cento:100,duzentos:200,trezentos:300,quatrocentos:400,quinhentos:500,seiscentos:600,setecentos:700,oitocentos:800,novecentos:900};
+function vozNorm(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9,.\s]/g,' ').replace(/\s+/g,' ').trim(); }
+// "tres mil quinhentos e vinte" → 3520 · "cento e oitenta" → 180 · "cento e vinte virgula cinco" → 120,5 (números por extenso viram dígitos)
+function vozNumeros(t){ const w=vozNorm(t).replace(/\bvirgula\b|\bponto\b/g,' VIRG ').split(' ').filter(Boolean), out=[]; let i=0;
+  while(i<w.length){ if(!(w[i] in VOZ_UN) && w[i]!=='mil'){ out.push(w[i]); i++; continue; }
+    let total=0, cur=0, j=i, usado=false;
+    while(j<w.length){ const x=w[j]; if(x in VOZ_UN){ cur+=VOZ_UN[x]; usado=true; j++; } else if(x==='mil'){ cur=(cur||1)*1000; total+=cur; cur=0; usado=true; j++; } else if(x==='e'&&j+1<w.length&&(w[j+1] in VOZ_UN)){ j++; } else break; }
+    if(!usado){ out.push(w[i]); i++; continue; } total+=cur; out.push(String(total)); i=j; }
+  return out.join(' ').replace(/(\d+) VIRG (\d+)/g,'$1,$2').replace(/ VIRG /g,' '); }
+function vozMaqMatch(txt){ const t=vozNorm(txt), ms=maqTodas(), toks=t.split(' ').filter(x=>x.length>1); let best=null, bestSc=0, emp=0;
+  ms.forEach(m=>{ const nm=vozNorm(m.nome), ntoks=nm.split(' ').filter(x=>x.length>1), grp=vozNorm(maqGrupoLbl(m)); let sc=0; if(nm&&t.indexOf(nm)>=0) sc+=10;
+    ntoks.forEach(k=>{ if(toks.includes(k)) sc+=/^\d+$/.test(k)?3:2; }); const gt=grp.split(' ')[0]; if(gt&&gt.length>3&&t.indexOf(gt)>=0) sc+=1;   // "trator 7": grupo + número do nome
+    const numsNome=ntoks.filter(k=>/^\d+$/.test(k)); numsNome.forEach(k=>{ if(new RegExp('\\b'+k+'\\b').test(t)) sc+=2; });
+    if(sc>bestSc){ best=m; bestSc=sc; emp=0; } else if(sc===bestSc&&sc>0) emp++; });
+  return {m:(bestSc>=3&&!emp)?best:null, sc:bestSc, emp}; }
+function vozLocal(texto){ const t=vozNumeros(texto), c={tipo:'', maq:'', hor:null, litros:null, comb:'', origem:'tanque', valor:null, desc:'', fonte:'app'};
+  const num=re=>{ const m=t.match(re); return m?parseFloat(String(m[1]).replace(',','.')):null; };
+  if(/quebr|conserto|troc|manuten|vazament|pneu|estour|reparo|oficina|revis|defeito|parou|nao liga|barulho|mangueira|correia|rolamento|solda/.test(t)) c.tipo='os';
+  if(/abastec|litro|diesel|arla|gasolina|etanol|encheu|enchi|tanque|combustivel/.test(t)) c.tipo=c.tipo==='os'?'os':'abast';
+  const mm=vozMaqMatch(t); if(mm.m) c.maq=mm.m.id; c._amb=mm.emp>0;
+  c.hor=num(/(?:horimetro|horas|odometro|hodometro|quilometragem|km)\D{0,12}(\d+(?:[.,]\d+)?)/)??num(/(\d+(?:[.,]\d+)?)\s*(?:horas|h\b|km\b)/);
+  c.litros=num(/(\d+(?:[.,]\d+)?)\s*(?:litros?|l\b)/)??num(/(?:abastec\w*|coloquei|botei|enchi)\D{0,16}(\d+(?:[.,]\d+)?)/);
+  c.valor=num(/(\d+(?:[.,]\d+)?)\s*(?:reais|real|rs|r\$)/)??num(/(?:valor|custou|paguei)\D{0,10}(\d+(?:[.,]\d+)?)/);
+  if(/arla/.test(t)) c.comb='Arla 32'; else if(/s500|s 500/.test(t)) c.comb='Diesel S500'; else if(/gasolina/.test(t)) c.comb='Gasolina'; else if(/etanol|alcool/.test(t)) c.comb='Etanol'; else if(/diesel|s10|s 10/.test(t)) c.comb='Diesel S10';
+  if(/posto/.test(t)) c.origem='posto';
+  if(c.tipo==='os'){ c.desc=String(texto||'').trim(); if(c.hor==null){ const n=t.match(/\b(\d{3,6})\b/); if(n) c.hor=+n[1]; } }
+  else if(c.tipo==='abast'&&c.hor==null){ const ns=[...t.matchAll(/\b(\d+(?:[.,]\d+)?)\b/g)].map(x=>parseFloat(x[1].replace(',','.'))).filter(v=>v!==c.litros&&v!==c.valor&&v>=100); if(ns.length) c.hor=Math.max(...ns); }   // o maior número que não é litros nem valor
+  return c; }
+function vozPrecisaIa(c){ if(!c.maq) return true; if(c.tipo==='abast') return !(c.litros>0)||!(c.hor>0); if(c.tipo==='os') return !c.desc; return true; }
+function vozPodeOuvir(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function vozAbrir(maqId){ VOZ={texto:'', c:null, tipo:'', ouvindo:false, erro:'', ia:'', maqPre:maqId||''}; vozRender(); }
+function vozRender(){ const V=VOZ; if(!V) return; let ov=document.getElementById('na-ov'); if(!ov){ novaAcaoFechar(); ov=document.createElement('div'); ov.id='na-ov'; ov.className='na-ov'; ov.addEventListener('click', e=>{ if(e.target===ov){ vozParar(); VOZ=null; novaAcaoFechar(); } }); document.body.appendChild(ov); }
+  const c=V.c, ms=maqTodas(), m=c&&c.maq?maqDe(c.maq):null, I=m?maqMedI(m):MAQ_MED.h, oper=(sessUsuario()||{}).nome||'';
+  const exemplo=vozPodeOuvir()?'Toque no microfone e fale, por exemplo:':'Digite (ou cole) a frase, por exemplo:';
+  const cartao=!c?'':`<div class="voz-card">
+      <div class="voz-tipo"><button class="chip-f${c.tipo==='abast'?' on':''}" data-act="vozTipo" data-k="abast">⛽ Abastecimento</button><button class="chip-f${c.tipo==='os'?' on':''}" data-act="vozTipo" data-k="os">🔧 Quebra / serviço</button>${c.fonte==='ia'?'<span class="pill" title="a IA da planilha ajudou a entender">🤖 IA</span>':''}</div>
+      <div class="app-grid" style="padding:4px 0 2px">
+        <label style="grid-column:1/-1">Máquina${c._amb&&!c.maq?' <small class="mut">· mais de uma parecida: escolha</small>':''}<select class="sel" data-voz="maq"><option value="">— escolher —</option>${ms.map(x=>`<option value="${esc(x.id)}"${x.id===c.maq?' selected':''}>${esc(x.nome)}${maqGrupoLbl(x)!=='Sem grupo'?' · '+esc(maqGrupoLbl(x)):''}</option>`).join('')}</select></label>
+        <label>${I.nome} (${I.un})<input class="cell" inputmode="decimal" data-voz="hor" value="${c.hor!=null?String(c.hor).replace('.',','):''}" placeholder="${m?numH(maqHorimetro(m)):'0'}" style="width:100%"></label>
+        ${c.tipo==='abast'?`<label>Litros<input class="cell" inputmode="decimal" data-voz="litros" value="${c.litros!=null?String(c.litros).replace('.',','):''}" style="width:100%"></label>
+        <label>Combustível<select class="sel" data-voz="comb">${MAQ_COMB.map(x=>`<option${(c.comb||'Diesel S10')===x?' selected':''}>${esc(x)}</option>`).join('')}</select></label>
+        <label>Origem<select class="sel" data-voz="origem"><option value="tanque"${c.origem!=='posto'?' selected':''}>Tanque da fazenda</option><option value="posto"${c.origem==='posto'?' selected':''}>Posto</option></select></label>
+        ${c.origem==='posto'?`<label>Valor (R$)<input class="cell" inputmode="decimal" data-voz="valor" value="${c.valor!=null?String(c.valor).replace('.',','):''}" style="width:100%"></label>`:''}`
+        :`<label style="grid-column:1/-1">O que aconteceu<input class="txt" data-voz="desc" value="${esc(c.desc||'')}" placeholder="descrição do serviço"></label>`}
+        <label style="grid-column:1/-1">Operador<input class="txt" data-voz="oper" value="${esc(c.oper!=null?c.oper:oper)}" placeholder="quem lançou"></label></div>
+      <pre class="voz-prev">${esc(vozTextoPadrao(c))}</pre>
+      <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="vozGravar">✅ Gravar</button>${maqWhats()?`<button class="btn btn-wa btn-sm" data-act="vozGravar" data-wa="1">📲 Gravar e enviar no WhatsApp</button>`:`<button class="btn btn-outline btn-sm" data-act="vozGravar" data-wa="1">📲 Gravar e compartilhar</button>`}<button class="btn btn-ghost btn-sm" data-act="vozDeNovo">↺ Falar de novo</button></div></div>`;
+  ov.innerHTML=`<div class="na-sheet tf-sheet voz-sheet" role="dialog"><div class="na-grab"></div>
+    <div class="tf-h"><div><h3>🎤 Lançar por voz</h3><span class="mut">abastecimento ou quebra · máquina, horímetro e litros</span></div><button class="icon-btn" data-act="vozFechar" title="Fechar">✕</button></div>
+    ${c?'':`<div class="voz-top">${vozPodeOuvir()?`<button class="voz-mic${V.ouvindo?' on':''}" data-act="vozOuvir" title="${V.ouvindo?'Parar':'Falar'}">${V.ouvindo?'⏹':'🎤'}</button>`:''}<div class="voz-ex"><small class="mut">${exemplo}</small><b>"trator sete, horímetro três mil quinhentos e vinte, abasteci cento e oitenta litros de diesel"</b><b>"pulverizador quebrou a mangueira da barra"</b></div></div>
+    <textarea class="txt voz-txt" data-voz="texto" rows="2" placeholder="${V.ouvindo?'Ouvindo…':'o que você falou aparece aqui (dá para corrigir)'}">${esc(V.texto||'')}</textarea>
+    <div class="tf-btns"><button class="btn btn-primary btn-sm" data-act="vozEntender"${V.texto.trim()?'':' disabled'}>Entender ›</button>${V.ia?`<span class="mut">${esc(V.ia)}</span>`:''}</div>`}
+    ${V.erro?`<div class="nfe-aviso warn" style="margin:0 12px 8px">${esc(V.erro)}</div>`:''}
+    ${cartao}</div>`; }
+function vozOuvir(){ const V=VOZ; if(!V) return; if(V.ouvindo){ vozParar(); return; } const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ V.erro='Este navegador não tem reconhecimento de voz: digite a frase.'; vozRender(); return; }
+  try{ const r=new SR(); r.lang='pt-BR'; r.interimResults=true; r.continuous=false; r.maxAlternatives=1; _vozRec=r; V.ouvindo=true; V.erro=''; V.texto=''; vozRender();
+    r.onresult=e=>{ let fin='', parc=''; for(let i=e.resultIndex;i<e.results.length;i++){ const tx=e.results[i][0].transcript; if(e.results[i].isFinal) fin+=tx; else parc+=tx; } const ta=document.querySelector('.voz-txt'); if(ta) ta.value=(V.texto+' '+fin+' '+parc).trim(); if(fin){ V.texto=(V.texto+' '+fin).trim(); } };
+    r.onerror=e=>{ V.ouvindo=false; _vozRec=null; V.erro=e.error==='not-allowed'?'Permita o microfone para o app (ícone de cadeado na barra do navegador).':e.error==='no-speech'?'Não ouvi nada. Tente de novo, mais perto do celular.':'Não deu para ouvir ('+e.error+'). Digite a frase.'; vozRender(); };
+    r.onend=()=>{ if(!V||!V.ouvindo) return; V.ouvindo=false; _vozRec=null; if(V.texto.trim()) vozEntender(); else vozRender(); };
+    r.start(); }catch(e){ V.ouvindo=false; V.erro='Não consegui ligar o microfone: digite a frase.'; vozRender(); } }
+function vozParar(){ try{ if(_vozRec) _vozRec.stop(); }catch(e){} if(VOZ) VOZ.ouvindo=false; _vozRec=null; }
+async function vozEntender(){ const V=VOZ; if(!V) return; const ta=document.querySelector('.voz-txt'); if(ta) V.texto=ta.value; const texto=String(V.texto||'').trim(); if(!texto){ V.erro='Fale ou digite a frase primeiro.'; vozRender(); return; }
+  V.erro=''; let c=vozLocal(texto); if(V.maqPre&&!c.maq) c.maq=V.maqPre; c.oper=null;
+  if(vozPrecisaIa(c)&&syncUrl()){ V.ia='🤖 pedindo ajuda à IA…'; vozRender(); const r=await vozIa(texto); V.ia='';
+    if(r&&r.campos){ const k=r.campos; if(!c.tipo&&k.tipo) c.tipo=k.tipo; if(!c.maq&&k.maq) c.maq=k.maq; if(!(c.hor>0)&&k.hor>0) c.hor=k.hor; if(!(c.litros>0)&&k.litros>0) c.litros=k.litros; if(!c.comb&&k.comb) c.comb=k.comb; if(k.origem) c.origem=k.origem; if(!(c.valor>0)&&k.valor>0) c.valor=k.valor; if(k.desc&&(!c.desc||c.tipo==='os')) c.desc=k.desc||c.desc; c.fonte='ia'; } }
+  if(!c.tipo) c.tipo=(c.litros>0||c.comb)?'abast':(c.desc?'os':'abast'); if(c.tipo==='os'&&!c.desc) c.desc=texto; if(c.tipo==='abast'&&!c.comb) c.comb='Diesel S10';
+  V.c=c; vozRender(); }
+async function vozIa(texto){ try{ const maquinas=maqTodas().map(m=>({id:m.id, nome:m.nome, grupo:maqGrupoLbl(m)})).slice(0,120); const j=await syncPost(syncUrl(), JSON.stringify({__vozIa:{texto:texto.slice(0,400), maquinas}})); return (j&&j.campos)?{campos:j.campos}:null; }catch(e){ return null; } }
+function vozLer(){ const V=VOZ; if(!V||!V.c) return V&&V.c; const c=V.c, ov=document.getElementById('na-ov'); if(!ov) return c; const g=k=>{ const el=ov.querySelector(`[data-voz="${k}"]`); return el?el.value:null; };
+  const n=v=>{ if(v==null||String(v).trim()==='') return null; const x=parseFloat(String(v).replace(/\./g,'').replace(',','.')); return isFinite(x)?x:null; };
+  const maq=g('maq'); if(maq!=null) c.maq=maq; const hor=g('hor'); if(hor!=null) c.hor=n(hor); const li=g('litros'); if(li!=null) c.litros=n(li); const cb=g('comb'); if(cb!=null) c.comb=cb; const og=g('origem'); if(og!=null) c.origem=og; const va=g('valor'); if(va!=null) c.valor=n(va); const de=g('desc'); if(de!=null) c.desc=de; const op=g('oper'); if(op!=null) c.oper=op; return c; }
+function vozTextoPadrao(c){ const m=c.maq?maqDe(c.maq):null, I=m?maqMedI(m):MAQ_MED.h, agora=new Date(), dt=`${fmtDataBR(agora.toISOString().slice(0,10))} ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`, oper=c.oper!=null?c.oper:((sessUsuario()||{}).nome||'');
+  if(c.tipo==='os') return `🔧 *OS CORRETIVA*${m?`  _[${m.id}]_`:''}\n🚜 *${m?m.nome:'máquina?'}*\n🕐 ${I.nome}: ${c.hor>0?numH(c.hor)+' '+I.un:'—'}\n📝 ${c.desc||'—'}\n📅 ${dt}${oper?' · '+oper:''}`;
+  return `⛽ *ABASTECIMENTO*${m?`  _[${m.id}]_`:''}\n🚜 *${m?m.nome:'máquina?'}*\n🕐 ${I.nome}: ${c.hor>0?numH(c.hor)+' '+I.un:'—'}\n⛽ ${c.litros>0?numH(c.litros)+' L':'— L'} ${c.comb||'Diesel S10'} · ${c.origem==='posto'?'posto'+(c.valor>0?' · '+brl(c.valor):''):'tanque da fazenda'}\n📅 ${dt}${oper?' · '+oper:''}`; }
+function vozGravar(wa){ const c=vozLer(); if(!c) return; const m=c.maq?maqDe(c.maq):null; if(!m){ VOZ.erro='Escolha a máquina.'; vozRender(); return; } const I=maqMedI(m), hoje=_hojeISO(), agora=new Date(), hora=`${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`;
+  if(c.tipo==='os'){ if(!String(c.desc||'').trim()){ VOZ.erro='Descreva o que aconteceu.'; vozRender(); return; }
+    osGravar({maq:m.id, tipo:'corretiva', planoId:'', dataAb:hoje, hor:+c.hor||0, desc:String(c.desc).trim(), pecas:[], moH:0, moValor:0, resp:c.oper||'', status:'aberta', dataFim:'', obs:'lançada por voz'}); }
+  else { if(!(c.litros>0)){ VOZ.erro='Informe os litros.'; vozRender(); return; } if(!(c.hor>0)){ VOZ.erro=`Informe o ${I.nomeMin}.`; vozRender(); return; }
+    const atual=maqHorimetro(m); if(c.hor<atual-0.001&&!ask(`O ${I.nomeMin} informado (${numH(c.hor)} ${I.un}) é menor que o último registrado (${numH(atual)} ${I.un}). Confirma mesmo assim?`)) return;
+    abastGravar({maq:m.id, data:hoje, hora, hor:+c.hor, litros:+c.litros, comb:c.comb||'Diesel S10', origem:c.origem==='posto'?'posto':'tanque', valor:c.origem==='posto'?(+c.valor||0):0, precoL:(c.origem==='posto'&&c.valor>0&&c.litros>0)?+(c.valor/c.litros).toFixed(3):0, operador:c.oper||'', obs:'lançado por voz'}); }
+  const txt=vozTextoPadrao(c); VOZ=null; novaAcaoFechar(); route(); toast(c.tipo==='os'?`OS aberta para ${m.nome}`:`Abastecimento de ${m.nome} registrado`);
+  if(wa){ const n=maqWhats(), url=`https://wa.me/${n?(n.startsWith('55')?n:'55'+n):''}?text=${encodeURIComponent(txt.replace(/\*/g,'*'))}`; try{ if(!n&&navigator.share){ navigator.share({text:txt}).catch(()=>window.open(url,'_blank')); } else window.open(url,'_blank'); }catch(e){ window.open(url,'_blank'); } } }
 V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return `<div class="empty">🚜 Nenhuma máquina ainda. Cadastre em <a class="link" data-go="#/maqcad">Cadastro de máquinas</a> ou monte os conjuntos em Planejamento → Máquinas.</div>`;
   const temDado=m=>abastLista(m.id).length||osLista(m.id).length||(m.plano||[]).length||maqHorimetro(m)>0; ms.sort((a,b)=>(temDado(b)?1:0)-(temDado(a)?1:0)||String(a.nome).localeCompare(String(b.nome),'pt-BR'));   // quem tem registro aparece primeiro
   const MOB=estMobile(), grupos={}; ms.forEach(m=>{ const g=maqGrupoLbl(m); grupos[g]=(grupos[g]||0)+1; });
@@ -5447,7 +5535,7 @@ V.frota=function(){ const ms=maqTodas(), T=tanqueSaldo(); if(!ms.length) return 
     <div class="kpi"><div class="k-label">Tanque da fazenda</div><div class="k-value">${numH(T.saldo)} L</div><div class="k-sub">${numH(T.ent)} L entraram · ${numH(T.sai)} L abastecidos${T.precoMedio?' · '+brl(T.precoMedio)+'/L':''}</div></div>
     <div class="kpi${nAl?' kpi-neg':''}"><div class="k-label">Alertas</div><div class="k-value">${nAl}</div><div class="k-sub">preventivas, OS abertas, consumo</div></div></div>
     <div class="es-top">
-    <div class="toolbar es-tb"><div class="search"><input id="q-frota" value="${esc(FROTA_UI.q)}" placeholder="Buscar máquina…" autocomplete="off"></div>
+    <div class="toolbar es-tb"><div class="search"><input id="q-frota" value="${esc(FROTA_UI.q)}" placeholder="Buscar máquina…" autocomplete="off"></div><button class="btn btn-primary btn-sm voz-btn" data-act="vozAbrir" title="Fale o abastecimento ou a quebra: o app entende máquina, horímetro e litros">🎤 Falar</button>
       <details class="es-menu"><summary class="btn btn-primary btn-sm">➕ Lançar</summary><div class="es-menu-in">
         <a data-go="#/abastecimento">⛽ Abastecimento</a><a data-go="#/manutencao">🔧 Ordem de serviço</a><a data-go="#/checklist">✅ Checklist pré-uso</a><a data-go="#/maqcad">🗂️ Cadastro de máquinas</a><a data-act="maqPdf">📄 Relatório da frota (PDF)</a>${maqWhats()?`<a data-act="maqEtiquetas" data-modo="whats">🏷️ Etiquetas WhatsApp</a>`:''}<a data-act="maqEtiquetas" data-modo="app">🏷️ Etiquetas App</a></div></details></div>
     <div class="toolbar es-tb2"><button class="chip-f${FROTA_UI.soAl?' on':''}" data-act="frSoAl" title="Só máquinas com preventiva vencida/perto, OS aberta ou consumo fora">⚠️ só com alerta <span style="opacity:.55">${nAlM}</span></button></div>
@@ -12552,6 +12640,10 @@ document.addEventListener('click',e=>{
     else if(a.act==='finCalNav'){ const d=+a.d||0; FIN_UI.calMes=d?_mesAdd(FIN_UI.calMes||_hojeISO().slice(0,7),d):_hojeISO().slice(0,7); if(!d) FIN_UI.calDia=_hojeISO(); else { const nd=new Date(FIN_UI.calMes+'-01T12:00:00'); FIN_UI.calDia=FIN_UI.calMes===_hojeISO().slice(0,7)?_hojeISO():nd.toISOString().slice(0,10); } route({keepScroll:true}); return; }   // v419
     else if(a.act==='finCalDia'){ if(e.target.closest('button[data-act="finBaixar"],button[data-act="finEditar"]')) return; FIN_UI.calDia=a.dia; FIN_UI.calMes=String(a.dia).slice(0,7); route({keepScroll:true}); return; }
     else if(a.act==='finFluxoMais'){ FIN_UI.fluxoMais=!FIN_UI.fluxoMais; route({keepScroll:true}); return; }   // v416
+    else if(a.act==='vozAbrir'){ vozAbrir(a.maq||''); return; } else if(a.act==='vozFechar'){ vozParar(); VOZ=null; novaAcaoFechar(); return; } else if(a.act==='vozOuvir'){ vozOuvir(); return; }   // v421
+    else if(a.act==='vozEntender'){ vozEntender(); return; } else if(a.act==='vozDeNovo'){ if(VOZ){ VOZ.c=null; VOZ.texto=''; VOZ.erro=''; vozRender(); } return; }
+    else if(a.act==='vozTipo'){ if(VOZ&&VOZ.c){ vozLer(); VOZ.c.tipo=a.k; if(a.k==='os'&&!VOZ.c.desc) VOZ.c.desc=VOZ.texto; vozRender(); } return; }
+    else if(a.act==='vozGravar'){ vozGravar(!!a.wa); return; }
     else if(a.act==='safraFechar'){ safraFechar(); return; } else if(a.act==='safraManual'){ safraManualOpen(a.id||''); return; } else if(a.act==='safraExcluir'){ safraExcluir(a.id); return; }   // v418
     else if(a.act==='safraManAdd'){ const M=safraManualLer(); if(M){ M.porCult.push({emp:'',area:'',prodHa:'',receita:'',custo:''}); safraManualRender(); } return; }
     else if(a.act==='safraManDel'){ const M=safraManualLer(); if(M){ M.porCult.splice(+a.i,1); safraManualRender(); } return; }
@@ -13414,7 +13506,7 @@ const SYNC_TIPO={__entradas:'Compras',__entrada:'Compra',__saida:'Baixa de estoq
   __result:'Resultados',__limites:'Limites (mapa)',__experimentos:'Experimentos',__maqCad:'Máquinas',__transferencia:'Transferências de estoque entre fazendas',__safraFecho:'Fechamentos de safra',__movAvulso:'Movimentos avulsos de estoque',__recom:'Recomendações',__contagem:'Contagem física (inventário)',__conjunto:'Conjuntos',__abastecimento:'Abastecimentos',__osMaq:'Ordens de serviço',__checklist:'Checklist pré-uso',__afericao:'Aferições',__stand:'Contagem de stand',__ocorrencia:'Ocorrências',__monit:'Monitoramento',__campoFoto:'Foto do campo',__produtividade:'Estimativa de produtividade',__opplan:'Ordem das operações',__nfeDepara:'De-para NF-e',__nfeClassifica:'NF-e: classificar',
   __nfeUpload:'NF-e: enviar XML',__recebimento:'NF-e: recebimento',__pendencia:'NF-e: pendência',__nfeFoto:'NF-e: foto',__nfeReabrir:'NF-e: reabrir',
   __nfeProdutor:'NF-e: cadastrar produtor',__precos:'Preços',__flatPrecos:'Publicar preços',__retorno:'Retorno do operador',
-  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
+  __bula:'Bulas',__bulaArquivo:'Bula: PDF',__bulaBaixar:'Bula: baixar pelo link',__bulaIa:'Bula: ler com a IA',__misturaIa:'Mistura: parecer da IA',__vozIa:'Lançamento por voz: entender com a IA',__mistura:'Misturas',__lote:'Lote (vários tipos)',__recomLink:'Link curto da recomendação'};
 const NFE_ACAO={nfe_lista:'NF-e: lista',nfe:'NF-e: baixar XML',capturar:'NF-e: buscar notas',contratos:'NF-e: contratos',nfe_chave:'NF-e: consultar chave',pendencias:'NF-e: pendências'};
 function syncLogTipo(body){
   try{ const o=JSON.parse(body); if(Array.isArray(o)) return 'Edições de campo ('+o.length+')';

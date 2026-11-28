@@ -525,6 +525,28 @@ function _bulaIaSaneia_(d, produto){ d = d && typeof d === 'object' ? d : {};
   return { bula:ficha, extra:extra, resumo:resumo };
 }
 // ===== v357: PARECER DA IA SOBRE A MISTURA DE TANQUE (compatibilidade da calda) =====
+// ===== v421: LANÇAMENTO POR VOZ — payload __vozIa: { texto, maquinas:[{id, nome, grupo}] } → { campos:{tipo, maq, hor, litros, comb, origem, valor, desc} } =====
+function vozIa_(p){ p = p || {};
+  var key = iaChave_(); if (!key) return { erro:'IA desligada: falta ANTHROPIC_KEY nas Propriedades do Script' };
+  var texto = S(p.texto).slice(0, 400); if (!texto) return { erro:'sem texto' };
+  var maqs = (Array.isArray(p.maquinas) ? p.maquinas : []).slice(0, 120).map(function(m){ m = m || {}; return { id:S(m.id).slice(0, 60), nome:S(m.nome).slice(0, 80), grupo:S(m.grupo).slice(0, 40) }; }).filter(function(m){ return m.id && m.nome; });
+  var system = 'Você recebe a transcrição de um áudio curto de um operador de fazenda no Brasil, falando sobre uma máquina agrícola: abastecimento (litros, horímetro/odômetro, combustível, tanque da fazenda ou posto, valor) ou uma quebra/serviço (ordem de serviço). ' +
+    'Identifique a máquina pela lista enviada (nome, apelido parcial, número do modelo ou grupo + número). Converta números por extenso em dígitos. ' +
+    'Responda SOMENTE com JSON válido, sem markdown: {"tipo":"abast|os|desconhecido","maq":"<id exato da lista ou vazio>","hor":<número ou null>,"litros":<número ou null>,"comb":"Diesel S10|Diesel S500|Arla 32|Gasolina|Etanol|","origem":"tanque|posto","valor":<número ou null>,"desc":"<para os: o que aconteceu, curto; senão vazio>","confianca":<0 a 1>}. ' +
+    'Se a máquina não estiver clara, deixe "maq" vazio. Não invente números que não foram ditos.';
+  var payload = { model:IA_MODELO, max_tokens:400, system:system, messages:[{ role:'user', content:JSON.stringify({ texto:texto, maquinas:maqs }) }] };
+  var resp; try { resp = UrlFetchApp.fetch(IA_URL, { method:'post', contentType:'application/json', headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' }, payload:JSON.stringify(payload), muteHttpExceptions:true }); }
+  catch (e) { return { erro:'IA sem resposta: ' + e }; }
+  var code = resp.getResponseCode(), body = resp.getContentText();
+  if (code !== 200) return { erro:'IA recusou (HTTP ' + code + '): ' + body.slice(0, 160) };
+  var d; try { var j = JSON.parse(body), tx = ((j.content || []).map(function(c){ return c.text || ''; }).join('')).replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim(); d = JSON.parse(tx.slice(tx.indexOf('{'), tx.lastIndexOf('}') + 1)); }
+  catch (e) { return { erro:'IA respondeu fora do formato' }; }
+  d = d && typeof d === 'object' ? d : {};
+  var ids = {}; maqs.forEach(function(m){ ids[m.id] = 1; }); var maq = ids[S(d.maq)] ? S(d.maq) : '';
+  var tipo = /^os$/i.test(S(d.tipo)) ? 'os' : /abast/i.test(S(d.tipo)) ? 'abast' : '';
+  var comb = ['Diesel S10','Diesel S500','Arla 32','Gasolina','Etanol'].indexOf(S(d.comb)) >= 0 ? S(d.comb) : '';
+  var num = function(v){ var n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) && n > 0 ? n : null; };
+  return { campos:{ tipo:tipo, maq:maq, hor:num(d.hor), litros:num(d.litros), comb:comb, origem:/posto/i.test(S(d.origem)) ? 'posto' : 'tanque', valor:num(d.valor), desc:S(d.desc).slice(0, 200), confianca:num(d.confianca) || 0, modelo:IA_MODELO } }; }
 // payload __misturaIa: { id, cultura, alvo, calda, adjuvante, produtos:[{produto, ativo, classe, formulacao, tipo, ph, conc, grupo, obs, dose, un}], regras:[...], historico }.
 // Devolve { parecer:{ risco, resumo, pares:[{a,b,risco,motivo,fazer}], ordem:[produtos], ph, avisos:[], modelo } }. Nada é gravado na planilha:
 // o app guarda o parecer na recomendação (e o risco vai para a aba MISTURAS APP quando a aplicação é aprovada).
@@ -3057,7 +3079,7 @@ var MOD_DADOS = {
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __safraFecho:['planejamento','admin'], __transferencia:['planejamento','campo','admin'], __movAvulso:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __renomearProduto:['admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __vozIa:['maquinas','campo','planejamento'], __misturaIa:['campo','planejamento','precos'], __safraFecho:['planejamento','admin'], __transferencia:['planejamento','campo','admin'], __movAvulso:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __renomearProduto:['admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'], __recom:['campo','planejamento','admin'] };   // v401   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -3215,7 +3237,7 @@ function cacheNovaGen_(keys){ try { var o = {}, g = String(Date.now()) + Math.ra
 // que chaves do pacote APP cada gravação (payload __x) muda. Fora da lista = todas (seguro). [] = nenhuma (login, fotos, link curto…)
 var NFE_KEYS_ = ['nfe_resumo','nfe_estados','movimentacao','compras_app','depara_nfe','financeiro','manutencao','vendas'];   // financeiro: classificar/cancelar nota mexe nos títulos
 var SEM_TRAVA_ = { __campoFoto:1, __bulaArquivo:1, __bulaBaixar:1, __nfeFoto:1, __finArquivo:1, __bancoIa:1, __bulaIa:1, __misturaIa:1 };   // só Drive/UrlFetch: não precisam da trava de gravação · v351: leitura da bula (rede) · v357: parecer da mistura
-var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[], __bulaIa:['catalogo_extra'], __misturaIa:[],
+var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[], __campoFoto:[], __bulaArquivo:[], __bulaBaixar:[], __nfeFoto:[], __bulaIa:['catalogo_extra'], __vozIa:[], __misturaIa:[],
   __retorno:['retornos'], __entradas:['movimentacao','compras_app'], __entrada:['movimentacao','compras_app'], __saida:['movimentacao'],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
@@ -3541,6 +3563,9 @@ function gravaUm_(payload, acc, cfg, out){
     } else if (payload && payload.__renomearProduto){   // v366: renomear/mesclar produto em todas as abas (só administrador)
       if (acc && acc.u && !acc.admin){ out.fail = 1; out.msgs.push('só administrador'); }
       else { var rn = renomearProduto_(payload.__renomearProduto); if (rn.erro){ out.fail = 1; out.msgs.push(rn.erro); } else { out.ok = 1; out.renomear = rn; base = true; } }
+    } else if (payload && payload.__vozIa){           // v421: lançamento por voz — a IA extrai máquina/horímetro/litros do texto falado (nada gravado)
+      var vz = vozIa_(payload.__vozIa);
+      if (vz && !vz.erro){ out.ok = 1; out.campos = vz.campos; } else { out.fail = 1; out.msgs.push('voz: ' + ((vz && vz.erro) || 'sem resposta')); }
     } else if (payload && payload.__misturaIa){       // v357: parecer da IA sobre a compatibilidade da calda (nada gravado na planilha)
       var mx = misturaIa_(payload.__misturaIa);
       if (mx && !mx.erro){ out.ok = 1; out.parecer = mx.parecer; } else { out.fail = 1; out.msgs.push('mistura: ' + ((mx && mx.erro) || 'sem parecer')); }
