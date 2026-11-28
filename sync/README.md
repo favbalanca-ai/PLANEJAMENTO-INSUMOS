@@ -979,6 +979,17 @@ Chamadas à planilha medidas no simulador (cada uma custa ~50–300 ms no Google
   sem cabeçalho "EM PEDIDO" cria coluna nova (antes usava W = SALDO e sobrescrevia a fórmula);
   produto novo (addprod) ganha as fórmulas de VALOR (S), CONSUMO (V) e SALDO (W).
 
+## Fechamentos de safra (v418)
+
+Aba nova **FECHAMENTOS SAFRA** (KEY|JSON, como as transferências): cada registro é a foto dos números de uma safra
+(`{id, nome, data, origem:'app'|'manual', quem, obs, area, prodSc, areaSc, receita, custo, lucro, porCult:[…], del, _u}`),
+feita pelo app em Resultados → Painel da safra ("📸 Fechar safra") ou digitada à mão ("➕ Registrar safra anterior").
+
+- `SAFRA_FECHO_SHEET = 'FECHAMENTOS SAFRA'`; leitura `safras_app` (`readMapApp`), nos pacotes **planejamento** e
+  **admin** e em `APP_TODAS_`; criada/renomeada junto com as outras abas KEY|JSON.
+- `doPost`: payload `__safraFecho` → `writeMapApp(SAFRA_FECHO_SHEET, …)` (merge por `_u`; `del:true` = apagado).
+  `GRAVA_MOD.__safraFecho = ['planejamento','admin']`; `APP_INVALIDA_.__safraFecho = ['safras_app']`.
+
 ## Publicar preços religa a fórmula VALOR (v406)
 
 Problema real: produto incluído à mão no PORTIFÓLIO com o preço **digitado** na coluna VALOR (S). Como a célula não

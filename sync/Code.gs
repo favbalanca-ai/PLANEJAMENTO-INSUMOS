@@ -110,7 +110,7 @@ function readBase_(){
 }
 // Parte APP do pacote: UMA chave por aba. Cada chave tem o seu próprio cache (ver currentJson): uma gravação só
 // invalida as chaves que ela mexe (APP_INVALIDA_), e o próximo puxar relê só essas abas — não as 17.
-var APP_TODAS_ = ['retornos','recom_app','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app',
+var APP_TODAS_ = ['safras_app','retornos','recom_app','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app',
   'ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','depara_nfe','nfe_resumo','nfe_estados','precos_app','equipe_sst','config_app','chuva_est','financeiro','manutencao','vendas','pesagem','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app','catalogo_extra','transferencias_app','movimentos_app','contagens_app'];   // v361: transferências entre fazendas · v362: contagens físicas   // v295: módulo Máquinas · v340: checklist pré-uso · v351: catálogo extra (bulas lidas pela IA)
 var APP_TTL_ = { precos_app:21600, equipe_sst:21600, config_app:21600, chuva_est:3600, pesagem:600 };   // pesagem: planilha da balança (Pesagem v2), 10 min   // chuva_est: planilha do Monitor de Irrigação, 1 h   // config_app: aba CONFIG APP (Copernicus etc.), 6 h   // planilhas EXTERNAS (banco de preços, SST): 6 h — __precos limpa tudo na hora
 var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:function(){ return readMovimentacao(); }, tarefas_app:function(){ return readTarefasApp(); },
@@ -128,11 +128,13 @@ var APP_LER_ = { retornos:function(){ return readRetornos(); }, movimentacao:fun
   chuva_est:function(){ return readChuvaEstacao(); }, financeiro:function(){ return readFinanceiro(); }, manutencao:function(){ return readManutencao(); }, vendas:function(){ return readVendas(); }, pesagem:function(){ return readPesagem(); },
   maquinas_app:function(){ return readMapApp(MAQ_APP_SHEET); }, abast_app:function(){ return readMapApp(ABAST_SHEET); }, os_app:function(){ return readMapApp(OS_SHEET); },   // v295
   transferencias_app:function(){ return readMapApp(TRANSF_SHEET); },   // v361
+  safras_app:function(){ return readMapApp(SAFRA_FECHO_SHEET); },   // v418
   movimentos_app:function(){ return readMapApp(MOVAV_SHEET); },   // v384
   recom_app:function(){ return readMapApp(RECOM_APP_SHEET); },   // v401: recomendações compartilhadas
   contagens_app:function(){ return readMapApp(CONTAGEM_SHEET); },   // v362
   conjuntos_app:function(){ return readMapApp(CONJ_SHEET); } };   // v302: conjuntos montados, edições e conjunto por operação
 var MAQ_APP_SHEET = 'MÁQUINAS APP', ABAST_SHEET = 'ABASTECIMENTOS APP', OS_SHEET = 'OS MÁQUINAS APP';   // v295: módulo Máquinas (KEY|JSON como os experimentos)
+var SAFRA_FECHO_SHEET = 'FECHAMENTOS SAFRA';   // v418: foto dos números de cada safra (KEY|JSON) para o comparativo entre safras
 var TRANSF_SHEET = 'TRANSFERÊNCIAS APP';   // v361: transferências de estoque entre fazendas (KEY|JSON); cada uma vira 2 linhas no razão
 var MOVAV_SHEET = 'MOVIMENTOS APP';   // v384: movimentos avulsos (empréstimo, devolução, venda a terceiro, compra sem nota); cada um vira 1 linha no razão
 var RECOM_APP_SHEET = 'RECOMENDAÇÕES APP';   // v401: recomendações de aplicação compartilhadas entre aparelhos (KEY|JSON, merge por _u; apagadas ficam como del)
@@ -878,7 +880,7 @@ function renomearProduto_(p){
   // razão de estoque
   add(MOV_SHEET, _renColuna_(sh(MOV_SHEET), 3, 2, DE, para));
   // abas KEY|JSON
-  [REALIZADO_SHEET_APP, 'COMPRAS APP', MIST_SHEET, CONTAGEM_SHEET, TRANSF_SHEET, MOVAV_SHEET, RECOM_APP_SHEET, RECLINK_SHEET, BULAS_SHEET, CATEXTRA_SHEET].forEach(function(nome){
+  [REALIZADO_SHEET_APP, 'COMPRAS APP', MIST_SHEET, CONTAGEM_SHEET, TRANSF_SHEET, MOVAV_SHEET, RECOM_APP_SHEET, SAFRA_FECHO_SHEET, RECLINK_SHEET, BULAS_SHEET, CATEXTRA_SHEET].forEach(function(nome){
     var r = _renAba_(nome, DE, para); add(nome, r.n); if (!r.n) return;
     try { if (nome === MIST_SHEET) writeMisturasApp(r.map); else if (nome === BULAS_SHEET) writeBulasApp(r.map); } catch (e) {} });   // colunas legíveis
   // abas dos talhões: coluna PRODUTO do plano (as duas safras)
@@ -3046,16 +3048,16 @@ var MODULOS_APP = ['planejamento','campo','precos','admin','tarefas','maquinas']
 // dados (chaves do doGet) que cada módulo precisa, além dos básicos que sempre vão
 var DADOS_SEMPRE = ['safra','produtos','talhoes','planos','maquinas','abas_faltando'];
 var MOD_DADOS = {
-  planejamento:['config_app','precos_cultura','precos_app','equipe_sst','retornos','recom_app','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app','catalogo_extra','transferencias_app','movimentos_app','contagens_app'],
+  planejamento:['safras_app','config_app','precos_cultura','precos_app','equipe_sst','retornos','recom_app','movimentacao','tarefas_app','realizado_app','result_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','compras_app','nfe_estados','chuva_est','manutencao','vendas','pesagem','conjuntos_app','catalogo_extra','transferencias_app','movimentos_app','contagens_app'],
   campo:['config_app','equipe_sst','retornos','recom_app','movimentacao','tarefas_app','realizado_app','opplan_app','limites_app','experimentos_app','afericoes_app','stand_app','ocorrencias_app','monit_app','produtividade_app','bulas_app','misturas_app','chuva_est','vendas','pesagem','conjuntos_app','checklist_app','catalogo_extra','transferencias_app','movimentos_app','contagens_app'],
   precos:['precos_app','bulas_app','catalogo_extra'],
-  admin:['compras_app','recom_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem','catalogo_extra','transferencias_app','movimentos_app','contagens_app'],
+  admin:['safras_app','compras_app','recom_app','depara_nfe','nfe_resumo','nfe_estados','movimentacao','precos_app','financeiro','manutencao','vendas','pesagem','catalogo_extra','transferencias_app','movimentos_app','contagens_app'],
   tarefas:['tarefas_app','equipe_sst','realizado_app','opplan_app','conjuntos_app'],
   maquinas:['config_app','equipe_sst','realizado_app','manutencao','maquinas_app','abast_app','os_app','conjuntos_app','checklist_app'] };   // v295 · v340: checklist_app
 // quem pode GRAVAR cada tipo (payload __x) — módulos
 var GRAVA_MOD = { __precos:['precos'], __flatPrecos:['precos'], __entradas:['admin'], __entrada:['admin'], __saida:['campo','planejamento'], __titulo:['admin'], __cadFin:['admin'], __baixa:['admin'], __finArquivo:['admin'], __concilia:['admin'], __bancoIa:['admin'], __fechamento:['admin'], __maqCad:['maquinas','planejamento'], __conjunto:['planejamento','maquinas','campo'], __abastecimento:['maquinas','campo'], __osMaq:['maquinas'], __checklist:['maquinas','campo'],
   __tarefas:['tarefas','campo','planejamento'], __realizado:['campo','planejamento','tarefas'], __result:['planejamento'], __opplan:['planejamento','campo'],
-  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __transferencia:['planejamento','campo','admin'], __movAvulso:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __renomearProduto:['admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
+  __limites:['campo','planejamento'], __experimentos:['campo','planejamento'], __afericao:['campo','planejamento'], __stand:['campo','planejamento'], __ocorrencia:['campo','planejamento'], __monit:['campo','planejamento'], __campoFoto:['campo','planejamento','maquinas'], __bula:['precos','planejamento','campo'], __bulaArquivo:['precos','planejamento','campo'], __bulaBaixar:['precos','planejamento','campo'], __bulaIa:['precos','planejamento','campo'], __misturaIa:['campo','planejamento','precos'], __safraFecho:['planejamento','admin'], __transferencia:['planejamento','campo','admin'], __movAvulso:['planejamento','campo','admin'], __contagem:['planejamento','admin'], __renomearProduto:['admin'], __mistura:['campo','planejamento'], __produtividade:['campo','planejamento'], __nfeClassifica:['admin'], __nfeUpload:['admin'], __nfeDepara:['admin'], __nfeReabrir:['admin'], __nfeProdutor:['admin'],
   __recebimento:['admin'], __pendencia:['admin'], __nfeFoto:['admin'], __nfeVenda:['admin'], __recomLink:['campo','planejamento'], __recom:['campo','planejamento','admin'] };   // v401   // Receber nota é só do Administrativo
 // edições de campo (lista) — por tipo; o que não está aqui é só do Planejamento
 var EDIT_MOD = { estoque:['admin','planejamento'], pedido:['admin','planejamento'], custoIni:['admin','planejamento'], preco:['precos','planejamento'], addprod:['precos','planejamento'],
@@ -3218,7 +3220,7 @@ var APP_INVALIDA_ = { __login:[], __trocarPin:[], __usuarios:[], __recomLink:[],
   __tarefas:['tarefas_app'], __realizado:['realizado_app'], __result:['result_app'], __nfeDepara:['depara_nfe'],
   __nfeClassifica:NFE_KEYS_, __nfeUpload:NFE_KEYS_, __recebimento:NFE_KEYS_, __pendencia:NFE_KEYS_, __nfeReabrir:NFE_KEYS_, __nfeProdutor:NFE_KEYS_, __nfeVenda:NFE_KEYS_,
   __afericao:['afericoes_app'], __ocorrencia:['ocorrencias_app'], __monit:['monit_app'], __mistura:['misturas_app'], __bula:['bulas_app'], __produtividade:['produtividade_app'],
-  __recom:['recom_app'], __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __conjunto:['conjuntos_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[], __concilia:['financeiro'], __bancoIa:[], __fechamento:['financeiro'], __maqCad:['maquinas_app'], __abastecimento:['abast_app'], __osMaq:['os_app'], __checklist:['checklist_app'], __transferencia:['movimentacao','transferencias_app'], __movAvulso:['movimentacao','movimentos_app'], __contagem:['movimentacao','contagens_app'] };   // v361 · v362
+  __recom:['recom_app'], __stand:['stand_app'], __limites:['limites_app'], __experimentos:['experimentos_app'], __opplan:['opplan_app'], __conjunto:['conjuntos_app'], __titulo:['financeiro'], __cadFin:['financeiro','pesagem'], __baixa:['financeiro'], __finArquivo:[], __concilia:['financeiro'], __bancoIa:[], __fechamento:['financeiro'], __maqCad:['maquinas_app'], __abastecimento:['abast_app'], __osMaq:['os_app'], __checklist:['checklist_app'], __safraFecho:['safras_app'], __transferencia:['movimentacao','transferencias_app'], __movAvulso:['movimentacao','movimentos_app'], __contagem:['movimentacao','contagens_app'] };   // v361 · v362
 function _gaKeys_(keys){ return keys.map(function(k){ return 'ga_' + k; }); }
 function cacheClear(){ cacheNovaGen_(['gb_'].concat(_gaKeys_(APP_TODAS_))); try { var c = CacheService.getScriptCache(); c.removeAll(['pb_meta','pb_ts','pa_meta','pd_meta','lg_cfg','lg_usu'].concat(APP_TODAS_.map(function(k){ return 'pa_' + k + '_meta'; }), APP_TODAS_.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
 function cacheClearAppKeys_(keys){ keys = keys || APP_TODAS_; if (!keys.length) return; cacheNovaGen_(_gaKeys_(keys)); try { CacheService.getScriptCache().removeAll(keys.map(function(k){ return 'pa_' + k + '_meta'; }).concat(keys.map(function(k){ return 'pa_' + k + '_ts'; }))); } catch (e) {} }
@@ -3528,6 +3530,8 @@ function gravaUm_(payload, acc, cfg, out){
       else { out.fail = 1; out.msgs.push('bula: ' + ((bi && bi.erro) || 'não li')); }
     } else if (payload && payload.__recom){   // v401: recomendações compartilhadas — mapa id → registro (merge por _u; del = apagada)
       var rc1 = writeMapApp(RECOM_APP_SHEET, payload.__recom); out.ok = rc1.rows;
+    } else if (payload && payload.__safraFecho){   // v418: fechamentos de safra (foto dos números) — mapa id → registro (merge por _u; del = apagado)
+      var sf1 = writeMapApp(SAFRA_FECHO_SHEET, payload.__safraFecho); out.ok = sf1.rows;
     } else if (payload && payload.__movAvulso){   // v384: movimento avulso (empréstimo, devolução, venda, compra sem nota) → 1 linha no razão + aba MOVIMENTOS APP
       var mv = writeMovAvulsos_(payload.__movAvulso); out.ok = mv.n;
     } else if (payload && payload.__transferencia){   // v361: transferência de estoque entre fazendas → 2 linhas no razão + aba TRANSFERÊNCIAS APP
