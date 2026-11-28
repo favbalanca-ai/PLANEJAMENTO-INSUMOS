@@ -2595,6 +2595,11 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
 .ps-cat-row i{width:12px;height:12px;border-radius:3px;display:inline-block}.ps-cat-row span{color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ps-cat-row b{color:var(--ink);white-space:nowrap}
 .ps-cat-row small{grid-column:2/4;color:var(--muted);font-size:11px;margin-top:-2px}
 
+/* v416: fluxo de caixa */
+.fx-venc .kpi .k-value{font-size:20px}
+.fx-t tbody tr.fx-atual td{background:#f3faf0}.fx-t tbody tr.fx-real td{color:var(--ink)}
+@media (max-width:640px){ .cards-sm.fx-t tbody tr{cursor:default} .cards-sm.fx-t tbody tr::after{display:none} }   /* todas as células já aparecem: sem botão Detalhes */
+
 /* ===== Celular: fonte ~20% menor em todos os módulos (v236+v237), como no quadro de operações. Campos de texto continuam com 16px (iPhone não dá zoom). Gerado por scripts/css_fonte_celular.py — não edite à mão, rode o script ===== */
 @media (max-width:640px){
   .brand-logo{font-size:21px}
@@ -3108,4 +3113,5 @@ tr.ci-off .ci-prod b{text-decoration:line-through}
   .ps-leg{font-size:9.5px}
   .ps-cat-top{font-size:9.5px}
   .ps-cat-row{font-size:10px}
+  .fx-venc .kpi .k-value{font-size:16px}
 }
